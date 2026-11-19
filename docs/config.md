@@ -77,14 +77,14 @@ Every UI decision is a token. Colors take `#rrggbb`, `0`-`255`, a name (`red`,
   block, `-1` removes the limit.
 - Symbols: `user_prefix`, `tool_prefix`, `reasoning_prefix`, `notice_prefix`,
   `error_prefix`, `bullet`, `quote_prefix`, `rule_char`, `table_sep`, `scroll_mark`,
-  `label_sep`, `picker_selected_prefix`, `more`, `spinner` (a list of frames),
+  `label_sep`, `steering_label`, `picker_selected_prefix`, `more`, `spinner` (a list of frames),
   `input_prefix` (default `› `; `""` removes it), `bar_char`, `box_chars` (top left, top
   right, bottom left, bottom right, vertical), `edge_top`, `edge_bottom`.
 
 ### Input design
 
 `input_design` picks how the input looks. Each design shows the input and two status bars:
-working (spinner, time, tool calls) and the model (model, effort, context, cost).
+working (spinner, time, tool calls; `steering_label` while a message you sent waits for the agent) and the model (model, effort, context, cost).
 
 - `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.
 - `box`: a frame around the input with the same two labels on its borders.

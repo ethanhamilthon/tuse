@@ -28,6 +28,8 @@ pub struct App {
     /// Lines scrolled up from the bottom of the chat.
     pub scroll: usize,
     pub tick: usize,
+    /// Width of the input text area at the last draw; the arrows move by rows of this width.
+    pub input_cols: usize,
     pub quit: bool,
 }
 
@@ -53,6 +55,7 @@ impl App {
             thinking: None,
             scroll: 0,
             tick: 0,
+            input_cols: 80,
             quit: false,
         }
     }

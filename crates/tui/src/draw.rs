@@ -18,6 +18,7 @@ pub fn draw(app: &mut App, out: &mut impl Write, w: u16, h: u16) -> std::io::Res
     let inner = w.saturating_sub(pad * 2).max(1);
     let fr = input_view::frame(t);
     let text_w = inner.saturating_sub(fr.left + fr.right).max(1);
+    app.input_cols = text_w;
     let (rows, (crow, ccol)) = app.editor.layout(text_w);
     let input_h = rows.len().clamp(1, (t.input_max_height as usize).max(1));
     let input_top = crow.saturating_sub(input_h - 1).min(rows.len() - input_h);

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs tuse: the binary and ~/.config/tuse/default.yaml.
-#   curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 # TUSE_VERSION=0.2.0 picks a version, TUSE_BIN_DIR changes the binary folder (default ~/.local/bin).
 set -eu
 

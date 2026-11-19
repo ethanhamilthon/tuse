@@ -12,7 +12,7 @@ Chat Completions compatible API, one tool: `bash`.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 tuse connect
 ```
 
@@ -22,7 +22,7 @@ The script puts `tuse` into `~/.local/bin` and the defaults into
 `~/.config/tuse/main.yaml`. `TUSE_VERSION=0.2.0` picks a version, `TUSE_BIN_DIR` the folder.
 
 Or build it: `cargo install --git https://github.com/ethanhamilthon/tuse tuse`, then copy
-[default.yaml](default.yaml) to `~/.config/tuse/`.
+[default.yaml](release/default.yaml) to `~/.config/tuse/`.
 
 ## Usage
 

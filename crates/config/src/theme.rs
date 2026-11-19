@@ -48,7 +48,12 @@ pub struct Theme {
     pub code_indent: u16,
     pub picker_pad_x: u16,
     pub input_pad_x: u16,
+    /// Extra rows above and below the text in `bar`; the bar runs through them.
+    pub input_top_padding: u16,
+    pub input_bottom_padding: u16,
     pub panel_pad_x: u16,
+    /// Width of the role column in the `/trace` list.
+    pub trace_role_width: u16,
     // limits
     pub picker_max_height: u16,
     pub input_max_height: u16,
@@ -138,7 +143,10 @@ impl Default for Theme {
             code_indent: 2,
             picker_pad_x: 1,
             input_pad_x: 1,
+            input_top_padding: 0,
+            input_bottom_padding: 0,
             panel_pad_x: 1,
+            trace_role_width: 9,
             picker_max_height: 8,
             input_max_height: 10,
             panel_max_height: 16,

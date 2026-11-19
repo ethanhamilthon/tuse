@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  build:
+    needs: check
+    strategy:
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin, name: darwin_arm64 }
+          - { os: macos-latest, target: x86_64-apple-darwin, name: darwin_amd64 }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, name: linux_amd64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, name: linux_arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check tag matches the crate version
+        run: |
+          want="v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$want" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != ${want}"; exit 1; }
+      - name: Toolchain
+        run: rustup toolchain install stable --profile minimal --target ${{ matrix.target }} && rustup default stable
+      - name: Build
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p tuse
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/tuse dist/tuse
+          tar -C dist -czf tuse_${{ matrix.name }}.tar.gz tuse
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tuse_${{ matrix.name }}
+          path: tuse_${{ matrix.name }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && shasum -a 256 *.tar.gz > checksums.txt
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: dist/*
+          generate_release_notes: true

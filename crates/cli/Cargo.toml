@@ -1,0 +1,18 @@
+[package]
+name = "tuse"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "tuse"
+path = "src/main.rs"
+
+[dependencies]
+tuse-config.workspace = true
+tuse-core.workspace = true
+tuse-socket.workspace = true
+tuse-tui.workspace = true
+serde_json.workspace = true
+signal-hook = "0.3"

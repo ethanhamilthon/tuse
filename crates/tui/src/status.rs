@@ -7,6 +7,9 @@ pub fn working(app: &App) -> String {
     let Some((elapsed, calls)) = app.session.turn_info() else {
         return String::new();
     };
+    if app.steering.is_some() {
+        return t.steering_label.clone();
+    }
     let frames = &t.spinner;
     let spin = frames
         .get(app.tick % frames.len().max(1))

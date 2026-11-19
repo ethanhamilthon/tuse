@@ -30,6 +30,9 @@ pub struct App {
     pub tick: usize,
     /// Width of the input text area at the last draw; the arrows move by rows of this width.
     pub input_cols: usize,
+    /// The text sent while the agent was busy; it stays in the input until the agent takes it.
+    /// (what the editor held, what was sent).
+    pub steering: Option<(String, String)>,
     pub quit: bool,
 }
 
@@ -56,6 +59,7 @@ impl App {
             scroll: 0,
             tick: 0,
             input_cols: 80,
+            steering: None,
             quit: false,
         }
     }
@@ -108,6 +112,14 @@ impl App {
     pub fn handle_event(&mut self, e: Event) {
         match e {
             Event::User { text, images } => {
+                if let Some((raw, sent)) = &self.steering
+                    && *sent == text
+                {
+                    if self.editor.text().trim() == raw {
+                        self.editor.clear();
+                    }
+                    self.steering = None;
+                }
                 self.chat.push(Entry::User { text, images });
                 self.scroll = 0;
             }
@@ -157,6 +169,7 @@ impl App {
             } => {
                 self.streaming = None;
                 self.thinking = None;
+                self.steering = None;
                 self.chat.push(Entry::TurnEnd {
                     elapsed,
                     calls,

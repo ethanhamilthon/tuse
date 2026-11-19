@@ -32,6 +32,7 @@ impl App {
             KeyCode::Esc => {
                 if self.session.busy() {
                     self.session.cancel();
+                    self.steering = None;
                 }
             }
             KeyCode::Enter if shift || alt => e.insert("\n"),
@@ -195,13 +196,22 @@ impl App {
             return;
         }
         let expanded = expand_prompts(trimmed, &self.session.config().prompts);
+        if matches!(&self.steering, Some((raw, _)) if raw == trimmed) {
+            return;
+        }
         let images = self.editor.images();
-        self.editor.clear();
         self.picker = None;
         self.scroll = 0;
         let images: Vec<String> = images.iter().map(|p| p.display().to_string()).collect();
         match tuse_core::with_images(&expanded, &images) {
-            Ok(input) => self.session.submit(input),
+            Ok(input) if self.session.busy() => {
+                self.steering = Some((trimmed.to_string(), input.text.clone()));
+                self.session.submit(input);
+            }
+            Ok(input) => {
+                self.editor.clear();
+                self.session.submit(input);
+            }
             Err(e) => self.error(e),
         }
     }

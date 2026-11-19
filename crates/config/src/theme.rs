@@ -86,6 +86,8 @@ pub struct Theme {
     pub table_sep: String,
     pub scroll_mark: String,
     pub label_sep: String,
+    /// Shown instead of the timer while a message you sent waits for the agent.
+    pub steering_label: String,
     pub picker_selected_prefix: String,
     pub more: String,
     /// Replaces each typed char of a secret in inline prompts.
@@ -166,6 +168,7 @@ impl Default for Theme {
             table_sep: s(" │ "),
             scroll_mark: s("↑"),
             label_sep: s(" · "),
+            steering_label: s("steering…"),
             picker_selected_prefix: s("› "),
             more: s("…"),
             mask_char: s("•"),

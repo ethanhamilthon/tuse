@@ -49,11 +49,12 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String]) -> Vec<Line> {
         .and_then(|(elapsed, _)| Motion::new(p, true, elapsed));
     let m = motion.as_ref();
     let mark = scroll_mark(t, app.scroll);
+    let steering = app.steering.is_some();
     let body =
         |decor: &dyn Fn(usize, usize) -> (Vec<crate::text::Span>, Vec<crate::text::Span>)| {
             rows.iter()
                 .enumerate()
-                .map(|(i, r)| row(p, fr, w, i, r, decor(i, rows.len())))
+                .map(|(i, r)| row(p, fr, w, i, r, steering, decor(i, rows.len())))
                 .collect::<Vec<_>>()
         };
     let mut out = vec![];
@@ -124,6 +125,7 @@ fn row(
     w: usize,
     i: usize,
     text: &str,
+    pending: bool,
     (left, right): (Vec<crate::text::Span>, Vec<crate::text::Span>),
 ) -> Line {
     let t = &p.t;
@@ -136,7 +138,8 @@ fn row(
         " ".repeat(width(&t.input_prefix))
     };
     line.push(span(prefix, Style::fg(p.status)));
-    line.push(span(text, Style::fg(p.fg)));
+    let color = if pending { p.dim } else { p.fg };
+    line.push(span(text, Style::fg(color)));
     if filled || t.input_design == "box" {
         let used = line_width(&line) + fr.right;
         line.push(span(" ".repeat(w.saturating_sub(used)), Style::default()));

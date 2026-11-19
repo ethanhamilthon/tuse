@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 - 2026-11-19
+
+- `bar` input: a blank row between the input and the status row, the status row has no indent.
+  New tokens `input_top_padding` and `input_bottom_padding` add rows above and below the text;
+  the bar runs through them.
+- `/trace` is a list (`0 system`, `1 user`, `4 bash`...); Up and Down select, Enter opens an
+  item in full, Esc goes back. `trace_role_width` is a theme token.
+- Panels have a rule on top that separates them from the chat.
+- A session keeps its own model: a new one records the config's model at once, `/resume` and
+  `/reload` do not change an old one.
+
 ## 0.3.1 - 2026-11-19
 
 - `tuse print` and `tuse steer` keep text that starts with `-` (`--- menu ---`); `tuse print`

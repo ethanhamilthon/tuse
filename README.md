@@ -71,8 +71,10 @@ the provider's models, says how many it got and adds the `connect` entry to the 
 
 Commands: `/new`, `/resume` (sessions started in this folder), `/models` (every model the
 providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/usage`,
-`/trace` (the system prompt, messages, thinking, tool calls and outputs), `/reload`, `/quit`.
+`/trace` (a list of the system prompt, messages, thinking, tool calls and outputs; Enter opens
+an item in full), `/reload`, `/quit`.
 `/usage`, `/trace` and a task's output open in a panel over the chat; Esc closes it.
+A session keeps its own model: `/models` also saves it to the config for new sessions.
 
 `#name` inserts a prompt from the config; it is expanded to its text when sent.
 `@` picks a file or folder from the current folder; `@dir/*` lists what is inside `dir`.

@@ -68,6 +68,9 @@ pub fn ask(a: &Args) -> Result<(), String> {
 /// `tuse print [--id ID] [TEXT|-]`: shows plain text in the TUI and prints the block ID.
 pub fn print(a: &Args) -> Result<(), String> {
     let text = text_arg(a)?;
+    if text.trim().is_empty() {
+        return Err("nothing to print".into());
+    }
     let id = a.value(&["--id"]);
     let data = send(a, Request::Print { text, id })?;
     println!("{}", data["id"].as_str().unwrap_or(""));

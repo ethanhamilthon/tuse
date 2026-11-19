@@ -144,3 +144,17 @@ fn settings_theme_wins_and_is_written() {
     assert_eq!(load(Some(&p)).unwrap().config.theme_name(), "b");
     std::fs::remove_file(p).ok();
 }
+
+#[test]
+fn shipped_main_includes_default() {
+    let dir = std::env::temp_dir().join(format!("tuse-ship-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let release = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../release");
+    for f in ["main.yaml", "default.yaml"] {
+        std::fs::copy(release.join(f), dir.join(f)).unwrap();
+    }
+    let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
+    assert!(c.systems[0].contains("running inside Tuse"));
+    assert_eq!(c.settings.retries, 5);
+    std::fs::remove_dir_all(dir).ok();
+}

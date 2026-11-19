@@ -1,0 +1,4 @@
+# Your Tuse config. `tuse reset` writes this file; `tuse update` never touches it.
+# default.yaml (system prompt and default settings) is replaced on every update.
+include:
+  - default.yaml

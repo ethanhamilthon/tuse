@@ -43,7 +43,7 @@ Hooks are commands started on events. Tuse does not wait for them. Events:
 `session_start`, `session_end`, `turn_start`, `turn_end`, `tool_start`, `tool_end`,
 `error`. A relative `run` path is resolved against the file that defines it.
 
-Environment: `TUSE_EVENT`, `TUSE_HOOK`, `TUSE_SESSION`, `TUSE_CWD`, `TUSE_MODEL`,
+Environment: `TUSE_EVENT`, `TUSE_HOOK`, `TUSE_SESSION`, `TUSE_CWD`, `TUSE_MODEL`, `TUSE_CURRENT_CONFIG`,
 plus `TUSE_TOOL_COMMAND` and `TUSE_TOOL_EXIT` for tool events, `TUSE_ERROR` for
 `error`, and `TUSE_CANCELLED=1` for a cancelled `turn_end`.
 

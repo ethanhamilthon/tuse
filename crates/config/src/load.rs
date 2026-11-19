@@ -15,32 +15,32 @@ pub fn home() -> PathBuf {
         .unwrap_or_default()
 }
 
-/// `--config PATH`, else `./tuse.yaml`, else `~/.config/tuse/main.yaml`.
+/// The global config: `$TUSE_GLOBAL_CONFIG`, else `~/.config/tuse/main.yaml`.
+pub fn global_path() -> PathBuf {
+    match std::env::var_os("TUSE_GLOBAL_CONFIG").filter(|v| !v.is_empty()) {
+        Some(p) => PathBuf::from(p),
+        None => home().join(".config/tuse/main.yaml"),
+    }
+}
+
+/// `--config PATH`, else `./tuse.yaml`, else the global config.
 pub fn find(explicit: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
+    find_in(explicit, cwd, &global_path())
+}
+
+pub(crate) fn find_in(explicit: Option<&Path>, cwd: &Path, global: &Path) -> Option<PathBuf> {
     if let Some(p) = explicit {
         return Some(p.to_path_buf());
     }
-    [cwd.join("tuse.yaml"), home().join(".config/tuse/main.yaml")]
+    [cwd.join("tuse.yaml"), global.to_path_buf()]
         .into_iter()
         .find(|p| p.is_file())
 }
 
-/// `~/.config/tuse/default.yaml`: written by the installer, loaded under every config.
-pub fn default_path() -> PathBuf {
-    home().join(".config/tuse/default.yaml")
-}
-
+/// Loads `path` and its includes; `None` gives the built-in defaults.
 pub fn load(path: Option<&Path>) -> Result<Loaded, String> {
-    load_with(path, Some(&default_path()))
-}
-
-/// Loads `path` over the `defaults` file, when that exists.
-pub fn load_with(path: Option<&Path>, defaults: Option<&Path>) -> Result<Loaded, String> {
     let mut files = vec![];
     let mut value = Value::Mapping(Mapping::new());
-    if let Some(d) = defaults.filter(|d| d.is_file() && path != Some(*d)) {
-        merge(&mut value, load_file(d, &mut files, 0)?);
-    }
     if let Some(path) = path {
         merge(&mut value, load_file(path, &mut files, 0)?);
     }
@@ -48,10 +48,9 @@ pub fn load_with(path: Option<&Path>, defaults: Option<&Path>) -> Result<Loaded,
     expand::walk(&mut value);
     crate::themes::resolve(&mut value).map_err(|e| format!("{name}: {e}"))?;
     let config: Config = serde_yaml::from_value(value).map_err(|e| format!("{name}: {e}"))?;
-    if !matches!(config.theme.as_str(), "" | "default")
-        && !config.themes.contains_key(&config.theme)
-    {
-        return Err(format!("{name}: theme {} not found", config.theme));
+    let theme = config.theme_name();
+    if !matches!(theme, "" | "default") && !config.themes.contains_key(theme) {
+        return Err(format!("{name}: theme {theme} not found"));
     }
     Ok(Loaded {
         config,

@@ -88,3 +88,44 @@ pub fn add_connect(path: &Path, name: &str, base_url: &str, api_key: &str) -> Re
     }
     std::fs::write(path, new).map_err(|e| format!("{}: {e}", path.display()))
 }
+
+/// Sets `key: value` inside the top-level `settings:` block, creating the block
+/// or the key. A file with an inline `settings: {...}` has to be edited by hand.
+pub fn set_setting(path: &Path, key: &str, value: &str) -> Result<(), String> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let line = format!("  {key}: {}", scalar(value));
+    let mut lines: Vec<String> = text.lines().map(String::from).collect();
+    match lines.iter().position(|l| l.starts_with("settings:")) {
+        None => {
+            lines.push("settings:".into());
+            lines.push(line);
+        }
+        Some(i) if lines[i].trim_end() == "settings:" => {
+            let mut end = i + 1;
+            let mut at = None;
+            while end < lines.len()
+                && (lines[end].starts_with([' ', '\t']) || lines[end].trim().is_empty())
+            {
+                if lines[end].trim_start().starts_with(&format!("{key}:")) {
+                    at = Some(end);
+                }
+                end += 1;
+            }
+            match at {
+                Some(j) => lines[j] = line,
+                None => lines.insert(i + 1, line),
+            }
+        }
+        Some(_) => {
+            return Err("`settings` is written inline in the config; edit it by hand".into());
+        }
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(path, lines.join("\n") + "\n").map_err(|e| format!("{}: {e}", path.display()))
+}

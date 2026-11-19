@@ -43,17 +43,16 @@ impl App {
             .map(|n| item(n.clone(), "", n.clone()))
             .collect();
         let mut p = Picker::new(Kind::Theme, "Theme", items);
-        let active = if config.theme.is_empty() {
-            "default"
-        } else {
-            &config.theme
+        let active = match config.theme_name() {
+            "" => "default",
+            name => name,
         };
         p.select(active);
         self.picker = Some(p);
     }
 
     pub fn set_theme(&mut self, name: &str) {
-        if let Err(e) = self.session.save_setting("theme", name) {
+        if let Err(e) = self.session.save_in_settings("theme", name) {
             self.error(format!("Can't save the theme: {e}"));
             return;
         }

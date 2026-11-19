@@ -10,7 +10,7 @@ pub struct Config {
     pub effort: String,
     pub connect: Vec<Connect>,
     pub settings: Settings,
-    /// Name of the active theme; `default` or empty is the built-in one.
+    /// Legacy top-level `theme`; `settings.theme` wins.
     pub theme: String,
     pub themes: BTreeMap<String, Theme>,
     pub bins: BTreeMap<String, String>,
@@ -35,6 +35,8 @@ pub struct Settings {
     pub max_bash_output: usize,
     pub bash_timeout: u64,
     pub retries: usize,
+    /// Name of the active theme; `default` or empty is the built-in one.
+    pub theme: String,
 }
 
 impl Default for Settings {
@@ -44,6 +46,7 @@ impl Default for Settings {
             max_bash_output: 16384,
             bash_timeout: 120,
             retries: 5,
+            theme: String::new(),
         }
     }
 }
@@ -79,9 +82,19 @@ pub struct Hook {
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
 
 impl Config {
+    pub fn theme_name(&self) -> &str {
+        match self.settings.theme.as_str() {
+            "" => &self.theme,
+            name => name,
+        }
+    }
+
     /// The active theme.
     pub fn active_theme(&self) -> Theme {
-        self.themes.get(&self.theme).cloned().unwrap_or_default()
+        self.themes
+            .get(self.theme_name())
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// The full `provider/model` name of the configured default model.

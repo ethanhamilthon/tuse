@@ -8,6 +8,7 @@ mod history;
 mod hooks;
 mod id;
 mod input;
+mod models;
 mod prompt;
 mod record;
 mod session;

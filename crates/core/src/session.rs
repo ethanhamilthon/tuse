@@ -28,6 +28,7 @@ pub struct Session {
     pub(crate) asks: Mutex<HashMap<String, Sender<String>>>,
     pub(crate) ask_seq: AtomicUsize,
     pub(crate) server: Mutex<Option<Server>>,
+    pub(crate) remote: Mutex<Vec<String>>,
 }
 
 pub(crate) struct State {
@@ -127,6 +128,7 @@ impl Session {
             asks: Mutex::default(),
             ask_seq: AtomicUsize::new(0),
             server: Mutex::default(),
+            remote: Mutex::default(),
         });
         s.start()?;
         Ok(s)

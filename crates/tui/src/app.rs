@@ -185,6 +185,11 @@ impl App {
                 }
             }
             Event::Usage => {}
+            Event::Models => {
+                if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Model) {
+                    self.open_models();
+                }
+            }
         }
     }
 

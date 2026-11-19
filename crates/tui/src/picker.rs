@@ -5,6 +5,7 @@ pub enum Kind {
     File,
     Resume,
     Model,
+    Theme,
     Effort(String),
     Task,
     Ask(String),

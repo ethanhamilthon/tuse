@@ -63,6 +63,8 @@ pub struct Theme {
     pub label_sep: String,
     pub picker_selected_prefix: String,
     pub more: String,
+    /// Replaces each typed char of a secret in inline prompts.
+    pub mask_char: String,
     pub spinner: Vec<String>,
 }
 
@@ -122,6 +124,7 @@ impl Default for Theme {
             label_sep: s(" · "),
             picker_selected_prefix: s("› "),
             more: s("…"),
+            mask_char: s("•"),
             spinner: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
                 .map(String::from)
                 .to_vec(),

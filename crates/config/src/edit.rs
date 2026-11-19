@@ -46,3 +46,45 @@ fn scalar(v: &str) -> String {
         format!("{v:?}")
     }
 }
+
+/// Appends a `connect` entry to a YAML file, creating the file or the key.
+pub fn add_connect(path: &Path, name: &str, base_url: &str, api_key: &str) -> Result<(), String> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let entry = format!(
+        "  - name: {}\n    base_url: {}\n    api_key: {}\n",
+        scalar(name),
+        scalar(base_url),
+        scalar(api_key)
+    );
+    let mut lines: Vec<&str> = text.lines().collect();
+    let new = match lines.iter().position(|l| l.starts_with("connect:")) {
+        None => {
+            lines.push("connect:");
+            lines.push(entry.trim_end());
+            lines.join("\n") + "\n"
+        }
+        Some(i) if lines[i].trim_end() == "connect:" => {
+            let mut end = i + 1;
+            for (j, l) in lines.iter().enumerate().skip(i + 1) {
+                if l.starts_with([' ', '\t']) || l.starts_with("- ") {
+                    end = j + 1;
+                } else if !l.trim().is_empty() {
+                    break;
+                }
+            }
+            lines.insert(end, entry.trim_end());
+            lines.join("\n") + "\n"
+        }
+        Some(_) => {
+            return Err("`connect` is written inline in the config; add the entry by hand".into());
+        }
+    };
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(path, new).map_err(|e| format!("{}: {e}", path.display()))
+}

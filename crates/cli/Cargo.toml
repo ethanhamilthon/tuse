@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 tuse-config.workspace = true
+tuse-api.workspace = true
 tuse-core.workspace = true
 tuse-socket.workspace = true
 tuse-tui.workspace = true

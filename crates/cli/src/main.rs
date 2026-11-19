@@ -1,4 +1,5 @@
 mod args;
+mod connect;
 mod headless;
 mod remote;
 
@@ -23,6 +24,8 @@ USAGE
   tuse task run [-s ID] [--name NAME] -- COMMAND...
   tuse task stop|get [--lines N]|list [-s ID] [ID]
                                            background tasks of a session
+  tuse connect [--config PATH]            add a provider: asks base url, api key and name,
+                                           fetches its models and saves it to the config
   tuse version | tuse help
 
 -s defaults to $TUSE_SESSION. The config is --config, else ./tuse.yaml,
@@ -47,6 +50,11 @@ fn run(raw: Vec<String>) -> Result<(), String> {
             rest,
             &["-s", "--session", "--name", "--lines", "-n"],
         )?),
+        "connect" => {
+            let a = Args::parse(rest, &["--config", "-c"])?;
+            let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+            connect::run(a.value(&["--config", "-c"]).map(|p| cwd.join(p)))
+        }
         "version" | "--version" | "-V" => {
             println!("tuse {}", env!("CARGO_PKG_VERSION"));
             Ok(())

@@ -1,15 +1,61 @@
-use crate::text::char_width;
+use std::path::PathBuf;
+
+mod layout;
+
+/// First code point of the private-use range that stands in for atoms.
+const ATOM_BASE: u32 = 0xF0000;
+
+/// A file, prompt or image in the input. The buffer holds one placeholder
+/// char for it, so deleting and the arrows treat it as a single letter.
+pub struct Atom {
+    pub label: String,
+    pub image: Option<PathBuf>,
+}
 
 /// A multi-line input buffer with a cursor.
 #[derive(Default)]
 pub struct Editor {
     pub buf: Vec<char>,
     pub cursor: usize,
+    atoms: Vec<Atom>,
+}
+
+fn atom_index(c: char) -> Option<usize> {
+    (c as u32).checked_sub(ATOM_BASE).map(|i| i as usize)
 }
 
 impl Editor {
+    /// The text with every atom written out as its label.
     pub fn text(&self) -> String {
-        self.buf.iter().collect()
+        self.buf
+            .iter()
+            .map(|c| match self.atom(*c) {
+                Some(a) => a.label.clone(),
+                None => c.to_string(),
+            })
+            .collect()
+    }
+
+    fn atom(&self, c: char) -> Option<&Atom> {
+        atom_index(c).and_then(|i| self.atoms.get(i))
+    }
+
+    pub fn insert_atom(&mut self, label: &str, image: Option<PathBuf>) {
+        let c = char::from_u32(ATOM_BASE + self.atoms.len() as u32).unwrap_or('?');
+        self.atoms.push(Atom {
+            label: label.to_string(),
+            image,
+        });
+        self.buf.insert(self.cursor, c);
+        self.cursor += 1;
+    }
+
+    /// Paths of the images placed in the input.
+    pub fn images(&self) -> Vec<PathBuf> {
+        self.buf
+            .iter()
+            .filter_map(|c| self.atom(*c)?.image.clone())
+            .collect()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -18,11 +64,12 @@ impl Editor {
 
     pub fn clear(&mut self) {
         self.buf.clear();
+        self.atoms.clear();
         self.cursor = 0;
     }
 
     pub fn insert(&mut self, s: &str) {
-        for c in s.chars().filter(|c| *c != '\r') {
+        for c in s.chars().filter(|c| *c != '\r' && atom_index(*c).is_none()) {
             self.buf.insert(self.cursor, c);
             self.cursor += 1;
         }
@@ -135,10 +182,11 @@ impl Editor {
     }
 
     /// The token under the cursor (from the last whitespace to the cursor) and its start.
+    /// Atoms end a token like whitespace does.
     pub fn token(&self) -> (usize, String) {
         let start = self.buf[..self.cursor]
             .iter()
-            .rposition(|c| c.is_whitespace())
+            .rposition(|c| c.is_whitespace() || atom_index(*c).is_some())
             .map_or(0, |i| i + 1);
         (start, self.buf[start..self.cursor].iter().collect())
     }
@@ -147,37 +195,27 @@ impl Editor {
         self.buf.splice(start..end, with.chars());
         self.cursor = start + with.chars().count();
     }
+}
 
-    /// Wraps the buffer to `width` columns: rows and the cursor's (row, col).
-    pub fn layout(&self, width: usize) -> (Vec<String>, (usize, usize)) {
-        let width = width.max(1);
-        let mut rows = vec![String::new()];
-        let mut w = 0;
-        let mut cur = (0, 0);
-        for (i, c) in self.buf.iter().enumerate() {
-            if i == self.cursor {
-                cur = (rows.len() - 1, w);
-            }
-            if *c == '\n' {
-                rows.push(String::new());
-                w = 0;
-                continue;
-            }
-            let cw = char_width(*c);
-            if w + cw > width {
-                rows.push(String::new());
-                w = 0;
-            }
-            rows.last_mut().unwrap().push(*c);
-            w += cw;
-        }
-        if self.cursor == self.buf.len() {
-            if w >= width {
-                rows.push(String::new());
-                w = 0;
-            }
-            cur = (rows.len() - 1, w);
-        }
-        (rows, cur)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn atom_is_one_letter() {
+        let mut e = Editor::default();
+        e.insert("a ");
+        e.insert_atom("@src/main.rs", None);
+        e.insert(" b");
+        assert_eq!(e.text(), "a @src/main.rs b");
+        assert_eq!(e.buf.len(), 5);
+        e.left();
+        e.left();
+        e.backspace();
+        assert_eq!(e.text(), "a  b");
+        let mut e = Editor::default();
+        e.insert_atom("[Image #1: /x.png]", Some("/x.png".into()));
+        assert_eq!(e.images(), [PathBuf::from("/x.png")]);
+        assert_eq!(e.token().1, "");
     }
 }

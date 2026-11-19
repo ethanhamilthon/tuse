@@ -21,7 +21,7 @@ mod usage;
 pub use bash::truncate;
 pub use event::Event;
 pub use hooks::EVENTS;
-pub use input::with_files;
+pub use input::{with_files, with_images};
 pub use record::{Record, UserInput};
 pub use session::{Options, Session};
 pub use store::{Meta, list_sessions, socket_path, tuse_home};

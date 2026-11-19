@@ -22,6 +22,8 @@ crossterm = "0.28"
 pulldown-cmark = { version = "0.12", default-features = false }
 unicode-width = "0.2"
 base64 = "0.22"
+arboard = "3"
+png = "0.18"
 
 [profile.release]
 strip = true

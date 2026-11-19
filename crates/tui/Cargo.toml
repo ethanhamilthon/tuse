@@ -11,3 +11,5 @@ tuse-core.workspace = true
 crossterm.workspace = true
 pulldown-cmark.workspace = true
 unicode-width.workspace = true
+arboard.workspace = true
+png.workspace = true

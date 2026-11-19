@@ -1,8 +1,8 @@
 use crate::app::App;
+use crate::clipboard::Pasted;
 use crate::picker::Kind;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::collections::BTreeMap;
-use tuse_core::UserInput;
 
 impl App {
     pub fn picker_rows(&self) -> usize {
@@ -41,6 +41,9 @@ impl App {
                 }
             }
             KeyCode::Char('d') if ctrl && e.is_empty() => self.quit = true,
+            KeyCode::Char('v') if ctrl || k.modifiers.contains(KeyModifiers::SUPER) => {
+                self.paste_clipboard()
+            }
             KeyCode::Char('a') if ctrl => e.home(),
             KeyCode::Char('e') if ctrl => e.end(),
             KeyCode::Char('u') if ctrl => e.kill_to_start(),
@@ -133,8 +136,27 @@ impl App {
             p.filter(&q);
             return;
         }
+        if s.is_empty() {
+            return self.paste_clipboard();
+        }
         self.editor.insert(s);
         self.update_token_picker();
+    }
+
+    /// Ctrl+V / Cmd+V: an image becomes an `[Image #n: PATH]` atom, text is inserted.
+    pub fn paste_clipboard(&mut self) {
+        let dir = tuse_core::tuse_home().join(&self.session.id).join("images");
+        match crate::clipboard::read(&dir) {
+            Ok(Pasted::Image(path)) => {
+                let n = self.editor.images().len() + 1;
+                let label = format!("[Image #{n}: {}]", path.display());
+                self.editor.insert_atom(&label, Some(path));
+                self.editor.insert(" ");
+            }
+            Ok(Pasted::Text(t)) => self.paste(&t),
+            Ok(Pasted::Nothing) => {}
+            Err(e) => self.error(format!("Clipboard: {e}")),
+        }
     }
 
     fn submit(&mut self) {
@@ -151,10 +173,15 @@ impl App {
             return;
         }
         let expanded = expand_prompts(trimmed, &self.session.config().prompts);
+        let images = self.editor.images();
         self.editor.clear();
         self.picker = None;
         self.scroll = 0;
-        self.session.submit(UserInput::text(expanded));
+        let images: Vec<String> = images.iter().map(|p| p.display().to_string()).collect();
+        match tuse_core::with_images(&expanded, &images) {
+            Ok(input) => self.session.submit(input),
+            Err(e) => self.error(e),
+        }
     }
 }
 

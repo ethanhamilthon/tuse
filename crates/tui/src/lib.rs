@@ -1,5 +1,6 @@
 mod app;
 mod chat;
+mod clipboard;
 mod commands;
 mod draw;
 mod editor;

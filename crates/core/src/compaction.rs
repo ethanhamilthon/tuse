@@ -53,7 +53,7 @@ mod tests {
                 reasoning: String::new(),
                 tool_calls: vec![ToolCall {
                     id: format!("c{n}"),
-                    name: "bash".into(),
+                    name: "python".into(),
                     arguments: "{}".into(),
                 }],
                 at: String::new(),
@@ -63,6 +63,8 @@ mod tests {
                 tool: "python".into(),
                 input: "ls".into(),
                 images: vec![],
+                diffs: vec![],
+                title: String::new(),
                 output: format!("first\n{big}"),
                 code: Some(0),
                 at: String::new(),

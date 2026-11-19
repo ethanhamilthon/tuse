@@ -6,14 +6,11 @@ use std::collections::BTreeMap;
 
 impl App {
     pub fn picker_rows(&self) -> usize {
-        let max = self.palette.t.picker_max_height as usize;
-        match &self.picker {
-            Some(p) if !p.title.is_empty() => max.saturating_sub(1).max(1),
-            _ => max.max(1),
-        }
+        self.list_rows.max(1)
     }
 
     pub fn key(&mut self, k: KeyEvent, page: usize) {
+        let page = page.max(1);
         if k.kind == KeyEventKind::Release {
             return;
         }
@@ -67,19 +64,11 @@ impl App {
             KeyCode::Backspace => e.backspace(),
             KeyCode::Delete => e.delete(),
             KeyCode::Up => {
-                if !e.vertical(true, cols) {
-                    self.scroll += self.palette.t.scroll_step as usize;
-                }
+                e.vertical(true, cols);
             }
             KeyCode::Down => {
-                if !e.vertical(false, cols) {
-                    self.scroll = self
-                        .scroll
-                        .saturating_sub(self.palette.t.scroll_step as usize);
-                }
+                e.vertical(false, cols);
             }
-            KeyCode::PageUp => self.scroll += page,
-            KeyCode::PageDown => self.scroll = self.scroll.saturating_sub(page),
             KeyCode::Tab => {}
             KeyCode::Char(c) => e.insert(&c.to_string()),
             _ => {}

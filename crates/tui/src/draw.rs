@@ -1,7 +1,7 @@
 use crate::app::App;
 use crate::input_view;
 use crate::style::Style;
-use crate::text::{Line, clip, line_width, span, width};
+use crate::text::{Line, line_width, span};
 use crossterm::QueueableCommand;
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::style::{
@@ -20,10 +20,11 @@ pub fn draw(app: &mut App, out: &mut impl Write, w: u16, h: u16) -> std::io::Res
     let text_w = inner.saturating_sub(fr.left + fr.right).max(1);
     app.input_cols = text_w;
     let (rows, (crow, ccol)) = app.editor.layout(text_w);
-    let input_h = rows.len().clamp(1, (t.input_max_height as usize).max(1));
+    let input_h = tuse_config::limit(t.input_max_height, rows.len())
+        .max(1)
+        .min(h.saturating_sub(fr.head + fr.foot).max(1));
     let input_top = crow.saturating_sub(input_h - 1).min(rows.len() - input_h);
-    let picker = picker_lines(app, inner);
-    let fixed = input_h + fr.head + fr.foot + picker.len();
+    let fixed = input_h + fr.head + fr.foot;
     let chat_h = h.saturating_sub(fixed);
     let mut screen: Vec<Line> = Vec::with_capacity(h);
 
@@ -37,13 +38,17 @@ pub fn draw(app: &mut App, out: &mut impl Write, w: u16, h: u16) -> std::io::Res
     while view.len() < chat_h {
         view.insert(0, vec![]);
     }
+    let cap = chat_h.min(t.list_max_height as usize);
     if let Some(panel) = &mut app.panel {
-        let lines = panel.lines(inner, chat_h, p);
+        let lines = panel.lines(inner, cap, p);
         view.truncate(chat_h.saturating_sub(lines.len()));
         view.extend(lines);
     }
+    let lines = crate::list::picker(app, inner, cap);
+    let p = &app.palette;
+    view.truncate(chat_h.saturating_sub(lines.len()));
+    view.extend(lines);
     screen.extend(view);
-    screen.extend(picker);
     let shown = &rows[input_top..input_top + input_h];
     screen.extend(input_view::block(app, &fr, inner, shown));
 
@@ -64,7 +69,15 @@ pub fn draw(app: &mut App, out: &mut impl Write, w: u16, h: u16) -> std::io::Res
         }
         out.queue(ResetColor)?;
     }
-    let cy = h.saturating_sub(input_h + fr.foot) + crow - input_top;
+    let first = h.saturating_sub(input_h + fr.foot);
+    app.input_area = Some(crate::app::InputArea {
+        row: first,
+        col: pad + fr.left,
+        height: input_h,
+        top: input_top,
+        cols: text_w,
+    });
+    let cy = first + crow - input_top;
     out.queue(MoveTo((pad + fr.left + ccol) as u16, cy as u16))?;
     if app.picker.as_ref().is_none_or(|p| p.kind.is_token()) {
         out.queue(Show)?;
@@ -96,74 +109,4 @@ fn put(out: &mut impl Write, s: &crate::text::Span, base: Style) -> std::io::Res
     out.queue(Print(&s.text))?;
     out.queue(SetAttribute(Attribute::Reset))?;
     Ok(())
-}
-
-fn picker_lines(app: &App, w: usize) -> Vec<Line> {
-    let Some(pk) = &app.picker else { return vec![] };
-    let p = &app.palette;
-    let t = &p.t;
-    let ppad = " ".repeat(t.picker_pad_x as usize);
-    let base = Style::fg(p.picker_fg).on(p.picker_bg);
-    let mut lines = vec![];
-    let fill = |mut l: Line, st: Style| {
-        let n = w.saturating_sub(line_width(&l));
-        l.push(span(" ".repeat(n), st));
-        l
-    };
-    if !pk.title.is_empty() {
-        let q = if pk.query.is_empty() {
-            String::new()
-        } else {
-            format!(" › {}", pk.query)
-        };
-        let title = clip(&format!("{ppad}{}{q}", pk.title), w, &t.more);
-        lines.push(fill(
-            vec![span(
-                title,
-                Style::fg(p.picker_title).on(p.picker_bg).bold(),
-            )],
-            base,
-        ));
-    }
-    let rows = app.picker_rows();
-    if pk.shown.is_empty() {
-        lines.push(fill(
-            vec![span(
-                format!("{ppad}no matches"),
-                Style::fg(p.picker_detail).on(p.picker_bg),
-            )],
-            base,
-        ));
-    }
-    for (n, &i) in pk.shown.iter().enumerate().skip(pk.scroll).take(rows) {
-        let it = &pk.items[i];
-        let sel = n == pk.selected;
-        let st = if sel {
-            Style::fg(p.picker_selected_fg).on(p.picker_selected_bg)
-        } else {
-            base
-        };
-        let det = if sel {
-            st
-        } else {
-            Style::fg(p.picker_detail).on(p.picker_bg)
-        };
-        let mark = if sel {
-            t.picker_selected_prefix.clone()
-        } else {
-            " ".repeat(width(&t.picker_selected_prefix))
-        };
-        let label = clip(
-            &it.label,
-            w.saturating_sub(ppad.len() + width(&mark)),
-            &t.more,
-        );
-        let mut l = vec![span(format!("{ppad}{mark}{label}"), st)];
-        let room = w.saturating_sub(line_width(&l) + 2);
-        if !it.detail.is_empty() && room > 4 {
-            l.push(span(format!("  {}", clip(&it.detail, room, &t.more)), det));
-        }
-        lines.push(fill(l, st));
-    }
-    lines
 }

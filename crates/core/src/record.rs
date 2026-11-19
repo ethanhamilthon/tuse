@@ -23,10 +23,10 @@ pub enum Record {
     },
     Tool {
         id: String,
-        /// Sessions before 0.4 have no tool name: they ran `bash`.
-        #[serde(default = "bash_name")]
         tool: String,
-        #[serde(alias = "command")]
+        /// What the agent said the call does (`python`'s `title`).
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        title: String,
         input: String,
         output: String,
         #[serde(default)]
@@ -34,6 +34,9 @@ pub enum Record {
         /// `data:` URLs the model saw with the output (images from `read`).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<String>,
+        /// Files the call changed, with their diffs.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        diffs: Vec<FileDiff>,
         #[serde(default)]
         at: String,
     },
@@ -63,6 +66,13 @@ pub enum Record {
     },
 }
 
+/// A file a call changed and what changed in it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileDiff {
+    pub path: String,
+    pub diff: String,
+}
+
 /// A message on its way into the history: typed in the TUI, a prompt or a notification.
 #[derive(Debug, Clone, Default)]
 pub struct UserInput {
@@ -78,8 +88,4 @@ impl UserInput {
             images: vec![],
         }
     }
-}
-
-fn bash_name() -> String {
-    "bash".into()
 }

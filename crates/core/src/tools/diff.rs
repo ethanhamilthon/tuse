@@ -10,6 +10,8 @@ pub struct Hunk {
 
 const CONTEXT: usize = 2;
 const MAX_HUNKS: usize = 5;
+/// Lines of a new file or of one changed region the diff lists.
+const MAX_LINES: usize = 200;
 
 /// Hunks for replacing the byte ranges `at` (start, old length) of `text` with `new`.
 pub fn hunks(text: &str, at: &[(usize, usize)], new: &str) -> Vec<Hunk> {
@@ -78,4 +80,63 @@ pub fn render(hunks: &[Hunk]) -> String {
         ));
     }
     out.trim_end().to_string()
+}
+
+/// The diff of a new file: every line added.
+pub fn whole(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out: Vec<String> = lines
+        .iter()
+        .take(MAX_LINES)
+        .enumerate()
+        .map(|(i, l)| format!("+ {:>4} | {l}", i + 1))
+        .collect();
+    if lines.len() > MAX_LINES {
+        out.push(format!("[{} more lines]", lines.len() - MAX_LINES));
+    }
+    out.join("\n")
+}
+
+/// The diff of a rewritten file: the lines between the common head and tail.
+pub fn changed(old: &str, new: &str) -> String {
+    let (a, b): (Vec<&str>, Vec<&str>) = (old.lines().collect(), new.lines().collect());
+    let head = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let tail = a[head..]
+        .iter()
+        .rev()
+        .zip(b[head..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    if head == a.len() && head == b.len() {
+        return String::new();
+    }
+    let (old_mid, new_mid) = (&a[head..a.len() - tail], &b[head..b.len() - tail]);
+    let hunk = Hunk {
+        start: head + 1,
+        old: old_mid
+            .iter()
+            .take(MAX_LINES)
+            .map(|s| s.to_string())
+            .collect(),
+        new: new_mid
+            .iter()
+            .take(MAX_LINES)
+            .map(|s| s.to_string())
+            .collect(),
+        before: a[head.saturating_sub(CONTEXT)..head]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        after: a[a.len() - tail..]
+            .iter()
+            .take(CONTEXT)
+            .map(|s| s.to_string())
+            .collect(),
+    };
+    let mut out = render(&[hunk]);
+    let more = old_mid.len().max(new_mid.len()).saturating_sub(MAX_LINES);
+    if more > 0 {
+        out.push_str(&format!("\n[{more} more changed lines]"));
+    }
+    out
 }

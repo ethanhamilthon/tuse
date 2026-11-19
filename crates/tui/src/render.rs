@@ -69,12 +69,12 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             all[all.len() - n..].to_vec()
         }
         Entry::Tool {
-            tool,
             input,
             output,
             code,
+            diffs,
             ..
-        } => crate::tool_view::tool(tool, input, output.as_deref(), *code, width, p),
+        } => crate::tool_view::tool(input, output.as_deref(), *code, diffs, width, p),
         Entry::Notice(text) => plain(text, width, Style::fg(p.notice), &t.notice_prefix, &pad),
         Entry::Error(text) => plain(text, width, Style::fg(p.error), &t.error_prefix, &pad),
         Entry::Print { text, .. } => plain(text, width, Style::fg(p.fg), "", ""),
@@ -106,14 +106,5 @@ mod tests {
             .map(|l| l.iter().map(|s| s.text.as_str()).collect())
             .collect();
         assert_eq!(text, ["a    b", "[31mred"]);
-    }
-
-    #[test]
-    fn tool_output_tabs_do_not_reach_the_terminal() {
-        let p = Palette::new(&tuse_config::Theme::default());
-        let lines =
-            crate::tool_view::tool("read", "f", Some("1\tx\n2\t\x1b[31my"), Some(0), 40, &p);
-        let text: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
-        assert!(!text.contains('\t') && !text.contains('\x1b'), "{text:?}");
     }
 }

@@ -1,10 +1,10 @@
 use crate::app::App;
 use crate::render::duration;
 
-/// The working indicator: spinner, time and tool calls; empty when the agent is idle.
+/// The working indicator: spinner, time and what the agent is doing; empty when it is idle.
 pub fn working(app: &App) -> String {
     let t = &app.palette.t;
-    let Some((elapsed, calls)) = app.session.turn_info() else {
+    let Some((elapsed, status)) = app.session.turn_info() else {
         return String::new();
     };
     if app.steering.is_some() {
@@ -15,7 +15,10 @@ pub fn working(app: &App) -> String {
         .get(app.tick % frames.len().max(1))
         .cloned()
         .unwrap_or_default();
-    format!("{spin} {}{}{calls} calls", duration(elapsed), t.label_sep)
+    if status.is_empty() {
+        return format!("{spin} {}", duration(elapsed));
+    }
+    format!("{spin} {}{}{status}", duration(elapsed), t.label_sep)
 }
 
 /// The model indicator: model, effort, context use and cost.

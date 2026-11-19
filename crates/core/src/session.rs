@@ -46,6 +46,8 @@ pub(crate) struct State {
     pub next_input: u64,
     pub turn_start: Instant,
     pub calls: usize,
+    /// What the agent is doing now; the working indicator shows it.
+    pub status: String,
     pub context: u64,
     pub meta: Meta,
 }
@@ -97,6 +99,7 @@ impl Session {
             next_input: 0,
             turn_start: Instant::now(),
             calls: 0,
+            status: String::new(),
             context: 0,
             meta,
             records: vec![],
@@ -145,18 +148,8 @@ impl Session {
     }
 
     fn start(self: &Arc<Self>) -> Result<(), String> {
-        self.notice_removed_settings();
         self.hook("session_start", Data::default());
         Ok(())
-    }
-
-    /// Tells the user about config keys that no longer do anything.
-    fn notice_removed_settings(&self) {
-        if !self.config().bins.is_empty() {
-            let text = "`bins` is no longer supported; put helpers in a .py file next to the config and import it (see `prelude`)";
-            let mut st = self.state.lock().unwrap();
-            self.push(&mut st, Record::Notice { text: text.into() });
-        }
     }
 
     /// Stops the turn and tasks, fires `session_end` (and waits for those hooks)

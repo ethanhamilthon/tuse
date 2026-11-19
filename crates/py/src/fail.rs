@@ -9,6 +9,10 @@ impl Fail {
         Fail(ExcType::ValueError, msg.into())
     }
 
+    pub fn of(kind: ExcType, msg: impl Into<String>) -> Self {
+        Fail(kind, msg.into())
+    }
+
     pub fn runtime(msg: impl Into<String>) -> Self {
         Fail(ExcType::RuntimeError, msg.into())
     }
@@ -28,6 +32,17 @@ impl From<Fail> for ExtFunctionResult {
 pub struct Args<'a>(pub &'a CallArgs);
 
 impl Args<'_> {
+    /// A `TypeError` when the call passes `name` (by position `i` or by keyword).
+    pub fn deny(&self, i: usize, name: &str) -> Result<(), Fail> {
+        if self.0.arg(i).is_some() || self.0.kwarg(name).is_some() {
+            return Err(Fail(
+                ExcType::TypeError,
+                format!("unexpected argument `{name}`"),
+            ));
+        }
+        Ok(())
+    }
+
     fn get(&self, i: usize, name: &str) -> Option<ObjectRef<'_>> {
         self.0
             .arg(i)

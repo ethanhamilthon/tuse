@@ -18,11 +18,13 @@ pub fn value(v: &MontyObject) -> String {
 fn sh_result(v: &MontyObject) -> Option<String> {
     let items = v.as_ref().items()?;
     let repr = v.py_repr();
-    if !repr.starts_with("Sh(out=") || items.len() != 4 {
+    if !repr.starts_with("Sh(out=") || items.len() != 5 {
         return None;
     }
     let mut out = items[0].as_str()?.to_string();
-    let note = if items[3].as_bool() == Some(true) {
+    let note = if let Some(id) = items[4].as_str() {
+        format!("[still running as task {id}; use task_get(\"{id}\")]")
+    } else if items[3].as_bool() == Some(true) {
         "[timed out]".to_string()
     } else {
         match items[1].as_int() {

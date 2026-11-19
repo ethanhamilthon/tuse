@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.4.1 - 2026-11-19
+
+One tool, a built-in system prompt, one look for every list. **Breaking** for hooks and configs;
+read the notes at the end.
+
+- **One tool: `python`.** `read`, `write` and `edit` are functions inside it, next to the new
+  `grep(pattern, path, glob, ignore_case, context, limit)` (a regex search that respects
+  `.gitignore`). Errors are Python exceptions (`ValueError`, `FileNotFoundError`, ...). The files a
+  call changed are shown as a diff at the end of the call (a change at the end of a long line stays
+  visible); the model gets a short confirmation. `read` stops at `max_output` and says which
+  `offset` continues.
+- **`title` and a status in the working indicator.** Every `python` call has a `title`. The
+  indicator shows `thinking...` at the start of a turn, then the title, `reading PATH`,
+  `writing PATH`, `editing PATH`, `searching PATTERN`, `running CMD`, `asking user...` or
+  `reading docs...`; the last status stays until a new one comes. The call counter left the
+  indicator (it stays in `/usage`). Texts are theme tokens (`thinking_label`, `read_label`, ...).
+- **`sh` does not die at its timeout.** A command still running at its own timeout or the call's
+  goes on as a background process task; `.task` is its ID, `.out` has what it printed so far.
+- **`task_run(code)` runs Python.** A task is a background REPL (new interpreter, same functions,
+  no access to your variables) that stays alive and `idle`. `task_add(id, code)` queues more code in
+  it. `task_get` and `task_list` show `.kind`, `.code`, `.status`, `.exit` and `.queue`. The agent
+  gets a message each time a REPL goes idle.
+- **`ask` always blocks** (no `wait`) and the call's timeout does not run while the user thinks.
+  The user can always write their own answer: typing is the answer, Enter without text takes the
+  selected option. To ask without waiting, call it from a task.
+- **One look for every list.** `/models`, `/resume`, `/theme`, `/tasks`, `/trace`, `ask` and the
+  `/`, `#` and `@` pickers share the `/trace` design (a rule, a title with the position, rows),
+  drawn over the bottom of the chat. `/trace` filters too. Tokens: `list_*` replace `picker_*`
+  and `panel_*`.
+- **Python is highlighted** in tool calls and in ```` ```python ```` blocks (`syntax_*` tokens).
+- **Mouse.** The wheel scrolls the chat (or the open list); a click in the input puts the cursor
+  there. The arrows only move in the input. Select text with Shift (Option in iTerm2 and
+  Terminal.app) while the mouse is captured.
+- **The system prompt is built in** (`crates/core/prompts/system.md`) and tells the agent the
+  real `max_output` and `tool_timeout`. The `systems` of your config come after it. `default.yaml`
+  is gone; `tuse update` only replaces the binary.
+- **New defaults.** `max_output` 4096, `tool_timeout` 10, `input_max_height` -1 (no limit),
+  `tool_line` -1, `output_line` 1, `reasoning_line` -1, `pad_x`, `input_pad_x` and `list_pad_x`
+  0, `tool_prefix` `* `, `notice_prefix` `✓ `, spinner `◐ ◓ ◑ ◒`.
+- The chat no longer prints `Model ..., effort ...` and `Theme ...` after `/models` and `/theme`.
+
+Notes for an existing install:
+
+- Run `tuse update`, then delete `include: [default.yaml]` from `~/.config/tuse/main.yaml` (or
+  run `tuse reset`). Until then `default.yaml` is an empty file, so nothing breaks.
+- Removed with no replacement: the old names `max_bash_output`, `bash_timeout`, `bash_line`, the
+  top-level `theme` (use `settings.theme`), `bins`, the `wait` argument of `ask`, and `task_run`
+  of a shell command (use `task_run('sh("cmd")')`). Sessions written before 0.4 are not shown
+  with a tool name.
+- Hooks: `tool` is always `python`, `input` is its code, `title` is new. A hook that looked for
+  `tool == "edit"` has to look at the code instead.
+- `Record::Tool` has `title` and `diffs`; a session written by 0.4.0 still opens.
+- The theme tokens `picker_*`, `panel_*` and the two `*_max_height` of lists are renamed; use `list_fg`, `list_bg`, `list_title`, `list_selected_fg`, `list_selected_bg`,
+  `list_detail`, `list_selected_prefix`, `list_pad_x`, `list_max_height`.
+
 ## 0.4.0 - 2026-11-19
 
 The agent no longer has `bash`. It has four tools: `python`, `read`, `write` and `edit`.

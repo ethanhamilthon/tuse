@@ -141,14 +141,15 @@ pub fn missing_results(records: &[Record]) -> Vec<Record> {
         .map(|c| Record::Tool {
             id: c.id.clone(),
             tool: c.name.clone(),
-            input: crate::tools::input_of(
-                &c.name,
-                &serde_json::from_str(&c.arguments).unwrap_or_default(),
-                &c.arguments,
-            ),
+            title: String::new(),
+            input: serde_json::from_str::<serde_json::Value>(&c.arguments)
+                .ok()
+                .and_then(|v| v["code"].as_str().map(String::from))
+                .unwrap_or_else(|| c.arguments.clone()),
             output: "[interrupted: no output]".into(),
             code: None,
             images: vec![],
+            diffs: vec![],
             at: crate::id::now(),
         })
         .collect()

@@ -1,30 +1,36 @@
 mod app;
 mod chat;
 mod clipboard;
+mod code_block;
 mod commands;
 mod draw;
 mod editor;
+mod events;
 mod files;
 mod inline;
 mod input_view;
 mod keys;
+mod list;
 mod markdown;
 mod motion;
+mod mouse;
 mod panel;
 mod panel_keys;
-mod panel_list;
 mod picker;
 mod pickers;
 mod render;
 mod status;
 mod style;
+mod syntax;
 mod table;
 mod text;
+mod token_picker;
 mod tool_view;
 
 use crossterm::event::{
-    self, DisableBracketedPaste, EnableBracketedPaste, Event as TermEvent,
-    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event as TermEvent, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
 };
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor::SetCursorStyle, execute};
@@ -60,23 +66,22 @@ fn setup() -> std::io::Result<()> {
         out,
         EnterAlternateScreen,
         EnableBracketedPaste,
+        EnableMouseCapture,
         SetCursorStyle::SteadyBar
     )?;
     let _ = execute!(
         out,
         PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
     );
-    // Alternate scroll: the mouse wheel sends Up/Down in the alternate screen.
-    write!(out, "\x1b[?1007h")?;
     out.flush()
 }
 
 fn restore() {
     let mut out = stdout();
-    let _ = write!(out, "\x1b[?1007l");
     let _ = execute!(
         out,
         PopKeyboardEnhancementFlags,
+        DisableMouseCapture,
         DisableBracketedPaste,
         SetCursorStyle::DefaultUserShape,
         LeaveAlternateScreen,
@@ -114,6 +119,7 @@ fn main_loop(mut app: app::App) -> std::io::Result<String> {
         match event::read()? {
             TermEvent::Key(k) => app.key(k, page),
             TermEvent::Paste(s) => app.paste(&s),
+            TermEvent::Mouse(m) => app.mouse(m),
             _ => {}
         }
         dirty = true;

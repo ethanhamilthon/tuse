@@ -19,8 +19,8 @@ USAGE
   tuse connect [--config PATH]            add a provider: asks base url, api key and name,
                                            fetches its models and saves it to the config
   tuse reset [--yes]                      replace the global config folder with the latest
-                                           main.yaml and default.yaml
-  tuse update                             update the binary and default.yaml
+                                           main.yaml
+  tuse update                             update the binary
   tuse version | tuse help
 
 The config is --config, else ./tuse.yaml, else $TUSE_GLOBAL_CONFIG, else

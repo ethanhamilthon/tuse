@@ -2,7 +2,7 @@ use crate::render::render;
 use crate::style::Palette;
 use crate::text::Line;
 use std::time::Duration;
-use tuse_core::Record;
+use tuse_core::{FileDiff, Record};
 
 #[derive(Debug, Clone)]
 pub enum Entry {
@@ -14,10 +14,10 @@ pub enum Entry {
     Reasoning(String),
     Tool {
         id: String,
-        tool: String,
         input: String,
         output: Option<String>,
         code: Option<i32>,
+        diffs: Vec<FileDiff>,
     },
     Notice(String),
     Error(String),
@@ -64,17 +64,17 @@ impl Chat {
                 }
                 Record::Tool {
                     id,
-                    tool,
                     input,
                     output,
                     code,
+                    diffs,
                     ..
                 } => Entry::Tool {
                     id: id.clone(),
-                    tool: tool.clone(),
                     input: input.clone(),
                     output: Some(output.clone()),
                     code: *code,
+                    diffs: diffs.clone(),
                 },
                 Record::Notice { text } => Entry::Notice(text.clone()),
                 Record::Error { text } => Entry::Error(text.clone()),

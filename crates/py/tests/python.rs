@@ -28,10 +28,7 @@ impl Host for H {
 }
 
 fn run(py: &mut Python, code: &str, secs: u64, cancel: &AtomicBool) -> (String, bool) {
-    let ctx = Ctx {
-        cancel,
-        deadline: Instant::now() + Duration::from_secs(secs),
-    };
+    let ctx = Ctx::new(cancel, Instant::now() + Duration::from_secs(secs));
     let o = py.run(code, &ctx, vec![]);
     (o.text, o.ok)
 }
@@ -106,5 +103,65 @@ fn the_interpreter_works_like_a_repl_with_sh_files_and_limits() {
         "{}",
         text.len()
     );
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn a_timed_out_sh_is_handed_over_and_the_deadline_pauses() {
+    use std::sync::Mutex;
+    use tuse_py::Adopt;
+    struct A(PathBuf, Mutex<Vec<String>>);
+    impl Host for A {
+        fn functions(&self) -> &'static [&'static str] {
+            &["wait"]
+        }
+        fn call(&self, _: &str, _: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
+            // The user takes 2 s to answer; the deadline must not run meanwhile.
+            let _p = ctx.pause();
+            std::thread::sleep(Duration::from_millis(1500));
+            Ok(MontyObject::string("answered"))
+        }
+        fn cwd(&self) -> PathBuf {
+            self.0.clone()
+        }
+        fn env(&self) -> Vec<(String, String)> {
+            vec![]
+        }
+        fn module_dirs(&self) -> Vec<PathBuf> {
+            vec![]
+        }
+        fn adopt(&self, a: Adopt) -> Result<(String, std::fs::File), Adopt> {
+            let log = self.0.join("t1.log");
+            self.1.lock().unwrap().push(a.cmd.clone());
+            let mut child = a.child;
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            Ok(("t1".into(), std::fs::File::create(log).unwrap()))
+        }
+    }
+    let dir = std::env::temp_dir().join(format!("tuse-py-adopt-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let host = Arc::new(A(dir.clone(), Mutex::default()));
+    let mut py = Python::new(host.clone(), 1000);
+    let no = AtomicBool::new(false);
+    let ctx = |secs| Ctx::new(&no, Instant::now() + Duration::from_secs(secs)).adopting();
+    // 1.5 s of waiting inside a 1 s call is fine.
+    let o = py.run("wait()", &ctx(1), vec![]);
+    assert!(o.ok && o.text == "answered", "{}", o.text);
+    // A timed out sh is adopted: it returns at once with the task id.
+    let t = Instant::now();
+    let o = py.run(
+        "r = sh('echo first; sleep 5', timeout=1)\nprint(r.task, r.timed_out, r.out.strip())",
+        &ctx(30),
+        vec![],
+    );
+    assert_eq!(o.text, "t1 True first", "{}", o.text);
+    assert!(t.elapsed() < Duration::from_secs(3));
+    assert_eq!(host.1.lock().unwrap().len(), 1);
+    // Without adoption it is killed as before.
+    let plain = Ctx::new(&no, Instant::now() + Duration::from_secs(30));
+    let o = py.run("sh('sleep 5', timeout=1).task", &plain, vec![]);
+    assert_eq!(o.text, "[no output]", "{}", o.text);
     std::fs::remove_dir_all(dir).ok();
 }

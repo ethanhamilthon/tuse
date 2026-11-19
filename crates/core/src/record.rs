@@ -23,10 +23,17 @@ pub enum Record {
     },
     Tool {
         id: String,
-        command: String,
+        /// Sessions before 0.4 have no tool name: they ran `bash`.
+        #[serde(default = "bash_name")]
+        tool: String,
+        #[serde(alias = "command")]
+        input: String,
         output: String,
         #[serde(default)]
         code: Option<i32>,
+        /// `data:` URLs the model saw with the output (images from `read`).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<String>,
         #[serde(default)]
         at: String,
     },
@@ -56,7 +63,7 @@ pub enum Record {
     },
 }
 
-/// A message on its way into the history: typed in the TUI or sent with `tuse steer`.
+/// A message on its way into the history: typed in the TUI, a prompt or a notification.
 #[derive(Debug, Clone, Default)]
 pub struct UserInput {
     pub text: String,
@@ -71,4 +78,8 @@ impl UserInput {
             images: vec![],
         }
     }
+}
+
+fn bash_name() -> String {
+    "bash".into()
 }

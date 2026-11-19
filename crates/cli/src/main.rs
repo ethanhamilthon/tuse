@@ -1,7 +1,6 @@
 mod args;
 mod connect;
 mod headless;
-mod remote;
 mod update;
 
 use args::Args;
@@ -15,29 +14,17 @@ USAGE
   tuse [--config PATH] [--resume ID]       open the TUI
   tuse -p [PROMPT|-] [--config PATH] [--resume ID]
                                            headless (`-` reads the prompt from stdin):
-                                           session ID to stderr, replies to stdout;
-                                           runs until killed, takes `tuse steer`
-  tuse steer [-s ID] [--file PATH]... [TEXT|-]
-                                           send a message to a running session
-  tuse ask [-s ID] [--async] QUESTION OPTION...
-                                           ask the TUI user; prints the answer
-                                           (--async: prints an ID, the answer is steered back)
-  tuse print [-s ID] [--id ID] [TEXT|-]
-                                           show plain multiline text in the TUI (no Markdown);
-                                           prints a block ID, `--id ID` replaces that block
-  tuse task run [-s ID] [--name NAME] -- COMMAND...
-  tuse task stop|get [--lines N]|list [-s ID] [ID]
-                                           background tasks of a session
+                                           runs the prompt to the end, replies to stdout,
+                                           the session ID to stderr; exit code 1 on an error
   tuse connect [--config PATH]            add a provider: asks base url, api key and name,
                                            fetches its models and saves it to the config
   tuse reset [--yes]                      replace the global config folder with the latest
                                            main.yaml and default.yaml
   tuse update                             update the binary and default.yaml
-  tuse docs                               print the docs for the agent
   tuse version | tuse help
 
--s defaults to $TUSE_SESSION. The config is --config, else ./tuse.yaml, else
-$TUSE_GLOBAL_CONFIG, else ~/.config/tuse/main.yaml.";
+The config is --config, else ./tuse.yaml, else $TUSE_GLOBAL_CONFIG, else
+~/.config/tuse/main.yaml.";
 
 fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -47,38 +34,14 @@ fn main() {
     }
 }
 
-fn docs() -> String {
-    format!(
-        "{}\n\n{}",
-        include_str!("../../../docs/agent.md").trim_end(),
-        include_str!("../../../docs/config.md").trim_end()
-    )
-}
-
 fn run(raw: Vec<String>) -> Result<(), String> {
     let sub = raw.first().map(String::as_str).unwrap_or("");
     let rest = raw.get(1..).unwrap_or_default();
-    let session_flags = ["-s", "--session"];
     match sub {
-        "steer" => remote::steer(&Args::parse_text(
-            rest,
-            &["-s", "--session", "--file", "-f"],
-            &[],
-        )?),
-        "ask" => remote::ask(&Args::parse(rest, &session_flags)?),
-        "print" => remote::print(&Args::parse_text(rest, &["-s", "--session", "--id"], &[])?),
-        "task" => remote::task(&Args::parse(
-            rest,
-            &["-s", "--session", "--name", "--lines", "-n"],
-        )?),
         "connect" => {
             let a = Args::parse(rest, &["--config", "-c"])?;
             let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
             connect::run(a.value(&["--config", "-c"]).map(|p| cwd.join(p)))
-        }
-        "docs" => {
-            print!("{}", docs());
-            Ok(())
         }
         "reset" => update::reset(Args::parse(rest, &[])?.has(&["--yes", "-y"])),
         "update" => update::update(),

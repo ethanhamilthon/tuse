@@ -39,7 +39,7 @@ pub fn with_images(text: &str, paths: &[String]) -> Result<UserInput, String> {
     Ok(input)
 }
 
-fn image_mime(p: &Path) -> Option<&'static str> {
+pub(crate) fn image_mime(p: &Path) -> Option<&'static str> {
     let ext = p.extension()?.to_str()?.to_ascii_lowercase();
     Some(match ext.as_str() {
         "png" => "image/png",

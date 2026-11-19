@@ -1,4 +1,4 @@
-use crate::{expand::vars, load::resolve_command};
+use crate::expand::vars;
 use std::path::Path;
 
 fn load(p: Option<&Path>) -> Result<crate::Loaded, String> {
@@ -12,21 +12,13 @@ fn vars_expand() {
 }
 
 #[test]
-fn command_paths() {
-    let d = Path::new("/cfg");
-    assert_eq!(resolve_command(".bin/hook -v", d), "/cfg/.bin/hook -v");
-    assert_eq!(resolve_command("notify-send hi", d), "notify-send hi");
-    assert_eq!(resolve_command("/usr/bin/x", d), "/usr/bin/x");
-}
-
-#[test]
 fn includes_merge() {
     let dir = std::env::temp_dir().join(format!("tuse-cfg-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("sub")).unwrap();
     let w = |n: &str, s: &str| std::fs::write(dir.join(n), s).unwrap();
     w(
         "sub/a.yaml",
-        "model: a\neffort: low\nsystems: [one]\nhooks: {h: {events: [turn_start], run: ./h.sh}}\n",
+        "model: a\neffort: low\nsystems: [one]\nhooks: {h: {events: [turn_start], run: 'sh(\"./h.sh\")'}}\n",
     );
     w(
         "b.yaml",
@@ -40,13 +32,11 @@ fn includes_merge() {
     assert_eq!(c.model, "b");
     assert_eq!(c.effort, "high");
     assert_eq!(c.systems, ["one", "two"]);
-    assert_eq!(c.settings.bash_timeout, 5);
-    assert_eq!(c.settings.max_bash_output, 10);
+    assert_eq!(c.settings.tool_timeout, 5);
+    assert_eq!(c.settings.max_output, 10);
     assert_eq!(c.prompts["p"], "hi");
-    assert_eq!(
-        c.hooks["h"].run,
-        dir.join("sub/./h.sh").display().to_string()
-    );
+    assert_eq!(c.settings.hook_timeout, 30);
+    assert_eq!(c.hooks["h"].run, "sh(\"./h.sh\")");
     std::fs::remove_dir_all(dir).ok();
 }
 
@@ -61,7 +51,7 @@ fn theme_extend() {
     )
     .unwrap();
     let t = load(Some(&p)).unwrap().config.active_theme();
-    assert_eq!((t.accent.as_str(), t.bash_line), ("blue", -1));
+    assert_eq!((t.accent.as_str(), t.tool_line), ("blue", -1));
     std::fs::write(&p, "theme: nope\n").unwrap();
     assert!(load(Some(&p)).is_err());
     std::fs::remove_dir_all(dir).ok();

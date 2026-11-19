@@ -1,6 +1,7 @@
 use crate::control::InputId;
 use crate::event::Event;
 use crate::history::{self, Bounds};
+use crate::hooks::Data;
 use crate::record::{Record, UserInput};
 use crate::store::{Meta, SessionDir};
 use crate::tasks::Tasks;
@@ -11,7 +12,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 use tuse_config::Config;
-use tuse_socket::Server;
+use tuse_py::Python;
 
 /// One conversation. A process holds at most one open session, and a session
 /// can be open in one process only (`SessionDir` holds a file lock).
@@ -21,14 +22,14 @@ pub struct Session {
     pub headless: bool,
     pub tasks: Tasks,
     pub(crate) dir: Mutex<Option<SessionDir>>,
-    pub(crate) path: PathBuf,
     pub(crate) config: RwLock<Arc<Config>>,
     pub(crate) config_arg: Option<PathBuf>,
     pub(crate) state: Mutex<State>,
     pub(crate) subs: Mutex<Vec<Sender<Event>>>,
     pub(crate) asks: Mutex<HashMap<String, Sender<String>>>,
     pub(crate) ask_seq: AtomicUsize,
-    pub(crate) server: Mutex<Option<Server>>,
+    /// The agent's interpreter; made on the first call, gone with the process.
+    pub(crate) python: Mutex<Option<Python>>,
     pub(crate) remote: Mutex<Vec<String>>,
     pub(crate) prints: Mutex<HashSet<String>>,
 }
@@ -129,14 +130,13 @@ impl Session {
             headless: opts.headless,
             tasks: Tasks::new(path.join("tasks")),
             dir: Mutex::new(Some(dir)),
-            path,
             config: RwLock::new(Arc::new(config)),
             config_arg: opts.config,
             state: Mutex::new(st),
             subs: Mutex::default(),
             asks: Mutex::default(),
             ask_seq: AtomicUsize::new(0),
-            server: Mutex::default(),
+            python: Mutex::default(),
             remote: Mutex::default(),
             prints: Mutex::default(),
         });
@@ -145,29 +145,32 @@ impl Session {
     }
 
     fn start(self: &Arc<Self>) -> Result<(), String> {
-        self.write_shims();
-        let weak = Arc::downgrade(self);
-        let handler: tuse_socket::Handler = Arc::new(move |req| match weak.upgrade() {
-            Some(s) => s.handle(req),
-            None => tuse_socket::Response::err("session closed"),
-        });
-        let server = Server::start(&crate::store::socket_path(&self.id), handler)
-            .map_err(|e| format!("socket: {e}"))?;
-        *self.server.lock().unwrap() = Some(server);
-        self.hook("session_start", vec![]);
+        self.notice_removed_settings();
+        self.hook("session_start", Data::default());
         Ok(())
     }
 
-    /// Stops the turn, tasks and socket, fires `session_end` and releases the lock.
-    pub fn close(&self) {
+    /// Tells the user about config keys that no longer do anything.
+    fn notice_removed_settings(&self) {
+        if !self.config().bins.is_empty() {
+            let text = "`bins` is no longer supported; put helpers in a .py file next to the config and import it (see `prelude`)";
+            let mut st = self.state.lock().unwrap();
+            self.push(&mut st, Record::Notice { text: text.into() });
+        }
+    }
+
+    /// Stops the turn and tasks, fires `session_end` (and waits for those hooks)
+    /// and releases the lock.
+    pub fn close(self: &Arc<Self>) {
         if self.dir.lock().unwrap().is_none() {
             return;
         }
         self.cancel();
         self.tasks.stop_all();
         self.asks.lock().unwrap().clear();
-        self.hook("session_end", vec![]);
-        self.server.lock().unwrap().take();
+        for h in self.hook("session_end", Data::default()) {
+            let _ = h.join();
+        }
         self.dir.lock().unwrap().take();
     }
 
@@ -175,19 +178,11 @@ impl Session {
         self.config.read().unwrap().clone()
     }
 
-    /// Rebuilds the config from its files and rewrites the `bins` shims.
+    /// Rebuilds the config from its files.
     pub fn reload(&self) -> Result<(), String> {
         let c = load_config(self.config_arg.as_deref(), &self.cwd)?;
         *self.config.write().unwrap() = Arc::new(c);
-        self.write_shims();
         Ok(())
-    }
-
-    fn write_shims(&self) {
-        let dir = tuse_config::find(self.config_arg.as_deref(), &self.cwd)
-            .and_then(|p| p.parent().map(Path::to_path_buf))
-            .unwrap_or_else(|| self.cwd.clone());
-        crate::bins::write_shims(&self.config(), &self.path.join("bin"), &dir);
     }
 
     pub(crate) fn emit(&self, e: Event) {
@@ -213,33 +208,18 @@ impl Session {
         }
     }
 
-    /// Environment of the agent's bash calls, tasks and hooks.
+    /// Environment of `sh`, tasks and `os.environ`.
     pub fn env(&self) -> Vec<(String, String)> {
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.display().to_string()))
-            .unwrap_or_default();
-        let path = std::env::var("PATH").unwrap_or_default();
         let model = self.state.lock().unwrap().model.clone();
         let mut env = vec![
             ("TUSE_SESSION".into(), self.id.clone()),
             ("TUSE_CWD".into(), self.cwd.display().to_string()),
             ("TUSE_MODEL".into(), model),
-            (
-                "PATH".into(),
-                format!("{}:{exe_dir}:{path}", self.path.join("bin").display()),
-            ),
         ];
         if let Some(c) = tuse_config::find(self.config_arg.as_deref(), &self.cwd) {
             env.push(("TUSE_CURRENT_CONFIG".into(), c.display().to_string()));
         }
         env
-    }
-
-    pub(crate) fn hook(&self, event: &str, mut extra: Vec<(String, String)>) {
-        let mut env = self.env();
-        env.append(&mut extra);
-        crate::hooks::fire(&self.config(), event, &env);
     }
 }
 

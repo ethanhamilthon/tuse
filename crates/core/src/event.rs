@@ -18,7 +18,10 @@ pub enum Event {
     },
     ToolStart {
         id: String,
-        command: String,
+        /// `python`, `read`, `write`, `edit` (or `bash` in an old session).
+        tool: String,
+        /// The code of `python`, the path of the others.
+        input: String,
     },
     ToolEnd {
         id: String,
@@ -41,7 +44,7 @@ pub enum Event {
         id: String,
     },
     Tasks,
-    /// `tuse print`: a plain text block; the same `id` replaces the earlier one.
+    /// `show()`: a plain text block; the same `id` replaces the earlier one.
     Print {
         id: String,
         text: String,

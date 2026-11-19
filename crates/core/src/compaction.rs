@@ -60,7 +60,9 @@ mod tests {
             },
             Record::Tool {
                 id: format!("c{n}"),
-                command: "ls".into(),
+                tool: "python".into(),
+                input: "ls".into(),
+                images: vec![],
                 output: format!("first\n{big}"),
                 code: Some(0),
                 at: String::new(),

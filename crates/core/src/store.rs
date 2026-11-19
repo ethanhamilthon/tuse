@@ -14,20 +14,6 @@ pub fn tuse_home() -> PathBuf {
 pub fn session_path(id: &str) -> PathBuf {
     tuse_home().join(id)
 }
-
-/// `~/.tuse/<id>/sock`, or `/tmp/tuse-$USER/<id>.sock` when that path is too
-/// long for a Unix socket (about 104 bytes).
-pub fn socket_path(id: &str) -> PathBuf {
-    let p = session_path(id).join("sock");
-    if p.as_os_str().len() < 100 {
-        return p;
-    }
-    let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
-    let dir = PathBuf::from(format!("/tmp/tuse-{user}"));
-    let _ = std::fs::create_dir_all(&dir);
-    dir.join(format!("{}.sock", &id[id.len().saturating_sub(16)..]))
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Meta {
     pub id: String,

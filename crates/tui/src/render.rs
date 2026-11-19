@@ -14,7 +14,7 @@ pub fn duration(d: Duration) -> String {
 
 /// Tabs become spaces and control characters (ESC included) are dropped,
 /// so text from scripts cannot move the cursor or break the width.
-fn clean(text: &str) -> String {
+pub(crate) fn clean(text: &str) -> String {
     text.chars()
         .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
         .map(|c| {
@@ -69,11 +69,12 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             all[all.len() - n..].to_vec()
         }
         Entry::Tool {
-            command,
+            tool,
+            input,
             output,
             code,
             ..
-        } => tool(command, output.as_deref(), *code, width, p),
+        } => crate::tool_view::tool(tool, input, output.as_deref(), *code, width, p),
         Entry::Notice(text) => plain(text, width, Style::fg(p.notice), &t.notice_prefix, &pad),
         Entry::Error(text) => plain(text, width, Style::fg(p.error), &t.error_prefix, &pad),
         Entry::Print { text, .. } => plain(text, width, Style::fg(p.fg), "", ""),
@@ -93,40 +94,6 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
     }
 }
 
-fn tool(
-    command: &str,
-    output: Option<&str>,
-    code: Option<i32>,
-    width: usize,
-    p: &Palette,
-) -> Vec<Line> {
-    let t = &p.t;
-    let failed = output.is_some() && code != Some(0);
-    let head = Style::fg(if failed { p.tool_error } else { p.tool });
-    let pad = " ".repeat(crate::text::width(&t.tool_prefix));
-    let mut lines = plain(command.trim(), width, head, &t.tool_prefix, &pad);
-    let keep = tuse_config::limit(t.bash_line, lines.len());
-    if keep < lines.len() {
-        lines.truncate(keep);
-        if keep > 0 {
-            lines.push(vec![span(format!("{pad}{}", t.more), Style::fg(p.dim))]);
-        }
-    }
-    let Some(out) = output else { return lines };
-    let st = Style::fg(p.tool_output);
-    let all: Vec<&str> = out.trim_end().lines().collect();
-    let shown = tuse_config::limit(t.output_line, all.len());
-    for l in all.iter().take(shown) {
-        let l = crate::text::clip(l, width.saturating_sub(pad.len()), &t.more);
-        lines.push(vec![span(pad.clone(), st), span(l, st)]);
-    }
-    if shown > 0 && shown < all.len() {
-        let more = format!("{pad}{} {} more lines", t.more, all.len() - shown);
-        lines.push(vec![span(more, Style::fg(p.dim))]);
-    }
-    lines
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +106,14 @@ mod tests {
             .map(|l| l.iter().map(|s| s.text.as_str()).collect())
             .collect();
         assert_eq!(text, ["a    b", "[31mred"]);
+    }
+
+    #[test]
+    fn tool_output_tabs_do_not_reach_the_terminal() {
+        let p = Palette::new(&tuse_config::Theme::default());
+        let lines =
+            crate::tool_view::tool("read", "f", Some("1\tx\n2\t\x1b[31my"), Some(0), 40, &p);
+        let text: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
+        assert!(!text.contains('\t') && !text.contains('\x1b'), "{text:?}");
     }
 }

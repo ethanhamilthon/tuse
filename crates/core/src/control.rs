@@ -1,5 +1,6 @@
 use crate::event::Event;
 use crate::history;
+use crate::hooks::Data;
 use crate::record::{Record, UserInput};
 use crate::session::Session;
 use crate::usage::{self, Stats};
@@ -52,7 +53,7 @@ impl Session {
     }
 
     /// Stops the running turn right away; its thread finds itself stale and exits.
-    pub fn cancel(&self) {
+    pub fn cancel(self: &Arc<Self>) {
         let mut st = self.state.lock().unwrap();
         if !st.busy {
             return;
@@ -81,7 +82,13 @@ impl Session {
             calls,
             cancelled: true,
         });
-        self.hook("turn_end", vec![("TUSE_CANCELLED".into(), "1".into())]);
+        self.hook(
+            "turn_end",
+            Data {
+                cancelled: true,
+                ..Default::default()
+            },
+        );
     }
 
     pub fn records(&self) -> Vec<Record> {

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.0 - 2026-11-19
+
+The agent no longer has `bash`. It has four tools: `python`, `read`, `write` and `edit`.
+
+**Breaking:** read the migration notes below before updating a customized config.
+
+- `python` is a persistent REPL on [Monty](https://github.com/pydantic/monty) (a Python subset
+  written in Rust). Variables, functions and imports stay between calls until Tuse exits.
+  The model gets `print()` output plus the last expression, or a traceback. It has `sh(cmd)`
+  (`bash -c`, returns `.out`, `.code`, `.ok`, `.timed_out`), `ask()`, `show()`, `task_run()`,
+  `task_get()`, `task_stop()`, `task_list()` and `docs()`, full filesystem access through
+  `pathlib` and `open`, and `import` of `.py` files from the config folder.
+  A timeout or a cancel (Esc) ends a loop and kills the `sh` it waits for.
+- `read` shows text with line numbers in pages, and images (png, jpg, gif, webp) to the model.
+  `write` creates or replaces a file atomically. `edit` replaces exact, unique text, handles CRLF
+  files and answers with a diff that the TUI colors (`diff_add`, `diff_del`, `diff_line`).
+- Hooks run Python instead of bash. Every call gets a fresh interpreter with the agent's access and
+  the event data as names (`event`, `tool`, `input`, `output`, `code`, `error`, `cancelled`, ...).
+  `settings.hook_timeout` (30 s) bounds a hook; Tuse waits for `session_end` hooks on exit.
+- Removed: the session socket and the commands `tuse steer`, `ask`, `print`, `task` and `docs`
+  (their work is done by functions in `python`), and `bins`. `tuse -p` runs one prompt to the end
+  and exits (exit code 1 after an error).
+- New settings: `prelude` (Python run before the REPL and every hook), `hook_timeout`,
+  `max_image_bytes`. Renamed with the old names still accepted: `max_bash_output` ->
+  `max_output`, `bash_timeout` -> `tool_timeout`, theme token `bash_line` -> `tool_line`.
+- Old sessions open as before; their `bash` calls are shown as they were.
+
+Migration: a hook `run: ~/x.sh` becomes `run: sh("~/x.sh")`; `TUSE_TOOL_COMMAND`, `TUSE_TOOL_EXIT`,
+`TUSE_ERROR` and `TUSE_CANCELLED` are now the names `input`, `code`, `error` and `cancelled`.
+A `bins` entry becomes a function in a `.py` file next to the config, loaded with `prelude`.
+A custom `systems` text that talks about `bash` should be updated; `tuse update` brings the new
+`default.yaml`.
+
 ## 0.3.3 - 2026-11-19
 
 - Edit a waiting steering message to take it back without interrupting the running turn.

@@ -6,29 +6,30 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-pub struct Output {
-    pub text: String,
+pub struct Sh {
+    pub out: String,
+    /// `None` when the process was killed.
     pub code: Option<i32>,
+    pub timed_out: bool,
 }
 
-/// The `command` field of the bash tool's JSON arguments.
-pub fn command_of(args: &str) -> String {
-    serde_json::from_str::<serde_json::Value>(args)
-        .ok()
-        .and_then(|v| v["command"].as_str().map(String::from))
-        .unwrap_or_else(|| args.to_string())
-}
+/// Bytes of output `sh` keeps; the rest is counted and dropped.
+const CAPTURE: usize = 16 * 1024 * 1024;
 
-/// Runs `bash -c cmd` directly, stdout and stderr merged, killed (with its
-/// process group) on timeout or cancel.
+/// Runs `bash -c cmd`, stdout and stderr merged. The process group is killed on
+/// timeout or when `cancel` is set.
 pub fn run(
     cmd: &str,
     cwd: &Path,
     env: &[(String, String)],
     timeout: Duration,
-    max: usize,
     cancel: &AtomicBool,
-) -> Output {
+) -> Sh {
+    let fail = |e: std::io::Error| Sh {
+        out: format!("failed to start bash: {e}"),
+        code: None,
+        timed_out: false,
+    };
     let (mut reader, writer) = match std::io::pipe() {
         Ok(p) => p,
         Err(e) => return fail(e),
@@ -51,7 +52,7 @@ pub fn run(
         Err(e) => return fail(e),
     };
     drop(c);
-    let buf = Arc::new(Mutex::new(Vec::new()));
+    let buf = Arc::new(Mutex::new((Vec::new(), 0usize)));
     let sink = buf.clone();
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -60,44 +61,40 @@ pub fn run(
             if n == 0 {
                 break;
             }
-            sink.lock().unwrap().extend_from_slice(&chunk[..n]);
+            let mut b = sink.lock().unwrap();
+            let room = CAPTURE.saturating_sub(b.0.len()).min(n);
+            b.0.extend_from_slice(&chunk[..room]);
+            b.1 += n - room;
         }
         let _ = done_tx.send(());
     });
     let start = Instant::now();
-    let mut note = "";
+    let mut timed_out = false;
     let status = loop {
         if let Ok(Some(s)) = child.try_wait() {
             break Some(s);
         }
-        if cancel.load(Ordering::Relaxed) {
-            note = "\n[cancelled]";
-        } else if start.elapsed() >= timeout {
-            note = "\n[timed out]";
-        }
-        if !note.is_empty() {
+        let cancelled = cancel.load(Ordering::Relaxed);
+        timed_out = !cancelled && start.elapsed() >= timeout;
+        if timed_out || cancelled {
             kill_group(child.id());
             let _ = child.wait();
             break None;
         }
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::sleep(Duration::from_millis(10));
     };
     // Background children may keep the pipe open; do not wait for them long.
     let _ = done_rx.recv_timeout(Duration::from_millis(500));
-    let bytes = buf.lock().unwrap().clone();
-    let mut text = truncate(&String::from_utf8_lossy(&bytes), max);
-    let code = status.and_then(|s| s.code());
-    text.push_str(note);
-    match code {
-        Some(0) => {}
-        Some(c) => text.push_str(&format!("\n[exit code {c}]")),
-        None if note.is_empty() => text.push_str("\n[killed by signal]"),
-        None => {}
+    let (bytes, dropped) = buf.lock().unwrap().clone();
+    let mut out = String::from_utf8_lossy(&bytes).into_owned();
+    if dropped > 0 {
+        out.push_str(&format!("\n[... {dropped} more bytes dropped]"));
     }
-    if text.trim().is_empty() {
-        text = "[no output]".into();
+    Sh {
+        out,
+        code: status.and_then(|s| s.code()),
+        timed_out,
     }
-    Output { text, code }
 }
 
 pub fn kill_group(pid: u32) {
@@ -105,13 +102,6 @@ pub fn kill_group(pid: u32) {
         .args(["-KILL", "--", &format!("-{pid}")])
         .stderr(Stdio::null())
         .status();
-}
-
-fn fail(e: std::io::Error) -> Output {
-    Output {
-        text: format!("failed to start bash: {e}"),
-        code: None,
-    }
 }
 
 /// Keeps the head and the tail when `s` is longer than `max` bytes.
@@ -133,36 +123,4 @@ pub fn truncate(s: &str, max: usize) -> String {
         tail - head,
         &s[tail..]
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn runs_merges_and_times_out() {
-        let no = AtomicBool::new(false);
-        let d = Duration::from_secs(5);
-        let o = run(
-            "echo out; echo err >&2; exit 3",
-            Path::new("/"),
-            &[],
-            d,
-            1000,
-            &no,
-        );
-        assert_eq!(o.code, Some(3));
-        assert!(o.text.contains("out\nerr\n") && o.text.ends_with("[exit code 3]"));
-        let t = Instant::now();
-        let o = run(
-            "sleep 10",
-            Path::new("/"),
-            &[],
-            Duration::from_millis(200),
-            1000,
-            &no,
-        );
-        assert!(t.elapsed() < Duration::from_secs(3) && o.text.contains("timed out"));
-        assert_eq!(truncate("abcdefghij", 4), "ab\n[... 6 bytes cut ...]\nij");
-    }
 }

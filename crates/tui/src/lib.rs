@@ -20,6 +20,7 @@ mod status;
 mod style;
 mod table;
 mod text;
+mod tool_view;
 
 use crossterm::event::{
     self, DisableBracketedPaste, EnableBracketedPaste, Event as TermEvent,

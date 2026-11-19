@@ -3,8 +3,8 @@ use tuse_tui::{Field, Tone, ask, say};
 /// `tuse connect`: asks for a provider, fetches its models and saves it to the config.
 pub fn run(config_arg: Option<std::path::PathBuf>) -> Result<(), String> {
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
-    let path = tuse_config::find(config_arg.as_deref(), &cwd)
-        .unwrap_or_else(|| tuse_config::home().join(".config/tuse/main.yaml"));
+    let path =
+        tuse_config::find(config_arg.as_deref(), &cwd).unwrap_or_else(tuse_config::global_path);
     // A config that does not exist yet is created by the save below.
     let config = if path.is_file() {
         tuse_config::load(Some(&path))

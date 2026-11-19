@@ -1,9 +1,8 @@
 use crate::{expand::vars, load::resolve_command};
 use std::path::Path;
 
-/// Loads without the machine's `default.yaml`.
 fn load(p: Option<&Path>) -> Result<crate::Loaded, String> {
-    crate::load::load_with(p, None)
+    crate::load(p)
 }
 
 #[test]
@@ -112,18 +111,36 @@ fn add_connect_appends() {
 }
 
 #[test]
-fn defaults_load_under_the_config() {
-    let dir = std::env::temp_dir().join(format!("tuse-def-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let (d, m) = (dir.join("default.yaml"), dir.join("main.yaml"));
+fn find_order() {
+    let dir = std::env::temp_dir().join(format!("tuse-find-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("cwd")).unwrap();
+    let (cwd, global, flag) = (dir.join("cwd"), dir.join("g.yaml"), dir.join("f.yaml"));
+    let find = |explicit: Option<&Path>| crate::load::find_in(explicit, &cwd, &global);
+    assert_eq!(find(None), None);
+    std::fs::write(&global, "").unwrap();
+    assert_eq!(find(None), Some(global.clone()));
+    std::fs::write(cwd.join("tuse.yaml"), "").unwrap();
+    assert_eq!(find(None), Some(cwd.join("tuse.yaml")));
+    assert_eq!(find(Some(&flag)), Some(flag));
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn settings_theme_wins_and_is_written() {
+    let p = std::env::temp_dir().join(format!("tuse-st-{}.yaml", std::process::id()));
     std::fs::write(
-        &d,
-        "systems: [base]\nsettings: {retries: 2, bash_timeout: 9}\n",
+        &p,
+        "theme: a\nthemes: {a: {}, b: {}}\nsettings:\n  retries: 2\n",
     )
     .unwrap();
-    std::fs::write(&m, "systems: [mine]\nsettings: {retries: 7}\n").unwrap();
-    let c = crate::load::load_with(Some(&m), Some(&d)).unwrap().config;
-    assert_eq!(c.systems, ["base", "mine"]);
-    assert_eq!((c.settings.retries, c.settings.bash_timeout), (7, 9));
-    std::fs::remove_dir_all(dir).ok();
+    assert_eq!(load(Some(&p)).unwrap().config.theme_name(), "a");
+    crate::set_setting(&p, "theme", "b").unwrap();
+    crate::set_setting(&p, "theme", "b").unwrap();
+    let s = std::fs::read_to_string(&p).unwrap();
+    assert_eq!(
+        s,
+        "theme: a\nthemes: {a: {}, b: {}}\nsettings:\n  theme: b\n  retries: 2\n"
+    );
+    assert_eq!(load(Some(&p)).unwrap().config.theme_name(), "b");
+    std::fs::remove_file(p).ok();
 }

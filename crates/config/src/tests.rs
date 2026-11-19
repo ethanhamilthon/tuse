@@ -1,5 +1,10 @@
-use crate::{expand::vars, load, load::resolve_command};
+use crate::{expand::vars, load::resolve_command};
 use std::path::Path;
+
+/// Loads without the machine's `default.yaml`.
+fn load(p: Option<&Path>) -> Result<crate::Loaded, String> {
+    crate::load::load_with(p, None)
+}
 
 #[test]
 fn vars_expand() {
@@ -104,4 +109,21 @@ fn add_connect_appends() {
     crate::add_connect(&p, "z", "http://h", "k").unwrap();
     assert_eq!(load(Some(&p)).unwrap().config.connect[0].name, "z");
     std::fs::remove_file(p).ok();
+}
+
+#[test]
+fn defaults_load_under_the_config() {
+    let dir = std::env::temp_dir().join(format!("tuse-def-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (d, m) = (dir.join("default.yaml"), dir.join("main.yaml"));
+    std::fs::write(
+        &d,
+        "systems: [base]\nsettings: {retries: 2, bash_timeout: 9}\n",
+    )
+    .unwrap();
+    std::fs::write(&m, "systems: [mine]\nsettings: {retries: 7}\n").unwrap();
+    let c = crate::load::load_with(Some(&m), Some(&d)).unwrap().config;
+    assert_eq!(c.systems, ["base", "mine"]);
+    assert_eq!((c.settings.retries, c.settings.bash_timeout), (7, 9));
+    std::fs::remove_dir_all(dir).ok();
 }

@@ -25,10 +25,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Check tag matches the crate version
+      - name: Check the tag matches VERSION and Cargo.toml
         run: |
-          want="v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          [ "$want" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != ${want}"; exit 1; }
+          want="v$(tr -d '[:space:]' < VERSION)"
+          crate="v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$want" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${want}"; exit 1; }
+          [ "$want" = "$crate" ] || { echo "VERSION ${want} != Cargo.toml ${crate}"; exit 1; }
       - name: Toolchain
         run: rustup toolchain install stable --profile minimal --target ${{ matrix.target }} && rustup default stable
       - name: Build
@@ -50,8 +52,11 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Checksums
-        run: cd dist && shasum -a 256 *.tar.gz > checksums.txt
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checksums and defaults
+        run: |
+          cp default.yaml dist/default.yaml
+          cd dist && shasum -a 256 *.tar.gz > checksums.txt
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*

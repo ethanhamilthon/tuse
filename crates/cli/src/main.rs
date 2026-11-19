@@ -2,6 +2,7 @@ mod args;
 mod connect;
 mod headless;
 mod remote;
+mod update;
 
 use args::Args;
 use std::io::Read;
@@ -26,10 +27,13 @@ USAGE
                                            background tasks of a session
   tuse connect [--config PATH]            add a provider: asks base url, api key and name,
                                            fetches its models and saves it to the config
+  tuse reset [--yes]                      replace the global config folder with the latest
+                                           main.yaml and default.yaml
+  tuse update                             update the binary and default.yaml
   tuse version | tuse help
 
--s defaults to $TUSE_SESSION. The config is --config, else ./tuse.yaml,
-else ~/.config/tuse/main.yaml.";
+-s defaults to $TUSE_SESSION. The config is --config, else ./tuse.yaml, else
+$TUSE_GLOBAL_CONFIG, else ~/.config/tuse/main.yaml.";
 
 fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -55,6 +59,8 @@ fn run(raw: Vec<String>) -> Result<(), String> {
             let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
             connect::run(a.value(&["--config", "-c"]).map(|p| cwd.join(p)))
         }
+        "reset" => update::reset(Args::parse(rest, &[])?.has(&["--yes", "-y"])),
+        "update" => update::update(),
         "version" | "--version" | "-V" => {
             println!("tuse {}", env!("CARGO_PKG_VERSION"));
             Ok(())

@@ -1,12 +1,12 @@
 #!/bin/sh
-# Installs tuse: the binary and ~/.config/tuse/default.yaml.
+# Installs the tuse binary; on a first install also sets up the config (`tuse reset`) and runs `tuse connect`.
 #   curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
-# TUSE_VERSION=0.2.0 picks a version, TUSE_BIN_DIR changes the binary folder (default ~/.local/bin).
+# TUSE_VERSION=0.3.0 picks a version, TUSE_BIN_DIR changes the binary folder (default ~/.local/bin).
+# TUSE_GLOBAL_CONFIG points to the global config file (default ~/.config/tuse/main.yaml).
 set -eu
 
 repo="ethanhamilthon/tuse"
 bin_dir="${TUSE_BIN_DIR:-$HOME/.local/bin}"
-conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/tuse"
 
 case "$(uname -s)" in
   Darwin) os=darwin ;;
@@ -19,7 +19,9 @@ case "$(uname -m)" in
   *) echo "tuse: unsupported CPU $(uname -m)" >&2; exit 1 ;;
 esac
 
-if [ -n "${TUSE_VERSION:-}" ]; then
+if [ -n "${TUSE_RELEASE_URL:-}" ]; then
+  base="$TUSE_RELEASE_URL"
+elif [ -n "${TUSE_VERSION:-}" ]; then
   base="https://github.com/$repo/releases/download/v${TUSE_VERSION#v}"
 else
   base="https://github.com/$repo/releases/latest/download"
@@ -32,7 +34,6 @@ name="tuse_${os}_${arch}.tar.gz"
 echo "Downloading $name"
 curl -fsSL "$base/$name" -o "$tmp/$name"
 curl -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
-curl -fsSL "$base/default.yaml" -o "$tmp/default.yaml"
 
 want="$(grep " $name\$" "$tmp/checksums.txt" | cut -d' ' -f1)"
 if command -v sha256sum >/dev/null 2>&1; then
@@ -46,15 +47,23 @@ if [ -z "$want" ] || [ "$want" != "$got" ]; then
 fi
 
 tar -xzf "$tmp/$name" -C "$tmp" tuse
-mkdir -p "$bin_dir" "$conf_dir"
+mkdir -p "$bin_dir"
 install -m 755 "$tmp/tuse" "$bin_dir/tuse"
-# default.yaml is replaced on every install; your own settings live in main.yaml.
-install -m 644 "$tmp/default.yaml" "$conf_dir/default.yaml"
 
 echo "Installed $("$bin_dir/tuse" version) to $bin_dir/tuse"
-echo "Defaults: $conf_dir/default.yaml"
 case ":$PATH:" in
   *":$bin_dir:"*) ;;
   *) echo "Add $bin_dir to your PATH." ;;
 esac
-echo "Next: tuse connect"
+
+# A first install: no TUSE_GLOBAL_CONFIG and no ~/.config/tuse yet.
+if [ -z "${TUSE_GLOBAL_CONFIG:-}" ] && [ ! -d "$HOME/.config/tuse" ]; then
+  TUSE_RELEASE_URL="$base" "$bin_dir/tuse" reset
+fi
+
+# The installer is piped from curl, so the prompts read the terminal.
+if (: < /dev/tty) 2>/dev/null; then
+  "$bin_dir/tuse" connect < /dev/tty || true
+else
+  echo "Next: tuse connect"
+fi

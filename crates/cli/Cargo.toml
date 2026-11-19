@@ -16,4 +16,5 @@ tuse-core.workspace = true
 tuse-socket.workspace = true
 tuse-tui.workspace = true
 serde_json.workspace = true
+ureq.workspace = true
 signal-hook = "0.3"

@@ -29,6 +29,9 @@ no `~/.config/tuse`) it runs `tuse reset`, which installs `main.yaml` and `defau
 Or build it: `cargo install --git https://github.com/ethanhamilthon/tuse tuse`, then copy
 [main.yaml](release/main.yaml) and [default.yaml](release/default.yaml) to `~/.config/tuse/`.
 
+From a checkout, `make install` builds the release binary into `~/.local/bin` (`BIN_DIR`) and
+puts `default.yaml` into `~/.config/tuse` (`CONFIG_DIR`); an existing `main.yaml` is kept.
+
 ## Usage
 
 ```

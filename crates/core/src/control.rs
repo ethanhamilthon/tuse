@@ -170,3 +170,20 @@ impl Session {
         self.state.lock().unwrap().meta.title.clone()
     }
 }
+
+/// A new session records the config's model and effort at once and keeps them from then on.
+pub(crate) fn initial_settings(config: &tuse_config::Config) -> Record {
+    Record::Settings {
+        model: config.default_model(),
+        effort: config.default_effort(),
+    }
+}
+
+/// An old session without a `Settings` record keeps what `meta.json` says, if anything.
+pub(crate) fn or_default(saved: &str, default: String) -> String {
+    if saved.is_empty() {
+        default
+    } else {
+        saved.to_string()
+    }
+}

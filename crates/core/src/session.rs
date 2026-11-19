@@ -78,10 +78,15 @@ impl Session {
             created: crate::id::now(),
             ..Default::default()
         });
+        if opts.resume.is_none() {
+            let r = crate::control::initial_settings(&config);
+            dir.append(&r);
+            records.push(r);
+        }
         let mut st = State {
             bounds: Bounds::default(),
-            model: config.default_model(),
-            effort: config.default_effort(),
+            model: crate::control::or_default(&meta.model, config.default_model()),
+            effort: crate::control::or_default(&meta.effort, config.default_effort()),
             busy: false,
             generation: 0,
             cancel: Arc::default(),

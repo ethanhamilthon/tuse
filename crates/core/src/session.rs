@@ -1,3 +1,4 @@
+use crate::control::InputId;
 use crate::event::Event;
 use crate::history::{self, Bounds};
 use crate::record::{Record, UserInput};
@@ -40,7 +41,8 @@ pub(crate) struct State {
     pub busy: bool,
     pub generation: u64,
     pub cancel: Arc<AtomicBool>,
-    pub queue: Vec<UserInput>,
+    pub queue: Vec<(InputId, UserInput)>,
+    pub next_input: u64,
     pub turn_start: Instant,
     pub calls: usize,
     pub context: u64,
@@ -91,6 +93,7 @@ impl Session {
             generation: 0,
             cancel: Arc::default(),
             queue: vec![],
+            next_input: 0,
             turn_start: Instant::now(),
             calls: 0,
             context: 0,

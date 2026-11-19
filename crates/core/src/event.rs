@@ -4,6 +4,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub enum Event {
     User {
+        id: crate::control::InputId,
         text: String,
         images: usize,
     },

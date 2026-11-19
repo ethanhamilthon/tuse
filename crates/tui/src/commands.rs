@@ -164,7 +164,7 @@ impl App {
 
     /// Opens, filters or closes the `/`, `#` and `@` pickers for the token at the cursor.
     pub fn update_token_picker(&mut self) {
-        if self.picker.as_ref().is_some_and(|p| !p.kind.is_token()) {
+        if self.steering.is_some() || self.picker.as_ref().is_some_and(|p| !p.kind.is_token()) {
             return;
         }
         let (start, token) = self.editor.token();

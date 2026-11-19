@@ -109,7 +109,7 @@ impl App {
             (Kind::Prompt, Some(v)) => self.replace_token(&format!("#{v} ")),
             (Kind::File, Some(v)) => {
                 let dir = v.ends_with('/');
-                self.replace_token(&format!("@{v}{}", if dir { "" } else { " " }));
+                self.replace_token(&format!("@{v}{}", if dir { "*" } else { " " }));
             }
             (Kind::Resume, Some(v)) => self.switch(Some(v)),
             (Kind::Model, Some(v)) => {
@@ -176,12 +176,18 @@ impl App {
             Some('@') => (Kind::File, chars.as_str()),
             _ => {
                 self.picker = None;
-                self.files = None;
                 return;
             }
         };
-        let query = query.to_string();
-        if self.picker.as_ref().is_none_or(|p| p.kind != kind) {
+        let mut query = query.to_string();
+        let mut dir = String::new();
+        if kind == Kind::File {
+            let (d, f) = crate::files::split(&query);
+            (dir, query) = (d.to_string(), f.to_string());
+        }
+        let stale = kind == Kind::File && self.file_dir != dir;
+        if stale || self.picker.as_ref().is_none_or(|p| p.kind != kind) {
+            self.file_dir = dir;
             let items = self.token_items(&kind);
             self.picker = Some(Picker::new(kind, "", items));
         }
@@ -206,12 +212,9 @@ impl App {
             }
             _ => {
                 let max = self.palette.t.file_picker_max;
-                let files = self
-                    .files
-                    .get_or_insert_with(|| crate::files::list(&self.cwd, max));
-                files
-                    .iter()
-                    .map(|f| item(f.clone(), "", f.clone()))
+                crate::files::list(&self.cwd, &self.file_dir, max)
+                    .into_iter()
+                    .map(|f| item(f.clone(), "", f))
                     .collect()
             }
         }

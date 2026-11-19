@@ -20,7 +20,8 @@ pub struct App {
     /// The token whose picker was dismissed with Esc; it stays closed until the token changes.
     pub dismissed: Option<String>,
     pub asks: Vec<(String, String, Vec<String>)>,
-    pub files: Option<Vec<String>>,
+    /// The directory the `@` picker lists, relative to `cwd`.
+    pub file_dir: String,
     pub streaming: Option<usize>,
     pub thinking: Option<usize>,
     pub last_turn: Option<(Duration, usize)>,
@@ -46,7 +47,7 @@ impl App {
             picker: None,
             dismissed: None,
             asks: vec![],
-            files: None,
+            file_dir: String::new(),
             streaming: None,
             thinking: None,
             last_turn: None,

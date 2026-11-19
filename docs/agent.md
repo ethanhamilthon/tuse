@@ -28,8 +28,13 @@ You run inside Tuse. This page is what you need to work with it. Read it with `t
 
 `/new`, `/resume`, `/models`, `/theme`, `/tasks`, `/usage`, `/trace`, `/reload`, `/quit`.
 `/usage`, `/trace` and a task's output open in a panel over the chat (Esc closes it); they are
-not part of the conversation. `/trace` shows the system prompt, messages, thinking, tool
-calls and their output.
+not part of the conversation. A panel has a rule on top. `/trace` is a list, one row per
+item (`system`, `user`, `agent`, `thinking`, `bash`, `output`); Up and Down move the selection,
+Enter opens the item in full, Esc goes back to the list and then closes the panel.
+
+A session keeps its own model and effort. `/models` changes them in the config and in the
+current session; a new session takes them from the config; `/resume` and `/reload` do not
+change the model of an old session.
 
 ## Environment
 

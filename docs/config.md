@@ -70,7 +70,8 @@ Every UI decision is a token. Colors take `#rrggbb`, `0`-`255`, a name (`red`,
   `panel_fg`, `panel_bg`, `panel_title`, and the gradient ends `motion_from`, `motion_to`
   (`#rrggbb`, so they can be blended).
 - Spacing: `pad_x`, `message_gap`, `list_indent`, `code_indent`, `picker_pad_x`,
-  `input_pad_x`, `panel_pad_x`.
+  `input_pad_x`, `input_top_padding`, `input_bottom_padding` (rows in `bar`, default `0`),
+  `panel_pad_x`, `trace_role_width` (the role column of `/trace`, 9).
 - Limits: `picker_max_height` (8), `input_max_height`, `panel_max_height` (16), `scroll_step`,
   `file_picker_max`, `frame_ms`, `motion_period` (cells per wave), `motion_ms` (ms per step).
 - Lines shown in the chat: `bash_line`, `output_line`, `reasoning_line`. `0` hides the
@@ -90,7 +91,9 @@ working (spinner, time, tool calls; `steering_label` while a message you sent wa
 - `box`: a frame around the input with the same two labels on its borders.
 - `fill`: the input has its own background (`input_bg`); one status row below, working on the
   left and the model on the right.
-- `bar`: a colored vertical bar (`bar`) left of the input; the same status row below.
+- `bar`: a colored vertical bar (`bar`) left of the input, a blank row, then the same status
+  row. `input_top_padding` and `input_bottom_padding` add rows above and below the text; the bar
+  runs through them.
 
 While the agent works, a gradient from `motion_from` to `motion_to` runs along the rules, the
 frame's borders, the edges of the filled input or the bar. `motion: false` turns it off.

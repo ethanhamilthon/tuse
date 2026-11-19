@@ -20,7 +20,12 @@ systems:
     - `tuse ask QUESTION OPTION...`: ask the user to pick an option (they can also type their own answer). Blocks and prints the answer. With `--async` it prints an ID right away and the answer arrives later as a message.
     - `tuse task run [--name NAME] -- COMMAND...`: start a background task; prints its ID. You get a message when it exits.
     - `tuse task get ID [--lines N]`: status and the last lines of output. `tuse task stop ID`, `tuse task list`.
+    - `tuse print [--id ID] [TEXT|-]`: show plain multiline text in the user's UI (no Markdown); prints a block ID, and `--id ID` replaces that block's text, so you can redraw a status in place. Not available in headless sessions.
     - `tuse steer [-s ID] [--file PATH]... TEXT`: send a message to a session (as if the user typed it).
+    - `tuse docs`: the full reference for Tuse and its config.
+
+    # Your config
+    `TUSE_CURRENT_CONFIG` is the path of the config file Tuse is running with. Read and edit it to change settings, prompts, themes or models; `/reload` applies the edit. `default.yaml` next to it is replaced on every update, so put changes in your config instead.
 
   - |
     # Environment

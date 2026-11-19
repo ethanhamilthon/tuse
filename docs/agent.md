@@ -14,7 +14,8 @@ You run inside Tuse. This page is what you need to work with it. Read it with `t
   `tuse task list` lists them.
 - `tuse print [--id ID] [TEXT|-]` shows plain multiline text in the user's UI, without Markdown,
   and prints a block ID. `tuse print --id ID TEXT` replaces the text of that block, so a script
-  can redraw its own interface in place. It fails in headless sessions.
+  can redraw its own interface in place. The text may start with `-` (only `-s` and `--id` are
+  flags). It fails in headless sessions or with empty text.
 - `tuse steer [--file PATH]... [TEXT|-]` sends a message to a session as if the user typed it.
 - `tuse connect` adds a provider (the user runs it).
 - `tuse reset [--yes]` replaces the global config folder with the latest `main.yaml` and
@@ -38,6 +39,7 @@ calls and their output.
 | `TUSE_GLOBAL_CONFIG` | Path of the global config file. Default `~/.config/tuse/main.yaml`. |
 | `TUSE_HOME` | Where sessions live. Default `~/.tuse`. |
 | `TUSE_RELEASE_URL` | Where `tuse reset` and `tuse update` download from. Default: the latest GitHub release. |
+| `TUSE_CURRENT_CONFIG` | Path of the config file in use (`--config`, `./tuse.yaml` or the global one); not set without a file. Tuse does not read it. |
 | `TUSE_CWD`, `TUSE_MODEL`, `TUSE_EVENT`, `TUSE_HOOK` | Set for hooks, see the config reference. |
 
 ## Config lookup

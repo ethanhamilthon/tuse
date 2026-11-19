@@ -213,7 +213,7 @@ impl Session {
             .unwrap_or_default();
         let path = std::env::var("PATH").unwrap_or_default();
         let model = self.state.lock().unwrap().model.clone();
-        vec![
+        let mut env = vec![
             ("TUSE_SESSION".into(), self.id.clone()),
             ("TUSE_CWD".into(), self.cwd.display().to_string()),
             ("TUSE_MODEL".into(), model),
@@ -221,7 +221,11 @@ impl Session {
                 "PATH".into(),
                 format!("{}:{exe_dir}:{path}", self.path.join("bin").display()),
             ),
-        ]
+        ];
+        if let Some(c) = tuse_config::find(self.config_arg.as_deref(), &self.cwd) {
+            env.push(("TUSE_CURRENT_CONFIG".into(), c.display().to_string()));
+        }
+        env
     }
 
     pub(crate) fn hook(&self, event: &str, mut extra: Vec<(String, String)>) {

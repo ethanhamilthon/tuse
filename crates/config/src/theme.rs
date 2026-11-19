@@ -33,15 +33,29 @@ pub struct Theme {
     pub picker_selected_bg: String,
     pub picker_detail: String,
     pub picker_title: String,
+    pub input_bg: String,
+    pub bar: String,
+    pub panel_fg: String,
+    pub panel_bg: String,
+    pub panel_title: String,
+    /// The ends of the gradient that travels along the input while the agent works.
+    pub motion_from: String,
+    pub motion_to: String,
     // spacing
     pub pad_x: u16,
     pub message_gap: u16,
     pub list_indent: u16,
     pub code_indent: u16,
     pub picker_pad_x: u16,
+    pub input_pad_x: u16,
+    pub panel_pad_x: u16,
     // limits
     pub picker_max_height: u16,
     pub input_max_height: u16,
+    pub panel_max_height: u16,
+    /// Cells per wave of the gradient, and ms per step of its animation.
+    pub motion_period: u16,
+    pub motion_ms: u64,
     /// Lines shown per block: `0` hides it, `-1` removes the limit.
     pub bash_line: i32,
     pub output_line: i32,
@@ -49,7 +63,18 @@ pub struct Theme {
     pub scroll_step: u16,
     pub file_picker_max: usize,
     pub frame_ms: u64,
+    /// `false` turns the gradient animation off.
+    pub motion: bool,
+    /// `lines`, `box`, `fill` or `bar`.
+    pub input_design: String,
     // symbols
+    pub input_prefix: String,
+    pub bar_char: String,
+    /// Top left, top right, bottom left, bottom right and vertical, for `box`.
+    pub box_chars: Vec<String>,
+    /// Half blocks above and below the input in `fill`.
+    pub edge_top: String,
+    pub edge_bottom: String,
     pub user_prefix: String,
     pub tool_prefix: String,
     pub reasoning_prefix: String,
@@ -98,19 +123,38 @@ impl Default for Theme {
             picker_selected_bg: s("accent"),
             picker_detail: s("#7A7A7A"),
             picker_title: s("accent"),
+            input_bg: s("#1E1E1E"),
+            bar: s("accent"),
+            panel_fg: s("none"),
+            panel_bg: s("#141414"),
+            panel_title: s("accent"),
+            motion_from: s("#4A4A4A"),
+            motion_to: s("accent"),
             pad_x: 1,
             message_gap: 1,
             list_indent: 2,
             code_indent: 2,
             picker_pad_x: 1,
+            input_pad_x: 1,
+            panel_pad_x: 1,
             picker_max_height: 8,
             input_max_height: 10,
+            panel_max_height: 16,
+            motion_period: 24,
+            motion_ms: 60,
             bash_line: 3,
             output_line: 3,
             reasoning_line: 2,
             scroll_step: 3,
             file_picker_max: 20000,
             frame_ms: 33,
+            motion: true,
+            input_design: s("lines"),
+            input_prefix: s("› "),
+            bar_char: s("┃"),
+            box_chars: ["╭", "╮", "╰", "╯", "│"].map(String::from).to_vec(),
+            edge_top: s("▄"),
+            edge_bottom: s("▀"),
             user_prefix: s("› "),
             tool_prefix: s("$ "),
             reasoning_prefix: s("∴ "),
@@ -129,6 +173,24 @@ impl Default for Theme {
                 .map(String::from)
                 .to_vec(),
         }
+    }
+}
+
+impl Theme {
+    pub fn check(&self) -> Result<(), String> {
+        if !matches!(self.input_design.as_str(), "lines" | "box" | "fill" | "bar") {
+            return Err(format!(
+                "input_design `{}` is not lines, box, fill or bar",
+                self.input_design
+            ));
+        }
+        if self.box_chars.len() != 5 {
+            return Err(
+                "box_chars needs 5 items: top left, top right, bottom left, bottom right, vertical"
+                    .into(),
+            );
+        }
+        Ok(())
     }
 }
 

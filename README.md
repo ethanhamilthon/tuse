@@ -13,16 +13,18 @@ Chat Completions compatible API, one tool: `bash`.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
-tuse connect
 ```
 
-The script puts `tuse` into `~/.local/bin` and the defaults into
-`~/.config/tuse/default.yaml` (the system prompt about Tuse and the default settings).
-`default.yaml` is replaced on every install; write your own settings to
-`~/.config/tuse/main.yaml`. `TUSE_VERSION=0.2.0` picks a version, `TUSE_BIN_DIR` the folder.
+The script puts `tuse` into `~/.local/bin`. On a first install (no `TUSE_GLOBAL_CONFIG` and
+no `~/.config/tuse`) it runs `tuse reset`, which installs `main.yaml` and `default.yaml`
+(the system prompt about Tuse and the default settings), and then `tuse connect`.
+`TUSE_VERSION=0.3.0` picks a version, `TUSE_BIN_DIR` the folder.
+
+`tuse update` updates the binary and replaces `default.yaml`; your `main.yaml` is not touched.
+`tuse reset` deletes the config folder and installs fresh `main.yaml` and `default.yaml`.
 
 Or build it: `cargo install --git https://github.com/ethanhamilthon/tuse tuse`, then copy
-[default.yaml](release/default.yaml) to `~/.config/tuse/`.
+[main.yaml](release/main.yaml) and [default.yaml](release/default.yaml) to `~/.config/tuse/`.
 
 ## Usage
 
@@ -32,6 +34,9 @@ tuse -p [PROMPT|-] [--config PATH] [--resume ID]
                                           headless: session ID to stderr, replies to stdout;
                                           runs until killed and takes `tuse steer` messages
 tuse connect [--config PATH]              add a provider (base url, api key, name)
+tuse print [-s ID] [--id ID] [TEXT|-]     show plain multiline text in the TUI; prints a block ID
+tuse reset [--yes] | tuse update          reset the config folder | update the binary and default.yaml
+tuse docs                                 the docs for the agent
 tuse steer [-s ID] [--file PATH]... [TEXT|-]
 tuse ask [-s ID] [--async] QUESTION OPTION...
 tuse task run [-s ID] [--name NAME] -- COMMAND...
@@ -65,7 +70,9 @@ the provider's models, says how many it got and adds the `connect` entry to the 
 | Ctrl+A / Ctrl+E / Ctrl+U / Ctrl+K / Ctrl+W | line start / end / kill back / kill forward / delete word |
 
 Commands: `/new`, `/resume` (sessions started in this folder), `/models` (every model the
-providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/usage`, `/reload`, `/quit`.
+providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/usage`,
+`/trace` (the system prompt, messages, thinking, tool calls and outputs), `/reload`, `/quit`.
+`/usage`, `/trace` and a task's output open in a panel over the chat; Esc closes it.
 
 `#name` inserts a prompt from the config; it is expanded to its text when sent.
 `@` picks a file or folder from the current folder; `@dir/*` lists what is inside `dir`.

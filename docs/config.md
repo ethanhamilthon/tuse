@@ -1,8 +1,10 @@
 # Config
 
-Tuse reads one YAML file: `--config PATH`, else `./tuse.yaml`, else
-`~/.config/tuse/main.yaml`. `~/.config/tuse/default.yaml` (written by the installer)
-is loaded first and your config merges over it. `/reload` rebuilds everything from its files.
+Tuse reads one YAML file: `--config PATH`, else `./tuse.yaml`, else `$TUSE_GLOBAL_CONFIG`,
+else `~/.config/tuse/main.yaml`. The app knows no other file: the shipped `main.yaml`
+loads `default.yaml` (system prompt and default settings) with `include`. `tuse reset`
+installs both files, `tuse update` replaces `default.yaml`. `/reload` rebuilds everything
+from its files.
 
 ## Merging and expansion
 
@@ -32,7 +34,7 @@ is loaded first and your config merges over it. `/reload` rebuilds everything fr
 | `prompts` | `name: text`. `#name` in the input expands to the text. |
 | `bins` | `name: command`. Short aliases on the agent's PATH, also listed in the system prompt. |
 | `hooks` | `name: {events: [...], run: command}`, see below. |
-| `theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. |
+| `settings.theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. A top-level `theme` still works. |
 | `themes` | `name: {extend: base, token: value, ...}`, see below. |
 
 ## Hooks
@@ -64,14 +66,34 @@ Every UI decision is a token. Colors take `#rrggbb`, `0`-`255`, a name (`red`,
   `tool`, `tool_output`, `tool_error`, `error`, `notice`, `heading`, `code`,
   `code_block`, `link`, `quote`, `rule`, `status`, `picker_fg`, `picker_bg`,
   `picker_selected_fg`, `picker_selected_bg`, `picker_detail`, `picker_title`.
-- Spacing: `pad_x`, `message_gap`, `list_indent`, `code_indent`, `picker_pad_x`.
-- Limits: `picker_max_height` (8), `input_max_height`, `scroll_step`, `file_picker_max`,
-  `frame_ms`.
+- Input and panel colors: `input_bg` (the `fill` design), `bar` (the `bar` design),
+  `panel_fg`, `panel_bg`, `panel_title`, and the gradient ends `motion_from`, `motion_to`
+  (`#rrggbb`, so they can be blended).
+- Spacing: `pad_x`, `message_gap`, `list_indent`, `code_indent`, `picker_pad_x`,
+  `input_pad_x`, `panel_pad_x`.
+- Limits: `picker_max_height` (8), `input_max_height`, `panel_max_height` (16), `scroll_step`,
+  `file_picker_max`, `frame_ms`, `motion_period` (cells per wave), `motion_ms` (ms per step).
 - Lines shown in the chat: `bash_line`, `output_line`, `reasoning_line`. `0` hides the
   block, `-1` removes the limit.
 - Symbols: `user_prefix`, `tool_prefix`, `reasoning_prefix`, `notice_prefix`,
   `error_prefix`, `bullet`, `quote_prefix`, `rule_char`, `table_sep`, `scroll_mark`,
-  `label_sep`, `picker_selected_prefix`, `more`, `spinner` (a list of frames).
+  `label_sep`, `picker_selected_prefix`, `more`, `spinner` (a list of frames),
+  `input_prefix` (default `› `; `""` removes it), `bar_char`, `box_chars` (top left, top
+  right, bottom left, bottom right, vertical), `edge_top`, `edge_bottom`.
+
+### Input design
+
+`input_design` picks how the input looks. Each design shows the input and two status bars:
+working (spinner, time, tool calls) and the model (model, effort, context, cost).
+
+- `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.
+- `box`: a frame around the input with the same two labels on its borders.
+- `fill`: the input has its own background (`input_bg`); one status row below, working on the
+  left and the model on the right.
+- `bar`: a colored vertical bar (`bar`) left of the input; the same status row below.
+
+While the agent works, a gradient from `motion_from` to `motion_to` runs along the rules, the
+frame's borders, the edges of the filled input or the bar. `motion: false` turns it off.
 
 ## Files
 

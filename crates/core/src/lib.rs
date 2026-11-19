@@ -9,12 +9,14 @@ mod hooks;
 mod id;
 mod input;
 mod models;
+mod print;
 mod prompt;
 mod record;
 mod session;
 mod store;
 mod tasks;
 mod tool;
+mod trace;
 mod turn;
 mod usage;
 

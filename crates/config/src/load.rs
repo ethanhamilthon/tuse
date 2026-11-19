@@ -48,6 +48,11 @@ pub fn load(path: Option<&Path>) -> Result<Loaded, String> {
     expand::walk(&mut value);
     crate::themes::resolve(&mut value).map_err(|e| format!("{name}: {e}"))?;
     let config: Config = serde_yaml::from_value(value).map_err(|e| format!("{name}: {e}"))?;
+    for (key, theme) in &config.themes {
+        theme
+            .check()
+            .map_err(|e| format!("{name}: theme {key}: {e}"))?;
+    }
     let theme = config.theme_name();
     if !matches!(theme, "" | "default") && !config.themes.contains_key(theme) {
         return Err(format!("{name}: theme {theme} not found"));

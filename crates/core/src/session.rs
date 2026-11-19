@@ -3,7 +3,7 @@ use crate::history::{self, Bounds};
 use crate::record::{Record, UserInput};
 use crate::store::{Meta, SessionDir};
 use crate::tasks::Tasks;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::mpsc::Sender;
@@ -29,6 +29,7 @@ pub struct Session {
     pub(crate) ask_seq: AtomicUsize,
     pub(crate) server: Mutex<Option<Server>>,
     pub(crate) remote: Mutex<Vec<String>>,
+    pub(crate) prints: Mutex<HashSet<String>>,
 }
 
 pub(crate) struct State {
@@ -129,6 +130,7 @@ impl Session {
             ask_seq: AtomicUsize::new(0),
             server: Mutex::default(),
             remote: Mutex::default(),
+            prints: Mutex::default(),
         });
         s.start()?;
         Ok(s)

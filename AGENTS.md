@@ -7,8 +7,8 @@ Rust + Crossterm, OpenAI Chat Completions API. User docs: `README.md` and `docs/
 - Separate crates with a clear split of responsibility, one crate per layer:
   - `crates/config` - YAML loading, includes, `$VAR` and `#{{cmd}}` expansion, theme tokens;
   - `crates/api` - Chat Completions client: streaming, retries, usage;
-  - `crates/core` - sessions, agent loop, bash tool, compaction, hooks, tasks, bins;
-  - `crates/socket` - session socket protocol, server and client;
+  - `crates/py` - the Python (Monty) runtime: interpreter, `sh`, filesystem and `import` mounts;
+  - `crates/core` - sessions, agent loop, tools (`python`, `read`, `write`, `edit`), compaction, hooks, tasks;
   - `crates/tui` - the terminal UI;
   - `crates/cli` - the `tuse` binary: argument parsing and wiring.
   Lower layers never depend on higher ones (`tui` and `cli` sit on top).

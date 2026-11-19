@@ -12,9 +12,15 @@ pub const PRUNED_MARKER: &str = "\n[tool output pruned]";
 pub const PRUNED_LINE_LIMIT: usize = 200;
 
 /// Builds Chat Completions messages from records, applying compaction bounds.
+/// Images of tool results cannot ride in a `tool` message, so they follow the
+/// results of that step as one `user` message.
 pub fn messages(records: &[Record], b: Bounds, system: &str) -> Vec<Value> {
     let mut out = vec![json!({"role": "system", "content": system})];
+    let mut images: Vec<(&str, &[String])> = vec![];
     for (i, r) in records.iter().enumerate() {
+        if !matches!(r, Record::Tool { .. }) {
+            flush_images(&mut out, &mut images);
+        }
         let msg = if i < b.drop {
             conversation_only(r)
         } else if i < b.prune {
@@ -22,9 +28,33 @@ pub fn messages(records: &[Record], b: Bounds, system: &str) -> Vec<Value> {
         } else {
             full(r, false)
         };
+        if let Record::Tool {
+            input, images: im, ..
+        } = r
+            && i >= b.prune
+            && !im.is_empty()
+        {
+            images.push((input, im));
+        }
         out.extend(msg);
     }
+    flush_images(&mut out, &mut images);
     out
+}
+
+fn flush_images(out: &mut Vec<Value>, images: &mut Vec<(&str, &[String])>) {
+    if images.is_empty() {
+        return;
+    }
+    let mut parts = vec![json!({"type": "text", "text": "[Images from the tool results above]"})];
+    for (path, urls) in images.drain(..) {
+        parts.push(json!({"type": "text", "text": format!("[Image: {path}]")}));
+        parts.extend(
+            urls.iter()
+                .map(|u| json!({"type": "image_url", "image_url": {"url": u}})),
+        );
+    }
+    out.push(json!({"role": "user", "content": parts}));
 }
 
 fn conversation_only(r: &Record) -> Option<Value> {
@@ -110,14 +140,36 @@ pub fn missing_results(records: &[Record]) -> Vec<Record> {
         })
         .map(|c| Record::Tool {
             id: c.id.clone(),
-            command: crate::bash::command_of(&c.arguments),
+            tool: c.name.clone(),
+            input: crate::tools::input_of(
+                &c.name,
+                &serde_json::from_str(&c.arguments).unwrap_or_default(),
+                &c.arguments,
+            ),
             output: "[interrupted: no output]".into(),
             code: None,
+            images: vec![],
             at: crate::id::now(),
         })
         .collect()
 }
 
+/// Tokens an image counts for in the estimate, whatever its size.
+const IMAGE_TOKENS: u64 = 1000;
+
 pub fn estimate_tokens(v: &[Value]) -> u64 {
-    v.iter().map(|m| m.to_string().len() as u64 / 4).sum()
+    v.iter().map(message_tokens).sum()
+}
+
+fn message_tokens(m: &Value) -> u64 {
+    let Some(parts) = m["content"].as_array() else {
+        return m.to_string().len() as u64 / 4;
+    };
+    parts
+        .iter()
+        .map(|p| match p["type"].as_str() {
+            Some("image_url") => IMAGE_TOKENS,
+            _ => p.to_string().len() as u64 / 4,
+        })
+        .sum()
 }

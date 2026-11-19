@@ -111,7 +111,7 @@ impl Tasks {
             .ok_or(format!("no task {id}"))?;
         if t.running() {
             t.status = "stopped".into();
-            crate::bash::kill_group(t.pid);
+            tuse_py::kill_group(t.pid);
         }
         Ok(t.clone())
     }

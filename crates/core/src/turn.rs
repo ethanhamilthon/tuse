@@ -1,5 +1,6 @@
 use crate::event::Event;
 use crate::history::{estimate_tokens, messages};
+use crate::hooks::Data;
 use crate::record::Record;
 use crate::session::{Session, State};
 use crate::{compaction, id, prompt};
@@ -16,7 +17,7 @@ enum Step {
 
 impl Session {
     pub(crate) fn turn(self: Arc<Self>, generation: u64, cancel: Arc<AtomicBool>) {
-        self.hook("turn_start", vec![]);
+        self.hook("turn_start", Data::default());
         self.emit(Event::TurnStart);
         loop {
             match self.step(generation, &cancel) {
@@ -29,7 +30,7 @@ impl Session {
     }
 
     /// Ends the turn unless messages arrived meanwhile. Returns false to keep going.
-    fn finish(&self, generation: u64) -> bool {
+    fn finish(self: &Arc<Self>, generation: u64) -> bool {
         let mut st = self.state.lock().unwrap();
         if st.generation != generation {
             return true;
@@ -52,7 +53,7 @@ impl Session {
             calls,
             cancelled: false,
         });
-        self.hook("turn_end", vec![]);
+        self.hook("turn_end", Data::default());
         true
     }
 
@@ -61,7 +62,7 @@ impl Session {
         (st.generation == generation).then_some(st)
     }
 
-    fn step(&self, generation: u64, cancel: &AtomicBool) -> Step {
+    fn step(self: &Arc<Self>, generation: u64, cancel: &AtomicBool) -> Step {
         let config = self.config();
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
@@ -95,7 +96,7 @@ impl Session {
         let req = Request {
             model: split_model(&model).1.to_string(),
             messages: messages(&st.records, st.bounds, &system),
-            tools: vec![prompt::bash_tool(&config)],
+            tools: prompt::tools(&config),
             effort: (effort != "default").then_some(effort),
         };
         drop(st);
@@ -195,14 +196,20 @@ impl Session {
         self.emit(Event::Notice(text));
     }
 
-    fn fail(&self, generation: u64, text: String) -> Step {
+    fn fail(self: &Arc<Self>, generation: u64, text: String) -> Step {
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
         };
         self.push(&mut st, Record::Error { text: text.clone() });
         drop(st);
         self.emit(Event::Error(text.clone()));
-        self.hook("error", vec![("TUSE_ERROR".into(), text)]);
+        self.hook(
+            "error",
+            Data {
+                error: Some(text),
+                ..Default::default()
+            },
+        );
         Step::Done
     }
 }

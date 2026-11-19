@@ -1,10 +1,11 @@
 [package]
-name = "tuse-socket"
+name = "tuse-py"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
-serde.workspace = true
-serde_json.workspace = true
+monty = "1.6.0"
+monty-types = "1.6.0"
+monty-fs = "1.6.0"

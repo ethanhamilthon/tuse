@@ -14,7 +14,8 @@ pub enum Entry {
     Reasoning(String),
     Tool {
         id: String,
-        command: String,
+        tool: String,
+        input: String,
         output: Option<String>,
         code: Option<i32>,
     },
@@ -25,7 +26,7 @@ pub enum Entry {
         calls: usize,
         cancelled: bool,
     },
-    /// A plain text block from `tuse print`.
+    /// A plain text block from `show()`.
     Print {
         id: String,
         text: String,
@@ -63,13 +64,15 @@ impl Chat {
                 }
                 Record::Tool {
                     id,
-                    command,
+                    tool,
+                    input,
                     output,
                     code,
                     ..
                 } => Entry::Tool {
                     id: id.clone(),
-                    command: command.clone(),
+                    tool: tool.clone(),
+                    input: input.clone(),
                     output: Some(output.clone()),
                     code: *code,
                 },

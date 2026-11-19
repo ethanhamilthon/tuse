@@ -4,12 +4,23 @@ use crate::session::Session;
 
 /// One entry of `/trace`.
 pub struct TraceItem {
-    /// `system`, `user`, `agent`, `thinking`, `bash`, `output`, `notice` or `error`.
+    /// `system`, `user`, `agent`, `thinking`, a tool name (`python`, `read`, `write`,
+    /// `edit`, `bash`), `output`, `notice` or `error`.
     pub role: &'static str,
     /// The first meaningful line.
     pub summary: String,
     /// The whole entry, as shown when it is opened.
     pub text: String,
+}
+
+fn role_of(tool: &str) -> &'static str {
+    match tool {
+        "read" => "read",
+        "write" => "write",
+        "edit" => "edit",
+        "python" => "python",
+        _ => "bash",
+    }
 }
 
 fn item(role: &'static str, text: String) -> TraceItem {
@@ -56,15 +67,22 @@ impl Session {
                     }
                 }
                 Record::Tool {
-                    command,
+                    tool,
+                    input,
                     output,
                     code,
+                    images,
                     ..
                 } => {
                     let code = code.map_or("none".to_string(), |c| c.to_string());
-                    items.push(item("bash", command.clone()));
+                    items.push(item(role_of(tool), input.clone()));
                     let mut out = item("output", output.trim_end().to_string());
-                    out.text = format!("exit {code}\n\n{}", out.text);
+                    let extra = if images.is_empty() {
+                        String::new()
+                    } else {
+                        format!("\n[{} image(s)]", images.len())
+                    };
+                    out.text = format!("exit {code}\n\n{}{extra}", out.text);
                     if output.trim().is_empty() {
                         out.summary = format!("exit {code}");
                     }

@@ -82,7 +82,7 @@ fn role_color(p: &Palette, role: &str) -> Option<Color> {
         "user" => p.user,
         "agent" => p.assistant,
         "thinking" => p.reasoning,
-        "bash" => p.tool,
+        "python" | "bash" | "read" | "write" | "edit" => p.tool,
         "output" => p.tool_output,
         "error" => p.error,
         "notice" => p.notice,

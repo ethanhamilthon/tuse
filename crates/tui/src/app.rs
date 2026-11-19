@@ -138,10 +138,11 @@ impl App {
                 self.streaming = None;
                 self.thinking = None;
             }
-            Event::ToolStart { id, command } => {
+            Event::ToolStart { id, tool, input } => {
                 self.chat.push(Entry::Tool {
                     id,
-                    command,
+                    tool,
+                    input,
                     output: None,
                     code: None,
                 });

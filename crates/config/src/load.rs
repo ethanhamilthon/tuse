@@ -78,7 +78,6 @@ fn load_file(path: &Path, files: &mut Vec<PathBuf>, depth: usize) -> Result<Valu
         return Err(format!("{}: top level must be a mapping", path.display()));
     }
     let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-    resolve_hook_paths(&mut own, &dir);
     let includes = own
         .as_mapping_mut()
         .and_then(|m| m.remove("include"))
@@ -114,17 +113,6 @@ pub fn merge(a: &mut Value, b: Value) {
     }
 }
 
-fn resolve_hook_paths(v: &mut Value, dir: &Path) {
-    let Some(hooks) = v.get_mut("hooks").and_then(|h| h.as_mapping_mut()) else {
-        return;
-    };
-    for (_, hook) in hooks.iter_mut() {
-        if let Some(Value::String(run)) = hook.get_mut("run") {
-            *run = resolve_command(run, dir);
-        }
-    }
-}
-
 pub fn resolve_path(p: &str, dir: &Path) -> PathBuf {
     if let Some(rest) = p.strip_prefix("~/") {
         return home().join(rest);
@@ -134,22 +122,5 @@ pub fn resolve_path(p: &str, dir: &Path) -> PathBuf {
         p.to_path_buf()
     } else {
         dir.join(p)
-    }
-}
-
-/// Makes the program of a command absolute when it is a relative path.
-pub fn resolve_command(cmd: &str, dir: &Path) -> String {
-    let trimmed = cmd.trim_start();
-    let (prog, rest) = trimmed
-        .split_once(char::is_whitespace)
-        .unwrap_or((trimmed, ""));
-    if !(prog.contains('/') || prog.starts_with('~')) || prog.starts_with('/') {
-        return cmd.to_string();
-    }
-    let abs = resolve_path(prog, dir).display().to_string();
-    if rest.is_empty() {
-        abs
-    } else {
-        format!("{abs} {rest}")
     }
 }

@@ -71,7 +71,7 @@ impl App {
             .collect();
         if items.is_empty() {
             self.picker = None;
-            self.notice("No tasks. The agent starts them with `tuse task run`.");
+            self.notice("No tasks. The agent starts them with `task_run()`.");
             return;
         }
         let selected = self

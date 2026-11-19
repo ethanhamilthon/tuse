@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.3.3"
+version = "0.4.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/ethanhamilthon/tuse"
@@ -12,7 +12,7 @@ repository = "https://github.com/ethanhamilthon/tuse"
 tuse-config = { path = "crates/config" }
 tuse-api = { path = "crates/api" }
 tuse-core = { path = "crates/core" }
-tuse-socket = { path = "crates/socket" }
+tuse-py = { path = "crates/py" }
 tuse-tui = { path = "crates/tui" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

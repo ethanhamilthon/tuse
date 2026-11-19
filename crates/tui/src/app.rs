@@ -5,7 +5,6 @@ use crate::style::Palette;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
-use std::time::Duration;
 use tuse_core::{Event, Options, Session};
 
 pub struct App {
@@ -24,7 +23,6 @@ pub struct App {
     pub file_dir: String,
     pub streaming: Option<usize>,
     pub thinking: Option<usize>,
-    pub last_turn: Option<(Duration, usize)>,
     /// Lines scrolled up from the bottom of the chat.
     pub scroll: usize,
     pub tick: usize,
@@ -50,7 +48,6 @@ impl App {
             file_dir: String::new(),
             streaming: None,
             thinking: None,
-            last_turn: None,
             scroll: 0,
             tick: 0,
             quit: false,
@@ -108,7 +105,7 @@ impl App {
                 self.chat.push(Entry::User { text, images });
                 self.scroll = 0;
             }
-            Event::TurnStart => self.last_turn = None,
+            Event::TurnStart => {}
             Event::Text(t) => self.stream(t, false),
             Event::Reasoning(t) => self.stream(t, true),
             Event::StreamReset => {
@@ -154,7 +151,6 @@ impl App {
             } => {
                 self.streaming = None;
                 self.thinking = None;
-                self.last_turn = Some((elapsed, calls));
                 self.chat.push(Entry::TurnEnd {
                     elapsed,
                     calls,

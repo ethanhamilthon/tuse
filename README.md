@@ -12,10 +12,17 @@ Chat Completions compatible API, one tool: `bash`.
 ## Install
 
 ```sh
-cargo install --git https://github.com/ethanhamilthon/tuse tuse
+curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/install.sh | sh
+tuse connect
 ```
 
-or download a binary from the [releases](https://github.com/ethanhamilthon/tuse/releases).
+The script puts `tuse` into `~/.local/bin` and the defaults into
+`~/.config/tuse/default.yaml` (the system prompt about Tuse and the default settings).
+`default.yaml` is replaced on every install; write your own settings to
+`~/.config/tuse/main.yaml`. `TUSE_VERSION=0.2.0` picks a version, `TUSE_BIN_DIR` the folder.
+
+Or build it: `cargo install --git https://github.com/ethanhamilthon/tuse tuse`, then copy
+[default.yaml](default.yaml) to `~/.config/tuse/`.
 
 ## Usage
 
@@ -24,6 +31,7 @@ tuse [--config PATH] [--resume ID]        open the TUI
 tuse -p [PROMPT|-] [--config PATH] [--resume ID]
                                           headless: session ID to stderr, replies to stdout;
                                           runs until killed and takes `tuse steer` messages
+tuse connect [--config PATH]              add a provider (base url, api key, name)
 tuse steer [-s ID] [--file PATH]... [TEXT|-]
 tuse ask [-s ID] [--async] QUESTION OPTION...
 tuse task run [-s ID] [--name NAME] -- COMMAND...
@@ -41,6 +49,9 @@ agent can use `tuse ask` and `tuse task` itself.
 - `tuse task run` starts a background process owned by the session. Tasks are listed
   in `/tasks`, and the agent gets a message when one exits.
 
+`tuse connect` asks for the base url, the API key (`$ENV` works too) and a name, fetches
+the provider's models, says how many it got and adds the `connect` entry to the config.
+
 ### TUI
 
 | Key | Action |
@@ -49,14 +60,17 @@ agent can use `tuse ask` and `tuse task` itself.
 | Shift+Enter, Alt+Enter, Ctrl+J | new line |
 | Esc | close the picker, or stop the running turn |
 | Up / Down, PageUp / PageDown, mouse wheel | scroll the chat |
+| Ctrl+V, Cmd+V | paste; an image becomes `[Image #n: PATH]` and goes to the model with the message |
 | Ctrl+C | clear the input, or quit when it is empty |
 | Ctrl+A / Ctrl+E / Ctrl+U / Ctrl+K / Ctrl+W | line start / end / kill back / kill forward / delete word |
 
-Commands: `/new`, `/resume` (sessions started in this folder), `/models` (model, then
-effort), `/tasks` (Enter shows output, Ctrl+X stops), `/usage`, `/reload`, `/quit`.
+Commands: `/new`, `/resume` (sessions started in this folder), `/models` (every model the
+providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/usage`, `/reload`, `/quit`.
 
 `#name` inserts a prompt from the config; it is expanded to its text when sent.
-`@` picks a file or folder and inserts its path.
+`@` picks a file or folder from the current folder; `@dir/*` lists what is inside `dir`.
+Files, prompts and images are one unit in the input: arrows and Backspace move over them whole.
+`/models` and `/theme` write your choice to the active config.
 
 ## Config
 

@@ -7,7 +7,7 @@ mod types;
 
 pub use edit::{add_connect, set_key};
 pub use expand::expand;
-pub use load::{Loaded, find, home, load, resolve_path};
+pub use load::{Loaded, default_path, find, home, load, resolve_path};
 pub use theme::{Theme, limit};
 pub use types::*;
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 - 2026-11-19
+
+- `install.sh` installs the binary and `~/.config/tuse/default.yaml`; the system prompt
+  about Tuse and the default settings now live there, not in the app.
+- `tuse connect`: an inline prompt that adds a provider and fetches its models.
+- `/models` lists every model the providers report; `models:` only adds details
+  (name, window, prices), which the list shows.
+- `/theme`; the chosen theme and model are saved to the active config.
+- `themes:` by key, `theme:` picks the active one, `extend:` builds on another theme.
+- Theme `bash_line`, `output_line`, `reasoning_line` (`0` hides, `-1` is unlimited)
+  replace `tool_command_lines`, `tool_preview_lines` and `reasoning_lines`.
+- Ctrl+V and Cmd+V paste; a clipboard image becomes `[Image #n: PATH]` and is sent to the model.
+- Files, prompts and images are one unit in the input.
+- The `@` picker lists one folder; `@dir/*` opens `dir`.
+- The turn timer shows only while the agent works.
+- A `VERSION` file; `make check` and the release workflow compare it with `Cargo.toml`.
+
 ## 0.1.0 - 2026-11-19
 
 First release.

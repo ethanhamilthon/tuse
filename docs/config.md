@@ -1,7 +1,8 @@
 # Config
 
 Tuse reads one YAML file: `--config PATH`, else `./tuse.yaml`, else
-`~/.config/tuse/main.yaml`. `/reload` rebuilds it from its files.
+`~/.config/tuse/main.yaml`. `~/.config/tuse/default.yaml` (written by the installer)
+is loaded first and your config merges over it. `/reload` rebuilds everything from its files.
 
 ## Merging and expansion
 

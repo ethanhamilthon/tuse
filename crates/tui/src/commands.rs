@@ -92,10 +92,16 @@ impl App {
                 self.editor.clear();
                 self.run_command(&v);
             }
-            (Kind::Prompt, Some(v)) => self.replace_token(&format!("#{v} ")),
+            (Kind::Prompt, Some(v)) => {
+                self.cut_token();
+                self.editor.insert_atom(&format!("#{v}"), None);
+                self.editor.insert(" ");
+            }
+            (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}*")),
             (Kind::File, Some(v)) => {
-                let dir = v.ends_with('/');
-                self.replace_token(&format!("@{v}{}", if dir { "*" } else { " " }));
+                self.cut_token();
+                self.editor.insert_atom(&format!("@{v}"), None);
+                self.editor.insert(" ");
             }
             (Kind::Resume, Some(v)) => self.switch(Some(v)),
             (Kind::Theme, Some(v)) => self.set_theme(&v),
@@ -143,6 +149,10 @@ impl App {
         if self.picker.is_none() {
             self.update_token_picker();
         }
+    }
+
+    fn cut_token(&mut self) {
+        self.replace_token("");
     }
 
     fn replace_token(&mut self, with: &str) {

@@ -1,0 +1,36 @@
+use arboard::Clipboard;
+use std::path::{Path, PathBuf};
+
+pub enum Pasted {
+    Image(PathBuf),
+    Text(String),
+    Nothing,
+}
+
+/// Reads the system clipboard: an image is saved as a PNG under `dir`.
+pub fn read(dir: &Path) -> Result<Pasted, String> {
+    let mut cb = Clipboard::new().map_err(|e| e.to_string())?;
+    if let Ok(img) = cb.get_image() {
+        let n = std::fs::read_dir(dir).map_or(0, |d| d.count()) + 1;
+        let path = dir.join(format!("image-{n}.png"));
+        write_png(&path, img.width, img.height, &img.bytes)?;
+        return Ok(Pasted::Image(path));
+    }
+    Ok(match cb.get_text() {
+        Ok(t) if !t.is_empty() => Pasted::Text(t),
+        _ => Pasted::Nothing,
+    })
+}
+
+fn write_png(path: &Path, w: usize, h: usize, rgba: &[u8]) -> Result<(), String> {
+    if let Some(d) = path.parent() {
+        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.write_header()
+        .and_then(|mut w| w.write_image_data(rgba))
+        .map_err(|e| e.to_string())
+}

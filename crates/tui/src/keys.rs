@@ -26,6 +26,7 @@ impl App {
         if self.panel.is_some() && self.panel_key(k.code, page) {
             return;
         }
+        let cols = self.input_cols;
         let e = &mut self.editor;
         match k.code {
             KeyCode::Esc => {
@@ -64,12 +65,12 @@ impl App {
             KeyCode::Backspace => e.backspace(),
             KeyCode::Delete => e.delete(),
             KeyCode::Up => {
-                if !(e.multiline() && e.vertical(true)) {
+                if !e.vertical(true, cols) {
                     self.scroll += self.palette.t.scroll_step as usize;
                 }
             }
             KeyCode::Down => {
-                if !(e.multiline() && e.vertical(false)) {
+                if !e.vertical(false, cols) {
                     self.scroll = self
                         .scroll
                         .saturating_sub(self.palette.t.scroll_step as usize);

@@ -154,33 +154,6 @@ impl Editor {
         self.buf.drain(self.cursor..end);
     }
 
-    pub fn multiline(&self) -> bool {
-        self.buf.contains(&'\n')
-    }
-
-    /// Moves to the previous (`up`) or next logical line; false at the edge.
-    pub fn vertical(&mut self, up: bool) -> bool {
-        let col = self.cursor - self.line_start();
-        if up {
-            let start = self.line_start();
-            if start == 0 {
-                return false;
-            }
-            self.cursor = start - 1;
-            let prev = self.line_start();
-            self.cursor = (prev + col).min(start - 1);
-        } else {
-            let end = self.line_end();
-            if end == self.buf.len() {
-                return false;
-            }
-            self.cursor = end + 1;
-            let next_end = self.line_end();
-            self.cursor = (end + 1 + col).min(next_end);
-        }
-        true
-    }
-
     /// The token under the cursor (from the last whitespace to the cursor) and its start.
     /// Atoms end a token like whitespace does.
     pub fn token(&self) -> (usize, String) {

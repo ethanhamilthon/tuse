@@ -36,7 +36,18 @@ pub fn load(path: Option<&Path>) -> Result<Loaded, String> {
     let mut files = vec![];
     let mut value = load_file(path, &mut files, 0)?;
     expand::walk(&mut value);
-    let config = serde_yaml::from_value(value).map_err(|e| format!("{}: {e}", path.display()))?;
+    crate::themes::resolve(&mut value).map_err(|e| format!("{}: {e}", path.display()))?;
+    let config: Config =
+        serde_yaml::from_value(value).map_err(|e| format!("{}: {e}", path.display()))?;
+    if !matches!(config.theme.as_str(), "" | "default")
+        && !config.themes.contains_key(&config.theme)
+    {
+        return Err(format!(
+            "{}: theme {} not found",
+            path.display(),
+            config.theme
+        ));
+    }
     Ok(Loaded {
         config,
         files,

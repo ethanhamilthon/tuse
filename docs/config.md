@@ -31,7 +31,8 @@ Tuse reads one YAML file: `--config PATH`, else `./tuse.yaml`, else
 | `prompts` | `name: text`. `#name` in the input expands to the text. |
 | `bins` | `name: command`. Short aliases on the agent's PATH, also listed in the system prompt. |
 | `hooks` | `name: {events: [...], run: command}`, see below. |
-| `theme` | See below. |
+| `theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. |
+| `themes` | `name: {extend: base, token: value, ...}`, see below. |
 
 ## Hooks
 
@@ -52,6 +53,9 @@ only user and assistant text.
 
 ## Theme
 
+Themes live under `themes`, one key per theme. `extend: other` starts from another
+theme (or `default`, the built-in one) and overrides only the tokens you write.
+
 Every UI decision is a token. Colors take `#rrggbb`, `0`-`255`, a name (`red`,
 `dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default.
 
@@ -60,8 +64,10 @@ Every UI decision is a token. Colors take `#rrggbb`, `0`-`255`, a name (`red`,
   `code_block`, `link`, `quote`, `rule`, `status`, `picker_fg`, `picker_bg`,
   `picker_selected_fg`, `picker_selected_bg`, `picker_detail`, `picker_title`.
 - Spacing: `pad_x`, `message_gap`, `list_indent`, `code_indent`, `picker_pad_x`.
-- Limits: `picker_max_height` (8), `input_max_height`, `tool_preview_lines`,
-  `tool_command_lines`, `reasoning_lines`, `scroll_step`, `file_picker_max`, `frame_ms`.
+- Limits: `picker_max_height` (8), `input_max_height`, `scroll_step`, `file_picker_max`,
+  `frame_ms`.
+- Lines shown in the chat: `bash_line`, `output_line`, `reasoning_line`. `0` hides the
+  block, `-1` removes the limit.
 - Symbols: `user_prefix`, `tool_prefix`, `reasoning_prefix`, `notice_prefix`,
   `error_prefix`, `bullet`, `quote_prefix`, `rule_char`, `table_sep`, `scroll_mark`,
   `label_sep`, `picker_selected_prefix`, `more`, `spinner` (a list of frames).

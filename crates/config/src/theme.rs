@@ -42,9 +42,10 @@ pub struct Theme {
     // limits
     pub picker_max_height: u16,
     pub input_max_height: u16,
-    pub tool_preview_lines: usize,
-    pub tool_command_lines: usize,
-    pub reasoning_lines: usize,
+    /// Lines shown per block: `0` hides it, `-1` removes the limit.
+    pub bash_line: i32,
+    pub output_line: i32,
+    pub reasoning_line: i32,
     pub scroll_step: u16,
     pub file_picker_max: usize,
     pub frame_ms: u64,
@@ -102,9 +103,9 @@ impl Default for Theme {
             picker_pad_x: 1,
             picker_max_height: 8,
             input_max_height: 10,
-            tool_preview_lines: 3,
-            tool_command_lines: 3,
-            reasoning_lines: 2,
+            bash_line: 3,
+            output_line: 3,
+            reasoning_line: 2,
             scroll_step: 3,
             file_picker_max: 20000,
             frame_ms: 33,
@@ -126,4 +127,9 @@ impl Default for Theme {
                 .to_vec(),
         }
     }
+}
+
+/// How many of `len` lines a `*_line` setting shows.
+pub fn limit(setting: i32, len: usize) -> usize {
+    usize::try_from(setting).map_or(len, |n| n.min(len))
 }

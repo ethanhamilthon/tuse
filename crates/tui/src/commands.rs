@@ -27,7 +27,7 @@ impl App {
             }
             "reload" => match self.session.reload() {
                 Ok(()) => {
-                    self.palette = Palette::new(&self.session.config().theme);
+                    self.palette = Palette::new(&self.session.config().active_theme());
                     self.chat = crate::chat::Chat::from_records(&self.session.records());
                     self.notice("Config reloaded.");
                 }

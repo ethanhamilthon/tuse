@@ -39,7 +39,7 @@ pub fn draw(app: &mut App, out: &mut impl Write, w: u16, h: u16) -> std::io::Res
     }
     if let Some(panel) = &mut app.panel {
         let lines = panel.lines(inner, chat_h, p);
-        view.truncate(chat_h - lines.len());
+        view.truncate(chat_h.saturating_sub(lines.len()));
         view.extend(lines);
     }
     screen.extend(view);

@@ -2,13 +2,39 @@ use crate::prompt;
 use crate::record::Record;
 use crate::session::Session;
 
+/// One entry of `/trace`.
+pub struct TraceItem {
+    /// `system`, `user`, `agent`, `thinking`, `bash`, `output`, `notice` or `error`.
+    pub role: &'static str,
+    /// The first meaningful line.
+    pub summary: String,
+    /// The whole entry, as shown when it is opened.
+    pub text: String,
+}
+
+fn item(role: &'static str, text: String) -> TraceItem {
+    let summary = text
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or_default()
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    TraceItem {
+        role,
+        summary,
+        text,
+    }
+}
+
 impl Session {
-    /// The whole session as plain text: system prompt, messages, thinking, tool calls and outputs.
-    pub fn trace(&self) -> String {
+    /// The whole session, one item per system prompt, message, thinking, tool call and output.
+    pub fn trace(&self) -> Vec<TraceItem> {
         let config = self.config();
         let st = self.state.lock().unwrap();
         let system = prompt::system_prompt(&config, st.bounds.drop > 0);
-        let mut parts = vec![format!("## system\n{system}")];
+        let mut items = vec![item("system", system)];
         for r in &st.records {
             match r {
                 Record::User { text, images, .. } => {
@@ -17,16 +43,16 @@ impl Session {
                     } else {
                         format!("\n[{} image(s)]", images.len())
                     };
-                    parts.push(format!("## user\n{text}{extra}"));
+                    items.push(item("user", format!("{text}{extra}")));
                 }
                 Record::Assistant {
                     text, reasoning, ..
                 } => {
                     if !reasoning.trim().is_empty() {
-                        parts.push(format!("## thinking\n{}", reasoning.trim_end()));
+                        items.push(item("thinking", reasoning.trim_end().to_string()));
                     }
                     if !text.trim().is_empty() {
-                        parts.push(format!("## assistant\n{}", text.trim_end()));
+                        items.push(item("agent", text.trim_end().to_string()));
                     }
                 }
                 Record::Tool {
@@ -36,17 +62,31 @@ impl Session {
                     ..
                 } => {
                     let code = code.map_or("none".to_string(), |c| c.to_string());
-                    parts.push(format!("## tool call\n$ {command}"));
-                    parts.push(format!(
-                        "## tool output (exit {code})\n{}",
-                        output.trim_end()
-                    ));
+                    items.push(item("bash", command.clone()));
+                    let mut out = item("output", output.trim_end().to_string());
+                    out.text = format!("exit {code}\n\n{}", out.text);
+                    if output.trim().is_empty() {
+                        out.summary = format!("exit {code}");
+                    }
+                    items.push(out);
                 }
-                Record::Notice { text } => parts.push(format!("## notice\n{text}")),
-                Record::Error { text } => parts.push(format!("## error\n{text}")),
+                Record::Notice { text } => items.push(item("notice", text.clone())),
+                Record::Error { text } => items.push(item("error", text.clone())),
                 _ => {}
             }
         }
-        parts.join("\n\n")
+        items
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::item;
+
+    #[test]
+    fn summary_is_the_first_nonempty_line() {
+        let it = item("agent", "\n  \n hello\tworld \nmore".into());
+        assert_eq!(it.summary, "hello world");
+        assert!(it.text.contains("more"));
     }
 }

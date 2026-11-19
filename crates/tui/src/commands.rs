@@ -29,7 +29,7 @@ impl App {
                 let r = self.session.usage_report();
                 self.panel = Some(Panel::new("Usage", r));
             }
-            "trace" => self.panel = Some(Panel::new("Trace", self.session.trace())),
+            "trace" => self.panel = Some(Panel::list("Trace", self.session.trace())),
             "reload" => match self.session.reload() {
                 Ok(()) => {
                     self.palette = Palette::new(&self.session.config().active_theme());

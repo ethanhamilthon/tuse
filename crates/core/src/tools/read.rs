@@ -1,61 +1,53 @@
-use super::Output;
 use base64::Engine;
-use serde_json::Value;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use tuse_config::Config;
+use tuse_py::{ExcType, Fail};
 
-const DEFAULT_LIMIT: usize = 2000;
+pub const DEFAULT_LIMIT: usize = 2000;
 /// Characters of one line shown; the rest is cut.
 const LINE_CHARS: usize = 2000;
 
-pub fn run(path: &Path, args: &Value, config: &Config) -> Output {
-    let meta = match std::fs::metadata(path) {
-        Ok(m) => m,
-        Err(e) => return Output::err(format!("{}: {e}", path.display())),
-    };
+/// What `read` gives back: the text, and a `data:` URL for an image.
+pub struct Read {
+    pub text: String,
+    pub image: Option<String>,
+}
+
+pub fn run(
+    path: &Path,
+    offset: usize,
+    limit: usize,
+    max_image: usize,
+    budget: usize,
+) -> Result<Read, Fail> {
+    let io = |e: std::io::Error| super::io_fail(path, &e);
+    let meta = std::fs::metadata(path).map_err(io)?;
     if meta.is_dir() {
-        return Output::err(format!(
-            "{} is a directory; list it with the python tool (os.listdir)",
-            path.display()
+        return Err(Fail::of(
+            ExcType::IsADirectoryError,
+            format!("{} is a directory; list it with os.listdir", path.display()),
         ));
     }
     if let Some(mime) = crate::input::image_mime(path) {
-        return image(
-            path,
-            mime,
-            meta.len() as usize,
-            config.settings.max_image_bytes,
-        );
+        return image(path, mime, meta.len() as usize, max_image);
     }
-    let offset = args["offset"].as_u64().unwrap_or(1).max(1) as usize;
-    let limit = args["limit"]
-        .as_u64()
-        .map_or(DEFAULT_LIMIT, |n| n.max(1) as usize);
-    match text(path, offset, limit, config.settings.max_output) {
-        Ok(t) => Output::ok(t),
-        Err(e) => Output::err(format!("{}: {e}", path.display())),
-    }
+    let text = text(path, offset, limit, budget).map_err(io)?;
+    Ok(Read { text, image: None })
 }
 
-fn image(path: &Path, mime: &str, size: usize, max: usize) -> Output {
+fn image(path: &Path, mime: &str, size: usize, max: usize) -> Result<Read, Fail> {
     if size > max {
-        return Output::err(format!(
+        return Err(Fail::value(format!(
             "{} is {size} bytes, over the image limit of {max} bytes (settings.max_image_bytes)",
             path.display()
-        ));
+        )));
     }
-    match std::fs::read(path) {
-        Ok(bytes) => {
-            let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
-            Output {
-                text: format!("[image: {}, {} KB]", path.display(), size.div_ceil(1024)),
-                ok: true,
-                images: vec![format!("data:{mime};base64,{data}")],
-            }
-        }
-        Err(e) => Output::err(format!("{}: {e}", path.display())),
-    }
+    let bytes = std::fs::read(path).map_err(|e| super::io_fail(path, &e))?;
+    let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(Read {
+        text: format!("[image: {}, {} KB]", path.display(), size.div_ceil(1024)),
+        image: Some(format!("data:{mime};base64,{data}")),
+    })
 }
 
 /// Numbered lines `offset..offset + limit`, within `budget` bytes.

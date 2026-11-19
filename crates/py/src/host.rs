@@ -1,7 +1,16 @@
 use crate::ctx::Ctx;
 use crate::fail::{Args, Fail};
 use monty_types::MontyObject;
+use std::fs::File;
 use std::path::PathBuf;
+use std::process::Child;
+
+/// A running process that outlived the timeout of its `sh`.
+pub struct Adopt {
+    pub child: Child,
+    pub cmd: String,
+    pub cwd: PathBuf,
+}
 
 /// What the interpreter needs from its owner: the functions that touch a
 /// session (`ask`, `show`, `task_*`, ...), the working directory and the env.
@@ -18,4 +27,13 @@ pub trait Host: Send + Sync {
 
     /// Directories searched first by `import` (the config folder).
     fn module_dirs(&self) -> Vec<PathBuf>;
+
+    /// Takes over a process whose `sh` timed out: the task id and the file the
+    /// rest of its output goes to. `Err` gives the process back to be killed.
+    fn adopt(&self, adopt: Adopt) -> Result<(String, File), Adopt> {
+        Err(adopt)
+    }
+
+    /// Called before every host function, `sh` included (the working indicator).
+    fn status(&self, _name: &str, _args: &Args) {}
 }

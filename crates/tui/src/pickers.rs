@@ -57,7 +57,6 @@ impl App {
             return;
         }
         self.palette = Palette::new(&self.session.config().active_theme());
-        self.notice(format!("Theme {name}."));
     }
 }
 

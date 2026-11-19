@@ -13,8 +13,8 @@ mod value;
 
 pub use ctx::{Ctx, NEVER};
 pub use fail::{Args, Fail};
-pub use host::Host;
-pub use monty_types::MontyObject;
+pub use host::{Adopt, Host};
+pub use monty_types::{ExcType, MontyObject};
 pub use runtime::{Output, Python};
 pub use sh::{Sh, kill_group, run as run_sh, truncate};
 pub use value::{opt_int, record};

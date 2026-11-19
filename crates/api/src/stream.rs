@@ -105,7 +105,7 @@ mod tests {
         };
         let chunks = [
             json!({"choices":[{"delta":{"content":"Hi"}}]}),
-            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"bash","arguments":"{\"com"}}]}}]}),
+            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"python","arguments":"{\"com"}}]}}]}),
             json!({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"mand\":\"ls\"}"}}]}}]}),
             json!({"choices":[{"delta":{},"finish_reason":"tool_calls"}]}),
             json!({"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":3,"prompt_tokens_details":{"cached_tokens":4}}}),

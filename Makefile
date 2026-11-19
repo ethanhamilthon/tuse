@@ -9,13 +9,12 @@ check:
 	cargo clippy --all-targets -- -D warnings
 	cargo test --quiet
 
-# Builds from this checkout and installs the binary and default.yaml (replaced, like `tuse update`).
+# Builds from this checkout and installs the binary.
 # main.yaml is created only when missing, so your own config stays.
 install:
 	cargo build --release -p tuse
 	mkdir -p "$(BIN_DIR)" "$(CONFIG_DIR)"
 	install -m 755 target/release/tuse "$(BIN_DIR)/tuse"
-	install -m 644 release/default.yaml "$(CONFIG_DIR)/default.yaml"
 	@[ -e "$(CONFIG_DIR)/main.yaml" ] || install -m 644 release/main.yaml "$(CONFIG_DIR)/main.yaml"
 	@echo "Installed $$("$(BIN_DIR)/tuse" version) to $(BIN_DIR)/tuse, config in $(CONFIG_DIR)"
 	@case ":$$PATH:" in *":$(BIN_DIR):"*) ;; *) echo "Add $(BIN_DIR) to your PATH." ;; esac

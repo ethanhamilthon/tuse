@@ -55,7 +55,10 @@ jobs:
           merge-multiple: true
       - name: Checksums and config files
         run: |
-          cp release/default.yaml release/main.yaml dist/
+          cp release/main.yaml dist/
+          # Tuse 0.4.0 and older download this file in `tuse update` and `tuse reset`; an empty one
+          # replaces their old copy, whose system prompt is built into the binary now.
+          echo "# Not used any more: the system prompt and the default settings are built into tuse." > dist/default.yaml
           cd dist && shasum -a 256 *.tar.gz > checksums.txt
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:

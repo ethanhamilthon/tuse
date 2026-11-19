@@ -22,6 +22,7 @@ pub const EVENTS: [&str; 7] = [
 pub struct Data {
     pub tool: Option<String>,
     pub input: Option<String>,
+    pub title: Option<String>,
     pub output: Option<String>,
     pub code: Option<i32>,
     pub error: Option<String>,
@@ -62,6 +63,7 @@ impl Session {
                 ),
                 ("tool".into(), opt(data.tool.clone())),
                 ("input".into(), opt(data.input.clone())),
+                ("title".into(), opt(data.title.clone())),
                 ("output".into(), opt(data.output.clone())),
                 (
                     "code".into(),
@@ -72,13 +74,10 @@ impl Session {
                 ("cancelled".into(), MontyObject::bool(data.cancelled)),
             ];
             handles.push(std::thread::spawn(move || {
-                let host = Arc::new(SessionHost(Arc::downgrade(&s)));
+                let host = Arc::new(SessionHost::new(Arc::downgrade(&s), true));
                 let mut py = Python::new(host, config.settings.max_output);
                 let secs = config.settings.hook_timeout.max(1);
-                let ctx = Ctx {
-                    cancel: &NEVER,
-                    deadline: Instant::now() + Duration::from_secs(secs),
-                };
+                let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(secs));
                 let prelude = config.prelude.join("\n");
                 if !prelude.trim().is_empty() {
                     py.run(&prelude, &ctx, vec![]);

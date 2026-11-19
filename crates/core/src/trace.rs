@@ -4,8 +4,8 @@ use crate::session::Session;
 
 /// One entry of `/trace`.
 pub struct TraceItem {
-    /// `system`, `user`, `agent`, `thinking`, a tool name (`python`, `read`, `write`,
-    /// `edit`, `bash`), `output`, `notice` or `error`.
+    /// `system`, `user`, `agent`, `thinking`, `python` (or `tool` for another name),
+    /// `output`, `notice` or `error`.
     pub role: &'static str,
     /// The first meaningful line.
     pub summary: String,
@@ -15,11 +15,8 @@ pub struct TraceItem {
 
 fn role_of(tool: &str) -> &'static str {
     match tool {
-        "read" => "read",
-        "write" => "write",
-        "edit" => "edit",
         "python" => "python",
-        _ => "bash",
+        _ => "tool",
     }
 }
 
@@ -44,7 +41,7 @@ impl Session {
     pub fn trace(&self) -> Vec<TraceItem> {
         let config = self.config();
         let st = self.state.lock().unwrap();
-        let system = prompt::system_prompt(&config, st.bounds.drop > 0);
+        let system = prompt::system_prompt(&config, &self.cwd, st.bounds.drop > 0);
         let mut items = vec![item("system", system)];
         for r in &st.records {
             match r {
@@ -72,6 +69,7 @@ impl Session {
                     output,
                     code,
                     images,
+                    diffs,
                     ..
                 } => {
                     let code = code.map_or("none".to_string(), |c| c.to_string());
@@ -82,7 +80,11 @@ impl Session {
                     } else {
                         format!("\n[{} image(s)]", images.len())
                     };
-                    out.text = format!("exit {code}\n\n{}{extra}", out.text);
+                    let changes: String = diffs
+                        .iter()
+                        .map(|d| format!("\n\n{}\n{}", d.path, d.diff))
+                        .collect();
+                    out.text = format!("exit {code}\n\n{}{extra}{changes}", out.text);
                     if output.trim().is_empty() {
                         out.summary = format!("exit {code}");
                     }

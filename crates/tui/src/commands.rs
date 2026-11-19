@@ -29,7 +29,7 @@ impl App {
                 let r = self.session.usage_report();
                 self.panel = Some(Panel::new("Usage", r));
             }
-            "trace" => self.panel = Some(Panel::list("Trace", self.session.trace())),
+            "trace" => self.open_trace(None),
             "reload" => match self.session.reload() {
                 Ok(()) => {
                     self.palette = Palette::new(&self.session.config().active_theme());
@@ -55,6 +55,25 @@ impl App {
         self.picker = Some(Picker::new(Kind::Resume, "Resume", items));
     }
 
+    /// The whole session as a list; Enter opens an item, Esc in the item comes back here.
+    pub fn open_trace(&mut self, select: Option<usize>) {
+        let all = self.session.trace();
+        let items = all
+            .iter()
+            .enumerate()
+            .map(|(i, it)| {
+                crate::picker::tagged(it.role, format!("{i} {}", it.summary), i.to_string())
+            })
+            .collect();
+        self.trace = all.into_iter().map(|it| (it.role, it.text)).collect();
+        let mut p = Picker::new(Kind::Trace, "Trace", items);
+        let last = self.trace.len().saturating_sub(1);
+        p.select(&select.unwrap_or(last).to_string());
+        self.picker = Some(p);
+        self.panel = None;
+        self.trace_item = None;
+    }
+
     pub fn open_tasks(&mut self) {
         let items: Vec<_> = self
             .session
@@ -62,8 +81,11 @@ impl App {
             .list()
             .into_iter()
             .map(|t| {
-                let status = match (t.status.as_str(), t.code) {
+                let status = match (t.status.as_str(), t.exit) {
                     ("exited", Some(c)) => format!("exited {c}"),
+                    ("idle" | "running", _) if t.queue > 0 => {
+                        format!("{}, {} queued", t.status, t.queue)
+                    }
                     (s, _) => s.to_string(),
                 };
                 item(format!("{} {}", t.id, t.name), status, t.id)
@@ -124,19 +146,26 @@ impl App {
                 if let Err(e) = saved {
                     self.error(format!("Can't save the model: {e}"));
                 }
-                let name = self.session.config().display_name(model);
-                self.notice(format!("Model {name}, effort {v}."));
             }
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.tasks.get(&v) {
                     let out = tuse_core::tail(&t.log, 200);
                     let title = format!("Task {} {} [{}]", t.id, t.name, t.status);
-                    self.panel = Some(Panel::new(title, format!("$ {}\n{out}", t.command)));
+                    self.panel = Some(Panel::new(title, format!("{}\n\n{out}", t.code)));
+                }
+            }
+            (Kind::Trace, Some(v)) => {
+                let at: usize = v.parse().unwrap_or(0);
+                if let Some((role, text)) = self.trace.get(at) {
+                    self.panel = Some(Panel::new(format!("Trace {at} {role}"), text.clone()));
+                    self.trace_item = Some(at);
                 }
             }
             (Kind::Ask(id), v) => {
-                let custom = (!p.query.trim().is_empty()).then(|| p.query.clone());
-                let Some(answer) = v.or(custom) else {
+                // Typed text is the answer; without it the selected option (the last row is only a hint).
+                let typed = p.query.trim();
+                let custom = (!typed.is_empty()).then(|| typed.to_string());
+                let Some(answer) = custom.or(v.filter(|v| !v.is_empty())) else {
                     self.picker = Some(p);
                     return;
                 };
@@ -149,79 +178,6 @@ impl App {
         }
         if self.picker.is_none() {
             self.update_token_picker();
-        }
-    }
-
-    fn cut_token(&mut self) {
-        self.replace_token("");
-    }
-
-    fn replace_token(&mut self, with: &str) {
-        let (start, _) = self.editor.token();
-        let end = self.editor.cursor;
-        self.editor.replace(start, end, with);
-    }
-
-    /// Opens, filters or closes the `/`, `#` and `@` pickers for the token at the cursor.
-    pub fn update_token_picker(&mut self) {
-        if self.steering.is_some() || self.picker.as_ref().is_some_and(|p| !p.kind.is_token()) {
-            return;
-        }
-        let (start, token) = self.editor.token();
-        if self.dismissed.as_deref() == Some(&token) {
-            return;
-        }
-        self.dismissed = None;
-        let mut chars = token.chars();
-        let (kind, query) = match chars.next() {
-            Some('/') if start == 0 => (Kind::Command, chars.as_str()),
-            Some('#') if !self.session.config().prompts.is_empty() => {
-                (Kind::Prompt, chars.as_str())
-            }
-            Some('@') => (Kind::File, chars.as_str()),
-            _ => {
-                self.picker = None;
-                return;
-            }
-        };
-        let mut query = query.to_string();
-        let mut dir = String::new();
-        if kind == Kind::File {
-            let (d, f) = crate::files::split(&query);
-            (dir, query) = (d.to_string(), f.to_string());
-        }
-        let stale = kind == Kind::File && self.file_dir != dir;
-        if stale || self.picker.as_ref().is_none_or(|p| p.kind != kind) {
-            self.file_dir = dir;
-            let items = self.token_items(&kind);
-            self.picker = Some(Picker::new(kind, "", items));
-        }
-        if let Some(p) = &mut self.picker {
-            p.filter(&query);
-        }
-    }
-
-    fn token_items(&mut self, kind: &Kind) -> Vec<crate::picker::Item> {
-        match kind {
-            Kind::Command => COMMANDS
-                .iter()
-                .map(|(n, d)| item(format!("/{n}"), *d, *n))
-                .collect(),
-            Kind::Prompt => {
-                let config = self.session.config();
-                config
-                    .prompts
-                    .iter()
-                    .map(|(k, v)| item(format!("#{k}"), v.lines().next().unwrap_or(""), k.clone()))
-                    .collect()
-            }
-            _ => {
-                let max = self.palette.t.file_picker_max;
-                crate::files::list(&self.cwd, &self.file_dir, max)
-                    .into_iter()
-                    .map(|f| item(f.clone(), "", f))
-                    .collect()
-            }
         }
     }
 }

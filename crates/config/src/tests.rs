@@ -22,11 +22,11 @@ fn includes_merge() {
     );
     w(
         "b.yaml",
-        "model: b\nsystems: [two]\nsettings: {bash_timeout: 5}\n",
+        "model: b\nsystems: [two]\nsettings: {tool_timeout: 5}\n",
     );
     w(
         "main.yaml",
-        "include: [sub/a.yaml, b.yaml]\neffort: high\nsettings: {max_bash_output: 10}\nprompts: {p: \"#{{echo hi}}\"}\n",
+        "include: [sub/a.yaml, b.yaml]\neffort: high\nsettings: {max_output: 10}\nprompts: {p: \"#{{echo hi}}\"}\n",
     );
     let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
     assert_eq!(c.model, "b");
@@ -47,12 +47,12 @@ fn theme_extend() {
     let p = dir.join("main.yaml");
     std::fs::write(
         &p,
-        "theme: b\nthemes:\n  a: {accent: red, bash_line: -1}\n  b: {extend: a, accent: blue}\n",
+        "settings: {theme: b}\nthemes:\n  a: {accent: red, tool_line: 7}\n  b: {extend: a, accent: blue}\n",
     )
     .unwrap();
     let t = load(Some(&p)).unwrap().config.active_theme();
-    assert_eq!((t.accent.as_str(), t.tool_line), ("blue", -1));
-    std::fs::write(&p, "theme: nope\n").unwrap();
+    assert_eq!((t.accent.as_str(), t.tool_line), ("blue", 7));
+    std::fs::write(&p, "settings: {theme: nope}\n").unwrap();
     assert!(load(Some(&p)).is_err());
     std::fs::remove_dir_all(dir).ok();
 }
@@ -116,37 +116,42 @@ fn find_order() {
 }
 
 #[test]
-fn settings_theme_wins_and_is_written() {
+fn settings_theme_is_written() {
     let p = std::env::temp_dir().join(format!("tuse-st-{}.yaml", std::process::id()));
-    std::fs::write(
-        &p,
-        "theme: a\nthemes: {a: {}, b: {}}\nsettings:\n  retries: 2\n",
-    )
-    .unwrap();
-    assert_eq!(load(Some(&p)).unwrap().config.theme_name(), "a");
+    std::fs::write(&p, "themes: {a: {}, b: {}}\nsettings:\n  retries: 2\n").unwrap();
     crate::set_setting(&p, "theme", "b").unwrap();
     crate::set_setting(&p, "theme", "b").unwrap();
     let s = std::fs::read_to_string(&p).unwrap();
     assert_eq!(
         s,
-        "theme: a\nthemes: {a: {}, b: {}}\nsettings:\n  theme: b\n  retries: 2\n"
+        "themes: {a: {}, b: {}}\nsettings:\n  theme: b\n  retries: 2\n"
     );
     assert_eq!(load(Some(&p)).unwrap().config.theme_name(), "b");
     std::fs::remove_file(p).ok();
 }
 
 #[test]
-fn shipped_main_includes_default() {
-    let dir = std::env::temp_dir().join(format!("tuse-ship-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let release = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../release");
-    for f in ["main.yaml", "default.yaml"] {
-        std::fs::copy(release.join(f), dir.join(f)).unwrap();
-    }
-    let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
-    assert!(c.systems[0].contains("running inside Tuse"));
-    assert_eq!(c.settings.retries, 5);
-    std::fs::remove_dir_all(dir).ok();
+fn defaults_are_what_the_docs_promise() {
+    let s = crate::Settings::default();
+    assert_eq!(
+        (s.compact_at, s.max_output, s.tool_timeout, s.hook_timeout),
+        (0, 4096, 10, 30)
+    );
+    assert_eq!((s.max_image_bytes, s.retries), (5 * 1024 * 1024, 5));
+    let t = crate::Theme::default();
+    assert_eq!(
+        (t.input_max_height, t.tool_line, t.output_line),
+        (-1, -1, 1)
+    );
+    assert_eq!(
+        (t.reasoning_line, t.pad_x, t.input_pad_x, t.list_pad_x),
+        (-1, 0, 0, 0)
+    );
+    assert_eq!(
+        (t.tool_prefix.as_str(), t.notice_prefix.as_str()),
+        ("* ", "✓ ")
+    );
+    assert_eq!(t.spinner, ["◐", "◓", "◑", "◒"]);
 }
 
 #[test]

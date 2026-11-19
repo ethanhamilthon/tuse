@@ -1,16 +1,21 @@
 use crate::event::Event;
-use crate::record::UserInput;
 use crate::session::Session;
-use crate::tasks::{self, TaskInfo};
+use crate::tools;
+use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
-use tuse_py::{Args, Ctx, Fail, Host, MontyObject, NEVER, Python, opt_int, record};
+use tuse_py::{Adopt, Args, Ctx, Fail, Host, MontyObject, NEVER, Python};
 
 const FUNCTIONS: &[&str] = &[
+    "read",
+    "write",
+    "edit",
+    "grep",
     "ask",
     "show",
     "task_run",
+    "task_add",
     "task_get",
     "task_stop",
     "task_list",
@@ -19,11 +24,19 @@ const FUNCTIONS: &[&str] = &[
 
 /// The Python functions that reach into a session. Holds the session weakly:
 /// the session owns the interpreter that owns this.
-pub(crate) struct SessionHost(pub Weak<Session>);
+pub(crate) struct SessionHost {
+    session: Weak<Session>,
+    /// Hooks and tasks do not change the working indicator.
+    quiet: bool,
+}
 
 impl SessionHost {
+    pub fn new(session: Weak<Session>, quiet: bool) -> Self {
+        Self { session, quiet }
+    }
+
     fn session(&self) -> Result<Arc<Session>, Fail> {
-        self.0
+        self.session
             .upgrade()
             .ok_or_else(|| Fail::runtime("session closed"))
     }
@@ -34,9 +47,32 @@ impl Host for SessionHost {
         FUNCTIONS
     }
 
+    fn status(&self, name: &str, a: &Args) {
+        if self.quiet {
+            return;
+        }
+        let Ok(s) = self.session() else { return };
+        let theme = s.config().active_theme();
+        let arg = |key| a.opt_str(0, key).ok().flatten().unwrap_or_default();
+        let text = match name {
+            "read" => theme.read_label.replace("{}", &arg("path")),
+            "write" => theme.write_label.replace("{}", &arg("path")),
+            "edit" => theme.edit_label.replace("{}", &arg("path")),
+            "grep" => theme.grep_label.replace("{}", &arg("pattern")),
+            "sh" => theme
+                .sh_label
+                .replace("{}", &last_line_of_command(&arg("cmd"))),
+            "ask" => theme.ask_label,
+            "docs" => theme.docs_label,
+            _ => return,
+        };
+        s.set_status(text);
+    }
+
     fn call(&self, name: &str, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
         let s = self.session()?;
         match name {
+            "read" | "write" | "edit" | "grep" => tools::call(name, a, ctx, &s.cwd, &s.config()),
             "ask" => ask(&s, a, ctx),
             "show" => {
                 let id = s
@@ -44,29 +80,8 @@ impl Host for SessionHost {
                     .map_err(Fail::runtime)?;
                 Ok(MontyObject::string(id))
             }
-            "task_run" => {
-                let t = run_task(&s, &a.str(0, "cmd")?, a.opt_str(1, "name")?)?;
-                Ok(task(&t, ""))
-            }
-            "task_get" => {
-                let id = a.str(0, "id")?;
-                let t = s
-                    .tasks
-                    .get(&id)
-                    .ok_or_else(|| Fail::value(format!("no task {id}")))?;
-                let lines = a.opt_int(1, "lines")?.map_or(50, |n| n.max(1) as usize);
-                Ok(task(&t, &tasks::tail(&t.log, lines)))
-            }
-            "task_stop" => {
-                let r = s.tasks.stop(&a.str(0, "id")?);
-                s.emit(Event::Tasks);
-                r.map(|t| task(&t, "")).map_err(Fail::value)
-            }
-            "task_list" => Ok(MontyObject::list(
-                s.tasks.list().iter().map(|t| task(t, "")),
-            )),
             "docs" => Ok(MontyObject::string(crate::docs::docs())),
-            _ => Err(Fail::runtime(format!("unknown function {name}"))),
+            _ => crate::host_tasks::call(&s, name, a),
         }
     }
 
@@ -86,64 +101,36 @@ impl Host for SessionHost {
             .into_iter()
             .collect()
     }
-}
 
-fn task(t: &TaskInfo, output: &str) -> MontyObject {
-    record(
-        "Task",
-        vec![
-            ("id", MontyObject::string(&t.id)),
-            ("name", MontyObject::string(&t.name)),
-            ("cmd", MontyObject::string(&t.command)),
-            ("status", MontyObject::string(&t.status)),
-            ("code", opt_int(t.code)),
-            ("output", MontyObject::string(output)),
-        ],
-    )
-}
-
-fn run_task(s: &Arc<Session>, cmd: &str, name: Option<String>) -> Result<TaskInfo, Fail> {
-    let weak = Arc::downgrade(s);
-    let on_exit = Box::new(move |t: TaskInfo| {
-        if let Some(s) = weak.upgrade() {
-            s.emit(Event::Tasks);
-            let code = t
-                .code
-                .map_or("none (killed)".to_string(), |c| c.to_string());
-            s.submit(UserInput::text(format!(
-                "<notification>Task {} ({}) exited with code {code}. Output: `task_get(\"{}\").output`.</notification>",
-                t.id, t.name, t.id
-            )));
+    fn adopt(&self, a: Adopt) -> Result<(String, File), Adopt> {
+        match self.session() {
+            Ok(s) => crate::host_tasks::adopt(&s, a),
+            Err(_) => Err(a),
         }
-    });
-    let r = s.tasks.run(cmd, name, &s.cwd, &s.env(), on_exit);
-    s.emit(Event::Tasks);
-    r.map_err(Fail::runtime)
+    }
 }
 
+/// The first line of a command, short enough for the indicator.
+fn last_line_of_command(cmd: &str) -> String {
+    let line = cmd.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    line.trim().chars().take(60).collect()
+}
+
+/// Blocks until the user answers. The time it takes does not count against the
+/// deadline of the call.
 fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
+    a.deny(2, "wait")?;
     let question = a.str(0, "question")?;
     let options = a.str_list(1, "options")?;
-    let wait = a.bool(2, "wait", true)?;
     let (id, rx) = s.ask(&question, options).map_err(Fail::runtime)?;
-    if !wait {
-        let s = s.clone();
-        let ask_id = id.clone();
-        std::thread::spawn(move || {
-            let answer = rx.recv().unwrap_or_else(|_| "(dismissed)".into());
-            s.submit(UserInput::text(format!(
-                "<notification>Answer to ask {ask_id} \"{question}\": {answer}</notification>"
-            )));
-        });
-        return Ok(MontyObject::string(id));
-    }
+    let _paused = ctx.pause();
     loop {
         match rx.recv_timeout(Duration::from_millis(50)) {
             Ok(answer) => return Ok(MontyObject::string(answer)),
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(Fail::runtime("dismissed"));
             }
-            Err(_) if ctx.stopped() => {
+            Err(_) if ctx.cancelled() => {
                 s.answer(&id, None);
                 return Err(Fail::runtime("stopped before the user answered"));
             }
@@ -152,24 +139,32 @@ fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
     }
 }
 
-impl Session {
-    /// A fresh interpreter with the configured `prelude` already run.
-    pub(crate) fn new_python(self: &Arc<Self>, config: &tuse_config::Config) -> Python {
-        let host = Arc::new(SessionHost(Arc::downgrade(self)));
-        let mut py = Python::new(host, config.settings.max_output);
-        let prelude = config.prelude.join("\n");
-        if !prelude.trim().is_empty() {
-            let secs = config.settings.tool_timeout.max(1);
-            let ctx = Ctx {
-                cancel: &NEVER,
-                deadline: Instant::now() + Duration::from_secs(secs),
-            };
-            let o = py.run(&prelude, &ctx, vec![]);
-            if !o.ok {
-                self.emit(Event::Notice(format!("prelude: {}", last_line(&o.text))));
-            }
+/// A fresh interpreter with the configured `prelude` already run.
+pub(crate) fn python_for(
+    session: Weak<Session>,
+    config: &tuse_config::Config,
+    quiet: bool,
+) -> Python {
+    let host = Arc::new(SessionHost::new(session.clone(), quiet));
+    let mut py = Python::new(host, config.settings.max_output);
+    let prelude = config.prelude.join("\n");
+    if !prelude.trim().is_empty() {
+        let secs = config.settings.hook_timeout.max(1);
+        let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(secs));
+        let o = py.run(&prelude, &ctx, vec![]);
+        if !o.ok
+            && let Some(s) = session.upgrade()
+        {
+            s.emit(Event::Notice(format!("prelude: {}", last_line(&o.text))));
         }
-        py
+    }
+    py
+}
+
+impl Session {
+    /// The agent's interpreter.
+    pub(crate) fn new_python(self: &Arc<Self>, config: &tuse_config::Config) -> Python {
+        python_for(Arc::downgrade(self), config, false)
     }
 }
 

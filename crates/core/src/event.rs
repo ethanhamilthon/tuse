@@ -18,16 +18,20 @@ pub enum Event {
     },
     ToolStart {
         id: String,
-        /// `python`, `read`, `write`, `edit` (or `bash` in an old session).
         tool: String,
-        /// The code of `python`, the path of the others.
+        /// The code of `python`.
         input: String,
+        title: String,
     },
     ToolEnd {
         id: String,
         output: String,
         code: Option<i32>,
+        /// Files the call changed.
+        diffs: Vec<crate::record::FileDiff>,
     },
+    /// The working indicator has a new status.
+    Status(String),
     Notice(String),
     Error(String),
     TurnEnd {

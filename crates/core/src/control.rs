@@ -35,6 +35,7 @@ impl Session {
         st.cancel = Arc::new(AtomicBool::new(false));
         st.turn_start = Instant::now();
         st.calls = 0;
+        st.status = self.config().active_theme().thinking_label;
         let (generation, cancel) = (st.generation, st.cancel.clone());
         drop(st);
         let s = self.clone();
@@ -119,10 +120,11 @@ impl Session {
         self.state.lock().unwrap().busy
     }
 
-    /// Elapsed time and tool calls of the running turn.
-    pub fn turn_info(&self) -> Option<(Duration, usize)> {
+    /// Elapsed time and the status of the running turn.
+    pub fn turn_info(&self) -> Option<(Duration, String)> {
         let st = self.state.lock().unwrap();
-        st.busy.then(|| (st.turn_start.elapsed(), st.calls))
+        st.busy
+            .then(|| (st.turn_start.elapsed(), st.status.clone()))
     }
 
     pub fn stats(&self) -> Stats {

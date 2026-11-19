@@ -1,10 +1,9 @@
 # Config
 
 Tuse reads one YAML file: `--config PATH`, else `./tuse.yaml`, else `$TUSE_GLOBAL_CONFIG`,
-else `~/.config/tuse/main.yaml`. The app knows no other file: the shipped `main.yaml`
-loads `default.yaml` (system prompt and default settings) with `include`. `tuse reset`
-installs both files, `tuse update` replaces `default.yaml`. `/reload` rebuilds everything
-from its files.
+else `~/.config/tuse/main.yaml`. The system prompt and the default settings are built into
+the binary, so the file holds only what you change. `tuse reset` installs a fresh `main.yaml`;
+`tuse update` never touches it. `/reload` rebuilds everything from its files.
 
 ## Merging and expansion
 
@@ -27,16 +26,16 @@ from its files.
 | `connect` | List of `{name, base_url, api_key}` for OpenAI-compatible endpoints. |
 | `models` | List of `{name: provider/model, display, window, compact_at, prices}`. `prices` are dollars per 1M tokens: `in`, `out`, `cache` (cached reads) and `cache_write`. |
 | `settings.compact_at` | Context size that triggers compaction (0 turns it off). A model's `compact_at` wins. |
-| `settings.max_output` | Bytes of a tool result kept; longer output is cut in the middle. Default 16384. Was `max_bash_output`. |
-| `settings.tool_timeout` | Seconds before a `python` call is stopped. Default 120. The agent can pass its own `timeout`. Was `bash_timeout`. |
+| `settings.max_output` | Bytes of a tool result kept; longer output is cut in the middle. The agent is told the number. Default 4096. |
+| `settings.tool_timeout` | Seconds before a `python` call is stopped (a running `sh` goes on as a task; time spent in `ask` does not count). Default 10. The agent can pass its own `timeout`. |
 | `settings.hook_timeout` | Seconds before a hook is stopped. Default 30. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
 | `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |
-| `systems` | Texts appended to the system prompt. |
+| `systems` | Texts appended to the built-in system prompt (after the environment and `AGENTS.md`). |
 | `prompts` | `name: text`. `#name` in the input expands to the text. |
 | `prelude` | List of Python snippets, joined and run once before the agent's REPL starts and before every hook. |
 | `hooks` | `name: {events: [...], run: python code}`, see below. |
-| `settings.theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. A top-level `theme` still works. |
+| `settings.theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. |
 | `themes` | `name: {extend: base, token: value, ...}`, see below. |
 
 ## Hooks
@@ -58,7 +57,7 @@ Names defined in the hook (`None` when they do not apply, `cancelled` is `False`
 | --- | --- |
 | `event`, `hook` | The event and the hook's name. |
 | `session`, `cwd`, `model`, `config` | Session ID, working directory, `provider/model`, path of the config file. |
-| `tool`, `input` | For `tool_start` and `tool_end`: `python`, `read`, `write` or `edit`, and the code or the path. |
+| `tool`, `input`, `title` | For `tool_start` and `tool_end`: `python`, its code and the `title` the agent gave it. |
 | `output`, `code` | For `tool_end`: the result (cut to `max_output`) and `0`, `1` (error) or `None` (cancelled). |
 | `error` | For `error`: the text. |
 | `cancelled` | For `turn_end`: the turn was cancelled. |
@@ -70,12 +69,11 @@ hooks:
     run: |
       if not cancelled:
           sh(f"osascript -e 'display notification \"done\" with title \"{model}\"'")
-  log_edits:
+  log_calls:
     events: [tool_end]
     run: |
-      if tool == "edit":
-          with open("/tmp/edits.log", "a") as f:
-              f.write(input + "\n")
+      with open("/tmp/calls.log", "a") as f:
+          f.write(title + "\n")
 ```
 
 To run a script, call it: `run: sh("~/scripts/x.sh")`. Longer code goes into a `.py` file next to
@@ -98,28 +96,37 @@ Every UI decision is a token. Colors take `#rrggbb`, `0`-`255`, a name (`red`,
 
 - Colors: `accent`, `bg`, `fg`, `dim`, `user`, `user_bg`, `assistant`, `reasoning`,
   `tool`, `tool_output`, `tool_error`, `diff_add`, `diff_del`, `error`, `notice`, `heading`, `code`,
-  `code_block`, `link`, `quote`, `rule`, `status`, `picker_fg`, `picker_bg`,
-  `picker_selected_fg`, `picker_selected_bg`, `picker_detail`, `picker_title`.
-- Input and panel colors: `input_bg` (the `fill` design), `bar` (the `bar` design),
-  `panel_fg`, `panel_bg`, `panel_title`, and the gradient ends `motion_from`, `motion_to`
+  `code_block`, `link`, `quote`, `rule`, `status`.
+- Python syntax in tool calls and in ```` ```python ```` blocks: `syntax_keyword`, `syntax_string`,
+  `syntax_comment`, `syntax_number`, `syntax_function`; the rest of the code keeps `tool`.
+- List colors (every list and text view): `list_fg`, `list_bg`, `list_title`,
+  `list_selected_fg`, `list_selected_bg`, `list_detail`. Input colors: `input_bg` (the `fill`
+  design), `bar` (the `bar` design), and the gradient ends `motion_from`, `motion_to`
   (`#rrggbb`, so they can be blended).
-- Spacing: `pad_x`, `message_gap`, `list_indent`, `code_indent`, `picker_pad_x`,
-  `input_pad_x`, `input_top_padding`, `input_bottom_padding` (rows in `bar`, default `0`),
-  `panel_pad_x`, `trace_role_width` (the role column of `/trace`, 9).
-- Limits: `picker_max_height` (8), `input_max_height`, `panel_max_height` (16), `scroll_step`,
-  `file_picker_max`, `frame_ms`, `motion_period` (cells per wave), `motion_ms` (ms per step).
-- Lines shown in the chat: `tool_line` (the tool's input; was `bash_line`), `output_line`,
-  `diff_line` (the diff of `edit`), `reasoning_line`. `0` hides the block, `-1` removes the limit.
-- Symbols: `user_prefix`, `tool_prefix`, `reasoning_prefix`, `notice_prefix`,
+- Spacing (all default to `0` except the ones noted): `pad_x`, `input_pad_x`, `list_pad_x`,
+  `message_gap` (1), `list_indent` (2), `code_indent` (2), `input_top_padding` and
+  `input_bottom_padding` (rows in `bar`), `trace_role_width` (the role column of `/trace`, 9).
+- Limits: `list_max_height` (16), `input_max_height` (`-1`: no limit), `scroll_step` (3, lines per
+  wheel notch), `file_picker_max`, `frame_ms`, `motion_period` (cells per wave), `motion_ms` (ms
+  per step).
+- Lines shown in the chat: `tool_line` (the code of a call, default `-1`), `output_line` (1),
+  `diff_line` (the diff of a changed file, 12), `reasoning_line` (`-1`). `0` hides the block,
+  `-1` removes the limit.
+- Symbols: `user_prefix`, `tool_prefix` (`* `), `reasoning_prefix`, `notice_prefix` (`✓ `),
   `error_prefix`, `bullet`, `quote_prefix`, `rule_char`, `table_sep`, `scroll_mark`,
-  `label_sep`, `steering_label`, `picker_selected_prefix`, `more`, `spinner` (a list of frames),
+  `label_sep`, `list_selected_prefix`, `more`, `spinner` (a list of frames, `◐ ◓ ◑ ◒`),
   `input_prefix` (default `› `; `""` removes it), `bar_char`, `box_chars` (top left, top
   right, bottom left, bottom right, vertical), `edge_top`, `edge_bottom`.
+- Texts: `steering_label` (shown instead of the status while a message you sent waits),
+  `ask_custom_label` (the last row of an `ask`), and the statuses of the working indicator,
+  where `{}` is the argument: `thinking_label` (`thinking...`, the start of a turn), `read_label`
+  (`reading {}`), `write_label`, `edit_label`, `grep_label`, `sh_label` (`running {}`),
+  `ask_label` (`asking user...`), `docs_label` (`reading docs...`).
 
 ### Input design
 
 `input_design` picks how the input looks. Each design shows the input and two status bars:
-working (spinner, time, tool calls; `steering_label` while a message you sent waits for the agent) and the model (model, effort, context, cost).
+working (spinner, time and what the agent is doing, from the `title` of its call or a function it runs; `steering_label` while a message you sent waits for the agent) and the model (model, effort, context, cost).
 
 - `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.
 - `box`: a frame around the input with the same two labels on its borders.

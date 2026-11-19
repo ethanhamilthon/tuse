@@ -8,6 +8,7 @@ pub enum Kind {
     Theme,
     Effort(String),
     Task,
+    Trace,
     Ask(String),
 }
 
@@ -24,6 +25,8 @@ pub struct Item {
     pub label: String,
     pub detail: String,
     pub value: String,
+    /// A short column before the label (the role in `/trace`); it is searched too.
+    pub tag: String,
 }
 
 pub fn item(label: impl Into<String>, detail: impl Into<String>, value: impl Into<String>) -> Item {
@@ -31,6 +34,14 @@ pub fn item(label: impl Into<String>, detail: impl Into<String>, value: impl Int
         label: label.into(),
         detail: detail.into(),
         value: value.into(),
+        tag: String::new(),
+    }
+}
+
+pub fn tagged(tag: &str, label: impl Into<String>, value: impl Into<String>) -> Item {
+    Item {
+        tag: tag.into(),
+        ..item(label, "", value)
     }
 }
 
@@ -49,8 +60,8 @@ impl Picker {
         let mut p = Picker {
             kind,
             title: title.into(),
+            shown: (0..items.len()).collect(),
             items,
-            shown: vec![],
             selected: 0,
             scroll: 0,
             query: String::new(),
@@ -59,13 +70,21 @@ impl Picker {
         p
     }
 
+    /// In an `ask` the typed text is the user's own answer, not a filter.
+    pub fn is_free(&self) -> bool {
+        matches!(self.kind, Kind::Ask(_))
+    }
+
     pub fn filter(&mut self, q: &str) {
         self.query = q.to_string();
+        if self.is_free() {
+            return;
+        }
         let mut scored: Vec<(i64, usize)> = self
             .items
             .iter()
             .enumerate()
-            .filter_map(|(i, it)| score(&it.label, q).map(|s| (s, i)))
+            .filter_map(|(i, it)| score(&format!("{} {}", it.tag, it.label), q).map(|s| (s, i)))
             .collect();
         if !q.is_empty() {
             scored.sort_by_key(|(s, i)| (-*s, *i));
@@ -89,17 +108,22 @@ impl Picker {
         }
     }
 
+    /// Scrolls so that the selected row is among the `height` visible ones.
+    pub fn follow(&mut self, height: usize) {
+        if self.selected < self.scroll {
+            self.scroll = self.selected;
+        } else if self.selected >= self.scroll + height {
+            self.scroll = self.selected + 1 - height;
+        }
+    }
+
     pub fn moved(&mut self, delta: isize, height: usize) {
         let n = self.shown.len();
         if n == 0 {
             return;
         }
         self.selected = (self.selected as isize + delta).rem_euclid(n as isize) as usize;
-        if self.selected < self.scroll {
-            self.scroll = self.selected;
-        } else if self.selected >= self.scroll + height {
-            self.scroll = self.selected + 1 - height;
-        }
+        self.follow(height);
     }
 }
 

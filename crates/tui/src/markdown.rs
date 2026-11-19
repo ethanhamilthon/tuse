@@ -13,6 +13,8 @@ pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
         lists: vec![],
         quote: 0,
         code: false,
+        lang: String::new(),
+        open: String::new(),
         item_first: None,
         table: None,
     };
@@ -27,15 +29,19 @@ pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
     r.out
 }
 
-struct Renderer<'a> {
-    p: &'a Palette,
-    width: usize,
-    out: Vec<Line>,
+pub(crate) struct Renderer<'a> {
+    pub(crate) p: &'a Palette,
+    pub(crate) width: usize,
+    pub(crate) out: Vec<Line>,
     cur: Line,
     styles: Vec<Style>,
     lists: Vec<Option<u64>>,
     quote: usize,
     code: bool,
+    /// The language of the open fenced block.
+    pub(crate) lang: String,
+    /// A triple-quoted string left open by the line before (Python blocks).
+    pub(crate) open: String,
     item_first: Option<String>,
     table: Option<crate::table::Table>,
 }
@@ -54,7 +60,7 @@ impl Renderer<'_> {
         " ".repeat(self.lists.len().saturating_sub(1) * self.p.t.list_indent as usize)
     }
 
-    fn prefixes(&mut self) -> (Line, Line) {
+    pub(crate) fn prefixes(&mut self) -> (Line, Line) {
         let q = Style::fg(self.p.quote);
         let quote = self.p.t.quote_prefix.repeat(self.quote);
         let mut first = vec![span(quote.clone(), q)];
@@ -103,17 +109,7 @@ impl Renderer<'_> {
         match ev {
             Event::Start(tag) => self.start(tag),
             Event::End(tag) => self.end(tag),
-            Event::Text(t) if self.code => {
-                let st = Style::fg(self.p.code_block);
-                let pad = " ".repeat(self.p.t.code_indent as usize);
-                for line in t.trim_end_matches('\n').split('\n') {
-                    let (mut first, _) = self.prefixes();
-                    first.push(span(pad.clone(), st));
-                    let rest = first.clone();
-                    self.out
-                        .extend(wrap(&vec![span(line, st)], self.width, &first, &rest));
-                }
-            }
+            Event::Text(t) if self.code => self.code_block(&t),
             Event::Text(t) => self.text(&t),
             Event::Code(t) => {
                 let st = Style {
@@ -160,6 +156,13 @@ impl Renderer<'_> {
             Tag::CodeBlock(kind) => {
                 self.flush();
                 self.code = true;
+                self.open.clear();
+                self.lang = match &kind {
+                    CodeBlockKind::Fenced(l) => {
+                        l.split_whitespace().next().unwrap_or("").to_lowercase()
+                    }
+                    CodeBlockKind::Indented => String::new(),
+                };
                 if let CodeBlockKind::Fenced(lang) = kind
                     && !lang.is_empty()
                 {

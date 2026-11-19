@@ -16,6 +16,7 @@ pub fn names(host: &dyn Host) -> Vec<&'static str> {
 
 pub fn call(host: &dyn Host, name: &str, args: &CallArgs, ctx: &Ctx) -> Result<MontyObject, Fail> {
     let a = Args(args);
+    host.status(name, &a);
     if name != "sh" {
         return host.call(name, &a, ctx);
     }
@@ -29,7 +30,18 @@ pub fn call(host: &dyn Host, name: &str, args: &CallArgs, ctx: &Ctx) -> Result<M
         .map_or_else(|| host.cwd(), |c| host.cwd().join(PathBuf::from(c)));
     let mut env = host.env();
     env.extend(a.str_map(3, "env")?);
-    let r = sh::run(&cmd, &cwd, &env, timeout, ctx.cancel);
+    let adopt = |a| host.adopt(a);
+    let r = sh::run(
+        &cmd,
+        &cwd,
+        &env,
+        timeout,
+        ctx.cancel,
+        ctx.adopt.then_some(&adopt as sh::Adopter),
+    );
+    if r.task.is_some() {
+        ctx.grace();
+    }
     Ok(record(
         "Sh",
         vec![
@@ -37,6 +49,12 @@ pub fn call(host: &dyn Host, name: &str, args: &CallArgs, ctx: &Ctx) -> Result<M
             ("code", opt_int(r.code)),
             ("ok", MontyObject::bool(r.code == Some(0))),
             ("timed_out", MontyObject::bool(r.timed_out)),
+            (
+                "task",
+                r.task
+                    .as_deref()
+                    .map_or_else(MontyObject::none, MontyObject::string),
+            ),
         ],
     ))
 }

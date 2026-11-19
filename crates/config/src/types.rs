@@ -10,11 +10,7 @@ pub struct Config {
     pub effort: String,
     pub connect: Vec<Connect>,
     pub settings: Settings,
-    /// Legacy top-level `theme`; `settings.theme` wins.
-    pub theme: String,
     pub themes: BTreeMap<String, Theme>,
-    /// Removed in 0.4; still parsed so Tuse can tell the user to drop it.
-    pub bins: BTreeMap<String, String>,
     /// Python run before the agent's REPL and every hook.
     pub prelude: Vec<String>,
     pub models: Vec<ModelDef>,
@@ -35,9 +31,7 @@ pub struct Connect {
 #[serde(default)]
 pub struct Settings {
     pub compact_at: u64,
-    #[serde(alias = "max_bash_output")]
     pub max_output: usize,
-    #[serde(alias = "bash_timeout")]
     pub tool_timeout: u64,
     pub hook_timeout: u64,
     pub max_image_bytes: usize,
@@ -50,8 +44,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             compact_at: 0,
-            max_output: 16384,
-            tool_timeout: 120,
+            max_output: 4096,
+            tool_timeout: 10,
             hook_timeout: 30,
             max_image_bytes: 5 * 1024 * 1024,
             retries: 5,
@@ -93,10 +87,7 @@ pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "ma
 
 impl Config {
     pub fn theme_name(&self) -> &str {
-        match self.settings.theme.as_str() {
-            "" => &self.theme,
-            name => name,
-        }
+        &self.settings.theme
     }
 
     /// The active theme.

@@ -41,10 +41,10 @@ fn global() -> Result<(PathBuf, PathBuf), String> {
     }
 }
 
-/// `tuse reset`: replaces the global config folder with the latest `main.yaml` and `default.yaml`.
+/// `tuse reset`: replaces the global config folder with the latest `main.yaml`.
 pub fn reset(yes: bool) -> Result<(), String> {
     let (dir, file) = global()?;
-    let (main, default) = (get("main.yaml")?, get("default.yaml")?);
+    let main = get("main.yaml")?;
     if dir.exists() {
         if !yes && !confirm(&dir) {
             return Err("cancelled".into());
@@ -52,7 +52,6 @@ pub fn reset(yes: bool) -> Result<(), String> {
         std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     write(&file, &main)?;
-    write(&dir.join("default.yaml"), &default)?;
     println!("Config reset in {}", dir.display());
     Ok(())
 }
@@ -66,18 +65,16 @@ fn confirm(dir: &Path) -> bool {
     std::io::stdin().read_line(&mut answer).is_ok() && answer.trim().eq_ignore_ascii_case("y")
 }
 
-/// `tuse update`: replaces this binary with the latest release and `default.yaml` in the global folder.
+/// `tuse update`: replaces this binary with the latest release.
 pub fn update() -> Result<(), String> {
-    let (dir, _) = global()?;
     let asset = format!("tuse_{}_{}.tar.gz", os()?, arch()?);
     println!("Downloading {asset}");
-    let (tarball, sums, default) = (get(&asset)?, get("checksums.txt")?, get("default.yaml")?);
+    let (tarball, sums) = (get(&asset)?, get("checksums.txt")?);
     let tmp = std::env::temp_dir().join(format!("tuse-update-{}", std::process::id()));
     let result = install(&tmp, &asset, &tarball, &sums);
     let _ = std::fs::remove_dir_all(&tmp);
     result?;
-    write(&dir.join("default.yaml"), &default)?;
-    println!("Updated tuse and {}", dir.join("default.yaml").display());
+    println!("Updated tuse");
     Ok(())
 }
 

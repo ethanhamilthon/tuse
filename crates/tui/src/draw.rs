@@ -117,22 +117,18 @@ fn rule(p: &Palette, w: usize, label: &str, scroll: usize) -> Line {
     line
 }
 
+/// The turn timer; empty when the agent is idle.
 fn top_label(app: &App) -> String {
     let t = &app.palette.t;
-    match app.session.turn_info() {
-        Some((elapsed, calls)) => {
-            let frames = &t.spinner;
-            let spin = frames
-                .get(app.tick % frames.len().max(1))
-                .cloned()
-                .unwrap_or_default();
-            format!("{spin} {}{}{calls} calls", duration(elapsed), t.label_sep)
-        }
-        None => match app.last_turn {
-            Some((elapsed, calls)) => format!("{}{}{calls} calls", duration(elapsed), t.label_sep),
-            None => String::new(),
-        },
-    }
+    let Some((elapsed, calls)) = app.session.turn_info() else {
+        return String::new();
+    };
+    let frames = &t.spinner;
+    let spin = frames
+        .get(app.tick % frames.len().max(1))
+        .cloned()
+        .unwrap_or_default();
+    format!("{spin} {}{}{calls} calls", duration(elapsed), t.label_sep)
 }
 
 fn bottom_label(app: &App) -> String {

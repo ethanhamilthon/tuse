@@ -5,6 +5,7 @@ mod commands;
 mod draw;
 mod editor;
 mod files;
+mod inline;
 mod keys;
 mod markdown;
 mod picker;
@@ -24,6 +25,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tuse_core::Session;
+
+pub use inline::{Field, Tone, ask, say};
 
 /// Runs the full-screen UI until the user quits; returns the last session ID.
 pub fn run(

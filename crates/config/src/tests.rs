@@ -86,3 +86,22 @@ fn set_key_keeps_the_rest() {
     );
     std::fs::remove_file(p).ok();
 }
+
+#[test]
+fn add_connect_appends() {
+    let p = std::env::temp_dir().join(format!("tuse-conn-{}.yaml", std::process::id()));
+    std::fs::write(
+        &p,
+        "model: a\nconnect:\n  - name: x\n    base_url: u\n\nsettings: {}\n",
+    )
+    .unwrap();
+    crate::add_connect(&p, "y", "http://h/v1", "$KEY").unwrap();
+    let c = load(Some(&p)).unwrap().config;
+    assert_eq!(c.connect.len(), 2);
+    assert_eq!(c.connect[1].name, "y");
+    assert_eq!(c.connect[1].base_url, "http://h/v1");
+    std::fs::remove_file(&p).ok();
+    crate::add_connect(&p, "z", "http://h", "k").unwrap();
+    assert_eq!(load(Some(&p)).unwrap().config.connect[0].name, "z");
+    std::fs::remove_file(p).ok();
+}

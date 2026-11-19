@@ -922,6 +922,7 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "signal-hook",
+ "tuse-api",
  "tuse-config",
  "tuse-core",
  "tuse-socket",

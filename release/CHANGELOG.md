@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 - 2026-11-19
+
+- Edit a waiting steering message to take it back without interrupting the running turn.
+  Enter sends the edited draft.
+
 ## 0.3.2 - 2026-11-19
 
 - `bar` input: a blank row between the input and the status row, the status row has no indent.

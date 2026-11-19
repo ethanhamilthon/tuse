@@ -69,6 +69,10 @@ the provider's models, says how many it got and adds the `connect` entry to the 
 | Ctrl+C | clear the input, or quit when it is empty |
 | Ctrl+A / Ctrl+E / Ctrl+U / Ctrl+K / Ctrl+W | line start / end / kill back / kill forward / delete word |
 
+A message sent while the agent is working stays dimmed in the input until the agent takes it.
+Editing it withdraws it from the queue without interrupting the turn. Press Enter to send
+the edited draft. Esc still stops the turn.
+
 Commands: `/new`, `/resume` (sessions started in this folder), `/models` (every model the
 providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/usage`,
 `/trace` (a list of the system prompt, messages, thinking, tool calls and outputs; Enter opens

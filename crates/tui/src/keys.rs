@@ -26,6 +26,7 @@ impl App {
         if self.panel.is_some() && self.panel_key(k.code, page) {
             return;
         }
+        let before = self.steering.map(|_| self.editor.buf.clone());
         let cols = self.input_cols;
         let e = &mut self.editor;
         match k.code {
@@ -47,7 +48,7 @@ impl App {
             }
             KeyCode::Char('d') if ctrl && e.is_empty() => self.quit = true,
             KeyCode::Char('v') if ctrl || k.modifiers.contains(KeyModifiers::SUPER) => {
-                self.paste_clipboard()
+                return self.paste_clipboard();
             }
             KeyCode::Char('a') if ctrl => e.home(),
             KeyCode::Char('e') if ctrl => e.end(),
@@ -82,6 +83,15 @@ impl App {
             KeyCode::Tab => {}
             KeyCode::Char(c) => e.insert(&c.to_string()),
             _ => {}
+        }
+        self.finish_edit(before);
+    }
+
+    fn finish_edit(&mut self, before: Option<Vec<char>>) {
+        if before.is_some_and(|buf| buf != self.editor.buf)
+            && let Some(id) = self.steering.take()
+        {
+            self.session.withdraw_input(id);
         }
         self.update_token_picker();
     }
@@ -144,8 +154,9 @@ impl App {
         if s.is_empty() {
             return self.paste_clipboard();
         }
+        let before = self.steering.map(|_| self.editor.buf.clone());
         self.editor.insert(s);
-        self.update_token_picker();
+        self.finish_edit(before);
     }
 
     /// Ctrl+V / Cmd+V: an image becomes an `[Image #n: PATH]` atom, text is inserted.
@@ -153,10 +164,12 @@ impl App {
         let dir = tuse_core::tuse_home().join(&self.session.id).join("images");
         match crate::clipboard::read(&dir) {
             Ok(Pasted::Image(path)) => {
+                let before = self.steering.map(|_| self.editor.buf.clone());
                 let n = self.editor.images().len() + 1;
                 let label = format!("[Image #{n}: {}]", path.display());
                 self.editor.insert_atom(&label, Some(path));
                 self.editor.insert(" ");
+                self.finish_edit(before);
             }
             Ok(Pasted::Text(t)) => self.paste(&t),
             Ok(Pasted::Nothing) => {}
@@ -165,6 +178,9 @@ impl App {
     }
 
     fn submit(&mut self) {
+        if self.steering.is_some() {
+            return;
+        }
         let text = self.editor.text();
         let trimmed = text.trim();
         if trimmed.is_empty() {
@@ -178,21 +194,18 @@ impl App {
             return;
         }
         let expanded = expand_prompts(trimmed, &self.session.config().prompts);
-        if matches!(&self.steering, Some((raw, _)) if raw == trimmed) {
-            return;
-        }
         let images = self.editor.images();
         self.picker = None;
         self.scroll = 0;
         let images: Vec<String> = images.iter().map(|p| p.display().to_string()).collect();
         match tuse_core::with_images(&expanded, &images) {
-            Ok(input) if self.session.busy() => {
-                self.steering = Some((trimmed.to_string(), input.text.clone()));
-                self.session.submit(input);
-            }
             Ok(input) => {
-                self.editor.clear();
-                self.session.submit(input);
+                let (id, queued) = self.session.submit(input);
+                if queued {
+                    self.steering = Some(id);
+                } else {
+                    self.editor.clear();
+                }
             }
             Err(e) => self.error(e),
         }
@@ -227,12 +240,5 @@ pub fn expand_prompts(text: &str, prompts: &BTreeMap<String, String>) -> String 
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn expands_prompt_tokens() {
-        let mut p = std::collections::BTreeMap::new();
-        p.insert("non-stop".to_string(), "Do it all.".to_string());
-        assert_eq!(super::expand_prompts("fix #non-stop", &p), "fix Do it all.");
-        assert_eq!(super::expand_prompts("a#non-stop #x", &p), "a#non-stop #x");
-    }
-}
+#[path = "keys_tests.rs"]
+mod tests;

@@ -21,6 +21,7 @@ mod turn;
 mod usage;
 
 pub use bash::truncate;
+pub use control::InputId;
 pub use event::Event;
 pub use hooks::EVENTS;
 pub use input::{with_files, with_images};

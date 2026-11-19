@@ -13,8 +13,7 @@ impl Session {
         match req {
             Request::Steer { text, files } => match crate::input::with_files(&text, &files) {
                 Ok(input) => {
-                    let busy = self.busy();
-                    self.submit(input);
+                    let (_, busy) = self.submit(input);
                     Response::ok(json!({"queued": busy}))
                 }
                 Err(e) => Response::err(e),

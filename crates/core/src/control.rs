@@ -8,6 +8,10 @@ use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 
+/// Identifies a submission within its session, even when two messages have the same text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InputId(pub(crate) u64);
+
 impl Session {
     pub fn subscribe(&self) -> Receiver<Event> {
         let (tx, rx) = channel();
@@ -16,12 +20,14 @@ impl Session {
     }
 
     /// Queues a message; it starts a turn when idle, or joins the running turn
-    /// after its current step.
-    pub fn submit(self: &Arc<Self>, input: UserInput) {
+    /// after its current step. Returns its ID and whether a turn was already running.
+    pub fn submit(self: &Arc<Self>, input: UserInput) -> (InputId, bool) {
         let mut st = self.state.lock().unwrap();
-        st.queue.push(input);
+        st.next_input += 1;
+        let id = InputId(st.next_input);
+        st.queue.push((id, input));
         if st.busy || self.dir.lock().unwrap().is_none() {
-            return;
+            return (id, st.busy);
         }
         st.busy = true;
         st.generation += 1;
@@ -32,6 +38,17 @@ impl Session {
         drop(st);
         let s = self.clone();
         std::thread::spawn(move || s.turn(generation, cancel));
+        (id, false)
+    }
+
+    /// Withdraws just this message, if the turn has not taken it yet.
+    pub fn withdraw_input(&self, id: InputId) -> bool {
+        let mut st = self.state.lock().unwrap();
+        let Some(i) = st.queue.iter().position(|(queued, _)| *queued == id) else {
+            return false;
+        };
+        st.queue.remove(i);
+        true
     }
 
     /// Stops the running turn right away; its thread finds itself stale and exits.

@@ -26,6 +26,10 @@ You run inside Tuse. This page is what you need to work with it. Read it with `t
 
 ## User commands
 
+When the user sends a message in the TUI during a turn, it stays dimmed in the input until
+the agent takes it. Editing the waiting message withdraws it without stopping the turn;
+Enter sends the edited draft. This does not affect messages queued by `tuse steer`.
+
 `/new`, `/resume`, `/models`, `/theme`, `/tasks`, `/usage`, `/trace`, `/reload`, `/quit`.
 `/usage`, `/trace` and a task's output open in a panel over the chat (Esc closes it); they are
 not part of the conversation. A panel has a rule on top. `/trace` is a list, one row per

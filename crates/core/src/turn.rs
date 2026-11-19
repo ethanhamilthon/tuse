@@ -66,7 +66,7 @@ impl Session {
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
         };
-        for input in std::mem::take(&mut st.queue) {
+        for (id, input) in std::mem::take(&mut st.queue) {
             if st.meta.title.is_empty() {
                 st.meta.title = input
                     .text
@@ -79,6 +79,7 @@ impl Session {
                 self.save_meta(&mut st);
             }
             self.emit(Event::User {
+                id,
                 text: input.text.clone(),
                 images: input.images.len(),
             });

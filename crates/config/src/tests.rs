@@ -45,3 +45,29 @@ fn includes_merge() {
     );
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn theme_extend() {
+    let dir = std::env::temp_dir().join(format!("tuse-theme-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join("main.yaml");
+    std::fs::write(
+        &p,
+        "theme: b\nthemes:\n  a: {accent: red, bash_line: -1}\n  b: {extend: a, accent: blue}\n",
+    )
+    .unwrap();
+    let t = load(Some(&p)).unwrap().config.active_theme();
+    assert_eq!((t.accent.as_str(), t.bash_line), ("blue", -1));
+    std::fs::write(&p, "theme: nope\n").unwrap();
+    assert!(load(Some(&p)).is_err());
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn line_limits() {
+    use crate::limit;
+    assert_eq!(
+        (limit(0, 5), limit(-1, 5), limit(3, 5), limit(9, 5)),
+        (0, 5, 3, 5)
+    );
+}

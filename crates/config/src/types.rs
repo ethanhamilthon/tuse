@@ -10,7 +10,9 @@ pub struct Config {
     pub effort: String,
     pub connect: Vec<Connect>,
     pub settings: Settings,
-    pub theme: Theme,
+    /// Name of the active theme; `default` or empty is the built-in one.
+    pub theme: String,
+    pub themes: BTreeMap<String, Theme>,
     pub bins: BTreeMap<String, String>,
     pub models: Vec<ModelDef>,
     pub systems: Vec<String>,
@@ -77,6 +79,11 @@ pub struct Hook {
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
 
 impl Config {
+    /// The active theme.
+    pub fn active_theme(&self) -> Theme {
+        self.themes.get(&self.theme).cloned().unwrap_or_default()
+    }
+
     /// The full `provider/model` name of the configured default model.
     pub fn default_model(&self) -> String {
         full_model_name(&self.model, &self.provider, &self.connect)

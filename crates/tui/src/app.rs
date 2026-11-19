@@ -33,7 +33,7 @@ pub struct App {
 
 impl App {
     pub fn new(session: Arc<Session>, cwd: PathBuf, config_arg: Option<PathBuf>) -> App {
-        let palette = Palette::new(&session.config().theme);
+        let palette = Palette::new(&session.config().active_theme());
         let events = session.subscribe();
         let chat = Chat::from_records(&session.records());
         App {

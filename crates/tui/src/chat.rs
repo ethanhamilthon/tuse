@@ -178,7 +178,8 @@ fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         Entry::Reasoning(text) => {
             let st = Style::fg(p.reasoning).italic();
             let all = plain(text.trim(), width, st, &t.reasoning_prefix, &pad);
-            all[all.len().saturating_sub(t.reasoning_lines)..].to_vec()
+            let n = tuse_config::limit(t.reasoning_line, all.len());
+            all[all.len() - n..].to_vec()
         }
         Entry::Tool {
             command,
@@ -216,23 +217,23 @@ fn tool(
     let head = Style::fg(if failed { p.tool_error } else { p.tool });
     let pad = " ".repeat(crate::text::width(&t.tool_prefix));
     let mut lines = plain(command.trim(), width, head, &t.tool_prefix, &pad);
-    if lines.len() > t.tool_command_lines {
-        lines.truncate(t.tool_command_lines);
-        lines.push(vec![span(format!("{pad}{}", t.more), Style::fg(p.dim))]);
+    let keep = tuse_config::limit(t.bash_line, lines.len());
+    if keep < lines.len() {
+        lines.truncate(keep);
+        if keep > 0 {
+            lines.push(vec![span(format!("{pad}{}", t.more), Style::fg(p.dim))]);
+        }
     }
     let Some(out) = output else { return lines };
     let st = Style::fg(p.tool_output);
     let all: Vec<&str> = out.trim_end().lines().collect();
-    for l in all.iter().take(t.tool_preview_lines) {
+    let shown = tuse_config::limit(t.output_line, all.len());
+    for l in all.iter().take(shown) {
         let l = crate::text::clip(l, width.saturating_sub(pad.len()), &t.more);
         lines.push(vec![span(pad.clone(), st), span(l, st)]);
     }
-    if all.len() > t.tool_preview_lines {
-        let more = format!(
-            "{pad}{} {} more lines",
-            t.more,
-            all.len() - t.tool_preview_lines
-        );
+    if shown > 0 && shown < all.len() {
+        let more = format!("{pad}{} {} more lines", t.more, all.len() - shown);
         lines.push(vec![span(more, Style::fg(p.dim))]);
     }
     lines

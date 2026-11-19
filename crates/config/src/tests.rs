@@ -71,3 +71,18 @@ fn line_limits() {
         (0, 5, 3, 5)
     );
 }
+
+#[test]
+fn set_key_keeps_the_rest() {
+    let p = std::env::temp_dir().join(format!("tuse-key-{}.yaml", std::process::id()));
+    std::fs::write(&p, "# top\nmodel: a\ntheme:\n  x: 1\nsystems:\n  - s\n").unwrap();
+    crate::set_key(&p, "theme", "my theme").unwrap();
+    crate::set_key(&p, "model", "x/b").unwrap();
+    crate::set_key(&p, "effort", "high").unwrap();
+    let s = std::fs::read_to_string(&p).unwrap();
+    assert_eq!(
+        s,
+        "# top\nmodel: x/b\ntheme: \"my theme\"\nsystems:\n  - s\neffort: high\n"
+    );
+    std::fs::remove_file(p).ok();
+}

@@ -3,10 +3,11 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-pub const COMMANDS: [(&str, &str); 7] = [
+pub const COMMANDS: [(&str, &str); 8] = [
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
     ("models", "switch model and effort"),
+    ("theme", "switch the theme"),
     ("tasks", "background tasks"),
     ("usage", "context, tokens and cost"),
     ("reload", "rebuild the config from its files"),
@@ -20,6 +21,7 @@ impl App {
             "quit" => self.quit = true,
             "resume" => self.open_resume(),
             "models" => self.open_models(),
+            "theme" => self.open_themes(),
             "tasks" => self.open_tasks(),
             "usage" => {
                 let r = self.session.usage_report();
@@ -48,22 +50,6 @@ impl App {
             return;
         }
         self.picker = Some(Picker::new(Kind::Resume, "Resume", items));
-    }
-
-    fn open_models(&mut self) {
-        let config = self.session.config();
-        let (current, _) = self.session.model();
-        let mut items: Vec<_> = config
-            .models
-            .iter()
-            .map(|m| item(config.display_name(&m.name), m.name.clone(), m.name.clone()))
-            .collect();
-        if !items.iter().any(|i| i.value == current) {
-            items.insert(0, item(current.clone(), "current", current.clone()));
-        }
-        let mut p = Picker::new(Kind::Model, "Model", items);
-        p.select(&current);
-        self.picker = Some(p);
     }
 
     pub fn open_tasks(&mut self) {
@@ -112,6 +98,7 @@ impl App {
                 self.replace_token(&format!("@{v}{}", if dir { "*" } else { " " }));
             }
             (Kind::Resume, Some(v)) => self.switch(Some(v)),
+            (Kind::Theme, Some(v)) => self.set_theme(&v),
             (Kind::Model, Some(v)) => {
                 let (_, effort) = self.session.model();
                 let items = EFFORTS.iter().map(|e| item(*e, "", *e)).collect();
@@ -121,6 +108,13 @@ impl App {
             }
             (Kind::Effort(model), Some(v)) => {
                 self.session.set_model(model, &v);
+                let saved = self
+                    .session
+                    .save_setting("model", model)
+                    .and_then(|()| self.session.save_setting("effort", &v));
+                if let Err(e) = saved {
+                    self.error(format!("Can't save the model: {e}"));
+                }
                 let name = self.session.config().display_name(model);
                 self.notice(format!("Model {name}, effort {v}."));
             }

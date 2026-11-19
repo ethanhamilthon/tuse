@@ -41,4 +41,6 @@ pub enum Event {
     },
     Tasks,
     Usage,
+    /// A provider's model list arrived.
+    Models,
 }

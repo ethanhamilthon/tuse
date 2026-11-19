@@ -7,6 +7,7 @@ mod files;
 mod keys;
 mod markdown;
 mod picker;
+mod pickers;
 mod style;
 mod table;
 mod text;

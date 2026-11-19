@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1 - 2026-11-19
+
+- `tuse print` and `tuse steer` keep text that starts with `-` (`--- menu ---`); `tuse print`
+  rejects empty text and strips control characters (ESC) and expands tabs, so script output
+  cannot break the UI.
+- `TUSE_CURRENT_CONFIG`: the path of the config file in use, set for bash calls, tasks and
+  hooks. `default.yaml` tells the agent about it, about `tuse print` and about `tuse docs`.
+- The input wraps at word boundaries; Up and Down move by the rows you see, not by `\n`.
+- A message sent while the agent works stays in the input (dimmed) with `steering…` in place
+  of the timer until the agent takes it; Esc keeps the text in the input.
+  `steering_label` is a theme token.
+
 ## 0.3.0 - 2026-11-19
 
 - The config is `--config PATH`, else `./tuse.yaml`, else `$TUSE_GLOBAL_CONFIG`, else

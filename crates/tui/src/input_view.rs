@@ -26,7 +26,12 @@ pub fn frame(t: &Theme) -> Frame {
             1,
         ),
         "fill" => (ipx + pw, ipx, 1, 2),
-        "bar" => (width(&t.bar_char) + 1 + pw, 0, 0, 1),
+        "bar" => (
+            width(&t.bar_char) + 1 + pw,
+            0,
+            t.input_top_padding as usize,
+            t.input_bottom_padding as usize + 2,
+        ),
         _ => (pw, 0, 1, 1),
     };
     Frame {
@@ -85,17 +90,26 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String]) -> Vec<Line> {
             out.push(status_row(p, w, 0, &join(&mark, &working), &model));
         }
         "bar" => {
-            out.extend(body(&|i, n| {
+            let (top, bottom) = (
+                t.input_top_padding as usize,
+                t.input_bottom_padding as usize,
+            );
+            let n = top + rows.len() + bottom;
+            let bar = |i: usize| {
                 let color = m
                     .and_then(|m| m.along((i as f32 + 0.5) / n as f32))
                     .or(p.bar);
-                (
-                    vec![span(format!("{} ", t.bar_char), Style::fg(color))],
-                    vec![],
-                )
-            }));
-            let indent = width(&t.bar_char) + 1;
-            out.push(status_row(p, w, indent, &join(&mark, &working), &model));
+                span(format!("{} ", t.bar_char), Style::fg(color))
+            };
+            out.extend((0..top).map(|i| vec![bar(i)]));
+            out.extend(
+                rows.iter()
+                    .enumerate()
+                    .map(|(i, r)| row(p, fr, w, i, r, steering, (vec![bar(top + i)], vec![]))),
+            );
+            out.extend((0..bottom).map(|i| vec![bar(top + rows.len() + i)]));
+            out.push(vec![]);
+            out.push(status_row(p, w, 0, &join(&mark, &working), &model));
         }
         _ => {
             out.push(border(p, w, ("", ""), &mark, &working, m));

@@ -60,9 +60,13 @@ fn run(raw: Vec<String>) -> Result<(), String> {
     let rest = raw.get(1..).unwrap_or_default();
     let session_flags = ["-s", "--session"];
     match sub {
-        "steer" => remote::steer(&Args::parse(rest, &["-s", "--session", "--file", "-f"])?),
+        "steer" => remote::steer(&Args::parse_text(
+            rest,
+            &["-s", "--session", "--file", "-f"],
+            &[],
+        )?),
         "ask" => remote::ask(&Args::parse(rest, &session_flags)?),
-        "print" => remote::print(&Args::parse(rest, &["-s", "--session", "--id"])?),
+        "print" => remote::print(&Args::parse_text(rest, &["-s", "--session", "--id"], &[])?),
         "task" => remote::task(&Args::parse(
             rest,
             &["-s", "--session", "--name", "--lines", "-n"],

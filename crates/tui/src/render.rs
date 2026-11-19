@@ -12,7 +12,23 @@ pub fn duration(d: Duration) -> String {
     }
 }
 
+/// Tabs become spaces and control characters (ESC included) are dropped,
+/// so text from scripts cannot move the cursor or break the width.
+fn clean(text: &str) -> String {
+    text.chars()
+        .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
+        .map(|c| {
+            if c == '\t' {
+                "    ".to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
 pub fn plain(text: &str, width: usize, style: Style, first: &str, rest: &str) -> Vec<Line> {
+    let text = &clean(text);
     let (f, r) = (vec![span(first, style)], vec![span(rest, style)]);
     text.split('\n')
         .enumerate()
@@ -109,4 +125,19 @@ fn tool(
         lines.push(vec![span(more, Style::fg(p.dim))]);
     }
     lines
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_drops_escapes_and_expands_tabs() {
+        let got = plain("a\tb\n\x1b[31mred", 40, Style::default(), "", "");
+        let text: Vec<String> = got
+            .iter()
+            .map(|l| l.iter().map(|s| s.text.as_str()).collect())
+            .collect();
+        assert_eq!(text, ["a    b", "[31mred"]);
+    }
 }

@@ -31,6 +31,11 @@ pub enum Request {
         lines: Option<usize>,
     },
     TaskList,
+    Print {
+        text: String,
+        #[serde(default)]
+        id: Option<String>,
+    },
     Status,
 }
 

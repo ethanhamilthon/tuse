@@ -1,5 +1,6 @@
 use crate::chat::{Chat, Entry};
 use crate::editor::Editor;
+use crate::panel::Panel;
 use crate::picker::Picker;
 use crate::style::Palette;
 use std::path::PathBuf;
@@ -16,6 +17,7 @@ pub struct App {
     pub chat: Chat,
     pub editor: Editor,
     pub picker: Option<Picker>,
+    pub panel: Option<Panel>,
     /// The token whose picker was dismissed with Esc; it stays closed until the token changes.
     pub dismissed: Option<String>,
     pub asks: Vec<(String, String, Vec<String>)>,
@@ -43,6 +45,7 @@ impl App {
             chat,
             editor: Editor::default(),
             picker: None,
+            panel: None,
             dismissed: None,
             asks: vec![],
             file_dir: String::new(),
@@ -181,6 +184,11 @@ impl App {
                 }
             }
             Event::Usage => {}
+            Event::Print { id, text } => {
+                if self.chat.set_print(&id, text) {
+                    self.scroll = 0;
+                }
+            }
             Event::Models => {
                 if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Model) {
                     self.open_models();

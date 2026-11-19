@@ -918,7 +918,7 @@ dependencies = [
 
 [[package]]
 name = "tuse"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "signal-hook",
@@ -927,11 +927,12 @@ dependencies = [
  "tuse-core",
  "tuse-socket",
  "tuse-tui",
+ "ureq",
 ]
 
 [[package]]
 name = "tuse-api"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -940,7 +941,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-config"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -948,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "serde",
@@ -960,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-socket"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -968,7 +969,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-tui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arboard",
  "crossterm",

@@ -40,6 +40,11 @@ pub enum Event {
         id: String,
     },
     Tasks,
+    /// `tuse print`: a plain text block; the same `id` replaces the earlier one.
+    Print {
+        id: String,
+        text: String,
+    },
     Usage,
     /// A provider's model list arrived.
     Models,

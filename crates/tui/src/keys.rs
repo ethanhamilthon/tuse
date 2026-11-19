@@ -23,6 +23,9 @@ impl App {
         if self.picker.is_some() && self.picker_key(k, ctrl, shift) {
             return;
         }
+        if self.panel.is_some() && self.panel_key(k.code, page) {
+            return;
+        }
         let e = &mut self.editor;
         match k.code {
             KeyCode::Esc => {
@@ -79,6 +82,24 @@ impl App {
             _ => {}
         }
         self.update_token_picker();
+    }
+
+    /// Esc closes the panel; the scroll keys move it. Returns true when the key was used.
+    fn panel_key(&mut self, code: KeyCode, page: usize) -> bool {
+        let step = self.palette.t.scroll_step as isize;
+        let page = page as isize;
+        let Some(panel) = &mut self.panel else {
+            return false;
+        };
+        match code {
+            KeyCode::Esc => self.panel = None,
+            KeyCode::Up if self.editor.is_empty() => panel.scroll_by(-step),
+            KeyCode::Down if self.editor.is_empty() => panel.scroll_by(step),
+            KeyCode::PageUp => panel.scroll_by(-page),
+            KeyCode::PageDown => panel.scroll_by(page),
+            _ => return false,
+        }
+        true
     }
 
     /// Returns true when the picker consumed the key.

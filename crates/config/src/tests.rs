@@ -158,3 +158,23 @@ fn shipped_main_includes_default() {
     assert_eq!(c.settings.retries, 5);
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn theme_input_tokens_are_checked() {
+    let p = std::env::temp_dir().join(format!("tuse-tok-{}.yaml", std::process::id()));
+    std::fs::write(
+        &p,
+        "themes:\n  a: {input_design: box, motion: false, input_prefix: \"\"}\n",
+    )
+    .unwrap();
+    let t = load(Some(&p)).unwrap().config.themes["a"].clone();
+    assert_eq!(
+        (t.input_design.as_str(), t.motion, t.input_prefix.as_str()),
+        ("box", false, "")
+    );
+    std::fs::write(&p, "themes:\n  a: {input_design: round}\n").unwrap();
+    assert!(load(Some(&p)).err().unwrap().contains("input_design"));
+    std::fs::write(&p, "themes:\n  a: {box_chars: [x]}\n").unwrap();
+    assert!(load(Some(&p)).err().unwrap().contains("box_chars"));
+    std::fs::remove_file(p).ok();
+}

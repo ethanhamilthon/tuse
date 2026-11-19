@@ -22,6 +22,9 @@ USAGE
   tuse ask [-s ID] [--async] QUESTION OPTION...
                                            ask the TUI user; prints the answer
                                            (--async: prints an ID, the answer is steered back)
+  tuse print [-s ID] [--id ID] [TEXT|-]
+                                           show plain multiline text in the TUI (no Markdown);
+                                           prints a block ID, `--id ID` replaces that block
   tuse task run [-s ID] [--name NAME] -- COMMAND...
   tuse task stop|get [--lines N]|list [-s ID] [ID]
                                            background tasks of a session
@@ -30,6 +33,7 @@ USAGE
   tuse reset [--yes]                      replace the global config folder with the latest
                                            main.yaml and default.yaml
   tuse update                             update the binary and default.yaml
+  tuse docs                               print the docs for the agent
   tuse version | tuse help
 
 -s defaults to $TUSE_SESSION. The config is --config, else ./tuse.yaml, else
@@ -43,6 +47,14 @@ fn main() {
     }
 }
 
+fn docs() -> String {
+    format!(
+        "{}\n\n{}",
+        include_str!("../../../docs/agent.md").trim_end(),
+        include_str!("../../../docs/config.md").trim_end()
+    )
+}
+
 fn run(raw: Vec<String>) -> Result<(), String> {
     let sub = raw.first().map(String::as_str).unwrap_or("");
     let rest = raw.get(1..).unwrap_or_default();
@@ -50,6 +62,7 @@ fn run(raw: Vec<String>) -> Result<(), String> {
     match sub {
         "steer" => remote::steer(&Args::parse(rest, &["-s", "--session", "--file", "-f"])?),
         "ask" => remote::ask(&Args::parse(rest, &session_flags)?),
+        "print" => remote::print(&Args::parse(rest, &["-s", "--session", "--id"])?),
         "task" => remote::task(&Args::parse(
             rest,
             &["-s", "--session", "--name", "--lines", "-n"],
@@ -58,6 +71,10 @@ fn run(raw: Vec<String>) -> Result<(), String> {
             let a = Args::parse(rest, &["--config", "-c"])?;
             let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
             connect::run(a.value(&["--config", "-c"]).map(|p| cwd.join(p)))
+        }
+        "docs" => {
+            print!("{}", docs());
+            Ok(())
         }
         "reset" => update::reset(Args::parse(rest, &[])?.has(&["--yes", "-y"])),
         "update" => update::update(),

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 - 2026-11-19
+
+- The config is `--config PATH`, else `./tuse.yaml`, else `$TUSE_GLOBAL_CONFIG`, else
+  `~/.config/tuse/main.yaml`. The app no longer loads `default.yaml` by itself: the shipped
+  `main.yaml` includes it.
+- `tuse reset` replaces the config folder with the latest `main.yaml` and `default.yaml`;
+  `tuse update` updates the binary and `default.yaml`.
+- `install.sh` installs the binary only; on a first install it runs `tuse reset`, then `tuse connect`.
+- `theme` moved into `settings` (`settings.theme`); a top-level `theme` still works.
+- `/usage`, `/trace` and a task's output open in a panel instead of a chat message.
+- `/trace` shows the whole session: system prompt, messages, thinking, tool calls and outputs.
+- `tuse print` shows plain multiline text in the UI and returns an ID; `--id` replaces that block.
+- `tuse docs` prints the docs for the agent.
+- Four input designs (`input_design`: `lines`, `box`, `fill`, `bar`), each with a working
+  and a model status bar.
+- A gradient runs along the input while the agent works; `motion: false` turns it off.
+- `input_prefix` theme token (`""` removes it).
+
 ## 0.2.0 - 2026-11-19
 
 - `install.sh` installs the binary and `~/.config/tuse/default.yaml`; the system prompt

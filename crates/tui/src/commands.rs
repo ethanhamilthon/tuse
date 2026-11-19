@@ -1,15 +1,17 @@
 use crate::app::App;
+use crate::panel::Panel;
 use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-pub const COMMANDS: [(&str, &str); 8] = [
+pub const COMMANDS: [(&str, &str); 9] = [
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
     ("models", "switch model and effort"),
     ("theme", "switch the theme"),
     ("tasks", "background tasks"),
     ("usage", "context, tokens and cost"),
+    ("trace", "everything in this session"),
     ("reload", "rebuild the config from its files"),
     ("quit", "exit"),
 ];
@@ -25,8 +27,9 @@ impl App {
             "tasks" => self.open_tasks(),
             "usage" => {
                 let r = self.session.usage_report();
-                self.notice(r);
+                self.panel = Some(Panel::new("Usage", r));
             }
+            "trace" => self.panel = Some(Panel::new("Trace", self.session.trace())),
             "reload" => match self.session.reload() {
                 Ok(()) => {
                     self.palette = Palette::new(&self.session.config().active_theme());
@@ -126,11 +129,9 @@ impl App {
             }
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.tasks.get(&v) {
-                    let out = tuse_core::tail(&t.log, 20);
-                    self.notice(format!(
-                        "{} {} [{}]\n$ {}\n{out}",
-                        t.id, t.name, t.status, t.command
-                    ));
+                    let out = tuse_core::tail(&t.log, 200);
+                    let title = format!("Task {} {} [{}]", t.id, t.name, t.status);
+                    self.panel = Some(Panel::new(title, format!("$ {}\n{out}", t.command)));
                 }
             }
             (Kind::Ask(id), v) => {

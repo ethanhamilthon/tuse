@@ -62,6 +62,10 @@ impl Session {
                 }
                 None => Response::err(format!("no task {id}")),
             },
+            Request::Print { text, id } => match self.print(text, id) {
+                Ok(id) => Response::ok(json!({ "id": id })),
+                Err(e) => Response::err(e),
+            },
             Request::TaskList => Response::ok(json!(self.tasks.list())),
             Request::Status => {
                 let (model, effort) = self.model();

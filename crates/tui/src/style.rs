@@ -104,6 +104,13 @@ pub struct Palette {
     pub picker_selected_bg: Option<Color>,
     pub picker_detail: Option<Color>,
     pub picker_title: Option<Color>,
+    pub input_bg: Option<Color>,
+    pub bar: Option<Color>,
+    pub panel_fg: Option<Color>,
+    pub panel_bg: Option<Color>,
+    pub panel_title: Option<Color>,
+    pub motion_from: Option<Color>,
+    pub motion_to: Option<Color>,
 }
 
 impl Palette {
@@ -142,6 +149,13 @@ impl Palette {
             picker_selected_bg: color(&t.picker_selected_bg),
             picker_detail: color(&t.picker_detail),
             picker_title: color(&t.picker_title),
+            input_bg: color(&t.input_bg),
+            bar: color(&t.bar),
+            panel_fg: color(&t.panel_fg),
+            panel_bg: color(&t.panel_bg),
+            panel_title: color(&t.panel_title),
+            motion_from: color(&t.motion_from),
+            motion_to: color(&t.motion_to),
             t: t.clone(),
         }
     }

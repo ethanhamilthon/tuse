@@ -17,4 +17,4 @@ Rust + Crossterm, OpenAI Chat Completions API. User docs: `README.md` and `docs/
 - Everything in English: UI text, comments, docs, commit messages.
 - Every UI decision is a theme token (colors, spacing, limits, symbols); no hardcoded styles in `tui`.
 - Run `make check` (fmt, clippy, tests) before committing; CI runs the same checks.
-- Commit after every feature or fix. Releases: bump `version` in `Cargo.toml`, update `CHANGELOG.md`, tag `vX.Y.Z`.
+- Commit after every feature or fix. Releases: bump `version` in `Cargo.toml`, update `release/CHANGELOG.md`, tag `vX.Y.Z`.

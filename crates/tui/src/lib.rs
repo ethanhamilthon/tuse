@@ -11,6 +11,8 @@ mod keys;
 mod markdown;
 mod motion;
 mod panel;
+mod panel_keys;
+mod panel_list;
 mod picker;
 mod pickers;
 mod render;

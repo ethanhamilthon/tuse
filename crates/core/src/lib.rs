@@ -28,4 +28,5 @@ pub use record::{Record, UserInput};
 pub use session::{Options, Session};
 pub use store::{Meta, list_sessions, socket_path, tuse_home};
 pub use tasks::{TaskInfo, tail};
+pub use trace::TraceItem;
 pub use usage::{Stats, tokens};

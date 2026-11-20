@@ -133,7 +133,13 @@ impl Session {
             .max(1);
         let ctx = Ctx::new(cancel, Instant::now() + Duration::from_secs(secs)).adopting();
         let mut slot = self.python.lock().unwrap();
-        let o = run_in_slot(&mut slot, || self.new_python(config), code, &ctx);
+        let o = run_in_slot(
+            &mut slot,
+            || self.new_python(config),
+            code,
+            &ctx,
+            config.settings.max_output,
+        );
         drop(slot);
         let cancelled = cancel.load(std::sync::atomic::Ordering::Relaxed);
         Outcome {
@@ -164,12 +170,14 @@ fn run_in_slot(
     make: impl FnOnce() -> Python,
     code: &str,
     ctx: &Ctx,
+    max: usize,
 ) -> tuse_py::Output {
     let py = slot.get_or_insert_with(make);
     let mut o = py.run(code, ctx, vec![]);
     if !py.is_alive() {
         *slot = None;
         o.text.push_str(RESTART_NOTE);
+        o.text = tuse_py::truncate(&o.text, max);
     }
     o
 }
@@ -203,11 +211,11 @@ mod tests {
         let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(10));
         let make = || Python::new(Arc::new(Boom), 1000);
         let mut slot = None;
-        assert!(run_in_slot(&mut slot, make, "x = 1", &ctx).ok);
-        let o = run_in_slot(&mut slot, make, "boom()", &ctx);
+        assert!(run_in_slot(&mut slot, make, "x = 1", &ctx, 4096).ok);
+        let o = run_in_slot(&mut slot, make, "boom()", &ctx, 4096);
         assert!(!o.ok && o.text.contains("lost"), "{}", o.text);
         assert!(slot.is_none());
-        let o = run_in_slot(&mut slot, make, "x", &ctx);
+        let o = run_in_slot(&mut slot, make, "x", &ctx, 4096);
         assert!(!o.ok && o.text.contains("NameError"), "{}", o.text);
         assert!(slot.is_some());
     }

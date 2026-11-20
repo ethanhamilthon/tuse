@@ -63,6 +63,16 @@ pub fn run(
         session.config().settings.ui.tab_status,
     ));
     let panic_enabled = enabled.clone();
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    for sig in [
+        signal_hook::consts::SIGINT,
+        signal_hook::consts::SIGTERM,
+        signal_hook::consts::SIGHUP,
+    ] {
+        signal_hook::flag::register(sig, stop.clone())?;
+    }
+    // Created before `setup` so a half-done setup is undone too.
+    let _guard = RestoreGuard(enabled.clone());
     setup()?;
     if enabled.load(std::sync::atomic::Ordering::Relaxed) {
         let mut out = stdout();
@@ -74,9 +84,16 @@ pub fn run(
         restore(panic_enabled.load(std::sync::atomic::Ordering::Relaxed));
         prev(info);
     }));
-    let result = main_loop(app::App::new(session, cwd, config_arg), &enabled);
-    restore(enabled.load(std::sync::atomic::Ordering::Relaxed));
-    result
+    main_loop(app::App::new(session, cwd, config_arg), &enabled, &stop)
+}
+
+/// Restores the terminal on every way out of `run` (return, `?`, unwinding).
+struct RestoreGuard(Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for RestoreGuard {
+    fn drop(&mut self) {
+        restore(self.0.load(std::sync::atomic::Ordering::Relaxed));
+    }
 }
 
 fn setup() -> std::io::Result<()> {
@@ -116,6 +133,7 @@ fn restore(enabled: bool) {
 fn main_loop(
     mut app: app::App,
     enabled: &std::sync::atomic::AtomicBool,
+    stop: &std::sync::atomic::AtomicBool,
 ) -> std::io::Result<String> {
     let mut out = BufWriter::with_capacity(1 << 16, stdout());
     let mut osc = osc::Osc::default();
@@ -165,7 +183,7 @@ fn main_loop(
             immediate = false;
             last_draw = Instant::now();
         }
-        if app.quit {
+        if app.quit || stop.load(std::sync::atomic::Ordering::Relaxed) {
             break;
         }
         if !event::poll(Duration::from_millis(style::FRAME_MS))? {

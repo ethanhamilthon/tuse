@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Fix the tab state (OSC 9;4) disappearing on long turns and `ask` waits: it is re-sent every 5s while working or asking. Error and paused now send 100% so terminals draw a visible bar. Turning off `settings.ui.tab_status` with `/reload` restores the title and clears the state.
+- **Fix**: the TUI now resets the terminal (mouse modes, bracketed paste, alt-screen, raw mode) when it exits on SIGINT, SIGTERM or SIGHUP, and on any early return. Before, mouse events leaked into the shell as `18M65;25;18M64;...`. SIGKILL cannot be handled; run `reset` if it happens.
 
 ## 0.5.4
 

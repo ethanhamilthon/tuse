@@ -2488,6 +2488,7 @@ dependencies = [
  "crossterm",
  "png",
  "pulldown-cmark",
+ "signal-hook",
  "tuse-config",
  "tuse-core",
  "unicode-width",

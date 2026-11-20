@@ -76,7 +76,9 @@ impl Chat {
                     code: *code,
                     diffs: diffs.clone(),
                 },
-                Record::Notice { text } => Entry::Notice(text.clone()),
+                Record::Notice { text } | Record::Notification { text } => {
+                    Entry::Notice(text.clone())
+                }
                 Record::Error { text } => Entry::Error(text.clone()),
                 Record::TurnEnd {
                     elapsed_ms,
@@ -212,6 +214,13 @@ impl Chat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn notifications_are_not_user_entries() {
+        let c = Chat::from_records(&[Record::Notification {
+            text: "ready".into(),
+        }]);
+        assert!(matches!(&c.entries[0].0, Entry::Notice(t) if t == "ready"));
+    }
 
     #[test]
     fn print_blocks_are_replaced_in_place() {

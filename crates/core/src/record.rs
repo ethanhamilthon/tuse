@@ -40,6 +40,9 @@ pub enum Record {
         #[serde(default)]
         at: String,
     },
+    Notification {
+        text: String,
+    },
     Notice {
         text: String,
     },
@@ -76,16 +79,23 @@ pub struct FileDiff {
 /// A message on its way into the history: typed in the TUI, a prompt or a notification.
 #[derive(Debug, Clone, Default)]
 pub struct UserInput {
+    pub notification: bool,
     pub text: String,
     /// `data:` URLs.
     pub images: Vec<String>,
 }
 
 impl UserInput {
+    pub fn notification(t: impl Into<String>) -> Self {
+        Self {
+            notification: true,
+            ..Self::text(t)
+        }
+    }
     pub fn text(t: impl Into<String>) -> Self {
         Self {
             text: t.into(),
-            images: vec![],
+            ..Self::default()
         }
     }
 }

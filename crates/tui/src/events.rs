@@ -61,7 +61,7 @@ impl App {
                 }
             }
             Event::Status(_) => {}
-            Event::Notice(t) => self.notice(t),
+            Event::Notice(t) | Event::Notification(t) => self.notice(t),
             Event::Error(t) => self.error(t),
             Event::TurnEnd {
                 elapsed,

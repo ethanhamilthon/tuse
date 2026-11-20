@@ -27,7 +27,11 @@ pub fn bounds(records: &[Record], threshold: u64, prev: Bounds) -> Option<Bounds
             next.prune = prev.prune.max(i);
             prune_set = true;
         }
-        if matches!(records[i], Record::User { .. }) && total >= middle {
+        if matches!(
+            records[i],
+            Record::User { .. } | Record::Notification { .. }
+        ) && total >= middle
+        {
             next.drop = prev.drop.max(i);
             break;
         }

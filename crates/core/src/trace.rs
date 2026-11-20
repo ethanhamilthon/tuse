@@ -90,6 +90,7 @@ impl Session {
                     }
                     items.push(out);
                 }
+                Record::Notification { text } => items.push(item("notification", text.clone())),
                 Record::Notice { text } => items.push(item("notice", text.clone())),
                 Record::Error { text } => items.push(item("error", text.clone())),
                 _ => {}

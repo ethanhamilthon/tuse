@@ -45,6 +45,11 @@ pub fn load(path: Option<&Path>) -> Result<Loaded, String> {
         merge(&mut value, load_file(path, &mut files, 0)?);
     }
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
+    if value.get("prelude").is_some() {
+        return Err(format!(
+            "{name}: `prelude` is no longer supported; use hooks or `import`"
+        ));
+    }
     expand::walk(&mut value);
     crate::themes::resolve(&mut value).map_err(|e| format!("{name}: {e}"))?;
     let config: Config = serde_yaml::from_value(value).map_err(|e| format!("{name}: {e}"))?;

@@ -27,7 +27,7 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "hooks",
-        "Event hooks and prelude",
+        "Event hooks",
         include_str!("../../../docs/hooks.md"),
     ),
     (

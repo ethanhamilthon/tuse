@@ -13,6 +13,16 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InputId(pub(crate) u64);
 
+impl InputId {
+    /// The number a client sees (`tuse json`).
+    pub fn number(self) -> u64 {
+        self.0
+    }
+    pub fn from_number(n: u64) -> Self {
+        InputId(n)
+    }
+}
+
 impl Session {
     pub fn subscribe(&self) -> Receiver<Event> {
         let (tx, rx) = channel();
@@ -171,6 +181,11 @@ impl Session {
             options,
         });
         Ok((id, rx))
+    }
+
+    /// Whether the ask `id` is still waiting for an answer.
+    pub fn has_ask(&self, id: &str) -> bool {
+        self.asks.lock().unwrap().contains_key(id)
     }
 
     /// Answers an ask; `None` dismisses it.

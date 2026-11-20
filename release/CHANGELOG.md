@@ -5,6 +5,7 @@
 Breaking: hook events and `run:` expansion changed, OSC 7501 was replaced (see below).
 
 - **Hooks have four events**: `process_start` and `process_end` (`reason`: `launch`, `new`, `resume`, `reload`, `exit`), `user_message` (`text`, `is_first`) and `agent_message` (`text`, `status`: `working`, `finished`, `cancelled`). `session_start`, `session_end`, `turn_start`, `turn_end`, `tool_start`, `tool_end` and `error` are removed without aliases, as are the `tool`, `input`, `title`, `output`, `code`, `error` and `cancelled` variables; a hook with an unknown event shows a notice. `/reload`, `/new` and `/resume` now run `process_end` and `process_start`.
+- **`tuse json`**: a JSON-RPC 2.0 session over stdin/stdout (NDJSON) with the TUI's full access: submit, cancel, withdraw, answer asks, model, config, tasks, trace and stats; every session event arrives as an `event` notification. See `docs("json")`.
 - `/trace` lists hook runs (`hook` items with the event, its variables, the result and the duration); they are saved with the session and never sent to the model.
 - `/trace` query filters by type: `+python+agent` keeps those types, `-hook` hides one, other words search the rows.
 - **OSC 7501 is replaced by standard sequences**: the tab title (OSC 2, `tuse · <session title>`) and the tab state (OSC 9;4: working, a question, an error). `settings.ui.osc_status` is renamed `settings.ui.tab_status`; the old key is ignored. The previous title is restored on exit.

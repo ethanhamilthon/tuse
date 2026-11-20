@@ -1,39 +1,16 @@
 use serde_json::{Value, json};
-use std::path::Path;
 use tuse_config::Config;
 
 const SYSTEM: &str = include_str!("../prompts/system.md");
 
-/// The built-in prompt, then the environment, the project rules and the `systems` of the config.
-pub fn system_prompt(config: &Config, cwd: &Path, compacted: bool) -> String {
-    let mut parts = vec![
-        fill(SYSTEM, config).trim_end().to_string(),
-        format!(
-            "# Environment\nWorking directory: {}\nPlatform: {}",
-            cwd.display(),
-            platform()
-        ),
-    ];
-    if let Ok(rules) = std::fs::read_to_string(cwd.join("AGENTS.md")) {
-        parts.push(format!("# Project rules (AGENTS.md)\n{}", rules.trim_end()));
-    }
+pub fn system_prompt(config: &Config, compacted: bool) -> String {
+    let mut parts = vec![fill(SYSTEM, config).trim_end().to_string()];
     parts.extend(config.systems.iter().map(|s| s.trim_end().to_string()));
     let mut out = parts.join("\n\n");
     if compacted {
         out.push_str("\n\nEarlier parts of this conversation were compacted to save context: old tool calls and their outputs were removed and some later outputs were cut to their first line.");
     }
     out
-}
-
-fn platform() -> &'static str {
-    static P: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    P.get_or_init(|| {
-        std::process::Command::new("uname")
-            .arg("-sm")
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_default()
-    })
 }
 
 /// `4096` bytes as `4 KB`, so the number in the prompt reads like the setting.

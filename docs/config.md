@@ -31,7 +31,7 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 | `settings.hook_timeout` | Seconds before a hook is stopped. Default 30. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
 | `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |
-| `systems` | Texts appended to the built-in system prompt (after the environment and `AGENTS.md`). |
+| `systems` | Texts appended to the built-in system prompt. |
 | `prompts` | `name: text`. `#name` in the input expands to the text. |
 | `prelude` | List of Python snippets, joined and run once before the agent's REPL starts and before every hook. |
 | `hooks` | `name: {events: [...], run: python code}`, see `docs("hooks")`. |

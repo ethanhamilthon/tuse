@@ -182,14 +182,6 @@ fn message_tokens(m: &Value) -> u64 {
         .sum()
 }
 
-#[test]
-fn notification_history_keeps_api_role() {
-    let r = Record::Notification {
-        text: "ready".into(),
-    };
-    assert_eq!(serde_json::to_value(&r).unwrap()["t"], "notification");
-    assert_eq!(
-        full(&r, false),
-        Some(json!({"role":"user", "content":"ready"}))
-    );
-}
+#[cfg(test)]
+#[path = "history_tests.rs"]
+mod tests;

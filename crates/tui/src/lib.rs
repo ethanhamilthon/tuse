@@ -1,4 +1,5 @@
 mod app;
+mod ask_view;
 mod chat;
 mod clipboard;
 mod code_block;

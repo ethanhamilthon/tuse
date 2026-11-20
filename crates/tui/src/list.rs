@@ -49,7 +49,12 @@ pub fn picker(app: &mut App, w: usize, max: usize) -> Vec<Line> {
     let rows = max
         .saturating_sub(1 + usize::from(!title.is_empty()))
         .max(1);
+    let lines = options(pk, rows, w, p);
     app.list_rows = rows;
+    framed(&title, lines, w, p)
+}
+
+pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Vec<Line> {
     pk.follow(rows);
     let inner = w.max(1);
     let mark = width(LIST_SELECTED_PREFIX);
@@ -85,5 +90,5 @@ pub fn picker(app: &mut App, w: usize, max: usize) -> Vec<Line> {
         }
         lines.push(line);
     }
-    framed(&title, lines, w, p)
+    lines
 }

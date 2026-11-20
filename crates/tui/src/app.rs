@@ -41,6 +41,8 @@ pub struct App {
     pub input_area: Option<InputArea>,
     /// The token whose picker was dismissed with Esc; it stays closed until the token changes.
     pub dismissed: Option<String>,
+    pub ask_scroll: usize,
+    pub ask_controls: usize,
     pub ask_input: Option<(String, String, Editor)>,
     /// The input draft set aside while a modal picker uses the editor as its search box.
     pub saved_editor: Option<Editor>,
@@ -90,6 +92,8 @@ impl App {
             list_rows: 8,
             input_area: None,
             dismissed: None,
+            ask_scroll: 0,
+            ask_controls: 0,
             ask_input: None,
             saved_editor: None,
             asks: vec![],
@@ -183,6 +187,8 @@ impl App {
         let Some((id, question, options)) = self.asks.first().cloned() else {
             return;
         };
+        self.ask_scroll = 0;
+        self.ask_controls = 0;
         let mut items: Vec<_> = options
             .iter()
             .map(|o| crate::picker::item(o.clone(), "", o.clone()))

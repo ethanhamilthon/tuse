@@ -38,10 +38,9 @@ pub fn frame(ui: &UiSettings) -> Frame {
 pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Vec<Line> {
     let p = &app.palette;
     let working = app
-        .ask_input
+        .flash
         .as_ref()
-        .map(|a| a.1.lines().collect::<Vec<_>>().join(" "))
-        .or_else(|| app.flash.as_ref().map(|(text, _)| text.clone()))
+        .map(|(text, _)| text.clone())
         .unwrap_or_else(|| status::working(app));
     let model = status::model(app);
     let motion = app

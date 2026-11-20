@@ -40,11 +40,41 @@ impl Renderer {
         let text_w = inner.saturating_sub(fr.left + fr.right).max(1);
         app.input_cols = text_w;
         let (rows, (crow, ccol)) = app.editor.layout(text_w);
-        let input_h = tuse_config::limit(ui.input_max_height, rows.len())
-            .max(1)
-            .min(h.saturating_sub(fr.head + fr.foot).max(1));
-        let input_top = crow.saturating_sub(input_h - 1).min(rows.len() - input_h);
-        let fixed = input_h + fr.head + fr.foot;
+        let asking = app.ask_active();
+        // Yield decoration rows first when a question and its controls barely fit.
+        let reserve = if asking {
+            1 + if app.ask_input.is_none() {
+                1
+            } else {
+                app.ask_controls
+            }
+        } else {
+            0
+        };
+        let decor = h.saturating_sub(reserve + 1);
+        let head = fr.head.min(decor);
+        let foot = fr.foot.min(decor.saturating_sub(head));
+        let panel_min = if asking {
+            1 + usize::from(app.ask_input.is_none())
+        } else {
+            0
+        };
+        let editor_room = h.saturating_sub(head + foot + panel_min).max(1);
+        let min_editor = if app.ask_input.is_some() {
+            1 + app.ask_controls
+        } else {
+            1
+        };
+        let mut input_h = tuse_config::limit(ui.input_max_height, rows.len())
+            .max(min_editor)
+            .min(editor_room);
+        if asking && app.ask_input.is_none() && h <= 2 {
+            input_h = 0;
+        }
+        let input_top = crow
+            .saturating_sub(input_h.saturating_sub(1))
+            .min(rows.len().saturating_sub(input_h));
+        let fixed = input_h + head + foot;
         let chat_h = h.saturating_sub(fixed);
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
@@ -60,13 +90,24 @@ impl Renderer {
             view.truncate(chat_h.saturating_sub(lines.len()));
             view.extend(lines);
         }
-        let lines = crate::list::picker(app, inner, cap);
+        let lines = if asking {
+            crate::ask_view::lines(app, inner, chat_h)
+        } else {
+            crate::list::picker(app, inner, cap)
+        };
         let p = &app.palette;
         view.truncate(chat_h.saturating_sub(lines.len()));
         view.extend(lines);
         screen.extend(view);
+        let mut rows = rows;
+        rows.resize_with(rows.len().max(input_h), String::new);
         let shown = &rows[input_top..input_top + input_h];
-        screen.extend(input_view::block(app, &fr, inner, shown, input_top));
+        screen.extend(
+            input_view::block(app, &fr, inner, shown, input_top)
+                .into_iter()
+                .skip(fr.head - head)
+                .take(head + input_h + foot),
+        );
         screen.truncate(h);
         app.selection
             .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
@@ -95,7 +136,7 @@ impl Renderer {
         }
         self.prev = screen;
 
-        let first = h.saturating_sub(input_h + fr.foot);
+        let first = h.saturating_sub(input_h + foot);
         app.input_area = Some(crate::app::InputArea {
             row: first,
             col: pad + fr.left,
@@ -103,7 +144,7 @@ impl Renderer {
             top: input_top,
             cols: text_w,
         });
-        let cy = first + crow - input_top;
+        let cy = (first + crow - input_top).min(h.saturating_sub(1));
         out.queue(MoveTo((pad + fr.left + ccol) as u16, cy as u16))?;
         if app.picker.as_ref().is_none_or(|p| !p.is_free()) {
             out.queue(Show)?;
@@ -112,6 +153,10 @@ impl Renderer {
         out.flush()
     }
 }
+
+#[cfg(test)]
+#[path = "ask_layout_tests.rs"]
+mod ask_layout_tests;
 
 fn put(
     out: &mut impl Write,

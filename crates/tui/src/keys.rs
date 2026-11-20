@@ -30,6 +30,14 @@ impl App {
             return;
         }
         self.selection = Default::default();
+        if self.ask_active() && matches!(k.code, KeyCode::PageUp | KeyCode::PageDown) {
+            if k.code == KeyCode::PageUp {
+                self.ask_scroll = self.ask_scroll.saturating_sub(1);
+            } else {
+                self.ask_scroll = self.ask_scroll.saturating_add(1);
+            }
+            return;
+        }
         if self.picker.is_some() && self.picker_key(k, ctrl, shift) {
             return;
         }

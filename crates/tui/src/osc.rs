@@ -59,8 +59,10 @@ impl Osc {
             encode("error", None, "", err)
         } else if app.turn_done {
             encode("done", None, "", "")
-        } else {
+        } else if app.turn_seen {
             encode("idle", None, "", "")
+        } else {
+            return None;
         };
         self.changed(s)
     }

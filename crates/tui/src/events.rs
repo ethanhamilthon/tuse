@@ -32,6 +32,7 @@ impl App {
                 self.scroll = 0;
             }
             Event::TurnStart => {
+                self.turn_seen = true;
                 self.turn_error = None;
                 self.turn_done = false;
             }

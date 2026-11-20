@@ -1,6 +1,4 @@
 use crate::app::App;
-use crate::clipboard::Pasted;
-use crate::expand_prompts::expand_prompts;
 use crate::picker::Kind;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
@@ -9,10 +7,17 @@ impl App {
         self.list_rows.max(1)
     }
 
-    pub fn key(&mut self, k: KeyEvent, page: usize) {
+    pub fn key(&mut self, mut k: KeyEvent, page: usize) {
         let page = page.max(1);
         if k.kind == KeyEventKind::Release {
             return;
+        }
+        if k.modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER)
+            && let KeyCode::Char(c) = k.code
+            && let Some(mapped) = crate::layout_keys::latin(c)
+        {
+            k.code = KeyCode::Char(mapped);
         }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let alt = k.modifiers.contains(KeyModifiers::ALT);
@@ -132,7 +137,7 @@ impl App {
             Err(e) => self.error(e),
         }
     }
-    fn finish_edit(&mut self, before: Option<Vec<char>>) {
+    pub(super) fn finish_edit(&mut self, before: Option<Vec<char>>) {
         if self.ask_input.is_some() {
             return;
         }
@@ -162,65 +167,6 @@ impl App {
         let before = self.steering.map(|_| self.editor.buf.clone());
         self.editor.insert(s);
         self.finish_edit(before);
-    }
-
-    /// Ctrl+V / Cmd+V: an image becomes an `[Image #n: PATH]` atom, text is inserted.
-    pub fn paste_clipboard(&mut self) {
-        let dir = tuse_core::tuse_home().join(&self.session.id).join("images");
-        match crate::clipboard::read(&dir) {
-            Ok(Pasted::Image(path)) => {
-                let before = self.steering.map(|_| self.editor.buf.clone());
-                let n = self.editor.images().len() + 1;
-                let label = format!("[Image #{n}: {}]", path.display());
-                self.editor.insert_atom(&label, Some(path));
-                self.editor.insert(" ");
-                self.finish_edit(before);
-            }
-            Ok(Pasted::Text(t)) => self.paste(&t),
-            Ok(Pasted::Nothing) => {}
-            Err(e) => self.error(format!("Clipboard: {e}")),
-        }
-    }
-
-    fn submit(&mut self) {
-        if self.ask_input.is_some() {
-            let answer = self.editor.text().trim().to_string();
-            if !answer.is_empty() {
-                self.finish_answer(Some(answer));
-            }
-            return;
-        }
-        if self.steering.is_some() {
-            return;
-        }
-        let text = self.editor.text();
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
-            return;
-        }
-        if let Some(cmd) = trimmed.strip_prefix('/')
-            && crate::commands::COMMANDS.iter().any(|(n, _)| *n == cmd)
-        {
-            self.editor.clear();
-            self.run_command(cmd);
-            return;
-        }
-        let expanded = expand_prompts(trimmed, &self.session.config().prompts);
-        let images = self.editor.images();
-        self.picker = None;
-        self.scroll = 0;
-        let images: Vec<String> = images.iter().map(|p| p.display().to_string()).collect();
-        match tuse_core::with_images(&expanded, &images) {
-            Ok(input) => {
-                let (id, queued) = self.session.submit(input);
-                if queued {
-                    self.steering = Some(id);
-                } else {
-                    self.editor.clear();
-                }
-            }
-            Err(e) => self.error(e),
-        }
     }
 }
 

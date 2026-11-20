@@ -1,4 +1,5 @@
 use super::*;
+use crate::expand_prompts::expand_prompts;
 use std::collections::BTreeMap;
 use std::net::TcpListener;
 use std::time::Duration;
@@ -108,5 +109,18 @@ fn shortcuts_copy_cut_and_select_without_losing_input() {
         press(&mut app, KeyCode::Char('c'), primary);
         assert!(app.editor.is_empty() && !app.quit);
     }
+    crate::app::cleanup(app);
+}
+
+#[test]
+fn russian_layout_preserves_typing_and_routes_modified_keys() {
+    let mut app = crate::app::test_app("layout", true);
+    let press = |app: &mut App, c, mods| app.key(KeyEvent::new(KeyCode::Char(c), mods), 10);
+    press(&mut app, 'ф', KeyModifiers::NONE);
+    assert_eq!(app.editor.text(), "ф");
+    press(&mut app, 'ф', KeyModifiers::CONTROL);
+    assert_eq!(app.editor.selected_text().as_deref(), Some("ф"));
+    press(&mut app, 'С', KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+    crate::clipboard::TEST_TEXT.with(|s| assert_eq!(&*s.borrow(), "ф"));
     crate::app::cleanup(app);
 }

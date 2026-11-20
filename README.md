@@ -74,11 +74,13 @@ the provider's models, says how many it got and adds the `connect` entry to the 
 | mouse wheel | scroll the chat (or the open list) |
 | Up / Down, Left / Right, Home / End | move in the input |
 | click in the input | put the cursor there |
-| Ctrl+V, Cmd+V | paste; an image becomes `[Image #n: PATH]` and goes to the model with the message |
+| Ctrl+V, Cmd+V | paste; an image becomes `[Image #n]` in the input; the path is added when the message is sent |
 | Ctrl/Cmd+C | copy selected text; otherwise clear the input or quit if empty |
 | Ctrl/Cmd+A / Ctrl/Cmd+X | select all input / cut selected input |
 | Shift+arrows / Shift+Home/End | extend the input selection |
 | Home / Ctrl+E / Ctrl+U / Ctrl+K / Ctrl+W | line start / end / kill back / kill forward / delete word |
+
+Shortcuts also work with the Russian keyboard layout when the terminal reports modified Cyrillic keys (for example, with the kitty keyboard protocol).
 
 A message sent while the agent is working stays dimmed in the input until the agent takes it.
 Editing it withdraws it from the queue without interrupting the turn. Press Enter to send

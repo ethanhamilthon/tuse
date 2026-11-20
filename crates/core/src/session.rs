@@ -190,6 +190,7 @@ impl Session {
         let c = Arc::new(load_config(self.config_arg.as_deref(), &self.cwd)?);
         self.finish_hooks("reload");
         *self.config.write().unwrap() = c.clone();
+        *self.hooks.lock().unwrap() = Some(Default::default());
         if let Some(py) = self.python.lock().unwrap().as_mut() {
             py.set_max_output(c.settings.max_output);
             crate::helpers::install(self, py, &c);

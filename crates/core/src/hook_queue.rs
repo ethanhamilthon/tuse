@@ -100,13 +100,7 @@ impl Session {
         let config = self.config();
         let deadline =
             Instant::now() + std::time::Duration::from_secs(config.settings.hook_timeout.max(1));
-        let queues = std::mem::take(
-            self.hooks
-                .lock()
-                .unwrap()
-                .as_mut()
-                .unwrap_or(&mut Default::default()),
-        );
+        let queues = self.hooks.lock().unwrap().take().unwrap_or_default();
         let mut waiting = vec![];
         for (name, q) in queues {
             drop(q.tx);
@@ -115,13 +109,18 @@ impl Session {
                 .get(&name)
                 .is_some_and(|h| h.events.iter().any(|e| e == "process_end"))
             {
-                waiting.push(q.done);
+                waiting.push((q.done, q.stale));
             } else {
                 q.stale.store(true, std::sync::atomic::Ordering::Release);
             }
         }
-        for done in waiting {
-            let _ = done.recv_timeout(deadline.saturating_duration_since(Instant::now()));
+        for (done, stale) in waiting {
+            if done
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .is_err()
+            {
+                stale.store(true, Ordering::Release);
+            }
         }
     }
 }

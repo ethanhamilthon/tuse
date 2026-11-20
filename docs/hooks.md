@@ -24,7 +24,7 @@ item (name, event, ok or the error, duration and the event's variables). Output 
 `$VAR` and `#{{cmd}}` are not expanded there (use `os.environ` and `sh`).
 
 Hooks and agent calls share the same functions, including `set_title(text)`, which updates and saves the session
-title (up to 80 characters). This function is unavailable to the agent and background tasks.
+title (up to 80 characters).
 
 ```yaml
 hooks:

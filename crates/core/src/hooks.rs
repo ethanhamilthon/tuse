@@ -66,4 +66,22 @@ impl Session {
             let _ = queue.tx.send(vars);
         }
     }
+
+    pub(crate) fn user_message_hook(self: &Arc<Self>, text: String, is_first: bool) {
+        let data = Data {
+            text: Some(text),
+            is_first: Some(is_first),
+            ..Default::default()
+        };
+        self.hook("user_message", data);
+    }
+
+    pub(crate) fn agent_message_hook(self: &Arc<Self>, text: String, status: &'static str) {
+        let data = Data {
+            text: Some(text),
+            status: Some(status),
+            ..Default::default()
+        };
+        self.hook("agent_message", data);
+    }
 }

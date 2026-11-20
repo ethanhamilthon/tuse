@@ -45,4 +45,8 @@ context, cost).
   model on the right.
 - `bar`: an `accent` vertical bar left of the input, a blank row, then the same status row.
 
-`settings.ui.osc_status` (default `true`) emits OSC 7501 program status in the full-screen UI. Set it to `false` to disable all reports.
+`settings.ui.tab_status` (default `true`) sets the terminal tab title to `tuse · <session title>`
+(OSC 2) and shows the state in the tab (OSC 9;4): working spins, a question pauses, an error is
+red, done and idle clear it. Terminals without OSC 9;4 ignore it. On exit the old title comes back
+(xterm title stack). In tmux, enable `set -g set-titles on` to pass the title through. Set it to
+`false` to send neither.

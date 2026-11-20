@@ -31,11 +31,7 @@ impl App {
                 self.chat.push(Entry::User { text, images });
                 self.scroll = 0;
             }
-            Event::TurnStart => {
-                self.turn_seen = true;
-                self.turn_error = None;
-                self.turn_done = false;
-            }
+            Event::TurnStart => self.turn_error = None,
             Event::Text(t) => self.stream(t, false),
             Event::Reasoning(t) => self.stream(t, true),
             Event::StreamReset => {
@@ -149,7 +145,6 @@ impl App {
                 self.streaming = None;
                 self.thinking = None;
                 self.drop_pending();
-                self.turn_done = !cancelled;
                 if cancelled {
                     self.turn_error = None;
                 }

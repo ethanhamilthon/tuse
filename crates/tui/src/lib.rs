@@ -59,10 +59,15 @@ pub fn run(
     config_arg: Option<PathBuf>,
 ) -> std::io::Result<String> {
     let enabled = Arc::new(std::sync::atomic::AtomicBool::new(
-        session.config().settings.ui.osc_status,
+        session.config().settings.ui.tab_status,
     ));
     let panic_enabled = enabled.clone();
     setup()?;
+    if enabled.load(std::sync::atomic::Ordering::Relaxed) {
+        let mut out = stdout();
+        out.write_all(osc::SAVE.as_bytes())?;
+        out.flush()?;
+    }
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         restore(panic_enabled.load(std::sync::atomic::Ordering::Relaxed));
@@ -93,7 +98,7 @@ fn setup() -> std::io::Result<()> {
 fn restore(enabled: bool) {
     let mut out = stdout();
     if enabled {
-        let _ = out.write_all(osc::encode("clear", None, "", "").as_bytes());
+        let _ = out.write_all(osc::RESTORE.as_bytes());
     }
     let _ = execute!(
         out,
@@ -146,7 +151,7 @@ fn main_loop(
             immediate = true;
         }
         enabled.store(
-            app.session.config().settings.ui.osc_status,
+            app.session.config().settings.ui.tab_status,
             std::sync::atomic::Ordering::Relaxed,
         );
         if let Some(bytes) = osc.update(&app) {

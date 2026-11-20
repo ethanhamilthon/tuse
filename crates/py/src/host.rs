@@ -13,7 +13,7 @@ pub struct Adopt {
 }
 
 /// What the interpreter needs from its owner: the functions that touch a
-/// session (`ask`, `show`, `task_*`, ...), the working directory and the env.
+/// session (`ask`, `draw_ui`, `task_*`, ...), the working directory and the env.
 pub trait Host: Send + Sync {
     /// Names of the host functions besides the built-in `sh`.
     fn functions(&self) -> &'static [&'static str];

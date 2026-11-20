@@ -28,7 +28,7 @@ const FUNCTIONS: &[&str] = &[
     "edit",
     "grep",
     "ask",
-    "show",
+    "draw_ui",
     "task_run",
     "task_add",
     "task_get",

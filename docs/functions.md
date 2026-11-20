@@ -23,11 +23,15 @@ Always defined in `python` and in hooks. Errors are Python exceptions.
   timeout (its own or the call's) is not killed**: it goes on as a background process task,
   `.task` is its ID and `.out` has what it printed so far (the rest is in `task_get(id).output`).
   Esc kills it, and so does a timeout inside a hook or a task.
+Use `ask` for clarification, confirmation, or choices instead of asking in a text reply.
+
 - `ask(question, options=[])`: asks the user and **waits** for the answer. The user picks an option
   or writes their own answer (the last row of the list), so the result is any text. To ask without
   waiting, call it from a task: `task_run('print(ask("Deploy?", ["yes", "no"]))')`.
-- `show(text, id=None)`: shows plain multiline text in the user's UI, without Markdown, and returns
-  a block ID. `show(text, id=ID)` replaces that block, so a script can redraw its own interface in
+Use `draw_ui` for diagrams, tables, dashboards and live progress in chat.
+
+- `draw_ui(text, id=None)`: shows plain multiline text in the user's UI, without Markdown, and returns
+  a block ID. `draw_ui(text, id=ID)` replaces that block, so a script can redraw its own interface in
   place. It raises `RuntimeError` in headless sessions.
 - `task_run(code, name=None)`: starts a **background Python REPL** that runs `code` (a string). It
   is a new interpreter with the same functions, the `prelude` and the filesystem, but it does not

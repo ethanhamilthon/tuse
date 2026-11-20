@@ -48,7 +48,7 @@ pub enum Event {
         id: String,
     },
     Tasks,
-    /// `show()`: a plain text block; the same `id` replaces the earlier one.
+    /// `draw_ui()`: a plain text block; the same `id` replaces the earlier one.
     Print {
         id: String,
         text: String,

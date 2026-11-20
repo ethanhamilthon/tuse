@@ -7,7 +7,7 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "functions",
-        "Built-in Python functions (read, write, edit, grep, sh, ask, show, task_*, docs)",
+        "Built-in Python functions (read, write, edit, grep, sh, ask, draw_ui, task_*, docs)",
         include_str!("../../../docs/functions.md"),
     ),
     (

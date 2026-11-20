@@ -94,7 +94,8 @@ pub struct Hook {
     pub run: String,
 }
 
-pub const HOOK_EVENTS: [&str; 4] = [
+pub const HOOK_EVENTS: [&str; 5] = [
+    "ask",
     "process_start",
     "process_end",
     "user_message",

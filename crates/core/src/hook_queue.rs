@@ -40,7 +40,7 @@ impl HookQueue {
         let stale = Arc::new(AtomicBool::new(false));
         let cancelled = stale.clone();
         std::thread::spawn(move || {
-            let make = || python_for(session.clone(), &config, true);
+            let make = || python_for(session.clone(), &config, crate::host::Origin::Hook);
             let mut py = make();
             for vars in rx {
                 if cancelled.load(Ordering::Acquire) {

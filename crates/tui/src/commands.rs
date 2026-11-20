@@ -183,14 +183,12 @@ impl App {
                 let at: usize = v.parse().unwrap_or(0);
                 self.open_trace_item(at);
             }
-            (Kind::Ask(id), v) => {
-                // Typed text is the answer; without it the selected option (the last row is only a hint).
-                let typed = p.query.trim();
-                let custom = (!typed.is_empty()).then(|| typed.to_string());
-                let Some(answer) = custom.or(v.filter(|v| !v.is_empty())) else {
-                    self.picker = Some(p);
+            (Kind::Ask(id), Some(answer)) => {
+                if answer.is_empty() {
+                    self.panel = None;
+                    self.ask_input = Some((id.clone(), p.title, std::mem::take(&mut self.editor)));
                     return;
-                };
+                }
                 let id = id.clone();
                 self.session.answer(&id, Some(answer));
                 self.asks.retain(|a| a.0 != id);

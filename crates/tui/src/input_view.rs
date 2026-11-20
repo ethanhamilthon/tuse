@@ -37,7 +37,11 @@ pub fn frame(ui: &UiSettings) -> Frame {
 /// The input block: its frame, the visible editor `rows` and the status bars.
 pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String]) -> Vec<Line> {
     let p = &app.palette;
-    let working = status::working(app);
+    let working = app
+        .ask_input
+        .as_ref()
+        .map(|a| a.1.lines().collect::<Vec<_>>().join(" "))
+        .unwrap_or_else(|| status::working(app));
     let model = status::model(app);
     let motion = app
         .session

@@ -46,8 +46,6 @@ pub struct App {
     /// The directory the `@` picker lists, relative to `cwd`.
     pub file_dir: String,
     pub turn_error: Option<String>,
-    pub turn_seen: bool,
-    pub turn_done: bool,
     pub flash: Option<(String, std::time::Instant)>,
     pub pending_tools: Vec<(usize, usize)>,
     pub streaming: Option<usize>,
@@ -94,8 +92,6 @@ impl App {
             asks: vec![],
             file_dir: String::new(),
             turn_error: None,
-            turn_seen: false,
-            turn_done: false,
             flash: None,
             pending_tools: vec![],
             streaming: None,

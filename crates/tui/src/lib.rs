@@ -6,7 +6,6 @@ mod commands;
 mod draw;
 mod editor;
 mod events;
-mod expand_prompts;
 mod files;
 mod fold;
 mod inline;

@@ -56,25 +56,20 @@ pub fn initialize(s: &Session) -> Value {
 
 fn submit(s: &Arc<Session>, p: &Value) -> Reply {
     let text = str_param(p, "text")?;
-    let mut input = tuse_core::with_images(&text, &[]).map_err(Fail::session)?;
-    for f in str_list(p, "images")? {
-        if f.starts_with("data:") {
-            input.images.push(f);
-        } else {
-            let one = tuse_core::with_files("", std::slice::from_ref(&f)).map_err(Fail::session)?;
-            input.images.extend(one.images);
-        }
-    }
-    let files = str_list(p, "files")?;
-    if !files.is_empty() {
-        let extra = tuse_core::with_files("", &files).map_err(Fail::session)?;
-        input.text.push_str(&format!("\n\n{}", extra.text));
-        input.images.extend(extra.images);
-    }
-    if input.text.trim().is_empty() && input.images.is_empty() {
+    let (urls, paths): (Vec<String>, Vec<String>) = str_list(p, "images")?
+        .into_iter()
+        .partition(|f| f.starts_with("data:"));
+    let refs = tuse_core::Refs {
+        images: (1..).zip(paths.into_iter().map(Into::into)).collect(),
+        files: str_list(p, "files")?.into_iter().map(Into::into).collect(),
+        strict: true,
+        ..Default::default()
+    };
+    let mut input: UserInput = tuse_core::build_input(&text, refs).map_err(Fail::session)?;
+    input.images.extend(urls);
+    if input.text.trim().is_empty() && input.context.is_empty() && input.images.is_empty() {
         return Err(Fail::session("no input"));
     }
-    let _: &UserInput = &input;
     let (id, queued) = s.submit(input);
     Ok(json!({"inputId": id.number(), "queued": queued}))
 }

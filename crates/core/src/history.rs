@@ -76,7 +76,12 @@ fn conversation_only(r: &Record) -> Option<Value> {
 fn full(r: &Record, prune: bool) -> Option<Value> {
     match r {
         Record::Notification { .. } => conversation_only(r),
-        Record::User { text, images, .. } => Some(user_message(text, images)),
+        Record::User {
+            text,
+            context,
+            images,
+            ..
+        } => Some(user_message(&join_context(text, context), images)),
         Record::Assistant {
             text, tool_calls, ..
         } => {
@@ -98,6 +103,15 @@ fn full(r: &Record, prune: bool) -> Option<Value> {
             Some(json!({"role": "tool", "tool_call_id": id, "content": content}))
         }
         _ => None,
+    }
+}
+
+/// The text and its hidden context as one message body.
+pub(crate) fn join_context(text: &str, context: &str) -> String {
+    match (text.is_empty(), context.is_empty()) {
+        (_, true) => text.to_string(),
+        (true, false) => context.to_string(),
+        _ => format!("{text}\n\n{context}"),
     }
 }
 

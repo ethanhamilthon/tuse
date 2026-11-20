@@ -32,7 +32,7 @@ impl Editor {
 fn replacing_and_deleting_selections() {
     let mut e = Editor::default();
     e.insert("abc");
-    e.insert_atom("@path", None);
+    e.insert_atom("@path", super::AtomKind::File("path".into()));
     e.select_all();
     assert_eq!(e.selected_text().as_deref(), Some("abc@path"));
     e.insert("x");

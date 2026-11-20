@@ -41,6 +41,11 @@ const TOPICS: &[(&str, &str, &str)] = &[
         include_str!("../../../docs/config.md"),
     ),
     (
+        "prompts",
+        "#prompts, @files and [Image #N] in a message: the hidden context blocks",
+        include_str!("../../../docs/prompts.md"),
+    ),
+    (
         "hooks",
         "Event hooks",
         include_str!("../../../docs/hooks.md"),

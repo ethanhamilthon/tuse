@@ -43,7 +43,7 @@ fn a_click_lands_on_the_cell_in_wrapped_wide_and_atom_text() {
     e.click(0, 4, 10);
     assert_eq!(e.cursor, 2);
     let mut e = ed("a ");
-    e.insert_atom("[Image #1]", None);
+    e.insert_image("/x.png".into());
     e.insert("b");
     e.click(0, 5, 40); // inside the atom's label: before it
     assert_eq!(e.cursor, 2);

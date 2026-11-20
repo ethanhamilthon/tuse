@@ -37,6 +37,8 @@ fn item(role: &'static str, text: String) -> TraceItem {
     }
 }
 
+use crate::history::join_context;
+
 impl Session {
     /// The whole session, one item per system prompt, message, thinking, tool call and output.
     pub fn trace(&self) -> Vec<TraceItem> {
@@ -46,13 +48,19 @@ impl Session {
         let mut items = vec![item("system", system)];
         for r in &st.records {
             match r {
-                Record::User { text, images, .. } => {
+                Record::User {
+                    text,
+                    context,
+                    images,
+                    ..
+                } => {
                     let extra = if images.is_empty() {
                         String::new()
                     } else {
                         format!("\n[{} image(s)]", images.len())
                     };
-                    items.push(item("user", format!("{text}{extra}")));
+                    let body = join_context(text, context);
+                    items.push(item("user", format!("{body}{extra}")));
                 }
                 Record::Assistant {
                     text, reasoning, ..

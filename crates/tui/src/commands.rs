@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::editor::AtomKind;
 use crate::panel::Panel;
 use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
@@ -153,13 +154,15 @@ impl App {
             }
             (Kind::Prompt, Some(v)) => {
                 self.cut_token();
-                self.editor.insert_atom(&format!("#{v}"), None);
+                self.editor
+                    .insert_atom(&format!("#{v}"), AtomKind::Prompt(v.clone()));
                 self.editor.insert(" ");
             }
             (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}*")),
             (Kind::File, Some(v)) => {
                 self.cut_token();
-                self.editor.insert_atom(&format!("@{v}"), None);
+                self.editor
+                    .insert_atom(&format!("@{v}"), AtomKind::File(v.clone().into()));
                 self.editor.insert(" ");
             }
             (Kind::Resume, Some(v)) => self.switch(Some(v)),

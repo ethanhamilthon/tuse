@@ -80,8 +80,22 @@ hooks:
         s.config().problems()
     );
     let events = s.subscribe();
-    s.submit(UserInput::text("hi"));
+    // The hidden context reaches /trace but not the hooks, the title or the UI.
+    s.submit(UserInput {
+        context: "<prompt name=\"p\">secret</prompt>".into(),
+        ..UserInput::text("hi")
+    });
+    let shown =
+        std::iter::from_fn(|| events.recv_timeout(Duration::from_secs(10)).ok()).find_map(|e| {
+            match e {
+                Event::User { text, .. } => Some(text),
+                _ => None,
+            }
+        });
+    assert_eq!(shown.as_deref(), Some("hi"));
     wait_turn(&events);
+    let user = s.trace().into_iter().find(|it| it.role == "user").unwrap();
+    assert_eq!(user.text, "hi\n\n<prompt name=\"p\">secret</prompt>");
     s.reload().unwrap();
     s.submit(UserInput::text("stop me"));
     wait_text(&events);

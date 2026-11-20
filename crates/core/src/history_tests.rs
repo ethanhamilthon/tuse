@@ -16,6 +16,7 @@ fn notification_history_keeps_api_role() {
 fn user(t: &str, images: Vec<String>) -> Record {
     Record::User {
         text: t.into(),
+        context: String::new(),
         images,
         at: String::new(),
     }
@@ -139,4 +140,25 @@ fn a_crash_mid_step_gets_placeholder_results() {
     records.extend(missing);
     assert!(missing_results(&records).is_empty());
     assert!(valid(&messages(&records, Bounds::default(), "s")));
+}
+
+#[test]
+fn context_rides_along_except_in_the_dropped_prefix() {
+    let r = Record::User {
+        text: "see #p".into(),
+        context: "<prompt name=\"p\">body</prompt>".into(),
+        images: vec![],
+        at: String::new(),
+    };
+    let both = "see #p\n\n<prompt name=\"p\">body</prompt>";
+    assert_eq!(full(&r, false).unwrap()["content"], both);
+    assert_eq!(conversation_only(&r).unwrap()["content"], "see #p");
+    assert_eq!(join_context("", "c"), "c");
+}
+
+#[test]
+fn old_user_records_have_no_context() {
+    let r: Record = serde_json::from_str(r#"{"t":"user","text":"hi","at":"x"}"#).unwrap();
+    assert!(matches!(&r, Record::User { context, .. } if context.is_empty()));
+    assert!(serde_json::to_value(&r).unwrap().get("context").is_none());
 }

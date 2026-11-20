@@ -97,7 +97,7 @@ the provider's models, says how many it got and adds the `connect` entry to the 
 | mouse wheel | scroll the chat (or the open list) |
 | Up / Down, Left / Right, Home / End | move in the input |
 | click in the input | put the cursor there |
-| Ctrl+V, Cmd+V | paste; an image becomes `[Image #n]` in the input; the path is added when the message is sent |
+| Ctrl+V, Cmd+V | paste; an image becomes `[Image #n]` in the input and is attached when the message is sent |
 | Ctrl/Cmd+C | copy selected text; otherwise clear the input or quit if empty |
 | SIGINT, SIGTERM, SIGHUP | quit and reset the terminal (SIGKILL cannot; run `reset` after it) |
 | Ctrl/Cmd+A / Ctrl/Cmd+X | select all input / cut selected input |
@@ -118,8 +118,9 @@ Every list looks the same and is drawn over the bottom of the chat; typing in th
 and a task's output open as text in the same frame; Esc closes it. Drag to select text in the chat, panels or input.
 A session keeps its own model: `/models` also saves it to the config for new sessions.
 
-`#name` inserts a prompt from the config; it is expanded to its text when sent.
-`@` picks a file or folder from the current folder; `@dir/*` lists what is inside `dir`.
+`#name` inserts a prompt from the config; `@` picks a file or folder from the current folder
+(`@dir/*` lists what is inside `dir`). The message keeps `#name` and `@path` as typed; the prompt
+text and the file go to the model in a hidden block ([docs/prompts.md](docs/prompts.md)).
 Files, prompts and images are one unit in the input: arrows and Backspace move over them whole.
 `/models` and `/theme` write your choice to the active config.
 

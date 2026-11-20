@@ -11,8 +11,6 @@ pub struct Config {
     pub connect: Vec<Connect>,
     pub settings: Settings,
     pub themes: BTreeMap<String, Theme>,
-    /// Python run before the agent's REPL and every hook.
-    pub prelude: Vec<String>,
     pub models: Vec<ModelDef>,
     pub systems: Vec<String>,
     pub prompts: BTreeMap<String, String>,

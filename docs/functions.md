@@ -34,7 +34,7 @@ Use `draw_ui` for diagrams, tables, dashboards and live progress in chat.
   a block ID. `draw_ui(text, id=ID)` replaces that block, so a script can redraw its own interface in
   place. It raises `RuntimeError` in headless sessions.
 - `task_run(code, name=None)`: starts a **background Python REPL** that runs `code` (a string). It
-  is a new interpreter with the same functions, the `prelude` and the filesystem, but it does not
+  is a new interpreter with the same functions and the filesystem, but it does not
   see your variables. Run a server with `task_run('sh("npm run dev")')`. `print()` and the value of
   the last expression go to the task log. The REPL stays alive when the code ends (`idle`); you get
   a message each time it goes idle, and when a process task exits. A task has no deadline.

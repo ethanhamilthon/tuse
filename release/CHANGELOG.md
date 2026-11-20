@@ -2,6 +2,7 @@
 
 ## 0.5.3
 
+- Removed `prelude`; import a `.py` file from the config folder or use a hook instead.
 - Removed the `VERSION` file; the version now comes only from `Cargo.toml`.
 
 ## 0.5.2

@@ -78,10 +78,6 @@ impl Session {
                 let mut py = Python::new(host, config.settings.max_output);
                 let secs = config.settings.hook_timeout.max(1);
                 let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(secs));
-                let prelude = config.prelude.join("\n");
-                if !prelude.trim().is_empty() {
-                    py.run(&prelude, &ctx, vec![]);
-                }
                 let out = py.run(&run, &ctx, vars);
                 if !out.ok {
                     s.emit(Event::Notice(format!(

@@ -1,11 +1,10 @@
-use crate::event::Event;
 use crate::session::Session;
 use crate::tools;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
-use std::time::{Duration, Instant};
-use tuse_py::{Adopt, Args, Ctx, Fail, Host, MontyObject, NEVER, Python};
+use std::time::Duration;
+use tuse_py::{Adopt, Args, Ctx, Fail, Host, MontyObject, Python};
 
 const FUNCTIONS: &[&str] = &[
     "read",
@@ -112,22 +111,11 @@ fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
     }
 }
 
-/// A fresh interpreter with the configured `prelude` already run.
 pub(crate) fn python_for(session: Weak<Session>, config: &tuse_config::Config) -> Python {
-    let host = Arc::new(SessionHost::new(session.clone()));
-    let mut py = Python::new(host, config.settings.max_output);
-    let prelude = config.prelude.join("\n");
-    if !prelude.trim().is_empty() {
-        let secs = config.settings.hook_timeout.max(1);
-        let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(secs));
-        let o = py.run(&prelude, &ctx, vec![]);
-        if !o.ok
-            && let Some(s) = session.upgrade()
-        {
-            s.emit(Event::Notice(format!("prelude: {}", last_line(&o.text))));
-        }
-    }
-    py
+    Python::new(
+        Arc::new(SessionHost::new(session)),
+        config.settings.max_output,
+    )
 }
 
 impl Session {

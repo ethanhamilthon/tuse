@@ -181,3 +181,12 @@ fn effective_yaml_contains_default_theme_and_settings() {
     assert_eq!(value["themes"]["default"]["bg"], "#0A0A0A");
     assert_eq!(value["settings"]["ui"]["motion"], true);
 }
+
+#[test]
+fn rejects_removed_prelude() {
+    let path = std::env::temp_dir().join(format!("tuse-prelude-{}.yaml", std::process::id()));
+    std::fs::write(&path, "prelude: ['pass']").unwrap();
+    let err = load(Some(&path)).err().unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert!(err.contains("`prelude` is no longer supported; use hooks or `import`"));
+}

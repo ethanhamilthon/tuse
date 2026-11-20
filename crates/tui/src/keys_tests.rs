@@ -124,3 +124,32 @@ fn russian_layout_preserves_typing_and_routes_modified_keys() {
     crate::clipboard::TEST_TEXT.with(|s| assert_eq!(&*s.borrow(), "ф"));
     crate::app::cleanup(app);
 }
+
+#[test]
+fn streamed_text_is_not_repeated_after_a_tool_delta() {
+    let mut app = crate::app::test_app("dup", true);
+    let n = app.chat.len();
+    app.handle_event(Event::Text("Let me check.".into()));
+    app.handle_event(Event::ToolDelta {
+        index: 0,
+        id: "c1".into(),
+        name: "python".into(),
+        code: "1".into(),
+        title: None,
+    });
+    app.handle_event(Event::Assistant {
+        text: "Let me check.".into(),
+    });
+    let texts = (n..app.chat.len())
+        .filter(|&i| matches!(app.chat.get_mut(i), Some(crate::chat::Entry::Assistant(_))))
+        .count();
+    assert_eq!(texts, 1);
+    // Without streaming the final text still shows up once.
+    app.handle_event(Event::Assistant {
+        text: "Done.".into(),
+    });
+    assert!(
+        matches!(app.chat.get_mut(app.chat.len() - 1), Some(crate::chat::Entry::Assistant(t)) if t == "Done.")
+    );
+    crate::app::cleanup(app);
+}

@@ -51,6 +51,8 @@ pub struct App {
     pub flash: Option<(String, std::time::Instant)>,
     pub pending_tools: Vec<(usize, usize)>,
     pub streaming: Option<usize>,
+    /// Assistant text of the current step was already shown by streaming.
+    pub streamed_text: bool,
     pub thinking: Option<usize>,
     /// Lines scrolled up from the bottom of the chat.
     pub scroll: usize,
@@ -93,6 +95,7 @@ impl App {
             flash: None,
             pending_tools: vec![],
             streaming: None,
+            streamed_text: false,
             thinking: None,
             scroll: 0,
             tick: 0,

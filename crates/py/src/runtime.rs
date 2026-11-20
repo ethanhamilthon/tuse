@@ -51,6 +51,11 @@ impl Python {
         self.max_output = max_output;
     }
 
+    /// `false` after a crash: the interpreter is gone and every run fails.
+    pub fn is_alive(&self) -> bool {
+        self.repl.is_some()
+    }
+
     /// Runs `code`; `vars` become globals for this run (hooks pass their event data).
     pub fn run(&mut self, code: &str, ctx: &Ctx, vars: Vec<(String, MontyObject)>) -> Output {
         let Some(repl) = self.repl.take() else {

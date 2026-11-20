@@ -52,6 +52,20 @@ impl Tasks {
                 let out = py.run(&snippet, &ctx, vec![]);
                 let _ = writeln!(log, "{}", out.text);
                 let stopped = cancel.load(std::sync::atomic::Ordering::Relaxed);
+                if !py.is_alive() {
+                    // A crashed interpreter cannot take more code: end the task.
+                    let _ = writeln!(log, "[the interpreter crashed; the task exited]");
+                    let done = tasks.update(&id, |t| {
+                        t.exit = Some(1);
+                        if t.status != "stopped" {
+                            t.status = "exited".into();
+                        }
+                    });
+                    if let Some(t) = done {
+                        notify(t, "the interpreter crashed".into());
+                    }
+                    break;
+                }
                 let Some(t) = tasks.update(&id, |t| {
                     if !stopped && t.queue == 0 {
                         t.status = "idle".into();
@@ -95,5 +109,51 @@ impl Tasks {
             .send(code.to_string())
             .map_err(|_| format!("task {id} is closed"))?;
         Ok(place)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tuse_py::{Args, Fail, Host, MontyObject};
+
+    struct Boom;
+    impl Host for Boom {
+        fn functions(&self) -> &'static [&'static str] {
+            &["boom"]
+        }
+        fn call(&self, _: &str, _: &Args, _: &Ctx) -> Result<MontyObject, Fail> {
+            panic!("boom")
+        }
+        fn cwd(&self) -> std::path::PathBuf {
+            std::env::temp_dir()
+        }
+        fn env(&self) -> Vec<(String, String)> {
+            vec![]
+        }
+        fn module_dirs(&self) -> Vec<std::path::PathBuf> {
+            vec![]
+        }
+    }
+
+    #[test]
+    fn a_crashed_repl_task_exits_instead_of_idling() {
+        let dir = std::env::temp_dir().join(format!("tuse-repl-crash-{}", std::process::id()));
+        let tasks = Tasks::new(dir.clone());
+        let (tx, rx) = channel::<String>();
+        let notify: Notify = Arc::new(move |t, _| tx.send(t.status).unwrap());
+        let make = Box::new(|| Python::new(Arc::new(Boom), 1000));
+        let info = tasks.run_repl("boom()", None, &dir, make, notify).unwrap();
+        assert_eq!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), "exited");
+        for _ in 0..100 {
+            if tasks.live.lock().unwrap().is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let t = tasks.get(&info.id).unwrap();
+        assert_eq!((t.status.as_str(), t.exit), ("exited", Some(1)));
+        assert!(tasks.add(&info.id, "1").is_err());
+        std::fs::remove_dir_all(dir).ok();
     }
 }

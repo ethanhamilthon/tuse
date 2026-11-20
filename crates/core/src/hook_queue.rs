@@ -71,7 +71,7 @@ impl HookQueue {
                         ms: started.elapsed().as_millis() as u64,
                     });
                 }
-                if ctx.expired() {
+                if ctx.expired() || !py.is_alive() {
                     py = make();
                 }
             }

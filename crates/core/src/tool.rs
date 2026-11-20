@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use tuse_api::ToolCall;
-use tuse_py::Ctx;
+use tuse_py::{Ctx, Python};
 
 /// The only tool.
 pub const TOOL: &str = "python";
@@ -133,8 +133,7 @@ impl Session {
             .max(1);
         let ctx = Ctx::new(cancel, Instant::now() + Duration::from_secs(secs)).adopting();
         let mut slot = self.python.lock().unwrap();
-        let py = slot.get_or_insert_with(|| self.new_python(config));
-        let o = py.run(code, &ctx, vec![]);
+        let o = run_in_slot(&mut slot, || self.new_python(config), code, &ctx);
         drop(slot);
         let cancelled = cancel.load(std::sync::atomic::Ordering::Relaxed);
         Outcome {
@@ -153,5 +152,63 @@ impl Session {
                 .map(|(path, diff)| FileDiff { path, diff })
                 .collect(),
         }
+    }
+}
+
+const RESTART_NOTE: &str = "\n[the interpreter crashed; it restarts from scratch on the next call, so all variables and imports are lost]";
+
+/// Runs `code` in the slot's interpreter (made on demand). A crashed interpreter is
+/// dropped so the next call gets a clean one.
+fn run_in_slot(
+    slot: &mut Option<Python>,
+    make: impl FnOnce() -> Python,
+    code: &str,
+    ctx: &Ctx,
+) -> tuse_py::Output {
+    let py = slot.get_or_insert_with(make);
+    let mut o = py.run(code, ctx, vec![]);
+    if !py.is_alive() {
+        *slot = None;
+        o.text.push_str(RESTART_NOTE);
+    }
+    o
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tuse_py::{Args, Fail, Host, MontyObject, NEVER};
+
+    struct Boom;
+    impl Host for Boom {
+        fn functions(&self) -> &'static [&'static str] {
+            &["boom"]
+        }
+        fn call(&self, _: &str, _: &Args, _: &Ctx) -> Result<MontyObject, Fail> {
+            panic!("boom")
+        }
+        fn cwd(&self) -> std::path::PathBuf {
+            std::env::temp_dir()
+        }
+        fn env(&self) -> Vec<(String, String)> {
+            vec![]
+        }
+        fn module_dirs(&self) -> Vec<std::path::PathBuf> {
+            vec![]
+        }
+    }
+
+    #[test]
+    fn a_crashed_interpreter_is_replaced_on_the_next_call() {
+        let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(10));
+        let make = || Python::new(Arc::new(Boom), 1000);
+        let mut slot = None;
+        assert!(run_in_slot(&mut slot, make, "x = 1", &ctx).ok);
+        let o = run_in_slot(&mut slot, make, "boom()", &ctx);
+        assert!(!o.ok && o.text.contains("lost"), "{}", o.text);
+        assert!(slot.is_none());
+        let o = run_in_slot(&mut slot, make, "x", &ctx);
+        assert!(!o.ok && o.text.contains("NameError"), "{}", o.text);
+        assert!(slot.is_some());
     }
 }

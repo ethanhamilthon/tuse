@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64.workspace = true
 tuse-config.workspace = true
 tuse-core.workspace = true
 crossterm.workspace = true

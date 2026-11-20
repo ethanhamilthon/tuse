@@ -44,3 +44,5 @@ context, cost).
 - `fill`: the input has `surface` background; one status row below, working on the left and the
   model on the right.
 - `bar`: an `accent` vertical bar left of the input, a blank row, then the same status row.
+
+`settings.ui.osc_status` (default `true`) emits OSC 7501 program status in the full-screen UI. Set it to `false` to disable all reports.

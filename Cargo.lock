@@ -2474,6 +2474,7 @@ name = "tuse-tui"
 version = "0.5.3"
 dependencies = [
  "arboard",
+ "base64",
  "crossterm",
  "png",
  "pulldown-cmark",

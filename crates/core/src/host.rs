@@ -19,21 +19,6 @@ const FUNCTIONS: &[&str] = &[
     "task_stop",
     "task_list",
     "docs",
-];
-
-const HOOK_FUNCTIONS: &[&str] = &[
-    "read",
-    "write",
-    "edit",
-    "grep",
-    "ask",
-    "draw_ui",
-    "task_run",
-    "task_add",
-    "task_get",
-    "task_stop",
-    "task_list",
-    "docs",
     "set_title",
 ];
 
@@ -65,11 +50,7 @@ impl SessionHost {
 
 impl Host for SessionHost {
     fn functions(&self) -> &'static [&'static str] {
-        if self.origin == Origin::Hook {
-            HOOK_FUNCTIONS
-        } else {
-            FUNCTIONS
-        }
+        FUNCTIONS
     }
 
     fn call(&self, name: &str, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
@@ -83,7 +64,7 @@ impl Host for SessionHost {
                     .map_err(Fail::runtime)?;
                 Ok(MontyObject::string(id))
             }
-            "set_title" if self.origin == Origin::Hook => {
+            "set_title" => {
                 let text: String = a
                     .str(0, "text")?
                     .trim()
@@ -159,14 +140,14 @@ fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx, origin: Origin) -> Result<MontyObj
             },
         );
     }
-    let _paused = ctx.pause();
+    let _paused = (origin != Origin::Hook).then(|| ctx.pause());
     loop {
         match rx.recv_timeout(Duration::from_millis(50)) {
             Ok(answer) => return Ok(MontyObject::string(answer)),
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(Fail::runtime("dismissed"));
             }
-            Err(_) if ctx.cancelled() => {
+            Err(_) if ctx.cancelled() || (origin == Origin::Hook && ctx.expired()) => {
                 s.answer(&id, None);
                 return Err(Fail::runtime("stopped before the user answered"));
             }

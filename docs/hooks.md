@@ -23,7 +23,7 @@ call. A timeout resets that interpreter; `/reload` runs `process_end` on the old
 item (name, event, ok or the error, duration and the event's variables). Output from `print()` is discarded. Code under `run` is passed as is:
 `$VAR` and `#{{cmd}}` are not expanded there (use `os.environ` and `sh`).
 
-Hooks have the agent's Python functions plus `set_title(text)`, which updates and saves the session
+Hooks and agent calls share the same functions, including `set_title(text)`, which updates and saves the session
 title (up to 80 characters). This function is unavailable to the agent and background tasks.
 
 ```yaml
@@ -45,3 +45,7 @@ the config and call its entry point each time: `import notify; notify.on_event(e
 module is imported only once per interpreter.
 
 Hooks can call helpers defined under `functions` in the config.
+
+A hook question counts against `hook_timeout`: expiry dismisses it and releases the queue.
+Esc interrupts running hooks without dropping later queued events.
+Timed-out shell processes can become tasks just as in agent calls.

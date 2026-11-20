@@ -95,13 +95,9 @@ impl Python {
         if dropped > 0 {
             text.push_str(&format!("\n[... {dropped} more bytes dropped]"));
         }
-        let text = sh::truncate(text.trim_end(), max);
+        let text = text.trim_end();
         Output {
-            text: if text.is_empty() {
-                "[no output]".into()
-            } else {
-                text
-            },
+            text: sh::truncate(if text.is_empty() { "[no output]" } else { text }, max),
             ok,
         }
     }

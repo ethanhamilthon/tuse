@@ -164,9 +164,8 @@ pub fn kill_group(pid: u32) {
 }
 
 /// Keeps the head and the tail; the result, marker included, is at most `max` bytes.
-/// `max == 0` means no limit.
 pub fn truncate(s: &str, max: usize) -> String {
-    if max == 0 || s.len() <= max {
+    if s.len() <= max {
         return s.to_string();
     }
     let floor = |mut i: usize| {
@@ -198,7 +197,7 @@ mod tests {
     #[test]
     fn truncate_is_bounded_and_idempotent() {
         let s = "é".repeat(5000);
-        for max in [1, 5, 20, 30, 31, 100, 4096, 9999] {
+        for max in [0, 1, 5, 20, 30, 31, 100, 4096, 9999] {
             let a = truncate(&s, max);
             assert!(a.len() <= max, "{max}: {}", a.len());
             assert_eq!(truncate(&a, max), a);

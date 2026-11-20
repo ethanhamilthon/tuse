@@ -146,13 +146,8 @@ impl Session {
             prints: Mutex::default(),
             http: tuse_api::default_agent(),
         });
-        s.start()?;
+        s.hook("session_start", Data::default());
         Ok(s)
-    }
-
-    fn start(self: &Arc<Self>) -> Result<(), String> {
-        self.hook("session_start", Data::default());
-        Ok(())
     }
 
     /// Stops the turn and tasks, fires `session_end` (and waits for those hooks)

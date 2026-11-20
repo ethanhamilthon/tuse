@@ -25,7 +25,7 @@ pub struct Meta {
     pub updated: String,
 }
 
-/// `~/.tuse/<id>/`: `session.jsonl`, `meta.json`, `lock`, `tasks/`, `images/`.
+/// `~/.tuse/<id>/`: `session.jsonl`, `meta.json`, `lock`, `tasks/` and pasted `images/`.
 /// Holding a `SessionDir` holds the session's lock. A new session keeps its records
 /// in memory and creates the folder with its first message, so empty sessions leave nothing.
 pub struct SessionDir {

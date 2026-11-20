@@ -8,10 +8,6 @@ pub struct Args {
 impl Args {
     /// `valued` lists flags that take a value.
     pub fn parse(raw: &[String], valued: &[&str]) -> Result<Args, String> {
-        Self::parse_with(raw, valued)
-    }
-
-    fn parse_with(raw: &[String], valued: &[&str]) -> Result<Args, String> {
         let mut a = Args {
             positional: vec![],
             flags: vec![],

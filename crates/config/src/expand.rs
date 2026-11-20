@@ -1,15 +1,30 @@
 use serde_yaml::Value;
 use std::process::Command;
 
-/// Expands every string value in place.
+/// Expands every string value in place, except the Python code in
+/// `hooks.<name>.run` and `functions.<name>.run`.
 pub fn walk(v: &mut Value) {
+    walk_at(v, &mut vec![]);
+}
+
+fn walk_at(v: &mut Value, path: &mut Vec<String>) {
     match v {
-        Value::String(s) => *s = expand(s),
-        Value::Sequence(seq) => seq.iter_mut().for_each(walk),
-        Value::Mapping(m) => m.iter_mut().for_each(|(_, v)| walk(v)),
-        Value::Tagged(t) => walk(&mut t.value),
+        Value::String(s) if !is_code(path) => *s = expand(s),
+        Value::Sequence(seq) => seq.iter_mut().for_each(|v| walk_at(v, path)),
+        Value::Mapping(m) => {
+            for (k, v) in m.iter_mut() {
+                path.push(k.as_str().unwrap_or_default().to_string());
+                walk_at(v, path);
+                path.pop();
+            }
+        }
+        Value::Tagged(t) => walk_at(&mut t.value, path),
         _ => {}
     }
+}
+
+fn is_code(path: &[String]) -> bool {
+    matches!(path, [top, _, run] if (top == "hooks" || top == "functions") && run == "run")
 }
 
 /// `#{{cmd}}` becomes the trimmed output of `bash -c cmd`; `$VAR` and `${VAR}`

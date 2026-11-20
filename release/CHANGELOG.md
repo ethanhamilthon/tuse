@@ -5,6 +5,7 @@
 Breaking: hook events and `run:` expansion changed, OSC 7501 was replaced (see below).
 
 - **Hooks have four events**: `process_start` and `process_end` (`reason`: `launch`, `new`, `resume`, `reload`, `exit`), `user_message` (`text`, `is_first`) and `agent_message` (`text`, `status`: `working`, `finished`, `cancelled`). `session_start`, `session_end`, `turn_start`, `turn_end`, `tool_start`, `tool_end` and `error` are removed without aliases, as are the `tool`, `input`, `title`, `output`, `code`, `error` and `cancelled` variables; a hook with an unknown event shows a notice. `/reload`, `/new` and `/resume` now run `process_end` and `process_start`.
+- **`$VAR` and `#{{cmd}}` are no longer expanded in `hooks.*.run` and `functions.*.run`**, so `$` in Python code (f-strings, templates) stays as written. Use `os.environ` or `sh` there.
 - A built-in function called as a tool of its own (`ask`, `grep`, `sh`...) now runs as `python` code `name(**args)` instead of failing with "unknown tool".
 - A new session creates its folder in `~/.tuse` with the first message; sessions closed before it leave nothing. Tests no longer write to `~/.tuse`.
 - An unknown `effort` in the config shows a notice with the valid values (it still falls back to `default`).

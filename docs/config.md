@@ -14,7 +14,8 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
   are concatenated. Any other value is replaced.
 - In every string value, `$VAR` and `${VAR}` become environment variables (empty when
   unset) and `$$` is a literal `$`. `#{{command}}` becomes the trimmed output of
-  `bash -c command`, run at load and on `/reload`.
+  `bash -c command`, run at load and on `/reload`. The Python code in `hooks.*.run` and
+  `functions.*.run` is left as is (read the environment there with `os.environ` or `sh`).
 
 ## Keys
 

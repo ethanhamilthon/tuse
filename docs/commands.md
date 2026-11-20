@@ -25,7 +25,7 @@ Every list (`/resume`, `/models`, `/theme`, `/tasks`, `/trace`, an `ask`, and th
 pickers) has one look: a rule on top, a title with the position, the rows, all drawn over the
 bottom of the chat. Typing filters most lists. In an `ask`, select an option or choose “Write your own answer” to edit a multiline reply without losing your draft. `/usage` and a task's output
 open as text in the same frame (Esc closes it). `/trace` is a list, one row per item (`system`,
-`user`, `agent`, `thinking`, `python`, `output`, `notification`, `notice`, `error`); Enter opens the item in full
+`user`, `agent`, `thinking`, `python`, `tool`, `output`, `notification`, `notice`, `error`, `hook`); Enter opens the item in full
 (with Left/Right to step between items and Esc back to the list).
 
 The chat scrolls with the mouse wheel only; the arrows move in the input, and a click in the input

@@ -61,6 +61,16 @@ pub enum Record {
         model: String,
         effort: String,
     },
+    /// One run of a hook: shown in `/trace`, never sent to the model.
+    Hook {
+        name: String,
+        event: String,
+        /// The event's own variables, `name=value` per line (long values are cut).
+        vars: String,
+        /// `None` when it succeeded, else the last line of the error.
+        error: Option<String>,
+        ms: u64,
+    },
     TurnEnd {
         elapsed_ms: u64,
         calls: usize,

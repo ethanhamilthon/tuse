@@ -5,7 +5,7 @@ use crate::session::Session;
 /// One entry of `/trace`.
 pub struct TraceItem {
     /// `system`, `user`, `agent`, `thinking`, `python` (or `tool` for another name),
-    /// `output`, `notice` or `error`.
+    /// `output`, `notification`, `notice`, `error` or `hook`.
     pub role: &'static str,
     /// The first meaningful line.
     pub summary: String,
@@ -94,6 +94,24 @@ impl Session {
                 Record::Notification { text } => items.push(item("notification", text.clone())),
                 Record::Notice { text } => items.push(item("notice", text.clone())),
                 Record::Error { text } => items.push(item("error", text.clone())),
+                Record::Hook {
+                    name,
+                    event,
+                    vars,
+                    error,
+                    ms,
+                } => {
+                    let result = error.as_deref().unwrap_or("ok");
+                    let mut it = item(
+                        "hook",
+                        format!("{name} {event} {result} ({ms} ms)\n\n{vars}"),
+                    );
+                    it.summary = format!(
+                        "{name} {event} {}",
+                        if error.is_some() { "error" } else { "ok" }
+                    );
+                    items.push(it);
+                }
                 _ => {}
             }
         }

@@ -18,7 +18,11 @@ pub fn messages(records: &[Record], b: Bounds, system: &str) -> Vec<Value> {
     let mut out = vec![json!({"role": "system", "content": system})];
     let mut images: Vec<(&str, &[String])> = vec![];
     for (i, r) in records.iter().enumerate() {
-        if !matches!(r, Record::Tool { .. }) {
+        // Records that are not messages (notices, usage, hooks) do not end a step.
+        if matches!(
+            r,
+            Record::User { .. } | Record::Assistant { .. } | Record::Notification { .. }
+        ) {
             flush_images(&mut out, &mut images);
         }
         let msg = if i < b.drop {

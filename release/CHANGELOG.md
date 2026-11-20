@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+
+- Removed the `VERSION` file; the version now comes only from `Cargo.toml`.
+
 ## 0.5.2
 
 - Inspect the effective YAML with `/config`. Expanded credentials are visible. Slash commands now work mid-draft without clearing surrounding text.

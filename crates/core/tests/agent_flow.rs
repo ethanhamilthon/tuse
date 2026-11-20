@@ -67,6 +67,11 @@ fn the_agent_edits_files_runs_tasks_and_reports_status() {
     assert!(ended, "the turn did not end; statuses {statuses:?}");
     assert_eq!(streamed, CODE);
     assert_eq!(starts, 2);
+    let st = s.stats();
+    assert_eq!(
+        (st.requests, st.turns, st.calls, st.totals.input),
+        (3, 1, 2, 30)
+    );
     let all = s.records();
     // `grep` called as a tool of its own runs as `python` code.
     let alias = all.iter().rev().find_map(|r| match r {

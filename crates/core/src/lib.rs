@@ -11,6 +11,7 @@ mod host;
 mod host_tasks;
 mod id;
 mod input;
+mod mode;
 mod models;
 mod print;
 mod prompt;

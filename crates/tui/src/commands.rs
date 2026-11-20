@@ -42,8 +42,9 @@ impl App {
                 Ok(()) => {
                     self.palette = Palette::from_config(&self.session.config());
                     self.palette_gen += 1;
-                    self.chat = crate::chat::Chat::from_records(&self.session.records(), &|m| {
-                        self.session.config().display_name(m)
+                    let config = self.session.config();
+                    self.chat = self.session.with_records(|r| {
+                        crate::chat::Chat::from_records(r, &|m| config.display_name(m))
                     });
                     if let Some(panel) = &mut self.panel {
                         panel.invalidate();

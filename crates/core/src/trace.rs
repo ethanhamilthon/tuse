@@ -14,9 +14,10 @@ pub struct TraceItem {
 }
 
 fn role_of(tool: &str) -> &'static str {
-    match tool {
-        "python" => "python",
-        _ => "tool",
+    if tool == "python" || crate::alias::is_builtin(tool) {
+        "python"
+    } else {
+        "tool"
     }
 }
 

@@ -1,3 +1,4 @@
+mod alias;
 mod compaction;
 mod control;
 mod docs;

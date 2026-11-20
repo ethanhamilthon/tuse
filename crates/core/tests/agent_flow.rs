@@ -1,54 +1,8 @@
+mod common;
+use common::Reply;
 use serde_json::json;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
 use std::time::{Duration, Instant};
 use tuse_core::{Event, Options, Record, Session, UserInput};
-
-/// Answers every request with SSE: a `python` call for the first one, plain text after.
-fn serve(listener: TcpListener, code: String) {
-    std::thread::spawn(move || {
-        for (n, stream) in listener.incoming().flatten().enumerate() {
-            let code = code.clone();
-            std::thread::spawn(move || {
-                let mut reader = BufReader::new(stream.try_clone().unwrap());
-                let mut len = 0;
-                loop {
-                    let mut line = String::new();
-                    reader.read_line(&mut line).unwrap();
-                    if line.trim().is_empty() {
-                        break;
-                    }
-                    if let Some(v) = line.to_lowercase().strip_prefix("content-length:") {
-                        len = v.trim().parse().unwrap();
-                    }
-                }
-                let mut body = vec![0; len];
-                reader.read_exact(&mut body).unwrap();
-                let mut chunks = vec![];
-                if n == 0 {
-                    let args = json!({"code":code,"title":"Testing the flow"}).to_string();
-                    for (i, part) in args.as_bytes().chunks(17).enumerate() {
-                        let mut f = json!({"arguments":std::str::from_utf8(part).unwrap()});
-                        if i == 0 {
-                            f["name"] = json!("python");
-                        }
-                        chunks.push(json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":f}]}}]}));
-                    }
-                } else {
-                    chunks.push(json!({"choices":[{"delta":{"content":"all done"}}]}));
-                }
-                chunks
-                    .push(json!({"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":3}}));
-                let mut out = stream;
-                let _ = out.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n");
-                for c in chunks {
-                    let _ = write!(out, "data: {c}\n\n");
-                }
-                let _ = out.write_all(b"data: [DONE]\n\n");
-            });
-        }
-    });
-}
 
 const CODE: &str = r#"
 write("a.txt", "one\ntwo\n")
@@ -75,19 +29,16 @@ print("sh", r.timed_out, r.task)
 
 #[test]
 fn the_agent_edits_files_runs_tasks_and_reports_status() {
-    let dir = std::env::temp_dir().join(format!("tuse-flow-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    // SAFETY: this file holds one test, so nothing else reads the environment meanwhile.
-    unsafe { std::env::set_var("TUSE_HOME", dir.join("home")) };
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let addr = listener.local_addr().unwrap();
-    serve(listener, CODE.to_string());
-    let cfg = dir.join("tuse.yaml");
-    std::fs::write(
-        &cfg,
-        format!("model: p/m\nconnect: [{{name: p, base_url: 'http://{addr}', api_key: k}}]\n"),
-    )
-    .unwrap();
+    let args = json!({"code": CODE, "title": "Testing the flow"}).to_string();
+    let addr = common::provider(vec![
+        Reply::Call("python", args),
+        Reply::Call(
+            "grep",
+            json!({"pattern": "^2$", "path": "a.txt"}).to_string(),
+        ),
+        Reply::Text("all done"),
+    ]);
+    let (dir, cfg) = common::setup("flow", &addr, "");
     let s = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg),
@@ -105,7 +56,7 @@ fn the_agent_edits_files_runs_tasks_and_reports_status() {
         match events.recv_timeout(Duration::from_millis(200)) {
             Ok(Event::ToolDelta { code, .. }) => streamed.push_str(&code),
             Ok(Event::ToolStart { .. }) => {
-                assert_eq!(statuses, ["Testing the flow"]);
+                assert_eq!(statuses[0], "Testing the flow");
                 starts += 1;
             }
             Ok(Event::Status(t)) => statuses.push(t),
@@ -115,8 +66,26 @@ fn the_agent_edits_files_runs_tasks_and_reports_status() {
     }
     assert!(ended, "the turn did not end; statuses {statuses:?}");
     assert_eq!(streamed, CODE);
-    assert_eq!(starts, 1);
+    assert_eq!(starts, 2);
     let all = s.records();
+    // `grep` called as a tool of its own runs as `python` code.
+    let alias = all.iter().rev().find_map(|r| match r {
+        Record::Tool {
+            input,
+            output,
+            code,
+            ..
+        } => Some((input, output, code)),
+        _ => None,
+    });
+    assert_eq!(
+        alias,
+        Some((
+            &r#"grep(path="a.txt", pattern="^2$")"#.to_string(),
+            &"a.txt:2: 2".to_string(),
+            &Some(0)
+        ))
+    );
     let Some(Record::Tool {
         output,
         title,

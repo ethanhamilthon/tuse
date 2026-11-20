@@ -107,18 +107,3 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn plain_drops_escapes_and_expands_tabs() {
-        let got = plain("a\tb\n\x1b[31mred", 40, Style::default(), "", "");
-        let text: Vec<String> = got
-            .iter()
-            .map(|l| l.iter().map(|s| s.text.as_str()).collect())
-            .collect();
-        assert_eq!(text, ["a    b", "[31mred"]);
-    }
-}

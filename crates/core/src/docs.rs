@@ -78,16 +78,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn docs_index_lists_all_topics() {
+    fn docs_lists_finds_and_rejects_topics() {
         let index = docs(None);
         for (name, _, _) in TOPICS {
             assert!(index.contains(&format!("- {name} —")), "missing {name}");
         }
         assert_eq!(index, docs(Some("  ")));
-    }
-
-    #[test]
-    fn docs_topic_lookup_and_unknown() {
         let hooks = docs(Some("hooks"));
         assert!(hooks.starts_with("# Hooks"));
         assert_eq!(hooks, docs(Some(" HOOKS ")));

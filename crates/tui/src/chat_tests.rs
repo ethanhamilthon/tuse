@@ -45,12 +45,19 @@ fn titles_follow_the_existing_tool_entry() {
     };
     check(&app.chat, n, "delta");
     app.handle_event(Event::ToolStart {
+        timeout: 150,
         id: "id".into(),
         tool: "python".into(),
         input: "1".into(),
         title: "final".into(),
     });
     check(&app.chat, n, "final");
+    let p = Palette::new(&Default::default(), &Default::default());
+    let lines = crate::render::render(&app.chat.entries[n].0, 80, &p);
+    let row = &lines[0];
+    assert!(row.last().unwrap().text.ends_with("/2m30s"));
+    assert_eq!(row.last().unwrap().style.fg, p.accent);
+    assert_eq!(row[0].style.fg, p.dim);
     let restored = Chat::from_records(
         &[Record::Tool {
             id: "id".into(),

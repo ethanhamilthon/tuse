@@ -70,6 +70,7 @@ impl App {
                         let pos = self.chat.len();
                         self.pending_tools.push((index, pos));
                         self.chat.push(Entry::Tool {
+                            timer: None,
                             id: if id.is_empty() {
                                 format!("stream-{index}")
                             } else {
@@ -96,8 +97,17 @@ impl App {
                 }
             }
             Event::ToolStart {
-                id, input, title, ..
+                id,
+                input,
+                title,
+                timeout,
+                ..
             } => {
+                let clock = Some((
+                    std::time::Instant::now(),
+                    std::time::Duration::from_secs(timeout),
+                    None,
+                ));
                 if let Some((n, _)) = self
                     .pending_tools
                     .iter()
@@ -106,12 +116,14 @@ impl App {
                 {
                     let (_, pos) = self.pending_tools.remove(n);
                     if let Some(Entry::Tool {
+                        timer,
                         id: old,
                         title: shown,
                         input: text,
                         ..
                     }) = self.chat.get_mut(pos)
                     {
+                        *timer = clock;
                         *old = id;
                         *shown = title;
                         *text = input;
@@ -119,6 +131,7 @@ impl App {
                     }
                 }
                 self.chat.push(Entry::Tool {
+                    timer: clock,
                     id,
                     title,
                     input,
@@ -134,12 +147,16 @@ impl App {
                 diffs,
             } => {
                 if let Some(Entry::Tool {
+                    timer,
                     output: o,
                     code: c,
                     diffs: d,
                     ..
                 }) = self.chat.find_tool(&id)
                 {
+                    if let Some((start, _, elapsed)) = timer {
+                        *elapsed = Some(start.elapsed());
+                    }
                     *o = Some(output);
                     *c = code;
                     *d = diffs;
@@ -214,34 +231,6 @@ impl App {
                     self.open_models();
                 }
             }
-        }
-    }
-
-    fn stream(&mut self, t: String, reasoning: bool) {
-        let slot = if reasoning {
-            self.thinking
-        } else {
-            self.streaming
-        };
-        if let Some(i) = slot
-            && let Some(Entry::Assistant(s) | Entry::Reasoning(s)) = self.chat.get_mut(i)
-        {
-            s.push_str(&t);
-            return;
-        }
-        if !reasoning {
-            self.streamed_text = true;
-        }
-        let i = self.chat.len();
-        self.chat.push(if reasoning {
-            Entry::Reasoning(t)
-        } else {
-            Entry::Assistant(t)
-        });
-        if reasoning {
-            self.thinking = Some(i);
-        } else {
-            self.streaming = Some(i);
         }
     }
 }

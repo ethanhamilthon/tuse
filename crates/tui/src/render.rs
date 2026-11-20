@@ -79,12 +79,13 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             all[all.len() - n..].to_vec()
         }
         Entry::Tool {
+            title,
             input,
             output,
             code,
             diffs,
             ..
-        } => crate::tool_view::tool(input, output.as_deref(), *code, diffs, width, p),
+        } => crate::tool_view::tool(title, input, output.as_deref(), *code, diffs, width, p),
         Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad),
         Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad),
         Entry::Print { text, .. } => plain(text, width, Style::fg(p.fg), "", ""),

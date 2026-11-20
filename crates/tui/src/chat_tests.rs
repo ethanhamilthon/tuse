@@ -24,6 +24,52 @@ fn notifications_are_not_chat_entries() {
 }
 
 #[test]
+fn titles_follow_the_existing_tool_entry() {
+    use tuse_core::Event;
+    let mut app = crate::app::test_app("title-chat");
+    let n = app.chat.len();
+    for (code, title) in [("1", None), ("", Some("delta"))] {
+        app.handle_event(Event::ToolDelta {
+            index: 0,
+            id: "id".into(),
+            name: "python".into(),
+            code: code.into(),
+            title: title.map(String::from),
+        });
+    }
+    let check = |chat: &Chat, n: usize, want: &str| {
+        assert_eq!(chat.len(), n + 1);
+        assert!(
+            matches!(&chat.entries[n].0, Entry::Tool {title,input,..} if title==want && input=="1")
+        );
+    };
+    check(&app.chat, n, "delta");
+    app.handle_event(Event::ToolStart {
+        id: "id".into(),
+        tool: "python".into(),
+        input: "1".into(),
+        title: "final".into(),
+    });
+    check(&app.chat, n, "final");
+    let restored = Chat::from_records(
+        &[Record::Tool {
+            id: "id".into(),
+            tool: "python".into(),
+            input: "1".into(),
+            title: "saved".into(),
+            output: String::new(),
+            code: Some(0),
+            images: vec![],
+            diffs: vec![],
+            at: String::new(),
+        }],
+        &str::to_owned,
+    );
+    check(&restored, 0, "saved");
+    crate::app::cleanup(app);
+}
+
+#[test]
 fn print_blocks_are_replaced_in_place() {
     let mut c = Chat::default();
     assert!(c.set_print("p1", "a".into()));

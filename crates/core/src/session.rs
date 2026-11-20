@@ -176,7 +176,12 @@ impl Session {
     /// Rebuilds the config from its files.
     pub fn reload(&self) -> Result<(), String> {
         let c = load_config(self.config_arg.as_deref(), &self.cwd)?;
-        *self.config.write().unwrap() = Arc::new(c);
+        let c = Arc::new(c);
+        *self.config.write().unwrap() = c.clone();
+        if let Some(py) = self.python.lock().unwrap().as_mut() {
+            crate::helpers::install(self, py, &c);
+        }
+
         Ok(())
     }
 

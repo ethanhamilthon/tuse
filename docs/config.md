@@ -33,6 +33,7 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 | `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |
 | `systems` | Texts appended to the built-in system prompt. |
 | `prompts` | `name: text`. `#name` in the input expands to the text. |
+| `functions` | Named Python helpers with `args`, `description` and `run`. Available to the agent, hooks and tasks. |
 | `hooks` | `name: {events: [...], run: python code}`, see `docs("hooks")`. |
 | `settings.theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. |
 | `settings.ui` | UI behavior and layout preferences, see `docs("theme")`. |

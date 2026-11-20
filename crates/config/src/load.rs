@@ -58,6 +58,7 @@ pub fn load(path: Option<&Path>) -> Result<Loaded, String> {
         .ui
         .check()
         .map_err(|e| format!("{name}: settings.ui: {e}"))?;
+    crate::functions::validate(&config).map_err(|e| format!("{name}: {e}"))?;
     let theme = config.theme_name();
     if !matches!(theme, "" | "default") && !config.themes.contains_key(theme) {
         return Err(format!("{name}: theme {theme} not found"));

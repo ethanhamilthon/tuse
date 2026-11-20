@@ -1,5 +1,6 @@
 mod edit;
 mod expand;
+mod functions;
 mod load;
 mod theme;
 mod themes;

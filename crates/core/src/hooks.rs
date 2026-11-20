@@ -1,10 +1,10 @@
 use crate::event::Event;
-use crate::host::{SessionHost, last_line};
+use crate::host::last_line;
 use crate::session::Session;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use tuse_py::{Ctx, MontyObject, NEVER, Python};
+use tuse_py::{Ctx, MontyObject, NEVER};
 
 pub const EVENTS: [&str; 7] = [
     "session_start",
@@ -74,8 +74,7 @@ impl Session {
                 ("cancelled".into(), MontyObject::bool(data.cancelled)),
             ];
             handles.push(std::thread::spawn(move || {
-                let host = Arc::new(SessionHost::new(Arc::downgrade(&s)));
-                let mut py = Python::new(host, config.settings.max_output);
+                let mut py = s.new_python(&config);
                 let secs = config.settings.hook_timeout.max(1);
                 let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(secs));
                 let out = py.run(&run, &ctx, vars);

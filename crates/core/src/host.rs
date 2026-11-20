@@ -57,7 +57,16 @@ impl Host for SessionHost {
             }
             "docs" => {
                 let topic = a.opt_str(0, "topic")?;
-                Ok(MontyObject::string(crate::docs::docs(topic.as_deref())))
+                let mut text = crate::docs::docs(topic.as_deref());
+                if topic.as_deref().is_some_and(|t| {
+                    matches!(
+                        t.trim().to_ascii_lowercase().as_str(),
+                        "functions" | "functions.md"
+                    )
+                }) {
+                    text.push_str(&crate::helpers::listing(&s.config(), true));
+                }
+                Ok(MontyObject::string(text))
             }
             _ => crate::host_tasks::call(&s, name, a),
         }
@@ -112,10 +121,15 @@ fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
 }
 
 pub(crate) fn python_for(session: Weak<Session>, config: &tuse_config::Config) -> Python {
-    Python::new(
+    let s = session.upgrade();
+    let mut py = Python::new(
         Arc::new(SessionHost::new(session)),
         config.settings.max_output,
-    )
+    );
+    if let Some(s) = s {
+        crate::helpers::install(&s, &mut py, config);
+    }
+    py
 }
 
 impl Session {

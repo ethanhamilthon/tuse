@@ -38,3 +38,5 @@ hooks:
 
 To run a script, call it: `run: sh("~/scripts/x.sh")`. Longer code goes into a `.py` file next to
 the config and `run: import notify`.
+
+Hooks can call helpers defined under `functions` in the config.

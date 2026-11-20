@@ -2,6 +2,7 @@
 
 ## 0.5.4
 
+- A built-in function called as a tool of its own (`ask`, `grep`, `sh`...) now runs as `python` code `name(**args)` instead of failing with "unknown tool".
 - Fixed: assistant text that had already streamed was shown twice when a tool call started in the same step.
 
 ## 0.5.3

@@ -52,7 +52,11 @@ impl Session {
         config: &tuse_config::Config,
     ) -> bool {
         let parsed = serde_json::from_str::<serde_json::Value>(&call.arguments);
-        let args = parsed.as_ref().cloned().unwrap_or_default();
+        let mut args = parsed.as_ref().cloned().unwrap_or_default();
+        let alias = crate::alias::code(&call.name, &args);
+        if let Some(code) = &alias {
+            args["code"] = code.clone().into();
+        }
         let input = args["code"]
             .as_str()
             .map_or_else(|| call.arguments.clone(), String::from);
@@ -80,11 +84,11 @@ impl Session {
                 "the arguments are not valid JSON: {}",
                 call.arguments
             ))
-        } else if call.name == TOOL {
+        } else if call.name == TOOL || alias.is_some() {
             self.python_call(&args, cancel, config)
         } else {
             Outcome::err(format!(
-                "unknown tool `{}`; the only tool is `{TOOL}`",
+                "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `ask` inside its `code`",
                 call.name
             ))
         };

@@ -33,3 +33,27 @@ fn window_slices_and_invalidate_clears_cache() {
     c.invalidate();
     assert!(c.entries.iter().all(|(_, cache)| cache.is_none()));
 }
+
+#[test]
+#[ignore]
+fn bench_stream() {
+    let p = Palette::new(&Default::default(), &Default::default());
+    let block = "## Section\n\nSome **bold** text with `code` and a [link](x). More words here to wrap around.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n- one\n- two\n\n";
+    let full = block.repeat(30000 / block.len() + 1);
+    let mut c = Chat::default();
+    c.push(Entry::Assistant(String::new()));
+    let start = std::time::Instant::now();
+    let mut frames = 0;
+    for chunk in full.as_bytes().chunks(40) {
+        if let Some(Entry::Assistant(s)) = c.get_mut(0) {
+            s.push_str(std::str::from_utf8(chunk).unwrap());
+        }
+        c.window(100, &p, 0, 50);
+        frames += 1;
+    }
+    eprintln!(
+        "BENCH {} bytes, {frames} frames, {:?}",
+        full.len(),
+        start.elapsed()
+    );
+}

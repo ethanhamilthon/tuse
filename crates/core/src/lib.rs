@@ -15,6 +15,7 @@ mod mode;
 mod models;
 mod print;
 mod prompt;
+mod questions;
 mod record;
 mod session;
 mod store;

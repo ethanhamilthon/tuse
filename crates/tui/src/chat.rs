@@ -26,7 +26,7 @@ pub enum Entry {
         calls: usize,
         cancelled: bool,
     },
-    /// A plain text block from `show()`.
+    /// A plain text block from `draw_ui()`.
     Print {
         id: String,
         text: String,

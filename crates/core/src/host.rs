@@ -13,7 +13,7 @@ const FUNCTIONS: &[&str] = &[
     "edit",
     "grep",
     "ask",
-    "show",
+    "draw_ui",
     "task_run",
     "task_add",
     "task_get",
@@ -50,7 +50,7 @@ impl Host for SessionHost {
         match name {
             "read" | "write" | "edit" | "grep" => tools::call(name, a, ctx, &s.cwd, &s.config()),
             "ask" => ask(&s, a, ctx),
-            "show" => {
+            "draw_ui" => {
                 let id = s
                     .print(a.str(0, "text")?, a.opt_str(1, "id")?)
                     .map_err(Fail::runtime)?;

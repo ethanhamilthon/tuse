@@ -5,7 +5,7 @@ which gets up to `hook_timeout` before Tuse exits). Events: `session_start`, `se
 `turn_start`, `turn_end`, `tool_start`, `tool_end`, `error`.
 
 Every call runs in a **fresh interpreter** with the same access as the agent's `python` tool:
-`read`, `write`, `edit`, `grep`, `sh`, `ask`, `show`, `task_*`, files, the whole standard library
+`read`, `write`, `edit`, `grep`, `sh`, `ask`, `draw_ui`, `task_*`, files, the whole standard library
 of the sandbox, `import` of `.py` files from the config folder, and the `prelude`. Nothing is kept
 between calls; keep state in files. A hook stops after `hook_timeout` seconds. An error shows as
 the notice `hook NAME: ...`; `print()` output is dropped. Tool calls a hook makes do not fire

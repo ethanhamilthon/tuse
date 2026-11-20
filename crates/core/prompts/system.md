@@ -12,8 +12,12 @@ They are always defined, no import needed. Files you change go through `write` a
 - `edit(path, old, new, replace_all=False)`: replace exact text in a file. `old` must be unique unless `replace_all` is set; read the file first. A wrong `old` raises `ValueError`.
 - `grep(pattern, path=".", glob=None, ignore_case=False, context=0, limit=100)`: search file contents with a regex; returns `path:line: text` per match. Respects `.gitignore`.
 - `sh(cmd, timeout=None, cwd=None, env=None)`: runs `bash -c cmd` in the working directory; returns an object with `.out` (stdout and stderr merged), `.code` (`None` when killed), `.ok`, `.timed_out` and `.task`. As the last expression it shows its output and exit code. Shell state does not carry over between calls. If the command is still running at the timeout it is not killed: it goes on as a background task and `.task` is its ID.
+Use `ask` for clarification, confirmation, or choices instead of asking in a text reply.
+
 - `ask(question, options=[])`: asks the user and waits for the answer; the user picks an option or writes their own. To ask without waiting, call it from `task_run`.
-- `show(text, id=None)`: shows plain multiline text in the user's UI (no Markdown) and returns a block ID; pass `id` to replace that block, so you can redraw a status in place. Not available in headless sessions.
+Use `draw_ui` for diagrams, tables, dashboards and live progress in chat.
+
+- `draw_ui(text, id=None)`: shows plain multiline text in the user's UI (no Markdown) and returns a block ID; pass `id` to replace that block, so you can redraw a status in place. Not available in headless sessions.
 - `task_run(code, name=None)`: starts a background Python REPL that runs `code`; returns an object with `.id`, `.name`, `.kind`, `.code`, `.status`, `.exit`, `.queue`, `.output`. It does not see your variables. Run a server or a watcher with `task_run('sh("npm run dev")')`. The REPL stays alive afterwards (`idle`); you get a message when it goes idle or exits.
 - `task_add(id, code)`: queues more code in the live REPL of a task, to run after the current code, in the same interpreter. Returns its place in the queue.
 - `task_get(id, lines=50)` (with the output tail in `.output`), `task_stop(id)`, `task_list()`.

@@ -79,13 +79,40 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             all[all.len() - n..].to_vec()
         }
         Entry::Tool {
+            timer,
             title,
             input,
             output,
             code,
             diffs,
             ..
-        } => crate::tool_view::tool(title, input, output.as_deref(), *code, diffs, width, p),
+        } => {
+            let mut lines =
+                crate::tool_view::tool(title, input, output.as_deref(), *code, diffs, width, p);
+            if let Some((start, limit, elapsed)) = timer
+                && !title.trim().is_empty()
+                && p.ui.tool_line != 0
+                && let Some(line) = lines.first_mut()
+            {
+                let label = format!(
+                    " {}/{}",
+                    duration(elapsed.unwrap_or_else(|| start.elapsed())),
+                    duration(*limit)
+                );
+                let left = width.saturating_sub(crate::text::width(&label));
+                line.truncate(1);
+                let title = clean(&title.split_whitespace().collect::<Vec<_>>().join(" "));
+                line.push(span(
+                    crate::text::clip(&title, left.saturating_sub(line_width(line)), "…"),
+                    Style::fg(p.dim),
+                ));
+                line.push(span(
+                    crate::text::clip(&label, width.saturating_sub(line_width(line)), ""),
+                    Style::fg(p.accent),
+                ));
+            }
+            lines
+        }
         Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad),
         Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad),
         Entry::Print { text, .. } => plain(text, width, Style::fg(p.fg), "", ""),

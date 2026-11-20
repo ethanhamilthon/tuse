@@ -25,6 +25,7 @@ pub enum Event {
         title: Option<String>,
     },
     ToolStart {
+        timeout: u64,
         id: String,
         tool: String,
         /// The code of `python`.

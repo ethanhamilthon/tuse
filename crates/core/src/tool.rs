@@ -63,7 +63,12 @@ impl Session {
         if !title.is_empty() {
             self.set_status(title.clone());
         }
+        let secs = args["timeout"]
+            .as_u64()
+            .unwrap_or(config.settings.tool_timeout)
+            .max(1);
         self.emit(Event::ToolStart {
+            timeout: secs,
             id: call.id.clone(),
             tool: call.name.clone(),
             input: input.clone(),
@@ -76,7 +81,7 @@ impl Session {
                 max,
             )
         } else if call.name == TOOL || alias.is_some() {
-            self.python_call(&args, cancel, config)
+            self.python_call(&args, cancel, config, secs)
         } else {
             Outcome::err(
                 format!(
@@ -120,6 +125,7 @@ impl Session {
         args: &serde_json::Value,
         cancel: &AtomicBool,
         config: &tuse_config::Config,
+        secs: u64,
     ) -> Outcome {
         let Some(code) = args["code"].as_str() else {
             return Outcome::err(
@@ -127,10 +133,6 @@ impl Session {
                 config.settings.max_output,
             );
         };
-        let secs = args["timeout"]
-            .as_u64()
-            .unwrap_or(config.settings.tool_timeout)
-            .max(1);
         let ctx = Ctx::new(cancel, Instant::now() + Duration::from_secs(secs)).adopting();
         let mut slot = self.python.lock().unwrap();
         let o = run_in_slot(

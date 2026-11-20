@@ -105,5 +105,19 @@ process_end 2 exit
 "
     );
     assert_eq!(again.title(), "hook hi");
+    // Hook runs are kept in the history and listed in /trace after a resume.
+    let hooks: Vec<_> = again
+        .trace()
+        .into_iter()
+        .filter(|it| it.role == "hook")
+        .map(|it| (it.summary, it.text))
+        .collect();
+    assert!(
+        hooks
+            .iter()
+            .any(|(summary, text)| summary == "record user_message ok"
+                && text.contains("text='hi'\nis_first=True")),
+        "{hooks:?}"
+    );
     common::cleanup(&dir);
 }

@@ -18,7 +18,8 @@ Each named hook has a persistent interpreter. Its events run in emission order, 
 hooks can run concurrently. Globals survive between events; event variables are refreshed for each
 call. A timeout resets that interpreter; `/reload` runs `process_end` on the old hooks, then
 `process_start` on the new ones, each in a fresh interpreter. Exceptions produce a
-`hook NAME: ...` notice. Output from `print()` is discarded. Code under `run` is passed as is:
+`hook NAME: ...` notice. Every run is kept in the session and listed in `/trace` as a `hook`
+item (name, event, ok or the error, duration and the event's variables). Output from `print()` is discarded. Code under `run` is passed as is:
 `$VAR` and `#{{cmd}}` are not expanded there (use `os.environ` and `sh`).
 
 Hooks have the agent's Python functions plus `set_title(text)`, which updates and saves the session

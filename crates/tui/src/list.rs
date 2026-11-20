@@ -113,6 +113,7 @@ fn role_color(p: &Palette, role: &str) -> Option<Color> {
         "thinking" => p.muted,
         "python" | "tool" => p.info,
         "output" | "notice" => p.dim,
+        "hook" => p.accent,
         "error" => p.err,
         _ => p.dim,
     }

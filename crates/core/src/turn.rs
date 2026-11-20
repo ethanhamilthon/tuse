@@ -69,9 +69,12 @@ impl Session {
         let error = st.turn_error.take();
         st.busy = false;
         let (elapsed, calls) = (st.turn_start.elapsed(), st.calls);
+        let (model, effort) = (st.model.clone(), st.effort.clone());
         let r = Record::TurnEnd {
             elapsed_ms: elapsed.as_millis() as u64,
             calls,
+            model: model.clone(),
+            effort: effort.clone(),
             cancelled: false,
         };
         self.push(&mut st, r);
@@ -80,6 +83,8 @@ impl Session {
         self.emit(Event::TurnEnd {
             elapsed,
             calls,
+            model,
+            effort,
             cancelled: false,
         });
         self.hook(
@@ -147,7 +152,7 @@ impl Session {
             },
             &mut |r| {
                 self.emit(Event::StreamReset);
-                self.emit(Event::Notice(format!(
+                self.emit(Event::Flash(format!(
                     "Retry {}/{} in {}s: {}",
                     r.attempt, r.max, r.delay, r.error
                 )));

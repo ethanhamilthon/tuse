@@ -45,6 +45,7 @@ pub struct App {
     pub asks: Vec<(String, String, Vec<String>)>,
     /// The directory the `@` picker lists, relative to `cwd`.
     pub file_dir: String,
+    pub flash: Option<(String, std::time::Instant)>,
     pub streaming: Option<usize>,
     pub thinking: Option<usize>,
     /// Lines scrolled up from the bottom of the chat.
@@ -61,7 +62,7 @@ impl App {
     pub fn new(session: Arc<Session>, cwd: PathBuf, config_arg: Option<PathBuf>) -> App {
         let palette = Palette::from_config(&session.config());
         let events = session.subscribe();
-        let chat = Chat::from_records(&session.records());
+        let chat = Chat::from_records(&session.records(), &|m| session.config().display_name(m));
         App {
             session,
             events,
@@ -82,6 +83,7 @@ impl App {
             ask_input: None,
             asks: vec![],
             file_dir: String::new(),
+            flash: None,
             streaming: None,
             thinking: None,
             scroll: 0,
@@ -90,6 +92,13 @@ impl App {
             steering: None,
             quit: false,
         }
+    }
+
+    pub fn flash(&mut self, text: impl AsRef<str>) {
+        self.flash = Some((
+            text.as_ref().lines().collect::<Vec<_>>().join(" "),
+            std::time::Instant::now(),
+        ));
     }
 
     pub fn notice(&mut self, text: impl Into<String>) {

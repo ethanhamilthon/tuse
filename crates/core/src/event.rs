@@ -34,10 +34,13 @@ pub enum Event {
     /// The working indicator has a new status.
     Status(String),
     Notice(String),
+    Flash(String),
     Error(String),
     TurnEnd {
         elapsed: Duration,
         calls: usize,
+        model: String,
+        effort: String,
         cancelled: bool,
     },
     Ask {

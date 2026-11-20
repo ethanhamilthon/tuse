@@ -67,12 +67,15 @@ impl Session {
             self.push(&mut st, r);
         }
         let elapsed = st.turn_start.elapsed();
+        let (model, effort) = (st.model.clone(), st.effort.clone());
         let calls = st.calls;
         self.push(
             &mut st,
             Record::TurnEnd {
                 elapsed_ms: elapsed.as_millis() as u64,
                 calls,
+                model: model.clone(),
+                effort: effort.clone(),
                 cancelled: true,
             },
         );
@@ -81,6 +84,8 @@ impl Session {
         self.emit(Event::TurnEnd {
             elapsed,
             calls,
+            model,
+            effort,
             cancelled: true,
         });
         self.hook(

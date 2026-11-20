@@ -16,6 +16,34 @@ pub fn names(host: &dyn Host) -> Vec<&'static str> {
 
 pub fn call(host: &dyn Host, name: &str, args: &CallArgs, ctx: &Ctx) -> Result<MontyObject, Fail> {
     let a = Args(args);
+    if name == "_tuse_which" {
+        use std::os::unix::fs::PermissionsExt;
+        let cmd = a.str(0, "cmd")?;
+        let path = a
+            .opt_str(1, "path")?
+            .or_else(|| {
+                host.env()
+                    .into_iter()
+                    .rev()
+                    .find(|(k, _)| k == "PATH")
+                    .map(|(_, v)| v)
+            })
+            .or_else(|| std::env::var("PATH").ok())
+            .unwrap_or_default();
+        let dirs = if cmd.contains('/') { "" } else { &path };
+        for dir in std::env::split_paths(dirs) {
+            let p = dir.join(&cmd);
+            if host
+                .cwd()
+                .join(&p)
+                .metadata()
+                .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+            {
+                return Ok(MontyObject::string(p.display().to_string()));
+            }
+        }
+        return Ok(MontyObject::none());
+    }
     if name != "sh" {
         return host.call(name, &a, ctx);
     }

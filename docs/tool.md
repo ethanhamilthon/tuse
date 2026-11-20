@@ -18,9 +18,13 @@ network, no pip packages, but `pathlib`, `open`, `os`, `json`, `re`, `datetime`,
 work. The whole filesystem is readable and writable. A `.py` file in the config folder (next to
 `main.yaml`) can be imported. Paths are absolute, `~/...` or relative to the working directory.
 
+Tuse also bundles `glob.glob` and `iglob`, POSIX `shlex.split`, `quote` and `join`, and
+`shutil.which` and `copyfile`. These are subsets, not the entire CPython modules.
+
 Monty is not CPython: dynamic `__import__` and `compile` are unavailable, some standard
 library modules are missing, `open` cannot open `/dev/null` or `/dev/tty`, and `re.sub`
-does not accept a callable replacement. Use `sh` when a command needs native OS facilities.
+does not accept a callable replacement. Monty 1.6 also lacks `re.subn`, `Path.home()` and
+ordering for `Path` objects: use `Path(os.environ["HOME"])` and `sorted(paths, key=str)`. Use `sh` when a command needs native OS facilities.
 
 The functions (`read`, `grep`, `ask`, `sh`...) live inside `python`; they are not tools. When a
 model still calls one as a tool of its own, Tuse runs it as `python` code `name(**args)`, and the

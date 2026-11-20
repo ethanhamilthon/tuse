@@ -42,6 +42,10 @@ fn the_interpreter_works_like_a_repl_with_sh_files_and_limits() {
     let no = AtomicBool::new(false);
     let mut go = |code: &str| run(&mut py, code, 5, &no);
 
+    let (out, ok) = go(
+        "import glob, shlex, shutil\nassert shlex.split(shlex.join([\"a'b\", '', 'x y'])) == [\"a'b\", '', 'x y']\nassert glob.glob('*.py') == ['helpers.py']\nshutil.copyfile('helpers.py', 'copy.txt')\nassert shutil.which('sh', path='/bin') is not None",
+    );
+    assert!(ok, "{out}");
     // State lives between calls; print and the last expression are both shown.
     assert_eq!(go("x = 20\nprint('a')"), ("a".into(), true));
     assert_eq!(go("x + 1"), ("21".into(), true));

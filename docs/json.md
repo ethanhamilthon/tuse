@@ -8,7 +8,7 @@ go to stderr. Closing stdin, `shutdown`, SIGINT, SIGTERM or SIGHUP close the ses
 
 ```
 > {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"client":{"name":"ed"}}}
-< {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"tuse":"0.5.4","session":{...},"model":"p/m","effort":"default","capabilities":{...}}}
+< {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"tuse":"0.6.0","session":{...},"model":"p/m","effort":"default","capabilities":{...}}}
 > {"jsonrpc":"2.0","id":2,"method":"turn.submit","params":{"text":"fix the test"}}
 < {"jsonrpc":"2.0","id":2,"result":{"inputId":1,"queued":false}}
 < {"jsonrpc":"2.0","method":"event","params":{"type":"text","text":"Let me"}}

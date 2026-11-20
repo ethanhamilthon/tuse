@@ -62,6 +62,7 @@ fn submit(s: &Arc<Session>, p: &Value) -> Reply {
     let refs = tuse_core::Refs {
         images: (1..).zip(paths.into_iter().map(Into::into)).collect(),
         files: str_list(p, "files")?.into_iter().map(Into::into).collect(),
+        cwd: s.cwd.clone(),
         strict: true,
         ..Default::default()
     };

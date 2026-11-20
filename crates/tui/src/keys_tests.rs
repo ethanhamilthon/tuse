@@ -30,7 +30,7 @@ fn editing_withdraws_only_the_waiting_tui_message() {
     let session = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg.clone()),
-        headless: false,
+        mode: tuse_core::Mode::Tui,
         resume: None,
     })
     .unwrap();
@@ -91,7 +91,7 @@ fn editing_withdraws_only_the_waiting_tui_message() {
 
 #[test]
 fn shortcuts_copy_cut_and_select_without_losing_input() {
-    let mut app = crate::app::test_app("selection", true);
+    let mut app = crate::app::test_app("selection");
     let press = |app: &mut App, code, mods| app.key(KeyEvent::new(code, mods), 10);
     for primary in [KeyModifiers::CONTROL, KeyModifiers::SUPER] {
         app.paste("alpha beta");
@@ -115,7 +115,7 @@ fn shortcuts_copy_cut_and_select_without_losing_input() {
 
 #[test]
 fn russian_layout_preserves_typing_and_routes_modified_keys() {
-    let mut app = crate::app::test_app("layout", true);
+    let mut app = crate::app::test_app("layout");
     let press = |app: &mut App, c, mods| app.key(KeyEvent::new(KeyCode::Char(c), mods), 10);
     press(&mut app, 'ф', KeyModifiers::NONE);
     assert_eq!(app.editor.text(), "ф");
@@ -128,7 +128,7 @@ fn russian_layout_preserves_typing_and_routes_modified_keys() {
 
 #[test]
 fn streamed_text_is_not_repeated_after_a_tool_delta() {
-    let mut app = crate::app::test_app("dup", true);
+    let mut app = crate::app::test_app("dup");
     let n = app.chat.len();
     app.handle_event(Event::Text("Let me check.".into()));
     app.handle_event(Event::ToolDelta {

@@ -168,9 +168,7 @@ impl Session {
         question: &str,
         options: Vec<String>,
     ) -> Result<(String, Receiver<String>), String> {
-        if self.headless {
-            return Err("no TUI is attached to this session (headless)".into());
-        }
+        self.require_client("ask")?;
         let id = format!("a{}", self.ask_seq.fetch_add(1, Ordering::Relaxed) + 1);
         let (tx, rx) = channel();
         self.asks.lock().unwrap().insert(id.clone(), tx);

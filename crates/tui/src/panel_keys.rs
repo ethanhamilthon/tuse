@@ -42,7 +42,7 @@ mod tests {
 
     #[test]
     fn left_right_steps_through_trace_items_without_wrapping() {
-        let mut app = crate::app::test_app("trace-nav", true);
+        let mut app = crate::app::test_app("trace-nav");
         app.trace = vec![
             ("user", "hi".into()),
             ("agent", "hello".into()),

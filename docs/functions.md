@@ -27,12 +27,13 @@ Use `ask` for clarification, confirmation, or choices instead of asking in a tex
 
 - `ask(question, options=[])`: asks the user and **waits** for the answer. The user picks an option
   or writes their own answer (the last row of the list), so the result is any text. To ask without
-  waiting, call it from a task: `task_run('print(ask("Deploy?", ["yes", "no"]))')`.
+  waiting, call it from a task (not headless): `task_run('print(ask("Deploy?", ["yes", "no"]))')`.
 Use `draw_ui` for diagrams, tables, dashboards and live progress in chat.
 
 - `draw_ui(text, id=None)`: shows plain multiline text in the user's UI, without Markdown, and returns
   a block ID. `draw_ui(text, id=ID)` replaces that block, so a script can redraw its own interface in
-  place. It raises `RuntimeError` in headless sessions.
+  place.
+- Headless (`tuse -p`): `ask` and `draw_ui` raise `RuntimeError`, in tasks and hooks too.
 - `task_run(code, name=None)`: starts a **background Python REPL** that runs `code` (a string). It
   is a new interpreter with the same functions and the filesystem, but it does not
   see your variables. Run a server with `task_run('sh("npm run dev")')`. `print()` and the value of

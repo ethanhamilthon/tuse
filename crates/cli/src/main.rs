@@ -11,8 +11,10 @@ use tuse_core::{Options, Session};
 const USAGE: &str = "tuse - minimal AI coding agent
 
 USAGE
-  tuse [--config PATH] [--resume ID]       open the TUI
-  tuse -p [PROMPT|-] [--config PATH] [--resume ID]
+  tuse [-c|--config PATH] [-r|--resume ID] open the TUI; -c picks the config file,
+                                           -r ID opens a saved session (its ID is printed
+                                           to stderr on exit, see /resume)
+  tuse -p [PROMPT|-] [-c PATH] [-r ID]
                                            headless (`-` reads the prompt from stdin):
                                            runs the prompt to the end, replies to stdout,
                                            the session ID to stderr; exit code 1 on an error
@@ -70,7 +72,11 @@ fn start(a: &Args) -> Result<(), String> {
     let session = Session::open(Options {
         cwd: cwd.clone(),
         config: config.clone(),
-        headless,
+        mode: if headless {
+            tuse_core::Mode::Headless
+        } else {
+            tuse_core::Mode::Tui
+        },
         resume: a.value(&["--resume", "-r"]),
     })?;
     if headless {

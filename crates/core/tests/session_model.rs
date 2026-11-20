@@ -5,7 +5,7 @@ fn open(cfg: &Path, cwd: &Path, resume: Option<String>) -> std::sync::Arc<Sessio
     Session::open(Options {
         cwd: cwd.to_path_buf(),
         config: Some(cfg.to_path_buf()),
-        headless: true,
+        mode: tuse_core::Mode::Headless,
         resume,
     })
     .unwrap()

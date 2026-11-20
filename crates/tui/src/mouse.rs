@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn the_wheel_scrolls_the_chat_and_a_click_moves_the_cursor() {
-        let mut app = crate::app::test_app("mouse", true);
+        let mut app = crate::app::test_app("mouse");
         let step = app.palette.ui.scroll_step as usize;
         app.mouse(event(MouseEventKind::ScrollUp, 0, 0));
         assert_eq!(app.scroll, step);
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn an_ask_sends_the_typed_text_else_the_selected_option() {
-        let mut app = crate::app::test_app("ask", false);
+        let mut app = crate::app::test_app("ask");
         let s = app.session.clone();
         app.editor.insert("draft");
         let mut ask = |options: &[&str], typed: &str| {

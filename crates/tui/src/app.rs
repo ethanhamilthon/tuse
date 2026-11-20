@@ -132,7 +132,7 @@ impl App {
         let opened = Session::open(Options {
             cwd: self.cwd.clone(),
             config: self.config_arg.clone(),
-            headless: false,
+            mode: tuse_core::Mode::Tui,
             resume: resume.clone(),
         });
         let (session, err) = match opened {
@@ -141,7 +141,7 @@ impl App {
                 let fresh = Session::open(Options {
                     cwd: self.cwd.clone(),
                     config: self.config_arg.clone(),
-                    headless: false,
+                    mode: tuse_core::Mode::Tui,
                     resume: None,
                 });
                 match fresh {
@@ -199,13 +199,13 @@ pub fn test_home() {
 }
 
 #[cfg(test)]
-pub fn test_app(name: &str, headless: bool) -> App {
+pub fn test_app(name: &str) -> App {
     test_home();
     let cwd = std::env::temp_dir().join(format!("tuse-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&cwd).unwrap();
     let s = Session::open(Options {
         cwd: cwd.clone(),
-        headless,
+        mode: tuse_core::Mode::Tui,
         config: None,
         resume: None,
     })

@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn usage_panel_styles_keys_and_context() {
-        let app = crate::app::test_app("usage", true);
+        let app = crate::app::test_app("usage");
         let p = &app.palette;
         let mut pnl = panel(&app.session, p);
         let lines = pnl.lines(80, 16, p);

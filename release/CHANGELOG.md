@@ -6,6 +6,7 @@
 - A new session creates its folder in `~/.tuse` with the first message; sessions closed before it leave nothing. Tests no longer write to `~/.tuse`.
 - An unknown `effort` in the config shows a notice with the valid values (it still falls back to `default`).
 - Compaction is on by default: without `compact_at`, it starts at 60% of the model's `window` from `models:`. `compact_at: 0` turns it off.
+- Headless mode (`tuse -p`): the system prompt tells the agent there is no user, and `ask`/`draw_ui` raise a clear `RuntimeError`. New `docs("headless")` page; `-c/--config` and `-r/--resume` are documented.
 - Fixed: assistant text that had already streamed was shown twice when a tool call started in the same step.
 
 ## 0.5.3

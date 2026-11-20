@@ -19,7 +19,7 @@ use tuse_py::Python;
 pub struct Session {
     pub id: String,
     pub cwd: PathBuf,
-    pub headless: bool,
+    pub mode: Mode,
     pub tasks: Tasks,
     pub(crate) dir: Mutex<Option<SessionDir>>,
     pub(crate) config: RwLock<Arc<Config>>,
@@ -55,11 +55,33 @@ pub(crate) struct State {
     pub meta: Meta,
 }
 
+/// Who is on the other side of the session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Tui,
+    /// `tuse -p`: one prompt, nobody to answer.
+    Headless,
+    /// `tuse json`: a client drives the session over JSON-RPC.
+    Json,
+}
+
+impl Session {
+    /// `ask` and `draw_ui` need someone to show them to.
+    pub(crate) fn require_client(&self, what: &str) -> Result<(), String> {
+        if self.mode == Mode::Headless {
+            return Err(format!(
+                "{what} is unavailable in headless mode (tuse -p): there is no user to answer or see it; decide yourself"
+            ));
+        }
+        Ok(())
+    }
+}
+
 pub struct Options {
     pub cwd: PathBuf,
     /// `--config PATH`; without it the config is searched for on every (re)load.
     pub config: Option<PathBuf>,
-    pub headless: bool,
+    pub mode: Mode,
     /// Resume this session instead of creating a new one.
     pub resume: Option<String>,
 }
@@ -134,7 +156,7 @@ impl Session {
             } else {
                 opts.cwd
             },
-            headless: opts.headless,
+            mode: opts.mode,
             tasks: Tasks::new(path.join("tasks")),
             dir: Mutex::new(Some(dir)),
             config: RwLock::new(Arc::new(config)),

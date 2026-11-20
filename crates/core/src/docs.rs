@@ -16,6 +16,11 @@ const TOPICS: &[(&str, &str, &str)] = &[
         include_str!("../../../docs/functions.md"),
     ),
     (
+        "headless",
+        "tuse -p: running one prompt from scripts, stdout/stderr, exit codes",
+        include_str!("../../../docs/headless.md"),
+    ),
+    (
         "commands",
         "CLI flags, TUI slash commands, steering and /trace",
         include_str!("../../../docs/commands.md"),

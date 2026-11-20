@@ -5,9 +5,7 @@ impl Session {
     /// Shows `text` in the TUI as a plain block and returns its ID.
     /// With `id`, the text of that earlier block is replaced instead.
     pub fn print(&self, text: String, id: Option<String>) -> Result<String, String> {
-        if self.headless {
-            return Err("no TUI is attached to this session (headless)".into());
-        }
+        self.require_client("draw_ui")?;
         let mut ids = self.prints.lock().unwrap();
         let id = match id {
             Some(id) if ids.contains(&id) => id,

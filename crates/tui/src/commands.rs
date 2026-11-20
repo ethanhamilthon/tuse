@@ -131,7 +131,7 @@ impl App {
         let value = p.current().map(|i| i.value.clone());
         match (&p.kind, value) {
             (Kind::Command, Some(v)) => {
-                self.editor.clear();
+                self.cut_token();
                 self.run_command(&v);
             }
             (Kind::Prompt, Some(v)) => {

@@ -18,14 +18,14 @@ impl App {
         if self.steering.is_some() || self.picker.as_ref().is_some_and(|p| !p.kind.is_token()) {
             return;
         }
-        let (start, token) = self.editor.token();
+        let (_, token) = self.editor.token();
         if self.dismissed.as_deref() == Some(&token) {
             return;
         }
         self.dismissed = None;
         let mut chars = token.chars();
         let (kind, query) = match chars.next() {
-            Some('/') if start == 0 => (Kind::Command, chars.as_str()),
+            Some('/') => (Kind::Command, chars.as_str()),
             Some('#') if !self.session.config().prompts.is_empty() => {
                 (Kind::Prompt, chars.as_str())
             }

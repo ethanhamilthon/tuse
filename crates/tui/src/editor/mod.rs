@@ -32,6 +32,25 @@ impl Editor {
         self.range_text(0, self.buf.len())
     }
 
+    pub fn insert_image(&mut self, path: PathBuf) {
+        let n = 1 + self.atoms.iter().filter(|a| a.image.is_some()).count();
+        self.insert_atom(&format!("[Image #{n}]"), Some(path));
+    }
+
+    pub fn text_expanded(&self) -> String {
+        self.buf
+            .iter()
+            .map(|c| match self.atom(*c) {
+                Some(Atom {
+                    label,
+                    image: Some(path),
+                }) => format!("{}: {}]", label.trim_end_matches(']'), path.display()),
+                Some(a) => a.label.clone(),
+                None => c.to_string(),
+            })
+            .collect()
+    }
+
     fn range_text(&self, a: usize, b: usize) -> String {
         self.buf[a..b]
             .iter()
@@ -206,7 +225,15 @@ mod tests {
         e.backspace();
         assert_eq!(e.text(), "a  b");
         let mut e = Editor::default();
-        e.insert_atom("[Image #1: /x.png]", Some("/x.png".into()));
+        e.insert_image("/x.png".into());
+        assert_eq!(e.text(), "[Image #1]");
+        assert_eq!(e.text_expanded(), "[Image #1: /x.png]");
+        e.insert_image("/y.png".into());
+        assert_eq!(e.text(), "[Image #1][Image #2]");
+        e.backspace();
+        e.insert_image("/z.png".into());
+        assert_eq!(e.text(), "[Image #1][Image #3]");
+        e.backspace();
         assert_eq!(e.images(), [PathBuf::from("/x.png")]);
         assert_eq!(e.token().1, "");
     }

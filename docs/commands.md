@@ -32,3 +32,5 @@ current session; a new session takes them from the config; `/resume` and `/reloa
 change the model of an old session.
 
 `/config` opens the full resolved YAML configuration, including expanded API keys. Avoid sharing it without redaction. Esc closes the panel.
+
+Shortcuts also work with the Russian keyboard layout when the terminal reports modified Cyrillic keys (for example, with the kitty keyboard protocol).

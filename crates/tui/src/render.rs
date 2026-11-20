@@ -65,7 +65,16 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         Entry::Reasoning(text) if text.trim().is_empty() => vec![],
         Entry::Reasoning(text) => {
             let st = Style::fg(p.muted).italic();
-            let all = plain(text.trim(), width, st, REASONING_PREFIX, &pad);
+            let text = text.trim();
+            // Only the last lines are shown; wrapping the rest is wasted work.
+            let cut = usize::try_from(p.ui.reasoning_line)
+                .ok()
+                .and_then(|n| text.rmatch_indices('\n').nth(n.saturating_sub(1)));
+            let (text, first) = match cut {
+                Some((i, _)) => (&text[i + 1..], pad.as_str()),
+                None => (text, REASONING_PREFIX),
+            };
+            let all = plain(text, width, st, first, &pad);
             let n = tuse_config::limit(p.ui.reasoning_line, all.len());
             all[all.len() - n..].to_vec()
         }

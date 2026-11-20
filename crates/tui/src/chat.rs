@@ -41,6 +41,9 @@ type Cache = Option<(usize, Vec<Line>)>;
 #[derive(Default)]
 pub struct Chat {
     entries: Vec<(Entry, Cache)>,
+    /// The reply that is changing (streaming) and its rendered finished blocks.
+    hot: Option<usize>,
+    stream: Option<crate::md_stream::Prefix>,
 }
 
 impl Chat {
@@ -115,12 +118,17 @@ impl Chat {
     pub fn get_mut(&mut self, i: usize) -> Option<&mut Entry> {
         let slot = self.entries.get_mut(i)?;
         slot.1 = None;
+        if matches!(slot.0, Entry::Assistant(_)) {
+            self.hot = Some(i);
+        }
         Some(&mut slot.0)
     }
 
     pub fn remove(&mut self, i: usize) {
         if i < self.entries.len() {
             self.entries.remove(i);
+            self.hot = None;
+            self.stream = None;
         }
     }
 
@@ -154,6 +162,7 @@ impl Chat {
     }
 
     pub fn invalidate(&mut self) {
+        self.stream = None;
         for (_, cache) in &mut self.entries {
             *cache = None;
         }
@@ -171,9 +180,15 @@ impl Chat {
         let gap = p.ui.message_gap as usize;
         let mut total = 0usize;
         let mut non_empty = false;
-        for (e, cache) in &mut self.entries {
+        for (i, (e, cache)) in self.entries.iter_mut().enumerate() {
             if cache.as_ref().is_none_or(|(w, _)| *w != width) {
-                *cache = Some((width, render(e, width, p)));
+                let lines = match e {
+                    Entry::Assistant(t) if self.hot == Some(i) => {
+                        crate::md_stream::render(&mut self.stream, i, t, width, p)
+                    }
+                    _ => render(e, width, p),
+                };
+                *cache = Some((width, lines));
             }
             let len = cache.as_ref().unwrap().1.len();
             if len == 0 {

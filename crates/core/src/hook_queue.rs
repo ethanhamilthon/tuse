@@ -9,7 +9,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use tuse_config::Config;
-use tuse_py::{Ctx, MontyObject, NEVER};
+use tuse_py::{Ctx, MontyObject};
 
 type Vars = Vec<(String, MontyObject)>;
 
@@ -31,6 +31,7 @@ fn describe(vars: &Vars) -> String {
 pub struct HookQueue {
     pub tx: Sender<Vars>,
     pub done: Receiver<()>,
+    pub interrupt: Arc<AtomicBool>,
     pub stale: Arc<AtomicBool>,
 }
 impl HookQueue {
@@ -38,18 +39,22 @@ impl HookQueue {
         let (tx, rx) = mpsc::channel::<Vars>();
         let (finish, done) = mpsc::channel();
         let stale = Arc::new(AtomicBool::new(false));
-        let cancelled = stale.clone();
+        let retired = stale.clone();
+        let interrupt = Arc::new(AtomicBool::new(false));
+        let cancelled = interrupt.clone();
         std::thread::spawn(move || {
             let make = || python_for(session.clone(), &config, crate::host::Origin::Hook);
             let mut py = make();
             for vars in rx {
-                if cancelled.load(Ordering::Acquire) {
+                cancelled.store(false, Ordering::Release);
+                if retired.load(Ordering::Acquire) {
                     break;
                 }
                 let ctx = Ctx::new(
-                    &NEVER,
+                    &cancelled,
                     Instant::now() + Duration::from_secs(config.settings.hook_timeout.max(1)),
-                );
+                )
+                .adopting();
                 let event = vars
                     .iter()
                     .find(|(k, _)| k == "event")
@@ -77,7 +82,12 @@ impl HookQueue {
             }
             let _ = finish.send(());
         });
-        Self { tx, done, stale }
+        Self {
+            tx,
+            done,
+            stale,
+            interrupt,
+        }
     }
 }
 
@@ -109,17 +119,19 @@ impl Session {
                 .get(&name)
                 .is_some_and(|h| h.events.iter().any(|e| e == "process_end"))
             {
-                waiting.push((q.done, q.stale));
+                waiting.push((q.done, q.stale, q.interrupt));
             } else {
-                q.stale.store(true, std::sync::atomic::Ordering::Release);
+                q.stale.store(true, Ordering::Release);
+                q.interrupt.store(true, Ordering::Release);
             }
         }
-        for (done, stale) in waiting {
+        for (done, stale, interrupt) in waiting {
             if done
                 .recv_timeout(deadline.saturating_duration_since(Instant::now()))
                 .is_err()
             {
                 stale.store(true, Ordering::Release);
+                interrupt.store(true, Ordering::Release);
             }
         }
     }

@@ -73,10 +73,8 @@ impl App {
                     self.finish_answer(None);
                     return;
                 }
-                if self.session.busy() {
-                    self.session.cancel();
-                    self.steering = None;
-                }
+                self.session.cancel();
+                self.steering = None;
             }
             KeyCode::Enter if shift || alt => e.insert("\n"),
             KeyCode::Char('j') if ctrl => e.insert("\n"),

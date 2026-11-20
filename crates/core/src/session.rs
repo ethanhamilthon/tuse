@@ -168,7 +168,7 @@ impl Session {
         if self.dir.lock().unwrap().is_none() {
             return;
         }
-        self.cancel();
+        self.cancel_turn();
         self.tasks.stop_all();
         self.state.lock().unwrap().asks.clear();
         self.finish_hooks(reason);

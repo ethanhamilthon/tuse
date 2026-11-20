@@ -39,6 +39,7 @@ impl App {
             Event::Text(t) => self.stream(t, false),
             Event::Reasoning(t) => self.stream(t, true),
             Event::StreamReset => {
+                self.streamed_text = false;
                 let mut drop: Vec<usize> = [self.streaming.take(), self.thinking.take()]
                     .into_iter()
                     .flatten()
@@ -50,11 +51,12 @@ impl App {
                 }
             }
             Event::Assistant { text } => {
-                if self.streaming.is_none() && !text.trim().is_empty() {
+                if !self.streamed_text && self.streaming.is_none() && !text.trim().is_empty() {
                     self.chat.push(Entry::Assistant(text));
                 }
                 self.streaming = None;
                 self.thinking = None;
+                self.streamed_text = false;
             }
             Event::ToolDelta {
                 index, id, code, ..
@@ -212,6 +214,9 @@ impl App {
         {
             s.push_str(&t);
             return;
+        }
+        if !reasoning {
+            self.streamed_text = true;
         }
         let i = self.chat.len();
         self.chat.push(if reasoning {

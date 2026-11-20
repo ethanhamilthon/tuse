@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4
+
+- Fixed: assistant text that had already streamed was shown twice when a tool call started in the same step.
+
 ## 0.5.3
 
 - Each hook processes events in order in a persistent interpreter. Hooks receive turn context and can set the session title. Configured Python helpers are available to the agent, tasks and hooks.

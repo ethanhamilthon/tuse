@@ -68,6 +68,11 @@ impl Session {
             return Step::Stale;
         };
         for (id, input) in std::mem::take(&mut st.queue) {
+            if input.notification {
+                self.emit(Event::Notification(input.text.clone()));
+                self.push(&mut st, Record::Notification { text: input.text });
+                continue;
+            }
             if st.meta.title.is_empty() {
                 st.meta.title = input
                     .text

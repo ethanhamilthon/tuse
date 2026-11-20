@@ -3,6 +3,7 @@ use std::time::Duration;
 /// What a session tells its front ends (TUI or headless printer).
 #[derive(Debug, Clone)]
 pub enum Event {
+    Notification(String),
     User {
         id: crate::control::InputId,
         text: String,

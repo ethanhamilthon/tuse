@@ -70,7 +70,7 @@ fn notify(s: &Arc<Session>) -> tasks::Notify {
                 .map_or("none (killed)".to_string(), |c| c.to_string());
             format!("exited with code {exit}")
         };
-        s.submit(UserInput::text(format!(
+        s.submit(UserInput::notification(format!(
             "<notification>Task {} ({}) {what}. Last line: {last}. Output: `task_get(\"{}\").output`.</notification>",
             t.id, t.name, t.id
         )));

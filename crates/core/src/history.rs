@@ -59,7 +59,9 @@ fn flush_images(out: &mut Vec<Value>, images: &mut Vec<(&str, &[String])>) {
 
 fn conversation_only(r: &Record) -> Option<Value> {
     match r {
-        Record::User { text, .. } => Some(json!({"role": "user", "content": text})),
+        Record::User { text, .. } | Record::Notification { text } => {
+            Some(json!({"role": "user", "content": text}))
+        }
         Record::Assistant { text, .. } if !text.trim().is_empty() => {
             Some(json!({"role": "assistant", "content": text}))
         }
@@ -69,6 +71,7 @@ fn conversation_only(r: &Record) -> Option<Value> {
 
 fn full(r: &Record, prune: bool) -> Option<Value> {
     match r {
+        Record::Notification { .. } => conversation_only(r),
         Record::User { text, images, .. } => Some(user_message(text, images)),
         Record::Assistant {
             text, tool_calls, ..
@@ -173,4 +176,16 @@ fn message_tokens(m: &Value) -> u64 {
             _ => p.to_string().len() as u64 / 4,
         })
         .sum()
+}
+
+#[test]
+fn notification_history_keeps_api_role() {
+    let r = Record::Notification {
+        text: "ready".into(),
+    };
+    assert_eq!(serde_json::to_value(&r).unwrap()["t"], "notification");
+    assert_eq!(
+        full(&r, false),
+        Some(json!({"role":"user", "content":"ready"}))
+    );
 }

@@ -44,10 +44,3 @@ context, cost).
 - `fill`: the input has `surface` background; one status row below, working on the left and the
   model on the right.
 - `bar`: an `accent` vertical bar left of the input, a blank row, then the same status row.
-
-`settings.ui.tab_status` (default `true`) sets the terminal tab title to `tuse · <session title>`
-(OSC 2) and shows the state in the tab (OSC 9;4): working spins, a question pauses, an error is
-red, done and idle clear it. While working or waiting for an answer the state is re-sent every 5s
-(terminals clear it after 15-60s of silence); an error is sent once. Terminals without OSC 9;4 ignore it. On exit the old title comes back
-(xterm title stack). In tmux, enable `set -g set-titles on` to pass the title through. Set it to
-`false` to send neither; turning it off with `/reload` clears the title and the state.

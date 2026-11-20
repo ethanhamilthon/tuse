@@ -35,7 +35,7 @@ pub fn frame(ui: &UiSettings) -> Frame {
 }
 
 /// The input block: its frame, the visible editor `rows` and the status bars.
-pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String]) -> Vec<Line> {
+pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Vec<Line> {
     let p = &app.palette;
     let working = app
         .ask_input
@@ -104,6 +104,14 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String]) -> Vec<Line> {
             out.extend(body(&|_, _| (vec![], vec![])));
             out.push(border(p, w, ("", ""), "", &model, m));
         }
+    }
+    for (line, (a, b)) in out.iter_mut().skip(fr.head).zip(
+        app.editor
+            .selected_columns(app.input_cols)
+            .into_iter()
+            .skip(top),
+    ) {
+        crate::selection::highlight(line, fr.left + a, fr.left + b, Style::fg(p.bg).on(p.accent));
     }
     out
 }

@@ -31,14 +31,14 @@ pub fn tool(
         lines.insert(
             0,
             vec![
-                span(clip(TOOL_PREFIX, width, ""), head),
+                span(clip(TOOL_PREFIX, width, ""), Style::fg(p.dim)),
                 span(
                     clip(
                         &title,
                         width.saturating_sub(pad.len()),
                         if width > pad.len() { MORE } else { "" },
                     ),
-                    Style::fg(p.border),
+                    Style::fg(p.dim),
                 ),
             ],
         );
@@ -47,7 +47,7 @@ pub fn tool(
     let out = crate::render::clean(out);
     let all: Vec<&str> = out.trim_end().lines().collect();
     let shown = tuse_config::limit(p.ui.output_line, all.len());
-    let st = Style::fg(p.dim);
+    let st = Style::fg(p.border);
     for l in all.iter().take(shown) {
         let l = clip(l, width.saturating_sub(pad.len()), MORE);
         lines.push(vec![span(pad.clone(), st), span(l, st)]);
@@ -99,7 +99,7 @@ fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
     let all: Vec<&str> = d.diff.lines().collect();
     let mut out = vec![vec![span(
         format!("{pad}{}", clip(&d.path, room, MORE)),
-        Style::fg(p.dim),
+        Style::fg(p.border),
     )]];
     let shown = tuse_config::limit(p.ui.diff_line, all.len());
     let pairs = pair_windows(&all[..shown], room, MORE);
@@ -180,8 +180,8 @@ mod tests {
         let text = |line: &Line| line.iter().map(|s| s.text.as_str()).collect::<String>();
         let lines = preview(" Test\n long\x1b title ", &p);
         assert_eq!(text(&lines[0]), "* Test l…");
-        assert_eq!(lines[0][0].style.fg, p.info);
-        assert_eq!(lines[0][1].style.fg, p.border);
+        assert_eq!(lines[0][0].style.fg, p.dim);
+        assert_eq!(lines[0][1].style.fg, p.dim);
         assert_eq!(text(&lines[1]), "  first");
         assert_eq!(text(&preview(" ", &p)[0]), "* first");
         p.ui.tool_line = 0;

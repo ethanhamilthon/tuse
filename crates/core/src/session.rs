@@ -191,6 +191,7 @@ impl Session {
         self.finish_hooks("reload");
         *self.config.write().unwrap() = c.clone();
         if let Some(py) = self.python.lock().unwrap().as_mut() {
+            py.set_max_output(c.settings.max_output);
             crate::helpers::install(self, py, &c);
         }
         self.hook(

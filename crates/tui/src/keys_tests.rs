@@ -33,6 +33,14 @@ fn editing_withdraws_only_the_waiting_tui_message() {
     .unwrap();
     let mut app = App::new(session.clone(), dir.clone(), Some(cfg));
     let press = |app: &mut App, code| app.key(KeyEvent::new(code, KeyModifiers::NONE), 0);
+    app.editor.insert("draft /theme after");
+    app.editor.cursor = 12;
+    app.update_token_picker();
+    assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Command);
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(app.editor.text(), "draft  after");
+    assert_eq!(app.picker.take().unwrap().kind, Kind::Theme);
+    app.editor.clear();
     let (first, _) = session.submit(UserInput::text("first"));
     loop {
         if matches!(app.events.recv_timeout(Duration::from_secs(5)).unwrap(),

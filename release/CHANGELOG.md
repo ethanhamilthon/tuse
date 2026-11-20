@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix the tab state (OSC 9;4) disappearing on long turns and `ask` waits: it is re-sent every 5s while working or asking. Error and paused now send 100% so terminals draw a visible bar. Turning off `settings.ui.tab_status` with `/reload` restores the title and clears the state.
+
 ## 0.5.4
 
 Breaking: hook events and `run:` expansion changed, OSC 7501 was replaced (see below).

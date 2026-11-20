@@ -38,7 +38,7 @@ pub fn run(session: Arc<Session>, prompt: Option<String>) -> Result<(), String> 
                 eprintln!("tuse: error: {e}");
                 failed = true;
             }
-            Ok(Event::Notice(n)) => eprintln!("tuse: {n}"),
+            Ok(Event::Notice(n) | Event::Flash(n)) => eprintln!("tuse: {n}"),
             Ok(_) => {}
             Err(_) if !session.busy() => break,
             Err(_) => {}

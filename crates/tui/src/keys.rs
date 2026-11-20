@@ -132,7 +132,7 @@ impl App {
                     self.editor.clear_selection();
                 }
                 self.selection = Default::default();
-                self.notice("Copied.");
+                self.flash("Copied.");
             }
             Err(e) => self.error(e),
         }

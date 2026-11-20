@@ -81,15 +81,19 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         Entry::Print { text, .. } => plain(text, width, Style::fg(p.fg), "", ""),
         Entry::TurnEnd {
             elapsed,
-            calls,
+            model,
+            effort,
             cancelled,
         } => {
-            let word = if *cancelled {
-                "Cancelled after"
-            } else {
-                "Done in"
-            };
-            let text = format!("{word} {}{LABEL_SEP}{calls} calls", duration(*elapsed));
+            let mut parts = vec![];
+            if *cancelled {
+                parts.push("cancelled".to_string());
+            }
+            parts.push(duration(*elapsed));
+            if !model.is_empty() {
+                parts.push(format!("{model}/{effort}"));
+            }
+            let text = parts.join(LABEL_SEP);
             plain(&text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad)
         }
     }

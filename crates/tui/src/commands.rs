@@ -42,11 +42,13 @@ impl App {
                 Ok(()) => {
                     self.palette = Palette::from_config(&self.session.config());
                     self.palette_gen += 1;
-                    self.chat = crate::chat::Chat::from_records(&self.session.records());
+                    self.chat = crate::chat::Chat::from_records(&self.session.records(), &|m| {
+                        self.session.config().display_name(m)
+                    });
                     if let Some(panel) = &mut self.panel {
                         panel.invalidate();
                     }
-                    self.notice("Config reloaded.");
+                    self.flash("Config reloaded.");
                 }
                 Err(e) => self.error(format!("Reload failed: {e}")),
             },
@@ -61,7 +63,7 @@ impl App {
             .map(|m| item(m.title, m.updated.replace('T', " ").replace('Z', ""), m.id))
             .collect();
         if items.is_empty() {
-            self.notice("No other sessions in this folder.");
+            self.flash("No other sessions in this folder.");
             return;
         }
         self.picker = Some(Picker::new(Kind::Resume, "Resume", items));
@@ -118,7 +120,7 @@ impl App {
             .collect();
         if items.is_empty() {
             self.picker = None;
-            self.notice("No tasks. The agent starts them with `task_run()`.");
+            self.flash("No tasks. The agent starts them with `task_run()`.");
             return;
         }
         let selected = self

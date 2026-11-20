@@ -65,6 +65,10 @@ pub enum Record {
         elapsed_ms: u64,
         calls: usize,
         #[serde(default)]
+        model: String,
+        #[serde(default)]
+        effort: String,
+        #[serde(default)]
         cancelled: bool,
     },
 }

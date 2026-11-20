@@ -1,9 +1,12 @@
 use super::*;
 #[test]
 fn notifications_are_not_user_entries() {
-    let c = Chat::from_records(&[Record::Notification {
-        text: "ready".into(),
-    }]);
+    let c = Chat::from_records(
+        &[Record::Notification {
+            text: "ready".into(),
+        }],
+        &str::to_owned,
+    );
     assert!(matches!(&c.entries[0].0, Entry::Notice(t) if t == "ready"));
 }
 

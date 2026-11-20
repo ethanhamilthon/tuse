@@ -41,6 +41,7 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
         .ask_input
         .as_ref()
         .map(|a| a.1.lines().collect::<Vec<_>>().join(" "))
+        .or_else(|| app.flash.as_ref().map(|(text, _)| text.clone()))
         .unwrap_or_else(|| status::working(app));
     let model = status::model(app);
     let motion = app

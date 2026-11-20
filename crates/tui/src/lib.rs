@@ -115,6 +115,14 @@ fn main_loop(mut app: app::App) -> std::io::Result<String> {
                 immediate = true;
             }
         }
+        if app
+            .flash
+            .as_ref()
+            .is_some_and(|(_, since)| since.elapsed() >= Duration::from_secs(style::FLASH_SECS))
+        {
+            app.flash = None;
+            dirty = true;
+        }
         if app.session.busy() && last_tick.elapsed() >= Duration::from_millis(100) {
             app.tick += 1;
             last_tick = Instant::now();

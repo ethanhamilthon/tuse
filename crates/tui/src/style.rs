@@ -149,3 +149,5 @@ impl Palette {
         Self::new(&cfg.active_theme(), &cfg.settings.ui)
     }
 }
+
+pub const FLASH_SECS: u64 = 5;

@@ -23,7 +23,8 @@ pub enum Entry {
     Error(String),
     TurnEnd {
         elapsed: Duration,
-        calls: usize,
+        model: String,
+        effort: String,
         cancelled: bool,
     },
     /// A plain text block from `draw_ui()`.
@@ -43,7 +44,7 @@ pub struct Chat {
 }
 
 impl Chat {
-    pub fn from_records(records: &[Record]) -> Chat {
+    pub fn from_records(records: &[Record], display: &dyn Fn(&str) -> String) -> Chat {
         let mut c = Chat::default();
         for r in records {
             let e = match r {
@@ -82,11 +83,18 @@ impl Chat {
                 Record::Error { text } => Entry::Error(text.clone()),
                 Record::TurnEnd {
                     elapsed_ms,
-                    calls,
+                    model,
+                    effort,
                     cancelled,
+                    ..
                 } => Entry::TurnEnd {
                     elapsed: Duration::from_millis(*elapsed_ms),
-                    calls: *calls,
+                    model: if model.is_empty() {
+                        String::new()
+                    } else {
+                        display(model)
+                    },
+                    effort: effort.clone(),
                     cancelled: *cancelled,
                 },
                 _ => continue,

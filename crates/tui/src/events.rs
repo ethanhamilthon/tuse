@@ -65,18 +65,22 @@ impl App {
                 }
             }
             Event::Status(_) => {}
+            Event::Flash(t) => self.flash(t),
             Event::Notice(t) | Event::Notification(t) => self.notice(t),
             Event::Error(t) => self.error(t),
             Event::TurnEnd {
                 elapsed,
-                calls,
+                model,
+                effort,
                 cancelled,
+                ..
             } => {
                 self.streaming = None;
                 self.thinking = None;
                 self.chat.push(Entry::TurnEnd {
                     elapsed,
-                    calls,
+                    model: self.session.config().display_name(&model),
+                    effort,
                     cancelled,
                 });
             }

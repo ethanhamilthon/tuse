@@ -29,7 +29,9 @@ pub struct Connect {
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Settings {
-    pub compact_at: u64,
+    /// Unset: 60% of the model's `window` when it is known; `0` turns compaction off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compact_at: Option<u64>,
     pub max_output: usize,
     pub tool_timeout: u64,
     pub hook_timeout: u64,
@@ -43,7 +45,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            compact_at: 0,
+            compact_at: None,
             max_output: 4096,
             tool_timeout: 10,
             hook_timeout: 30,
@@ -147,11 +149,12 @@ impl Config {
         self.connect.iter().find(|c| c.name == name)
     }
 
-    /// The model-level threshold wins over `settings.compact_at`.
+    /// The model's `compact_at`, else `settings.compact_at`, else 60% of the model's window.
     pub fn compact_at(&self, full: &str) -> u64 {
-        self.model_def(full)
-            .and_then(|m| m.compact_at)
-            .unwrap_or(self.settings.compact_at)
+        let def = self.model_def(full);
+        def.and_then(|m| m.compact_at)
+            .or(self.settings.compact_at)
+            .unwrap_or_else(|| def.map_or(0, |m| m.window * 6 / 10))
     }
 
     pub fn display_name(&self, full: &str) -> String {

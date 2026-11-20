@@ -25,7 +25,7 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 | `effort` | `default` (sends no `reasoning_effort`), `low`, `medium`, `high`, `xhigh`, `max`. |
 | `connect` | List of `{name, base_url, api_key}` for OpenAI-compatible endpoints. |
 | `models` | List of `{name: provider/model, display, window, compact_at, prices}`. `prices` are dollars per 1M tokens: `in`, `out`, `cache` (cached reads) and `cache_write`. |
-| `settings.compact_at` | Context size that triggers compaction (0 turns it off). A model's `compact_at` wins. |
+| `settings.compact_at` | Context size that triggers compaction (0 turns it off). Unset: 60% of the model's `window` (off when the window is unknown). A model's `compact_at` wins. |
 | `settings.max_output` | Bytes of a tool result kept; longer output is cut in the middle. The agent is told the number. Default 4096. |
 | `settings.tool_timeout` | Seconds before a `python` call is stopped (a running `sh` goes on as a task; time spent in `ask` does not count). Default 10. The agent can pass its own `timeout`. |
 | `settings.hook_timeout` | Seconds before a hook is stopped. Default 30. |

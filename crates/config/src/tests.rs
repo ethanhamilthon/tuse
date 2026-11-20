@@ -38,6 +38,19 @@ fn includes_merge() {
     assert_eq!(c.settings.hook_timeout, 30);
     assert_eq!(c.hooks["h"].run, "sh(\"./h.sh\")");
     assert!(c.problems().is_empty());
+    w(
+        "main.yaml",
+        "models: [{name: p/a, window: 1000}, {name: p/b, window: 1000, compact_at: 0}]\n",
+    );
+    let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
+    assert_eq!(
+        (
+            c.compact_at("p/a"),
+            c.compact_at("p/b"),
+            c.compact_at("p/x")
+        ),
+        (600, 0, 0)
+    );
     w("main.yaml", "effort: hgih\n");
     let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
     assert_eq!(c.default_effort(), "default");
@@ -152,7 +165,7 @@ fn defaults_are_what_the_docs_promise() {
     let s = crate::Settings::default();
     assert_eq!(
         (s.compact_at, s.max_output, s.tool_timeout, s.hook_timeout),
-        (0, 4096, 10, 30)
+        (None, 4096, 10, 30)
     );
     assert_eq!((s.max_image_bytes, s.retries), (5 * 1024 * 1024, 5));
     let ui = &s.ui;

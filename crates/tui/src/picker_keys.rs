@@ -1,7 +1,8 @@
 use crate::{app::App, picker::Kind};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 impl App {
-    /// Returns true when the picker consumed the key.
+    /// Returns true when the picker consumed the key. While a modal picker
+    /// searches, text editing keys go on to the editor, which is its search box.
     pub(crate) fn picker_key(&mut self, k: KeyEvent, ctrl: bool, shift: bool) -> bool {
         let rows = self.picker_rows();
         let Some(p) = &mut self.picker else {
@@ -24,7 +25,7 @@ impl App {
                         self.next_ask();
                     }
                     k if k.is_token() => self.dismissed = Some(self.editor.token().1),
-                    _ => {}
+                    _ => self.restore_draft(),
                 }
             }
             KeyCode::Char('x') if ctrl && p.kind == Kind::Task => {
@@ -36,17 +37,26 @@ impl App {
             }
             _ if matches!(p.kind, Kind::Ask(_)) => {}
             _ if p.kind.is_token() => return false,
-            KeyCode::Char(c) if !ctrl => {
-                let q = format!("{}{c}", p.query);
-                p.filter(&q);
-            }
-            KeyCode::Backspace => {
-                let mut q = p.query.clone();
-                q.pop();
-                p.filter(&q);
-            }
-            _ => {}
+            _ => return !edits_text(k),
         }
         true
+    }
+}
+
+/// The keys that edit a one-line search: everything else (Shift+Enter, Ctrl+C,
+/// Ctrl+D...) is swallowed so it neither adds a line nor reaches the session.
+fn edits_text(k: KeyEvent) -> bool {
+    let primary = k
+        .modifiers
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER);
+    match k.code {
+        KeyCode::Char(c) => !primary || matches!(c, 'a' | 'e' | 'u' | 'k' | 'w' | 'v' | 'x'),
+        KeyCode::Backspace
+        | KeyCode::Delete
+        | KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::Home
+        | KeyCode::End => true,
+        _ => false,
     }
 }

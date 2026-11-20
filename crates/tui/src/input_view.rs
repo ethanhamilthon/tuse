@@ -50,7 +50,8 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
         .and_then(|(elapsed, _)| Motion::new(p, true, elapsed));
     let m = motion.as_ref();
     let mark = scroll_mark(app.scroll);
-    let steering = app.steering.is_some();
+    // A search typed into the editor is not the queued message.
+    let steering = app.steering.is_some() && app.saved_editor.is_none() && app.ask_input.is_none();
     let body =
         |decor: &dyn Fn(usize, usize) -> (Vec<crate::text::Span>, Vec<crate::text::Span>)| {
             rows.iter()

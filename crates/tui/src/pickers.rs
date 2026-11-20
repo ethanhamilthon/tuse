@@ -26,9 +26,9 @@ impl App {
             .filter(|p| p.kind == Kind::Model)
             .and_then(|p| p.current())
             .map_or(current, |i| i.value.clone());
-        let mut p = Picker::new(Kind::Model, "Model", items);
-        p.select(&selected);
-        self.picker = Some(p);
+        // A refresh keeps the search typed in the editor and re-applies it.
+        self.open_modal(Picker::new(Kind::Model, "Model", items))
+            .select(&selected);
         if self.session.remote_models().is_empty() {
             self.session.fetch_models();
         }
@@ -42,13 +42,12 @@ impl App {
             .iter()
             .map(|n| item(n.clone(), "", n.clone()))
             .collect();
-        let mut p = Picker::new(Kind::Theme, "Theme", items);
         let active = match config.theme_name() {
             "" => "default",
             name => name,
         };
-        p.select(active);
-        self.picker = Some(p);
+        self.open_modal(Picker::new(Kind::Theme, "Theme", items))
+            .select(active);
     }
 
     pub fn set_theme(&mut self, name: &str) {
@@ -66,11 +65,16 @@ impl App {
 }
 
 fn model_item(config: &Config, name: &str) -> Item {
-    let mut parts = vec![name.to_string()];
+    let shown = config.display_name(name);
+    let mut parts = if shown == name {
+        vec![]
+    } else {
+        vec![name.to_string()]
+    };
     if let Some(m) = config.model_def(name) {
         parts.extend(details(m));
     }
-    item(config.display_name(name), parts.join(" · "), name)
+    item(shown, parts.join(" · "), name)
 }
 
 fn details(m: &ModelDef) -> Vec<String> {
@@ -82,4 +86,31 @@ fn details(m: &ModelDef) -> Vec<String> {
         out.push(format!("${}/${} per 1M", p.input, p.out));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_detail_repeats_the_name_only_under_a_display_name() {
+        let def = |name: &str, display: &str| ModelDef {
+            name: name.into(),
+            display: display.into(),
+            window: 200_000,
+            ..Default::default()
+        };
+        let config = Config {
+            models: vec![def("c/opus", ""), def("c/sonnet", "Sonnet")],
+            ..Default::default()
+        };
+        let plain = model_item(&config, "c/opus");
+        assert_eq!(
+            (plain.label.as_str(), plain.detail.as_str()),
+            ("c/opus", "200.0k ctx")
+        );
+        let named = model_item(&config, "c/sonnet");
+        assert_eq!(named.detail, "c/sonnet · 200.0k ctx");
+        assert_eq!(model_item(&config, "c/other").detail, "");
+    }
 }

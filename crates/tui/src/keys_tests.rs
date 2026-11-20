@@ -1,5 +1,6 @@
 use super::*;
 use crate::expand_prompts::expand_prompts;
+use crate::picker::Kind;
 use std::collections::BTreeMap;
 use std::net::TcpListener;
 use std::time::Duration;
@@ -42,8 +43,11 @@ fn editing_withdraws_only_the_waiting_tui_message() {
     app.update_token_picker();
     assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Command);
     press(&mut app, KeyCode::Enter);
+    assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Theme);
+    assert!(app.editor.is_empty());
+    press(&mut app, KeyCode::Esc);
+    assert!(app.picker.is_none());
     assert_eq!(app.editor.text(), "draft  after");
-    assert_eq!(app.picker.take().unwrap().kind, Kind::Theme);
     app.editor.clear();
     let (first, _) = session.submit(UserInput::text("first"));
     loop {

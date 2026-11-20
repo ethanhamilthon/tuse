@@ -16,6 +16,7 @@ mod layout_keys;
 mod list;
 mod markdown;
 mod md_stream;
+mod modal;
 mod motion;
 mod mouse;
 mod osc;

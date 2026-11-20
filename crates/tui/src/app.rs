@@ -42,6 +42,8 @@ pub struct App {
     /// The token whose picker was dismissed with Esc; it stays closed until the token changes.
     pub dismissed: Option<String>,
     pub ask_input: Option<(String, String, Editor)>,
+    /// The input draft set aside while a modal picker uses the editor as its search box.
+    pub saved_editor: Option<Editor>,
     pub asks: Vec<(String, String, Vec<String>)>,
     /// The directory the `@` picker lists, relative to `cwd`.
     pub file_dir: String,
@@ -89,6 +91,7 @@ impl App {
             input_area: None,
             dismissed: None,
             ask_input: None,
+            saved_editor: None,
             asks: vec![],
             file_dir: String::new(),
             turn_error: None,

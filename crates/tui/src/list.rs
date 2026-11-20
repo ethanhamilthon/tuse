@@ -30,22 +30,12 @@ pub fn framed(title: &str, rows: Vec<Line>, w: usize, p: &Palette) -> Vec<Line> 
     out
 }
 
-/// The title of a picker: its name, the position and the query (or the typed answer).
+/// The title of a picker: its name and the position; the query is in the input.
 fn title_of(pk: &Picker) -> String {
-    if pk.title.is_empty() {
-        return String::new();
+    if pk.title.is_empty() || pk.is_free() || pk.shown.is_empty() {
+        return pk.title.clone();
     }
-    let at = if pk.is_free() || pk.shown.is_empty() {
-        String::new()
-    } else {
-        format!(" {}/{}", pk.selected + 1, pk.shown.len())
-    };
-    let q = if pk.query.is_empty() {
-        String::new()
-    } else {
-        format!(" › {}", pk.query)
-    };
-    format!("{}{at}{q}", pk.title)
+    format!("{} {}/{}", pk.title, pk.selected + 1, pk.shown.len())
 }
 
 /// The open picker as screen lines, at most `max` of them. Stores the number of rows

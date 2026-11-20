@@ -105,7 +105,7 @@ impl Renderer {
         });
         let cy = first + crow - input_top;
         out.queue(MoveTo((pad + fr.left + ccol) as u16, cy as u16))?;
-        if app.picker.as_ref().is_none_or(|p| p.kind.is_token()) {
+        if app.picker.as_ref().is_none_or(|p| !p.is_free()) {
             out.queue(Show)?;
         }
         out.queue(EndSynchronizedUpdate)?;

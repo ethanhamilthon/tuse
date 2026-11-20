@@ -7,6 +7,8 @@ impl App {
     pub fn paste_clipboard(&mut self) {
         let dir = tuse_core::tuse_home().join(&self.session.id).join("images");
         match crate::clipboard::read(&dir) {
+            // A search box takes no images.
+            Ok(Pasted::Image(_)) if self.searching() => {}
             Ok(Pasted::Image(path)) => {
                 let before = self.steering.map(|_| self.editor.buf.clone());
                 self.editor.insert_image(path);

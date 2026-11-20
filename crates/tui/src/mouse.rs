@@ -11,7 +11,7 @@ impl App {
                 && point.0 < a.row + a.height
                 && point.1 >= a.col
                 && point.1 < a.col + a.cols
-        }) && self.picker.as_ref().is_none_or(|p| p.kind.is_token());
+        }) && self.picker.as_ref().is_none_or(|p| !p.is_free());
         match m.kind {
             MouseEventKind::ScrollUp => {
                 self.wheel(-1);
@@ -74,7 +74,7 @@ impl App {
     }
 
     fn click(&mut self, x: usize, y: usize) {
-        if self.picker.as_ref().is_some_and(|p| !p.kind.is_token()) {
+        if self.picker.as_ref().is_some_and(|p| p.is_free()) {
             return;
         }
         let Some(a) = self.input_area else { return };
@@ -82,7 +82,9 @@ impl App {
             return;
         }
         self.editor.click(y - a.row + a.top, x - a.col, a.cols);
-        self.update_token_picker();
+        if !self.searching() {
+            self.update_token_picker();
+        }
     }
 }
 

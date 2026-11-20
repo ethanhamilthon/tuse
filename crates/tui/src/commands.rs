@@ -70,7 +70,7 @@ impl App {
             self.flash("No other sessions in this folder.");
             return;
         }
-        self.picker = Some(Picker::new(Kind::Resume, "Resume", items));
+        self.open_modal(Picker::new(Kind::Resume, "Resume", items));
     }
 
     /// The whole session as a list; Enter opens an item, Esc in the item comes back here.
@@ -84,10 +84,9 @@ impl App {
             })
             .collect();
         self.trace = all.into_iter().map(|it| (it.role, it.text)).collect();
-        let mut p = Picker::new(Kind::Trace, "Trace", items);
         let last = self.trace.len().saturating_sub(1);
-        p.select(&select.unwrap_or(last).to_string());
-        self.picker = Some(p);
+        self.open_modal(Picker::new(Kind::Trace, "Trace", items))
+            .select(&select.unwrap_or(last).to_string());
         self.panel = None;
         self.trace_item = None;
     }
@@ -123,7 +122,7 @@ impl App {
             })
             .collect();
         if items.is_empty() {
-            self.picker = None;
+            self.close_modal();
             self.flash("No tasks. The agent starts them with `task_run()`.");
             return;
         }
@@ -132,16 +131,20 @@ impl App {
             .as_ref()
             .and_then(|p| p.current())
             .map(|i| i.value.clone());
-        let mut p = Picker::new(Kind::Task, "Tasks (enter: output, ctrl+x: stop)", items);
+        let p = Picker::new(Kind::Task, "Tasks (enter: output, ctrl+x: stop)", items);
+        let p = self.open_modal(p);
         if let Some(v) = selected {
             p.select(&v);
         }
-        self.picker = Some(p);
     }
 
     /// Enter on a picker item.
     pub fn choose(&mut self) {
         let Some(p) = self.picker.take() else { return };
+        // Effort follows Model and keeps the draft aside; everything else gives it back.
+        if !(p.kind == Kind::Model && p.current().is_some()) {
+            self.restore_draft();
+        }
         let value = p.current().map(|i| i.value.clone());
         match (&p.kind, value) {
             (Kind::Command, Some(v)) => {
@@ -164,9 +167,8 @@ impl App {
             (Kind::Model, Some(v)) => {
                 let (_, effort) = self.session.model();
                 let items = EFFORTS.iter().map(|e| item(*e, "", *e)).collect();
-                let mut ep = Picker::new(Kind::Effort(v.clone()), format!("Effort for {v}"), items);
-                ep.select(&effort);
-                self.picker = Some(ep);
+                let ep = Picker::new(Kind::Effort(v.clone()), format!("Effort for {v}"), items);
+                self.open_modal(ep).select(&effort);
             }
             (Kind::Effort(model), Some(v)) => {
                 self.session.set_model(model, &v);

@@ -1,6 +1,5 @@
 use crate::event::Event;
 use crate::history;
-use crate::hooks::Data;
 use crate::record::{Record, UserInput};
 use crate::session::Session;
 use crate::usage::Stats;
@@ -99,14 +98,7 @@ impl Session {
             effort,
             cancelled: true,
         });
-        self.hook(
-            "agent_message",
-            Data {
-                text: Some(partial),
-                status: Some("cancelled"),
-                ..Default::default()
-            },
-        );
+        self.agent_message_hook(partial, "cancelled");
     }
 
     pub fn records(&self) -> Vec<Record> {

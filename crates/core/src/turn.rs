@@ -1,6 +1,5 @@
 use crate::event::Event;
 use crate::history::{estimate_tokens, messages};
-use crate::hooks::Data;
 use crate::record::Record;
 use crate::session::{Session, State};
 use crate::{compaction, id, prompt};
@@ -120,14 +119,7 @@ impl Session {
         let (model, effort) = (st.model.clone(), st.effort.clone());
         drop(st);
         for (text, is_first) in typed {
-            self.hook(
-                "user_message",
-                Data {
-                    text: Some(text),
-                    is_first: Some(is_first),
-                    ..Default::default()
-                },
-            );
+            self.user_message_hook(text, is_first);
         }
         let Some(st) = self.lock_live(generation) else {
             return Step::Stale;
@@ -189,18 +181,12 @@ impl Session {
         st.partial.clear();
         drop(st);
         if !reply.text.trim().is_empty() {
-            self.hook(
-                "agent_message",
-                Data {
-                    text: Some(reply.text.clone()),
-                    status: Some(if calls.is_empty() {
-                        "finished"
-                    } else {
-                        "working"
-                    }),
-                    ..Default::default()
-                },
-            );
+            let status = if calls.is_empty() {
+                "finished"
+            } else {
+                "working"
+            };
+            self.agent_message_hook(reply.text.clone(), status);
         }
         self.emit(Event::Assistant { text: reply.text });
         self.emit(Event::Usage);

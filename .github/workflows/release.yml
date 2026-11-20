@@ -25,12 +25,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Check the tag matches VERSION and Cargo.toml
+      - name: Check the tag matches Cargo.toml
         run: |
-          want="v$(tr -d '[:space:]' < release/VERSION)"
           crate="v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          [ "$want" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${want}"; exit 1; }
-          [ "$want" = "$crate" ] || { echo "VERSION ${want} != Cargo.toml ${crate}"; exit 1; }
+          [ "$crate" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != Cargo.toml ${crate}"; exit 1; }
       - name: Toolchain
         run: rustup toolchain install stable --profile minimal --target ${{ matrix.target }} && rustup default stable
       - name: Build

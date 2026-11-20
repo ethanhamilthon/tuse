@@ -21,49 +21,29 @@ pub struct Panel {
 }
 
 impl Panel {
-    pub fn new(title: impl Into<String>, text: impl Into<String>) -> Self {
-        Panel {
-            title: title.into(),
-            body: Body::Text(text.into()),
-            scroll: 0,
-            cache: None,
-        }
-    }
-
-    pub fn styled(title: impl Into<String>, lines: Vec<Line>) -> Self {
-        Panel {
-            title: title.into(),
-            body: Body::Styled(lines),
-            scroll: 0,
-            cache: None,
-        }
-    }
-
-    pub fn markdown(title: impl Into<String>, text: impl Into<String>) -> Self {
-        Panel {
-            title: title.into(),
-            body: Body::Markdown(text.into()),
-            scroll: 0,
-            cache: None,
-        }
-    }
-
-    pub fn python(title: impl Into<String>, code: impl Into<String>) -> Self {
-        Panel {
-            title: title.into(),
-            body: Body::Python(code.into()),
-            scroll: 0,
-            cache: None,
-        }
-    }
-
-    pub fn yaml(title: &str, yaml: String) -> Self {
+    fn with_body(title: impl Into<String>, body: Body) -> Self {
         Self {
-            body: Body::Yaml(yaml),
-            ..Self::new(title, "")
+            title: title.into(),
+            body,
+            scroll: 0,
+            cache: None,
         }
     }
-
+    pub fn new(title: impl Into<String>, value: impl Into<String>) -> Self {
+        Self::with_body(title, Body::Text(value.into()))
+    }
+    pub fn markdown(title: impl Into<String>, value: impl Into<String>) -> Self {
+        Self::with_body(title, Body::Markdown(value.into()))
+    }
+    pub fn python(title: impl Into<String>, value: impl Into<String>) -> Self {
+        Self::with_body(title, Body::Python(value.into()))
+    }
+    pub fn yaml(title: impl Into<String>, value: String) -> Self {
+        Self::with_body(title, Body::Yaml(value))
+    }
+    pub fn styled(title: impl Into<String>, value: Vec<Line>) -> Self {
+        Self::with_body(title, Body::Styled(value))
+    }
     pub fn invalidate(&mut self) {
         self.cache = None;
     }

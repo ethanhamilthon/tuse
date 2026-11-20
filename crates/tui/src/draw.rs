@@ -27,6 +27,7 @@ impl Renderer {
     ) -> std::io::Result<()> {
         let (w, h) = (w as usize, h as usize);
         if self.size != (w, h) || self.palette_gen != app.palette_gen {
+            app.selection = Default::default();
             self.prev.clear();
             self.size = (w, h);
             self.palette_gen = app.palette_gen;
@@ -65,8 +66,10 @@ impl Renderer {
         view.extend(lines);
         screen.extend(view);
         let shown = &rows[input_top..input_top + input_h];
-        screen.extend(input_view::block(app, &fr, inner, shown));
+        screen.extend(input_view::block(app, &fr, inner, shown, input_top));
         screen.truncate(h);
+        app.selection
+            .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
 
         out.queue(BeginSynchronizedUpdate)?.queue(Hide)?;
         let base = Style::fg(p.fg).on(p.bg);

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 mod layout;
+mod selection;
 
 /// First code point of the private-use range that stands in for atoms.
 const ATOM_BASE: u32 = 0xF0000;
@@ -17,6 +18,7 @@ pub struct Atom {
 pub struct Editor {
     pub buf: Vec<char>,
     pub cursor: usize,
+    pub anchor: Option<usize>,
     atoms: Vec<Atom>,
 }
 
@@ -27,7 +29,11 @@ fn atom_index(c: char) -> Option<usize> {
 impl Editor {
     /// The text with every atom written out as its label.
     pub fn text(&self) -> String {
-        self.buf
+        self.range_text(0, self.buf.len())
+    }
+
+    fn range_text(&self, a: usize, b: usize) -> String {
+        self.buf[a..b]
             .iter()
             .map(|c| match self.atom(*c) {
                 Some(a) => a.label.clone(),
@@ -41,6 +47,7 @@ impl Editor {
     }
 
     pub fn insert_atom(&mut self, label: &str, image: Option<PathBuf>) {
+        self.delete_selection();
         let c = char::from_u32(ATOM_BASE + self.atoms.len() as u32).unwrap_or('?');
         self.atoms.push(Atom {
             label: label.to_string(),
@@ -63,12 +70,14 @@ impl Editor {
     }
 
     pub fn clear(&mut self) {
+        self.clear_selection();
         self.buf.clear();
         self.atoms.clear();
         self.cursor = 0;
     }
 
     pub fn insert(&mut self, s: &str) {
+        self.delete_selection();
         for c in s.chars().filter(|c| *c != '\r' && atom_index(*c).is_none()) {
             self.buf.insert(self.cursor, c);
             self.cursor += 1;
@@ -76,6 +85,9 @@ impl Editor {
     }
 
     pub fn backspace(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
         if self.cursor > 0 {
             self.cursor -= 1;
             self.buf.remove(self.cursor);
@@ -83,6 +95,9 @@ impl Editor {
     }
 
     pub fn delete(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
         if self.cursor < self.buf.len() {
             self.buf.remove(self.cursor);
         }
@@ -138,18 +153,27 @@ impl Editor {
     }
 
     pub fn delete_word(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
         let end = self.cursor;
         self.word_left();
         self.buf.drain(self.cursor..end);
     }
 
     pub fn kill_to_start(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
         let start = self.line_start();
         self.buf.drain(start..self.cursor);
         self.cursor = start;
     }
 
     pub fn kill_to_end(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
         let end = self.line_end();
         self.buf.drain(self.cursor..end);
     }
@@ -165,6 +189,7 @@ impl Editor {
     }
 
     pub fn replace(&mut self, start: usize, end: usize, with: &str) {
+        self.clear_selection();
         self.buf.splice(start..end, with.chars());
         self.cursor = start + with.chars().count();
     }

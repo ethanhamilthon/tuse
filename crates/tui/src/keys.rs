@@ -17,6 +17,15 @@ impl App {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let alt = k.modifiers.contains(KeyModifiers::ALT);
         let shift = k.modifiers.contains(KeyModifiers::SHIFT);
+        let primary = ctrl || k.modifiers.contains(KeyModifiers::SUPER);
+        if primary
+            && k.code == KeyCode::Char('c')
+            && (!self.selection.text.is_empty() || self.editor.selection_range().is_some())
+        {
+            self.copy_selection(false);
+            return;
+        }
+        self.selection = Default::default();
         if self.picker.is_some() && self.picker_key(k, ctrl, shift) {
             return;
         }
@@ -26,6 +35,26 @@ impl App {
         let before = self.steering.map(|_| self.editor.buf.clone());
         let cols = self.input_cols;
         let e = &mut self.editor;
+        if matches!(
+            k.code,
+            KeyCode::Left
+                | KeyCode::Right
+                | KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Home
+                | KeyCode::End
+        ) {
+            if shift {
+                e.anchor.get_or_insert(e.cursor);
+            } else {
+                e.clear_selection();
+            }
+        } else if matches!(k.code, KeyCode::Esc)
+            || (ctrl && k.code == KeyCode::Char('e'))
+            || (alt && matches!(k.code, KeyCode::Char('b' | 'f')))
+        {
+            e.clear_selection();
+        }
         match k.code {
             KeyCode::Esc => {
                 if self.ask_input.is_some() {
@@ -40,7 +69,7 @@ impl App {
             KeyCode::Enter if shift || alt => e.insert("\n"),
             KeyCode::Char('j') if ctrl => e.insert("\n"),
             KeyCode::Enter => self.submit(),
-            KeyCode::Char('c') if ctrl => {
+            KeyCode::Char('c') if primary => {
                 if e.is_empty() {
                     self.quit = true;
                 } else {
@@ -51,7 +80,8 @@ impl App {
             KeyCode::Char('v') if ctrl || k.modifiers.contains(KeyModifiers::SUPER) => {
                 return self.paste_clipboard();
             }
-            KeyCode::Char('a') if ctrl => e.home(),
+            KeyCode::Char('a') if primary => e.select_all(),
+            KeyCode::Char('x') if primary => self.copy_selection(true),
             KeyCode::Char('e') if ctrl => e.end(),
             KeyCode::Char('u') if ctrl => e.kill_to_start(),
             KeyCode::Char('k') if ctrl => e.kill_to_end(),
@@ -80,6 +110,28 @@ impl App {
         self.finish_edit(before);
     }
 
+    fn copy_selection(&mut self, cut: bool) {
+        let text = if !cut && !self.selection.text.is_empty() {
+            Some(self.selection.text.clone())
+        } else {
+            self.editor.selected_text()
+        };
+        let Some(text) = text else {
+            return;
+        };
+        match crate::clipboard::write(&text) {
+            Ok(()) => {
+                if cut {
+                    self.editor.delete_selection();
+                } else {
+                    self.editor.clear_selection();
+                }
+                self.selection = Default::default();
+                self.notice("Copied.");
+            }
+            Err(e) => self.error(e),
+        }
+    }
     fn finish_edit(&mut self, before: Option<Vec<char>>) {
         if self.ask_input.is_some() {
             return;
@@ -92,55 +144,8 @@ impl App {
         self.update_token_picker();
     }
 
-    /// Returns true when the picker consumed the key.
-    fn picker_key(&mut self, k: KeyEvent, ctrl: bool, shift: bool) -> bool {
-        let rows = self.picker_rows();
-        let Some(p) = &mut self.picker else {
-            return false;
-        };
-        match k.code {
-            KeyCode::Up => p.moved(-1, rows),
-            KeyCode::Down => p.moved(1, rows),
-            KeyCode::Char('p') if ctrl => p.moved(-1, rows),
-            KeyCode::Char('n') if ctrl => p.moved(1, rows),
-            KeyCode::Enter | KeyCode::Tab if !shift => self.choose(),
-            KeyCode::Esc => {
-                let p = self.picker.take().unwrap();
-                match &p.kind {
-                    Kind::Ask(id) => {
-                        let id = id.clone();
-                        self.session.answer(&id, None);
-                        self.asks.retain(|a| a.0 != id);
-                        self.next_ask();
-                    }
-                    k if k.is_token() => self.dismissed = Some(self.editor.token().1),
-                    _ => {}
-                }
-            }
-            KeyCode::Char('x') if ctrl && p.kind == Kind::Task => {
-                if let Some(it) = p.current() {
-                    let id = it.value.clone();
-                    let _ = self.session.tasks.stop(&id);
-                    self.open_tasks();
-                }
-            }
-            _ if matches!(p.kind, Kind::Ask(_)) => {}
-            _ if p.kind.is_token() => return false,
-            KeyCode::Char(c) if !ctrl => {
-                let q = format!("{}{c}", p.query);
-                p.filter(&q);
-            }
-            KeyCode::Backspace => {
-                let mut q = p.query.clone();
-                q.pop();
-                p.filter(&q);
-            }
-            _ => {}
-        }
-        true
-    }
-
     pub fn paste(&mut self, s: &str) {
+        self.selection = Default::default();
         if let Some(p) = &mut self.picker
             && !p.kind.is_token()
         {

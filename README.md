@@ -75,8 +75,10 @@ the provider's models, says how many it got and adds the `connect` entry to the 
 | Up / Down, Left / Right, Home / End | move in the input |
 | click in the input | put the cursor there |
 | Ctrl+V, Cmd+V | paste; an image becomes `[Image #n: PATH]` and goes to the model with the message |
-| Ctrl+C | clear the input, or quit when it is empty |
-| Ctrl+A / Ctrl+E / Ctrl+U / Ctrl+K / Ctrl+W | line start / end / kill back / kill forward / delete word |
+| Ctrl/Cmd+C | copy selected text; otherwise clear the input or quit if empty |
+| Ctrl/Cmd+A / Ctrl/Cmd+X | select all input / cut selected input |
+| Shift+arrows / Shift+Home/End | extend the input selection |
+| Home / Ctrl+E / Ctrl+U / Ctrl+K / Ctrl+W | line start / end / kill back / kill forward / delete word |
 
 A message sent while the agent is working stays dimmed in the input until the agent takes it.
 Editing it withdraws it from the queue without interrupting the turn. Press Enter to send
@@ -87,8 +89,7 @@ providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X s
 `/trace` (a list of the system prompt, messages, thinking, tool calls and outputs; Enter opens
 an item in full), `/reload`, `/quit`.
 Every list looks the same and is drawn over the bottom of the chat; typing filters it. `/usage`
-and a task's output open as text in the same frame; Esc closes it. With the mouse captured, select
-text in the terminal with Shift (Option in iTerm2 and Terminal.app).
+and a task's output open as text in the same frame; Esc closes it. Drag to select text in the chat, panels or input.
 A session keeps its own model: `/models` also saves it to the config for new sessions.
 
 `#name` inserts a prompt from the config; it is expanded to its text when sent.

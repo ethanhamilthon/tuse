@@ -29,6 +29,7 @@ pub struct App {
     pub palette_gen: u64,
     pub chat: Chat,
     pub editor: Editor,
+    pub selection: crate::selection::Selection,
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
     /// The `/trace` item shown in the panel; Esc goes back to the list at this item.
@@ -70,6 +71,7 @@ impl App {
             palette_gen: 0,
             chat,
             editor: Editor::default(),
+            selection: Default::default(),
             picker: None,
             panel: None,
             trace_item: None,
@@ -159,4 +161,24 @@ impl App {
         items.push(crate::picker::item(crate::style::ASK_CUSTOM_LABEL, "", ""));
         self.picker = Some(Picker::new(crate::picker::Kind::Ask(id), question, items));
     }
+}
+
+#[cfg(test)]
+pub fn test_app(name: &str, headless: bool) -> App {
+    let cwd = std::env::temp_dir().join(format!("tuse-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&cwd).unwrap();
+    let s = Session::open(Options {
+        cwd: cwd.clone(),
+        headless,
+        config: None,
+        resume: None,
+    })
+    .unwrap();
+    App::new(s, cwd, None)
+}
+#[cfg(test)]
+pub fn cleanup(app: App) {
+    app.session.close();
+    std::fs::remove_dir_all(tuse_core::tuse_home().join(&app.session.id)).ok();
+    std::fs::remove_dir_all(app.cwd).ok();
 }

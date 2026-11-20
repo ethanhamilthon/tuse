@@ -143,10 +143,7 @@ mod tests {
 
     #[test]
     fn tool_output_tabs_do_not_reach_the_terminal() {
-        let p = Palette::new(
-            &tuse_config::Theme::default(),
-            &tuse_config::UiSettings::default(),
-        );
+        let p = Palette::new(&Default::default(), &Default::default());
         let lines = tool("x = 1", Some("1\tx\n2\t\x1b[31my"), Some(0), &[], 40, &p);
         let text: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
         assert!(!text.contains('\t') && !text.contains('\x1b'), "{text:?}");

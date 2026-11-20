@@ -70,16 +70,16 @@ impl Picker {
         p
     }
 
-    /// In an `ask` the typed text is the user's own answer, not a filter.
+    /// An `ask` offers fixed choices rather than a filterable list.
     pub fn is_free(&self) -> bool {
         matches!(self.kind, Kind::Ask(_))
     }
 
     pub fn filter(&mut self, q: &str) {
-        self.query = q.to_string();
         if self.is_free() {
             return;
         }
+        self.query = q.to_string();
         let mut scored: Vec<(i64, usize)> = self
             .items
             .iter()

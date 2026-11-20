@@ -18,6 +18,25 @@ impl Editor {
         (rows.into_iter().map(|r| r.text).collect(), cur)
     }
 
+    pub fn selected_columns(&self, cols: usize) -> Vec<(usize, usize)> {
+        let Some((a, b)) = self.selection_range() else {
+            return vec![];
+        };
+        self.placed(cols)
+            .0
+            .iter()
+            .map(|r| {
+                let col = |index: usize| {
+                    (r.start..index.clamp(r.start, r.end))
+                        .map(|i| self.unit(i, cols).1)
+                        .sum::<usize>()
+                        .min(width(&r.text))
+                };
+                (col(a), col(b))
+            })
+            .collect()
+    }
+
     /// Moves the cursor one visual row up or down, keeping the column; false at the edge.
     pub fn vertical(&mut self, up: bool, cols: usize) -> bool {
         let cols = cols.max(1);

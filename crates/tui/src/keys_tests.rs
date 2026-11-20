@@ -86,3 +86,27 @@ fn editing_withdraws_only_the_waiting_tui_message() {
     std::fs::remove_dir_all(tuse_core::tuse_home().join(&session.id)).unwrap();
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn shortcuts_copy_cut_and_select_without_losing_input() {
+    let mut app = crate::app::test_app("selection", true);
+    let press = |app: &mut App, code, mods| app.key(KeyEvent::new(code, mods), 10);
+    for primary in [KeyModifiers::CONTROL, KeyModifiers::SUPER] {
+        app.paste("alpha beta");
+        let word = KeyModifiers::SHIFT | KeyModifiers::ALT;
+        press(&mut app, KeyCode::Left, word);
+        assert_eq!(app.editor.selected_text().as_deref(), Some("beta"));
+        press(&mut app, KeyCode::Char('c'), primary);
+        crate::clipboard::TEST_TEXT.with(|s| assert_eq!(&*s.borrow(), "beta"));
+        press(&mut app, KeyCode::Char('x'), primary);
+        assert_eq!(app.editor.text(), "alpha beta");
+        press(&mut app, KeyCode::Char('a'), primary);
+        press(&mut app, KeyCode::Char('x'), primary);
+        assert!(app.editor.is_empty());
+        crate::clipboard::TEST_TEXT.with(|s| assert_eq!(&*s.borrow(), "alpha beta"));
+        app.paste("clear");
+        press(&mut app, KeyCode::Char('c'), primary);
+        assert!(app.editor.is_empty() && !app.quit);
+    }
+    crate::app::cleanup(app);
+}

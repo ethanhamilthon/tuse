@@ -87,23 +87,13 @@ pub fn panel(session: &Session, p: &Palette) -> Panel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuse_config::{Theme, UiSettings};
-    use tuse_core::Options;
 
     #[test]
     fn usage_panel_styles_keys_and_context() {
-        let dir = std::env::temp_dir().join(format!("tuse-usage-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let s = Session::open(Options {
-            cwd: dir.clone(),
-            config: None,
-            headless: true,
-            resume: None,
-        })
-        .unwrap();
-        let p = Palette::new(&Theme::default(), &UiSettings::default());
-        let mut pnl = panel(&s, &p);
-        let lines = pnl.lines(80, 16, &p);
+        let app = crate::app::test_app("usage", true);
+        let p = &app.palette;
+        let mut pnl = panel(&app.session, p);
+        let lines = pnl.lines(80, 16, p);
         // Rule + Title + 5 rows (Session, Model, Context, Turns, Tokens)
         assert_eq!(lines.len(), 7);
         // Key span on Session row uses border color; Context value uses accent bold.
@@ -111,7 +101,6 @@ mod tests {
         assert_eq!(lines[4][0].style.fg, p.border);
         assert_eq!(lines[4][1].style.fg, p.accent);
         assert!(lines[4][1].style.bold);
-        s.close();
-        std::fs::remove_dir_all(dir).ok();
+        crate::app::cleanup(app);
     }
 }

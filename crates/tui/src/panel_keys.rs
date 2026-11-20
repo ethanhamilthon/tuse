@@ -39,20 +39,10 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuse_core::{Options, Session};
 
     #[test]
     fn left_right_steps_through_trace_items_without_wrapping() {
-        let dir = std::env::temp_dir().join(format!("tuse-trace-nav-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let s = Session::open(Options {
-            cwd: dir.clone(),
-            config: None,
-            headless: true,
-            resume: None,
-        })
-        .unwrap();
-        let mut app = App::new(s, dir.clone(), None);
+        let mut app = crate::app::test_app("trace-nav", true);
         app.trace = vec![
             ("user", "hi".into()),
             ("agent", "hello".into()),
@@ -80,7 +70,6 @@ mod tests {
         assert!(!app.panel_key(KeyCode::Left, 10));
         assert_eq!(app.trace_item, Some(2));
 
-        app.session.close();
-        std::fs::remove_dir_all(dir).ok();
+        crate::app::cleanup(app);
     }
 }

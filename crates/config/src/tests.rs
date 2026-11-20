@@ -173,3 +173,11 @@ fn ui_settings_are_checked() {
     assert!(load(Some(&p)).err().unwrap().contains("input_design"));
     std::fs::remove_file(p).ok();
 }
+
+#[test]
+fn effective_yaml_contains_default_theme_and_settings() {
+    let c = crate::load(None).unwrap().config;
+    let value: serde_yaml::Value = serde_yaml::from_str(&c.to_yaml().unwrap()).unwrap();
+    assert_eq!(value["themes"]["default"]["bg"], "#0A0A0A");
+    assert_eq!(value["settings"]["ui"]["motion"], true);
+}

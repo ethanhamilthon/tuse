@@ -4,7 +4,8 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-pub const COMMANDS: [(&str, &str); 9] = [
+pub const COMMANDS: [(&str, &str); 10] = [
+    ("config", "show resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
     ("models", "switch model and effort"),
@@ -19,6 +20,13 @@ pub const COMMANDS: [(&str, &str); 9] = [
 impl App {
     pub fn run_command(&mut self, name: &str) {
         match name {
+            "config" => match self.session.config().to_yaml() {
+                Ok(yaml) => {
+                    self.trace_item = None;
+                    self.panel = Some(Panel::yaml("Config", yaml));
+                }
+                Err(e) => self.error(e),
+            },
             "new" => self.switch(None),
             "quit" => self.quit = true,
             "resume" => self.open_resume(),

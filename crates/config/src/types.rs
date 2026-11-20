@@ -2,7 +2,7 @@ use crate::theme::{Theme, UiSettings};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Config {
     pub model: String,
@@ -19,7 +19,7 @@ pub struct Config {
     pub hooks: BTreeMap<String, Hook>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Connect {
     pub name: String,
@@ -27,7 +27,7 @@ pub struct Connect {
     pub api_key: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Settings {
     pub compact_at: u64,
@@ -56,7 +56,7 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct ModelDef {
     pub name: String,
@@ -67,7 +67,7 @@ pub struct ModelDef {
 }
 
 /// Prices in dollars per 1M tokens.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Prices {
     #[serde(rename = "in")]
@@ -77,7 +77,7 @@ pub struct Prices {
     pub cache_write: f64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Hook {
     pub events: Vec<String>,
@@ -88,6 +88,12 @@ pub struct Hook {
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
 
 impl Config {
+    pub fn to_yaml(&self) -> Result<String, String> {
+        let mut effective = self.clone();
+        effective.themes.entry("default".into()).or_default();
+        serde_yaml::to_string(&effective).map_err(|e| e.to_string())
+    }
+
     pub fn theme_name(&self) -> &str {
         &self.settings.theme
     }

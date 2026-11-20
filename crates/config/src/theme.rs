@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 /// The 10 base colors of a theme. Values are `#rrggbb`, `#rgb`, an ANSI number
 /// (`0`-`255`), a name (`red`, `dark_grey`, ...), `accent`, or `none`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Theme {
     pub bg: String,
@@ -36,7 +36,7 @@ impl Default for Theme {
 }
 
 /// User-facing UI behavior and layout preferences (`settings.ui`), independent of the color theme.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct UiSettings {
     /// `lines`, `box`, `fill` or `bar`.

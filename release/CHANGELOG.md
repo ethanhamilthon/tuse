@@ -17,6 +17,7 @@ Breaking: hook events and `run:` expansion changed, OSC 7501 was replaced (see b
 - Faster status line on long sessions: usage totals are kept up to date instead of being recomputed from the whole history on every frame.
 - Streaming long replies no longer re-renders the whole Markdown on every frame: finished blocks are cached and only the last one is parsed again (a 30 KB reply: 497 ms → 68 ms of rendering in total). Reasoning wraps only the lines it shows.
 - Resize, `/theme` and `/reload` render only the messages on screen, from the bottom up (4000 messages, 20 resizes: 263 ms → 1.5 ms). `/reload` no longer copies the history.
+- Fixed: a notice or a hook record between the tool results of one step no longer splits them with the images message.
 - Fixed: assistant text that had already streamed was shown twice when a tool call started in the same step.
 
 ## 0.5.3

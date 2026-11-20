@@ -91,3 +91,27 @@ fn one_line(s: &str) -> String {
         None => s,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+
+    #[test]
+    fn rate_limits_server_errors_and_the_network_are_retried() {
+        for (code, retry) in [
+            (429, true),
+            (500, true),
+            (503, true),
+            (400, false),
+            (401, false),
+        ] {
+            assert_eq!(
+                Error::Status(code, String::new()).retryable(),
+                retry,
+                "{code}"
+            );
+        }
+        assert!(Error::Transport("reset".into()).retryable());
+        assert!(!Error::Parse("x".into()).retryable() && !Error::Cancelled.retryable());
+    }
+}

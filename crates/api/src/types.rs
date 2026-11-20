@@ -44,6 +44,13 @@ pub struct Reply {
 }
 
 pub enum Delta<'a> {
+    Tool {
+        index: usize,
+        id: &'a str,
+        name: &'a str,
+        code: &'a str,
+        title: Option<&'a str>,
+    },
     Text(&'a str),
     Reasoning(&'a str),
 }

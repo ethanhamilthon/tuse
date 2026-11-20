@@ -6,7 +6,7 @@ use crate::session::{Session, State};
 use crate::{compaction, id, prompt};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use tuse_api::{Client, Delta, Request};
+use tuse_api::{Client, Request};
 use tuse_config::split_model;
 
 enum Step {
@@ -146,10 +146,7 @@ impl Session {
             &req,
             config.settings.retries,
             cancel,
-            &mut |d| match d {
-                Delta::Text(t) => self.emit(Event::Text(t.to_string())),
-                Delta::Reasoning(t) => self.emit(Event::Reasoning(t.to_string())),
-            },
+            &mut |d| self.on_delta(d),
             &mut |r| {
                 self.emit(Event::StreamReset);
                 self.emit(Event::Flash(format!(

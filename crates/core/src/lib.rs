@@ -16,6 +16,7 @@ mod prompt;
 mod record;
 mod session;
 mod store;
+mod stream;
 mod task_repl;
 mod tasks;
 mod tool;

@@ -2,6 +2,7 @@
 
 ## 0.5.3
 
+- Tool code now streams into the chat, with the title shown as soon as it arrives.
 - Removed `prelude`; import a `.py` file from the config folder or use a hook instead.
 - Removed the `VERSION` file; the version now comes only from `Cargo.toml`.
 

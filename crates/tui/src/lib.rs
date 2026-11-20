@@ -108,7 +108,10 @@ fn main_loop(mut app: app::App) -> std::io::Result<String> {
     let mut last_draw = Instant::now();
     loop {
         while let Ok(e) = app.events.try_recv() {
-            let stream = matches!(e, Event::Text(_) | Event::Reasoning(_));
+            let stream = matches!(
+                e,
+                Event::Text(_) | Event::Reasoning(_) | Event::ToolDelta { .. }
+            );
             app.handle_event(e);
             dirty = true;
             if !stream {

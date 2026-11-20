@@ -3,6 +3,20 @@ use crate::chat::Entry;
 use tuse_core::Event;
 
 impl App {
+    fn drop_pending(&mut self) {
+        self.pending_tools.sort_by_key(|(_, pos)| *pos);
+        for (_, pos) in self.pending_tools.drain(..).rev() {
+            self.chat.remove(pos);
+            for idx in [&mut self.streaming, &mut self.thinking]
+                .into_iter()
+                .flatten()
+            {
+                if *idx > pos {
+                    *idx -= 1;
+                }
+            }
+        }
+    }
     pub fn handle_event(&mut self, e: Event) {
         match e {
             Event::User { id, text, images } => {
@@ -25,6 +39,7 @@ impl App {
                     .into_iter()
                     .flatten()
                     .collect();
+                drop.extend(self.pending_tools.drain(..).map(|(_, pos)| pos));
                 drop.sort_unstable_by(|a, b| b.cmp(a));
                 for i in drop {
                     self.chat.remove(i);
@@ -37,7 +52,53 @@ impl App {
                 self.streaming = None;
                 self.thinking = None;
             }
+            Event::ToolDelta {
+                index, id, code, ..
+            } => {
+                let pos =
+                    if let Some((_, pos)) = self.pending_tools.iter().find(|(i, _)| *i == index) {
+                        *pos
+                    } else {
+                        self.streaming = None;
+                        self.thinking = None;
+                        let pos = self.chat.len();
+                        self.pending_tools.push((index, pos));
+                        self.chat.push(Entry::Tool {
+                            id: if id.is_empty() {
+                                format!("stream-{index}")
+                            } else {
+                                id
+                            },
+                            input: String::new(),
+                            output: None,
+                            code: None,
+                            diffs: vec![],
+                        });
+                        pos
+                    };
+                if let Some(Entry::Tool { input, .. }) = self.chat.get_mut(pos) {
+                    input.push_str(&code);
+                }
+            }
             Event::ToolStart { id, input, .. } => {
+                if let Some((n, _)) = self
+                    .pending_tools
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, x)| x.0)
+                {
+                    let (_, pos) = self.pending_tools.remove(n);
+                    if let Some(Entry::Tool {
+                        id: old,
+                        input: text,
+                        ..
+                    }) = self.chat.get_mut(pos)
+                    {
+                        *old = id;
+                        *text = input;
+                        return;
+                    }
+                }
                 self.chat.push(Entry::Tool {
                     id,
                     input,
@@ -67,7 +128,10 @@ impl App {
             Event::Status(_) => {}
             Event::Flash(t) => self.flash(t),
             Event::Notice(t) | Event::Notification(t) => self.notice(t),
-            Event::Error(t) => self.error(t),
+            Event::Error(t) => {
+                self.drop_pending();
+                self.error(t)
+            }
             Event::TurnEnd {
                 elapsed,
                 model,
@@ -77,6 +141,7 @@ impl App {
             } => {
                 self.streaming = None;
                 self.thinking = None;
+                self.drop_pending();
                 self.chat.push(Entry::TurnEnd {
                     elapsed,
                     model: self.session.config().display_name(&model),

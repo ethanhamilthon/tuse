@@ -5,6 +5,7 @@ use serde_json::Value;
 #[derive(Default)]
 pub struct Accumulator {
     pub reply: Reply,
+    args: Vec<crate::args::ArgStream>,
 }
 
 impl Accumulator {
@@ -36,11 +37,11 @@ impl Accumulator {
             .into_iter()
             .flatten()
         {
-            self.tool_call(tc);
+            self.tool_call(tc, on_delta);
         }
     }
 
-    fn tool_call(&mut self, tc: &Value) {
+    fn tool_call(&mut self, tc: &Value, on_delta: &mut dyn FnMut(Delta)) {
         let calls = &mut self.reply.tool_calls;
         let index = tc.get("index").and_then(Value::as_u64).map(|i| i as usize);
         let id = tc.get("id").and_then(Value::as_str).unwrap_or("");
@@ -50,18 +51,37 @@ impl Accumulator {
             None => calls.len().saturating_sub(1),
         };
         while calls.len() <= slot {
+            self.args.push(Default::default());
             calls.push(ToolCall::default());
         }
         let call = &mut calls[slot];
         if !id.is_empty() {
             call.id = id.to_string();
         }
+        let first = call.name.is_empty();
         if let Some(f) = tc.get("function") {
             if let Some(n) = f.get("name").and_then(Value::as_str) {
                 call.name.push_str(n);
             }
             if let Some(a) = f.get("arguments").and_then(Value::as_str) {
                 call.arguments.push_str(a);
+            }
+            if !call.name.is_empty() {
+                let chunk = if first {
+                    call.arguments.as_str()
+                } else {
+                    f.get("arguments").and_then(Value::as_str).unwrap_or("")
+                };
+                let (code, title) = self.args[slot].feed(chunk);
+                if first || !code.is_empty() || title.is_some() {
+                    on_delta(Delta::Tool {
+                        index: slot,
+                        id: &call.id,
+                        name: &call.name,
+                        code: &code,
+                        title: title.as_deref(),
+                    });
+                }
             }
         }
     }

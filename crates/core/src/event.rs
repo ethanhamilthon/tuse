@@ -17,6 +17,13 @@ pub enum Event {
     Assistant {
         text: String,
     },
+    ToolDelta {
+        index: usize,
+        id: String,
+        name: String,
+        code: String,
+        title: Option<String>,
+    },
     ToolStart {
         id: String,
         tool: String,

@@ -83,41 +83,29 @@ pub fn fold_multiline_strings(code: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn folds_basic_and_leading_newline_strings() {
-        let s = "write(\"a.txt\", \"\"\"line 1\nline 2\nline 3\"\"\")";
-        assert_eq!(
-            fold_multiline_strings(s),
-            "write(\"a.txt\", \"\"\"line 1…\"\"\")"
-        );
-
-        let s2 = "write(\"a.txt\", \"\"\"\n  line 1\n  line 2\n\"\"\")";
-        assert_eq!(
-            fold_multiline_strings(s2),
-            "write(\"a.txt\", \"\"\"line 1…\"\"\")"
-        );
-    }
-
-    #[test]
-    fn folds_multiple_strings_in_one_call() {
-        let s = "edit(\"a.txt\", \"\"\"old 1\nold 2\"\"\", \"\"\"new 1\nnew 2\"\"\")";
-        assert_eq!(
-            fold_multiline_strings(s),
-            "edit(\"a.txt\", \"\"\"old 1…\"\"\", \"\"\"new 1…\"\"\")"
-        );
-    }
-
-    #[test]
-    fn preserves_single_line_comments_and_escapes() {
+    fn folds_multiline_strings_only() {
         let s = "# \"\"\"not a string\nx = '''one line'''\ny = \"a\\\"b\"";
-        assert_eq!(fold_multiline_strings(s), s);
-    }
-
-    #[test]
-    fn folds_unclosed_streaming_string() {
-        let s = "write(\"a.txt\", \"\"\"first\nsecond";
-        assert_eq!(fold_multiline_strings(s), "write(\"a.txt\", \"\"\"first…");
+        for (code, want) in [
+            (
+                "write(\"a.txt\", \"\"\"line 1\nline 2\nline 3\"\"\")",
+                "write(\"a.txt\", \"\"\"line 1…\"\"\")",
+            ),
+            (
+                "write(\"a.txt\", \"\"\"\n  line 1\n  line 2\n\"\"\")",
+                "write(\"a.txt\", \"\"\"line 1…\"\"\")",
+            ),
+            (
+                "edit(\"a\", \"\"\"o 1\no 2\"\"\", \"\"\"n 1\nn 2\"\"\")",
+                "edit(\"a\", \"\"\"o 1…\"\"\", \"\"\"n 1…\"\"\")",
+            ),
+            (
+                "write(\"a.txt\", \"\"\"first\nsecond",
+                "write(\"a.txt\", \"\"\"first…",
+            ),
+            (s, s),
+        ] {
+            assert_eq!(super::fold_multiline_strings(code), want, "{code:?}");
+        }
     }
 }

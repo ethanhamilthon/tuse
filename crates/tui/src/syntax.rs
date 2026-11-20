@@ -185,10 +185,7 @@ mod tests {
         ];
         let want: Vec<(Kind, String)> = want.iter().map(|(k, s)| (*k, s.to_string())).collect();
         assert_eq!(got, want);
-    }
-
-    #[test]
-    fn unterminated_and_triple_strings_do_not_break() {
+        // Unterminated and triple-quoted strings do not break the line or the next one.
         assert_eq!(colored("x = 'abc"), [(Kind::Str, "'abc".to_string())]);
         let mut open = String::new();
         tokens("s = \"\"\"first", &mut open);

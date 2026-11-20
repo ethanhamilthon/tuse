@@ -6,7 +6,8 @@ impl Session {
     /// With `id`, the text of that earlier block is replaced instead.
     pub fn print(&self, text: String, id: Option<String>) -> Result<String, String> {
         self.require_client("draw_ui")?;
-        let mut ids = self.prints.lock().unwrap();
+        let mut st = self.state.lock().unwrap();
+        let ids = &mut st.prints;
         let id = match id {
             Some(id) if ids.contains(&id) => id,
             Some(id) => return Err(format!("no print {id}")),
@@ -16,7 +17,7 @@ impl Session {
                 id
             }
         };
-        drop(ids);
+        drop(st);
         self.emit(Event::Print {
             id: id.clone(),
             text,

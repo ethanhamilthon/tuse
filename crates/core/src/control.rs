@@ -174,7 +174,7 @@ impl Session {
         self.require_client("ask")?;
         let id = format!("a{}", self.ask_seq.fetch_add(1, Ordering::Relaxed) + 1);
         let (tx, rx) = channel();
-        self.asks.lock().unwrap().insert(id.clone(), tx);
+        self.state.lock().unwrap().asks.insert(id.clone(), tx);
         self.emit(Event::Ask {
             id: id.clone(),
             question: question.to_string(),
@@ -185,12 +185,13 @@ impl Session {
 
     /// Whether the ask `id` is still waiting for an answer.
     pub fn has_ask(&self, id: &str) -> bool {
-        self.asks.lock().unwrap().contains_key(id)
+        self.state.lock().unwrap().asks.contains_key(id)
     }
 
     /// Answers an ask; `None` dismisses it.
     pub fn answer(&self, id: &str, answer: Option<String>) {
-        if let Some(tx) = self.asks.lock().unwrap().remove(id)
+        let tx = self.state.lock().unwrap().asks.remove(id);
+        if let Some(tx) = tx
             && let Some(a) = answer
         {
             let _ = tx.send(a);

@@ -27,13 +27,10 @@ pub struct Session {
     pub(crate) config_arg: Option<PathBuf>,
     pub(crate) state: Mutex<State>,
     pub(crate) subs: Mutex<Vec<Sender<Event>>>,
-    pub(crate) asks: Mutex<HashMap<String, Sender<String>>>,
     pub(crate) ask_seq: AtomicUsize,
     /// The agent's interpreter; made on the first call, gone with the process.
     pub(crate) hooks: Mutex<Option<HashMap<String, crate::hook_queue::HookQueue>>>,
     pub(crate) python: Mutex<Option<Python>>,
-    pub(crate) remote: Mutex<Vec<String>>,
-    pub(crate) prints: Mutex<HashSet<String>>,
     pub(crate) http: tuse_api::HttpAgent,
 }
 
@@ -56,6 +53,12 @@ pub(crate) struct State {
     pub meta: Meta,
     /// Assistant text streamed in the current step; `agent_message` gets it on a cancel.
     pub partial: String,
+    /// Open `ask`s and where their answers go.
+    pub asks: HashMap<String, Sender<String>>,
+    /// IDs of the `draw_ui` blocks.
+    pub prints: HashSet<String>,
+    /// Models the providers have reported.
+    pub remote: Vec<String>,
     /// Totals of `records` and the config whose prices they use.
     pub stats: (crate::usage::Stats, Arc<Config>),
 }
@@ -104,6 +107,9 @@ impl Session {
             meta,
             stats: Default::default(),
             partial: String::new(),
+            asks: HashMap::new(),
+            prints: HashSet::new(),
+            remote: vec![],
             records: vec![],
         };
         for r in &records {
@@ -141,12 +147,9 @@ impl Session {
             config_arg: opts.config,
             state: Mutex::new(st),
             subs: Mutex::default(),
-            asks: Mutex::default(),
             ask_seq: AtomicUsize::new(0),
             hooks: Mutex::new(Some(HashMap::new())),
             python: Mutex::default(),
-            remote: Mutex::default(),
-            prints: Mutex::default(),
             http: tuse_api::default_agent(),
         });
         s.hook(
@@ -167,7 +170,7 @@ impl Session {
         }
         self.cancel();
         self.tasks.stop_all();
-        self.asks.lock().unwrap().clear();
+        self.state.lock().unwrap().asks.clear();
         self.finish_hooks(reason);
         self.hooks.lock().unwrap().take();
         self.dir.lock().unwrap().take();

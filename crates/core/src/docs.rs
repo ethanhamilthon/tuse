@@ -1,6 +1,11 @@
 /// Built-in documentation topics read via `docs(topic=None)`.
 const TOPICS: &[(&str, &str, &str)] = &[
     (
+        "README.md",
+        "Overview, install, usage, hotkeys, config, benchmark (long; read in slices)",
+        include_str!("../../../README.md"),
+    ),
+    (
         "tool",
         "Python REPL tool, limits, timeout, imports",
         include_str!("../../../docs/tool.md"),
@@ -52,9 +57,11 @@ pub fn docs(topic: Option<&str>) -> String {
     let Some(raw) = topic.map(str::trim).filter(|s| !s.is_empty()) else {
         return topic_list();
     };
+    let key = raw.to_ascii_lowercase();
+    let key = key.strip_suffix(".md").unwrap_or(&key);
     if let Some((_, _, body)) = TOPICS
         .iter()
-        .find(|(name, _, _)| name.eq_ignore_ascii_case(raw))
+        .find(|(name, _, _)| name.trim_end_matches(".md").eq_ignore_ascii_case(key))
     {
         return body.trim_end().to_string();
     }
@@ -80,6 +87,10 @@ mod tests {
         assert!(hooks.starts_with("# Hooks"));
         assert_eq!(hooks, docs(Some(" HOOKS ")));
 
+        assert_eq!(hooks, docs(Some("Hooks.MD")));
+        let readme = docs(Some(" Readme.md "));
+        assert!(readme.starts_with("# Tuse"));
+        assert_eq!(readme, docs(Some("readme")));
         let err = docs(Some("nope"));
         assert!(err.starts_with("Unknown docs topic \"nope\"."));
         assert!(err.contains("- config —"));

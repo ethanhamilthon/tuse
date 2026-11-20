@@ -2,7 +2,7 @@ use crate::control::InputId;
 use crate::event::Event;
 use crate::history::{self, Bounds};
 use crate::hooks::Data;
-pub use crate::mode::{Mode, Options};
+pub use crate::mode::{Mode, Options, Start};
 use crate::record::{Record, UserInput};
 use crate::store::{Meta, SessionDir};
 use crate::tasks::Tasks;
@@ -54,6 +54,8 @@ pub(crate) struct State {
     pub status: String,
     pub context: u64,
     pub meta: Meta,
+    /// Assistant text streamed in the current step; `agent_message` gets it on a cancel.
+    pub partial: String,
     /// Totals of `records` and the config whose prices they use.
     pub stats: (crate::usage::Stats, Arc<Config>),
 }
@@ -101,6 +103,7 @@ impl Session {
             context: 0,
             meta,
             stats: Default::default(),
+            partial: String::new(),
             records: vec![],
         };
         for r in &records {
@@ -146,44 +149,54 @@ impl Session {
             prints: Mutex::default(),
             http: tuse_api::default_agent(),
         });
-        s.hook("session_start", Data::default());
+        s.hook(
+            "process_start",
+            Data {
+                reason: Some(opts.start.reason()),
+                ..Default::default()
+            },
+        );
         Ok(s)
     }
 
-    /// Stops the turn and tasks, fires `session_end` (and waits for those hooks)
-    /// and releases the lock.
-    pub fn close(self: &Arc<Self>) {
+    /// Stops the turn and tasks, fires `process_end` with `reason` (`exit`, `new`,
+    /// `resume`), waits for those hooks and releases the lock.
+    pub fn close_for(self: &Arc<Self>, reason: &'static str) {
         if self.dir.lock().unwrap().is_none() {
             return;
         }
         self.cancel();
         self.tasks.stop_all();
         self.asks.lock().unwrap().clear();
-        self.finish_hooks();
+        self.finish_hooks(reason);
+        self.hooks.lock().unwrap().take();
         self.dir.lock().unwrap().take();
+    }
+
+    pub fn close(self: &Arc<Self>) {
+        self.close_for("exit");
     }
 
     pub fn config(&self) -> Arc<Config> {
         self.config.read().unwrap().clone()
     }
 
-    /// Rebuilds the config from its files.
-    pub fn reload(&self) -> Result<(), String> {
-        let c = load_config(self.config_arg.as_deref(), &self.cwd)?;
-        let c = Arc::new(c);
-        {
-            let mut queues = self.hooks.lock().unwrap();
-            *self.config.write().unwrap() = c.clone();
-            if let Some(queues) = queues.as_mut() {
-                for (_, q) in queues.drain() {
-                    q.stale.store(true, std::sync::atomic::Ordering::Release);
-                }
-            }
-        }
+    /// Rebuilds the config from its files: `process_end` runs on the old hooks, then
+    /// `process_start` on the new ones, each hook in a fresh interpreter.
+    pub fn reload(self: &Arc<Self>) -> Result<(), String> {
+        let c = Arc::new(load_config(self.config_arg.as_deref(), &self.cwd)?);
+        self.finish_hooks("reload");
+        *self.config.write().unwrap() = c.clone();
         if let Some(py) = self.python.lock().unwrap().as_mut() {
             crate::helpers::install(self, py, &c);
         }
-
+        self.hook(
+            "process_start",
+            Data {
+                reason: Some("reload"),
+                ..Default::default()
+            },
+        );
         Ok(())
     }
 

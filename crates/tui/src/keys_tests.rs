@@ -32,6 +32,7 @@ fn editing_withdraws_only_the_waiting_tui_message() {
         config: Some(cfg.clone()),
         mode: tuse_core::Mode::Tui,
         resume: None,
+        start: Default::default(),
     })
     .unwrap();
     let mut app = App::new(session.clone(), dir.clone(), Some(cfg));

@@ -30,4 +30,28 @@ pub struct Options {
     pub mode: Mode,
     /// Resume this session instead of creating a new one.
     pub resume: Option<String>,
+    /// Why the session opens, for `process_start`.
+    pub start: Start,
+}
+
+/// The `reason` of `process_start`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Start {
+    /// Tuse was started (with or without `--resume`).
+    #[default]
+    Launch,
+    /// `/new`.
+    New,
+    /// `/resume`.
+    Resume,
+}
+
+impl Start {
+    pub fn reason(self) -> &'static str {
+        match self {
+            Start::Launch => "launch",
+            Start::New => "new",
+            Start::Resume => "resume",
+        }
+    }
 }

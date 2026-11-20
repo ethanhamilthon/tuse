@@ -54,19 +54,33 @@ impl HookQueue {
 }
 
 impl Session {
-    pub(crate) fn finish_hooks(self: &Arc<Self>) {
-        self.hook("session_end", crate::hooks::Data::default());
+    /// Fires `process_end` and waits up to `hook_timeout` for the hooks that listen to it;
+    /// the other queues are dropped. The hooks of the next config start fresh.
+    pub(crate) fn finish_hooks(self: &Arc<Self>, reason: &'static str) {
+        self.hook(
+            "process_end",
+            crate::hooks::Data {
+                reason: Some(reason),
+                ..Default::default()
+            },
+        );
         let config = self.config();
         let deadline =
             Instant::now() + std::time::Duration::from_secs(config.settings.hook_timeout.max(1));
-        let queues = self.hooks.lock().unwrap().take().unwrap_or_default();
+        let queues = std::mem::take(
+            self.hooks
+                .lock()
+                .unwrap()
+                .as_mut()
+                .unwrap_or(&mut Default::default()),
+        );
         let mut waiting = vec![];
         for (name, q) in queues {
             drop(q.tx);
             if config
                 .hooks
                 .get(&name)
-                .is_some_and(|h| h.events.iter().any(|e| e == "session_end"))
+                .is_some_and(|h| h.events.iter().any(|e| e == "process_end"))
             {
                 waiting.push(q.done);
             } else {

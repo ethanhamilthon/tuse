@@ -128,12 +128,18 @@ impl App {
 
     /// Closes the current session and opens a new (`resume: None`) or existing one.
     pub fn switch(&mut self, resume: Option<String>) {
-        self.session.close();
+        let start = if resume.is_some() {
+            tuse_core::Start::Resume
+        } else {
+            tuse_core::Start::New
+        };
+        self.session.close_for(start.reason());
         let opened = Session::open(Options {
             cwd: self.cwd.clone(),
             config: self.config_arg.clone(),
             mode: tuse_core::Mode::Tui,
             resume: resume.clone(),
+            start,
         });
         let (session, err) = match opened {
             Ok(s) => (s, None),
@@ -143,6 +149,7 @@ impl App {
                     config: self.config_arg.clone(),
                     mode: tuse_core::Mode::Tui,
                     resume: None,
+                    start: tuse_core::Start::New,
                 });
                 match fresh {
                     Ok(s) => (s, Some(e)),
@@ -206,6 +213,7 @@ pub fn test_app(name: &str) -> App {
     let s = Session::open(Options {
         cwd: cwd.clone(),
         mode: tuse_core::Mode::Tui,
+        start: Default::default(),
         config: None,
         resume: None,
     })

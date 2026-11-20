@@ -1,45 +1,45 @@
 # Hooks
 
-A hook is Python code started on an event; Tuse does not wait for it (except for `session_end`,
-which gets up to `hook_timeout` before Tuse exits). Events: `session_start`, `session_end`,
-`turn_start`, `turn_end`, `tool_start`, `tool_end`, `error`.
+A hook is Python code started on an event; Tuse does not wait for it, except for `process_end`,
+which gets up to `hook_timeout` before Tuse goes on. There are four events:
 
-Each named hook has a persistent interpreter. Its events run in emission order,
-while different hooks can run concurrently. Globals survive between events;
-event variables are refreshed for each call. A timeout resets that interpreter,
-and `/reload` discards queued events and starts fresh interpreters. Exceptions
-produce a `hook NAME: ...` notice. Output from `print()` is discarded.
+| Event | When | Variables |
+| --- | --- | --- |
+| `process_start` | A session opens in this process. | `reason`: `launch` (Tuse started, also with `--resume`), `new` (`/new`), `resume` (`/resume`), `reload` (`/reload`, on the new config). |
+| `process_end` | The session closes. | `reason`: `exit`, `new`, `resume`, `reload` (on the old config, before it is replaced). |
+| `user_message` | The agent takes a message the user typed (not task notifications). | `text`; `is_first`: the first message of the session (`False` after a resume). |
+| `agent_message` | The agent wrote a message. Messages without text (only tool calls) are skipped, except on a cancel. | `text`; `status`: `working` (tool calls follow), `finished` (the turn is over) or `cancelled` (the user stopped the turn; `text` is what streamed so far, maybe empty). |
 
-Hooks have the agent's Python functions plus `set_title(text)`, which updates
-and saves the session title (up to 80 characters). This function is unavailable
-to the agent and background tasks.
+Every hook also gets `event`, `hook` (its name), `session` (ID), `cwd`, `model` (`provider/model`)
+and `config` (path of the config file). Names an event does not set are `None`. A hook listening
+to an unknown event shows a notice.
 
-Names defined in the hook (`None` when they do not apply, `cancelled` is `False`):
+Each named hook has a persistent interpreter. Its events run in emission order, while different
+hooks can run concurrently. Globals survive between events; event variables are refreshed for each
+call. A timeout resets that interpreter; `/reload` runs `process_end` on the old hooks, then
+`process_start` on the new ones, each in a fresh interpreter. Exceptions produce a
+`hook NAME: ...` notice. Output from `print()` is discarded. Code under `run` is passed as is:
+`$VAR` and `#{{cmd}}` are not expanded there (use `os.environ` and `sh`).
 
-| Name | Value |
-| --- | --- |
-| `event`, `hook` | The event and the hook's name. |
-| `session`, `cwd`, `model`, `config` | Session ID, working directory, `provider/model`, path of the config file. |
-| `tool`, `input`, `title` | For `turn_start`: `input` is the prompt and `title` is the session title. For `tool_start` and `tool_end`: `python`, its code and the `title` the agent gave it. |
-| `output`, `code` | For `tool_end`: the result (cut to `max_output`) and `0`, `1` (error) or `None` (cancelled). |
-| `error` | For `error` and failed `turn_end`: the text. |
-| `cancelled` | For `turn_end`: the turn was cancelled. |
+Hooks have the agent's Python functions plus `set_title(text)`, which updates and saves the session
+title (up to 80 characters). This function is unavailable to the agent and background tasks.
 
 ```yaml
 hooks:
   notify:
-    events: [turn_end]
+    events: [agent_message]
     run: |
-      if not cancelled:
+      if status == "finished":
           sh(f"osascript -e 'display notification \"done\" with title \"{model}\"'")
-  log_calls:
-    events: [tool_end]
+  title:
+    events: [user_message]
     run: |
-      with open("/tmp/calls.log", "a") as f:
-          f.write(title + "\n")
+      if is_first:
+          set_title(text.splitlines()[0][:40])
 ```
 
 To run a script, call it: `run: sh("~/scripts/x.sh")`. Longer code goes into a `.py` file next to
-the config and call its entry point each time: `import notify; notify.on_event(event, input)`. A module is imported only once per interpreter.
+the config and call its entry point each time: `import notify; notify.on_event(event, text)`. A
+module is imported only once per interpreter.
 
 Hooks can call helpers defined under `functions` in the config.

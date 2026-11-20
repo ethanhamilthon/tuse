@@ -154,9 +154,9 @@ functions:
 
 hooks:
   notify:
-    events: [turn_end]
+    events: [agent_message]     # process_start, process_end, user_message, agent_message
     run: |                      # Python, one persistent interpreter per hook
-      if not cancelled:
+      if status == "finished":
           sh("osascript -e 'display notification \"done\"'")
 ```
 

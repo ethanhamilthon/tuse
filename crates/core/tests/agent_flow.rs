@@ -44,6 +44,7 @@ fn the_agent_edits_files_runs_tasks_and_reports_status() {
         config: Some(cfg),
         mode: tuse_core::Mode::Headless,
         resume: None,
+        start: Default::default(),
     })
     .unwrap();
     let events = s.subscribe();

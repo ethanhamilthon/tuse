@@ -11,6 +11,8 @@ pub enum Reply {
     /// A tool call: name and JSON arguments, streamed in small pieces.
     Call(&'static str, String),
     Text(&'static str),
+    /// Streams the text, then holds the response open until the client goes away.
+    Stall(&'static str),
 }
 
 /// Serves `replies` in order (the last one repeats) and returns `host:port`.
@@ -53,6 +55,19 @@ fn answer(stream: std::net::TcpStream, reply: Reply) {
             }
         }
         Reply::Text(t) => chunks.push(json!({"choices":[{"delta":{"content":t}}]})),
+        Reply::Stall(t) => {
+            let mut out = stream;
+            let _ = out.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+            );
+            let c = json!({"choices":[{"delta":{"content":t}}]});
+            let _ = write!(out, "data: {c}\n\n");
+            let _ = out.flush();
+            while out.write_all(b": ping\n\n").is_ok() {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            return;
+        }
     }
     chunks.push(json!({"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":3}}));
     let mut out = stream;

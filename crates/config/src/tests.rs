@@ -18,7 +18,7 @@ fn includes_merge() {
     let w = |n: &str, s: &str| std::fs::write(dir.join(n), s).unwrap();
     w(
         "sub/a.yaml",
-        "model: a\neffort: low\nsystems: [one]\nhooks: {h: {events: [turn_start], run: 'sh(\"./h.sh\")'}}\n",
+        "model: a\neffort: low\nsystems: [one]\nhooks: {h: {events: [user_message], run: 'sh(\"./h.sh\")'}}\n",
     );
     w(
         "b.yaml",

@@ -1,45 +1,109 @@
-use tuse_core::{Options, Session};
+mod common;
+use common::Reply;
+use serde_json::json;
+use std::time::{Duration, Instant};
+use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
+
+fn wait_turn(events: &std::sync::mpsc::Receiver<Event>) {
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(30) {
+        if let Ok(Event::TurnEnd { .. }) = events.recv_timeout(Duration::from_millis(50)) {
+            return;
+        }
+    }
+    panic!("the turn did not end");
+}
+
+fn wait_text(events: &std::sync::mpsc::Receiver<Event>) {
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(30) {
+        if let Ok(Event::Text(_)) = events.recv_timeout(Duration::from_millis(50)) {
+            return;
+        }
+    }
+    panic!("no text streamed");
+}
+
 #[test]
-fn close_drains_hook_in_order_with_global_state() {
-    let dir = std::env::temp_dir().join(format!("tuse-hook-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+fn hooks_see_process_and_message_events_in_order() {
+    let addr = common::provider(vec![
+        Reply::Call("python", json!({"code": "1", "title": "t"}).to_string()),
+        Reply::Text("done"),
+        Reply::Stall("partial"),
+    ]);
+    let (dir, _) = common::setup("hooks", &addr, "");
     let log = dir.join("events");
     let cfg = dir.join("main.yaml");
     std::fs::write(
         &cfg,
         format!(
-            r#"functions:
+            r#"model: p/m
+connect: [{{name: p, base_url: 'http://{addr}', api_key: k}}]
+functions:
   label:
     description: Label the current event
     run: return event
 hooks:
   record:
-    events: [session_start, session_end]
+    events: [process_start, process_end, user_message, agent_message, turn_end]
     run: |
-      if event == 'session_start':
+      if event == 'process_start':
           n = 0
       n += 1
+      extra = {{'process_start': reason, 'process_end': reason, 'user_message': f'{{text}} {{is_first}}', 'agent_message': f'{{text}} {{status}}'}}[event]
       with open('{}', 'a') as f:
-          f.write(label() + str(n) + '\n')
-      set_title('hook title')
+          f.write(f'{{label()}} {{n}} {{extra}}\n')
+      if event == 'user_message' and is_first:
+          set_title('hook ' + text)
 "#,
             log.display()
         ),
     )
     .unwrap();
-    let s = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        resume: None,
-        mode: tuse_core::Mode::Headless,
-    })
-    .unwrap();
-    s.close();
-    assert_eq!(
-        std::fs::read_to_string(log).unwrap(),
-        "session_start1\nsession_end2\n"
+    let open = |resume, start| {
+        Session::open(Options {
+            cwd: dir.clone(),
+            config: Some(cfg.clone()),
+            mode: Mode::Headless,
+            resume,
+            start,
+        })
+        .unwrap()
+    };
+    let s = open(None, Start::Launch);
+    assert!(
+        s.config()
+            .problems()
+            .iter()
+            .any(|p| p.contains("unknown event `turn_end`")),
+        "{:?}",
+        s.config().problems()
     );
-    assert_eq!(s.title(), "hook title");
-    std::fs::remove_dir_all(tuse_core::tuse_home().join(&s.id)).ok();
-    std::fs::remove_dir_all(dir).unwrap();
+    let events = s.subscribe();
+    s.submit(UserInput::text("hi"));
+    wait_turn(&events);
+    s.reload().unwrap();
+    s.submit(UserInput::text("stop me"));
+    wait_text(&events);
+    std::thread::sleep(Duration::from_millis(200));
+    s.cancel();
+    s.close_for("resume");
+    let again = open(Some(s.id.clone()), Start::Resume);
+    again.close();
+    assert_eq!(
+        std::fs::read_to_string(&log).unwrap(),
+        "process_start 1 launch
+user_message 2 hi True
+agent_message 3 done finished
+process_end 4 reload
+process_start 1 reload
+user_message 2 stop me False
+agent_message 3 partial cancelled
+process_end 4 resume
+process_start 1 resume
+process_end 2 exit
+"
+    );
+    assert_eq!(again.title(), "hook hi");
+    common::cleanup(&dir);
 }

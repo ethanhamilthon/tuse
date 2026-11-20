@@ -32,16 +32,19 @@ impl Session {
 
     /// Writes a top-level key into the active config file and reloads it.
     /// Without a config file there is nothing to write to.
-    pub fn save_setting(&self, key: &str, value: &str) -> Result<(), String> {
+    pub fn save_setting(self: &Arc<Self>, key: &str, value: &str) -> Result<(), String> {
         self.save(|path| tuse_config::set_key(path, key, value))
     }
 
     /// Like `save_setting`, for a key inside `settings:`.
-    pub fn save_in_settings(&self, key: &str, value: &str) -> Result<(), String> {
+    pub fn save_in_settings(self: &Arc<Self>, key: &str, value: &str) -> Result<(), String> {
         self.save(|path| tuse_config::set_setting(path, key, value))
     }
 
-    fn save(&self, write: impl Fn(&std::path::Path) -> Result<(), String>) -> Result<(), String> {
+    fn save(
+        self: &Arc<Self>,
+        write: impl Fn(&std::path::Path) -> Result<(), String>,
+    ) -> Result<(), String> {
         match tuse_config::find(self.config_arg.as_deref(), &self.cwd) {
             Some(path) => {
                 write(&path)?;

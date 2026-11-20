@@ -63,6 +63,7 @@ impl Session {
         st.generation += 1;
         st.busy = false;
         st.queue.clear();
+        let partial = std::mem::take(&mut st.partial);
         for r in history::missing_results(&st.records) {
             self.push(&mut st, r);
         }
@@ -89,9 +90,10 @@ impl Session {
             cancelled: true,
         });
         self.hook(
-            "turn_end",
+            "agent_message",
             Data {
-                cancelled: true,
+                text: Some(partial),
+                status: Some("cancelled"),
                 ..Default::default()
             },
         );

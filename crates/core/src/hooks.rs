@@ -3,27 +3,19 @@ use crate::session::Session;
 use std::sync::Arc;
 use tuse_py::MontyObject;
 
-pub const EVENTS: [&str; 7] = [
-    "session_start",
-    "session_end",
-    "turn_start",
-    "turn_end",
-    "tool_start",
-    "tool_end",
-    "error",
-];
+pub use tuse_config::HOOK_EVENTS as EVENTS;
 
-/// What a hook may read besides the event itself; unset names are `None`
-/// (`cancelled` is `False`).
+/// The variables of one event; each event sets its own, the rest are `None`.
 #[derive(Default)]
 pub struct Data {
-    pub tool: Option<String>,
-    pub input: Option<String>,
-    pub title: Option<String>,
-    pub output: Option<String>,
-    pub code: Option<i32>,
-    pub error: Option<String>,
-    pub cancelled: bool,
+    /// `user_message` and `agent_message`.
+    pub text: Option<String>,
+    /// `user_message`: the first message of the session.
+    pub is_first: Option<bool>,
+    /// `agent_message`: `working`, `finished` or `cancelled`.
+    pub status: Option<&'static str>,
+    /// `process_start` / `process_end`: `launch`, `new`, `resume`, `reload` or `exit`.
+    pub reason: Option<&'static str>,
 }
 
 fn opt(s: Option<String>) -> MontyObject {
@@ -42,6 +34,8 @@ impl Session {
             if hook.run.trim().is_empty() || !hook.events.iter().any(|e| e == event) {
                 continue;
             }
+            let config_path = tuse_config::find(self.config_arg.as_deref(), &self.cwd)
+                .map(|p| p.display().to_string());
             let vars = vec![
                 ("event".to_string(), MontyObject::string(event)),
                 ("hook".into(), MontyObject::string(name)),
@@ -51,24 +45,15 @@ impl Session {
                     MontyObject::string(self.cwd.display().to_string()),
                 ),
                 ("model".into(), MontyObject::string(&model)),
+                ("config".into(), opt(config_path)),
+                ("text".into(), opt(data.text.clone())),
                 (
-                    "config".into(),
-                    tuse_config::find(self.config_arg.as_deref(), &self.cwd)
-                        .map_or_else(MontyObject::none, |p| {
-                            MontyObject::string(p.display().to_string())
-                        }),
+                    "is_first".into(),
+                    data.is_first
+                        .map_or_else(MontyObject::none, MontyObject::bool),
                 ),
-                ("tool".into(), opt(data.tool.clone())),
-                ("input".into(), opt(data.input.clone())),
-                ("title".into(), opt(data.title.clone())),
-                ("output".into(), opt(data.output.clone())),
-                (
-                    "code".into(),
-                    data.code
-                        .map_or_else(MontyObject::none, |c| MontyObject::int(c.into())),
-                ),
-                ("error".into(), opt(data.error.clone())),
-                ("cancelled".into(), MontyObject::bool(data.cancelled)),
+                ("status".into(), opt(data.status.map(String::from))),
+                ("reason".into(), opt(data.reason.map(String::from))),
             ];
             let queue = queues.entry(name.clone()).or_insert_with(|| {
                 HookQueue::new(

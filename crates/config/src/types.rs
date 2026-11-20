@@ -94,6 +94,13 @@ pub struct Hook {
     pub run: String,
 }
 
+pub const HOOK_EVENTS: [&str; 4] = [
+    "process_start",
+    "process_end",
+    "user_message",
+    "agent_message",
+];
+
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
 
 impl Config {
@@ -129,6 +136,18 @@ impl Config {
                 self.effort,
                 EFFORTS.join(", ")
             ));
+        }
+        for (name, hook) in &self.hooks {
+            for e in hook
+                .events
+                .iter()
+                .filter(|e| !HOOK_EVENTS.contains(&e.as_str()))
+            {
+                out.push(format!(
+                    "hook {name}: unknown event `{e}`; events are {}",
+                    HOOK_EVENTS.join(", ")
+                ));
+            }
         }
         out
     }

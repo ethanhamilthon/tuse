@@ -33,7 +33,7 @@ pub use event::Event;
 pub use hooks::EVENTS;
 pub use input::{with_files, with_images};
 pub use record::{FileDiff, Record, UserInput};
-pub use session::{Mode, Options, Session};
+pub use session::{Mode, Options, Session, Start};
 pub use store::{Meta, list_sessions, tuse_home};
 pub use tasks::{TaskInfo, tail};
 pub use trace::TraceItem;

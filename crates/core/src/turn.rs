@@ -17,7 +17,7 @@ enum Step {
 
 impl Session {
     pub(crate) fn turn(self: Arc<Self>, generation: u64, cancel: Arc<AtomicBool>) {
-        let data = {
+        {
             let Some(mut st) = self.lock_live(generation) else {
                 return;
             };
@@ -39,13 +39,7 @@ impl Session {
                 self.save_meta(&mut st);
             }
             st.turn_error = None;
-            Data {
-                input,
-                title: Some(st.meta.title.clone()),
-                ..Default::default()
-            }
-        };
-        self.hook("turn_start", data);
+        }
         self.emit(Event::TurnStart);
         loop {
             match self.step(generation, &cancel) {
@@ -66,7 +60,7 @@ impl Session {
         if !st.queue.is_empty() {
             return false;
         }
-        let error = st.turn_error.take();
+        st.turn_error = None;
         st.busy = false;
         let (elapsed, calls) = (st.turn_start.elapsed(), st.calls);
         let (model, effort) = (st.model.clone(), st.effort.clone());
@@ -87,13 +81,6 @@ impl Session {
             effort,
             cancelled: false,
         });
-        self.hook(
-            "turn_end",
-            Data {
-                error,
-                ..Default::default()
-            },
-        );
         true
     }
 
@@ -107,6 +94,8 @@ impl Session {
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
         };
+        st.partial.clear();
+        let mut typed = vec![];
         for (id, input) in std::mem::take(&mut st.queue) {
             if input.notification {
                 self.emit(Event::Notification(input.text.clone()));
@@ -118,6 +107,8 @@ impl Session {
                 text: input.text.clone(),
                 images: input.images.len(),
             });
+            let is_first = !st.records.iter().any(|r| matches!(r, Record::User { .. }));
+            typed.push((input.text.clone(), is_first));
             let r = Record::User {
                 text: input.text,
                 images: input.images,
@@ -127,6 +118,20 @@ impl Session {
         }
         let system = prompt::system_prompt(&config, st.bounds.drop > 0, self.mode);
         let (model, effort) = (st.model.clone(), st.effort.clone());
+        drop(st);
+        for (text, is_first) in typed {
+            self.hook(
+                "user_message",
+                Data {
+                    text: Some(text),
+                    is_first: Some(is_first),
+                    ..Default::default()
+                },
+            );
+        }
+        let Some(st) = self.lock_live(generation) else {
+            return Step::Stale;
+        };
         let req = Request {
             model: split_model(&model).1.to_string(),
             messages: messages(&st.records, st.bounds, &system),
@@ -181,7 +186,22 @@ impl Session {
             at: id::now(),
         };
         self.push(&mut st, r);
+        st.partial.clear();
         drop(st);
+        if !reply.text.trim().is_empty() {
+            self.hook(
+                "agent_message",
+                Data {
+                    text: Some(reply.text.clone()),
+                    status: Some(if calls.is_empty() {
+                        "finished"
+                    } else {
+                        "working"
+                    }),
+                    ..Default::default()
+                },
+            );
+        }
         self.emit(Event::Assistant { text: reply.text });
         self.emit(Event::Usage);
         if calls.is_empty() {
@@ -234,14 +254,7 @@ impl Session {
         st.turn_error = Some(text.clone());
         self.push(&mut st, Record::Error { text: text.clone() });
         drop(st);
-        self.emit(Event::Error(text.clone()));
-        self.hook(
-            "error",
-            Data {
-                error: Some(text),
-                ..Default::default()
-            },
-        );
+        self.emit(Event::Error(text));
         Step::Done
     }
 }

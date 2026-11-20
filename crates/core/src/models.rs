@@ -6,7 +6,7 @@ use tuse_api::Client;
 impl Session {
     /// Models (`provider/model`) the providers have reported so far.
     pub fn remote_models(&self) -> Vec<String> {
-        self.remote.lock().unwrap().clone()
+        self.state.lock().unwrap().remote.clone()
     }
 
     /// Asks every `connect` provider for its models in the background.
@@ -18,10 +18,11 @@ impl Session {
                 move || match Client::new(&c.base_url, &c.api_key).models() {
                     Ok(ids) => {
                         let prefix = format!("{}/", c.name);
-                        let mut all = s.remote.lock().unwrap();
-                        all.retain(|m| !m.starts_with(&prefix));
-                        all.extend(ids.into_iter().map(|id| format!("{prefix}{id}")));
-                        drop(all);
+                        let mut st = s.state.lock().unwrap();
+                        st.remote.retain(|m| !m.starts_with(&prefix));
+                        st.remote
+                            .extend(ids.into_iter().map(|id| format!("{prefix}{id}")));
+                        drop(st);
                         s.emit(Event::Models);
                     }
                     Err(e) => s.emit(Event::Error(format!("{}: can't fetch models: {e}", c.name))),

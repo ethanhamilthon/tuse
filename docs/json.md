@@ -18,6 +18,8 @@ go to stderr. Closing stdin, `shutdown`, SIGINT, SIGTERM or SIGHUP close the ses
 ```
 
 Requests are served while a turn runs. Methods before `initialize` fail with `-32002`.
+In `turn.submit`, `text` stays as given; `files` and image paths are attached as hidden context
+blocks, like `@` files in the TUI ([prompts.md](prompts.md)). A missing file fails the request.
 
 | Method | Params → result |
 | --- | --- |

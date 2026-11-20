@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::clipboard::Pasted;
-use crate::expand_prompts::expand_prompts;
+use tuse_core::Refs;
 
 impl App {
     /// Ctrl+V / Cmd+V: an image becomes an `[Image #n]` atom, text is inserted.
@@ -23,7 +23,7 @@ impl App {
 
     pub(super) fn submit(&mut self) {
         if self.ask_input.is_some() {
-            let answer = self.editor.text_expanded().trim().to_string();
+            let answer = self.editor.text().trim().to_string();
             if !answer.is_empty() {
                 self.finish_answer(Some(answer));
             }
@@ -44,15 +44,9 @@ impl App {
             self.run_command(cmd);
             return;
         }
-        let expanded = expand_prompts(
-            self.editor.text_expanded().trim(),
-            &self.session.config().prompts,
-        );
-        let images = self.editor.images();
         self.picker = None;
         self.scroll = 0;
-        let images: Vec<String> = images.iter().map(|p| p.display().to_string()).collect();
-        match tuse_core::with_images(&expanded, &images) {
+        match tuse_core::build_input(trimmed, self.refs()) {
             Ok(input) => {
                 let (id, queued) = self.session.submit(input);
                 if queued {
@@ -62,6 +56,20 @@ impl App {
                 }
             }
             Err(e) => self.error(e),
+        }
+    }
+
+    /// The prompts, files and images picked into the input.
+    pub(crate) fn refs(&self) -> Refs {
+        let prompts = &self.session.config().prompts;
+        Refs {
+            prompts: (self.editor.prompts().into_iter())
+                .filter_map(|n| prompts.get(&n).map(|b| (n, b.clone())))
+                .collect(),
+            images: self.editor.images(),
+            files: self.editor.files(),
+            strict: false,
+            cwd: self.cwd.clone(),
         }
     }
 }

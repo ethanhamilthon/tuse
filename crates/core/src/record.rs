@@ -7,6 +7,8 @@ use tuse_api::{ToolCall, Usage};
 pub enum Record {
     User {
         text: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        context: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<String>,
         #[serde(default)]
@@ -95,6 +97,8 @@ pub struct FileDiff {
 pub struct UserInput {
     pub notification: bool,
     pub text: String,
+    /// Hidden XML blocks (prompts, files, images) sent to the model but not shown.
+    pub context: String,
     /// `data:` URLs.
     pub images: Vec<String>,
 }

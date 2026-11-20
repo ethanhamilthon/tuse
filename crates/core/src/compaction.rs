@@ -49,6 +49,7 @@ mod tests {
         vec![
             Record::User {
                 text: format!("q{n}"),
+                context: String::new(),
                 images: vec![],
                 at: String::new(),
             },

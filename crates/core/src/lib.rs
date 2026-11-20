@@ -31,7 +31,7 @@ pub use control::InputId;
 pub use docs::docs;
 pub use event::Event;
 pub use hooks::EVENTS;
-pub use input::{with_files, with_images};
+pub use input::{FILE_LIMIT, Refs, build as build_input};
 pub use record::{FileDiff, Record, UserInput};
 pub use session::{Mode, Options, Session, Start};
 pub use store::{Meta, list_sessions, tuse_home};

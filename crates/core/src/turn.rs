@@ -110,6 +110,7 @@ impl Session {
             typed.push((input.text.clone(), is_first));
             let r = Record::User {
                 text: input.text,
+                context: input.context,
                 images: input.images,
                 at: id::now(),
             };

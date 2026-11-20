@@ -1,17 +1,29 @@
 use super::*;
-use crate::expand_prompts::expand_prompts;
+use crate::editor::AtomKind;
 use crate::picker::Kind;
-use std::collections::BTreeMap;
 use std::net::TcpListener;
 use std::time::Duration;
 use tuse_core::{Event, Options, Session, UserInput};
 
 #[test]
-fn expands_prompt_tokens() {
-    let mut p = BTreeMap::new();
-    p.insert("non-stop".to_string(), "Do it all.".to_string());
-    assert_eq!(expand_prompts("fix #non-stop", &p), "fix Do it all.");
-    assert_eq!(expand_prompts("a#non-stop #x", &p), "a#non-stop #x");
+fn only_picked_atoms_reach_the_hidden_context() {
+    let mut app = crate::app::test_app("refs");
+    std::fs::write(app.cwd.join("a.txt"), "body").unwrap();
+    std::fs::write(app.cwd.join("p.png"), "PNG").unwrap();
+    app.editor.insert("#typed @b.txt ");
+    app.editor
+        .insert_atom("@a.txt", AtomKind::File("a.txt".into()));
+    app.editor.insert(" ");
+    app.editor.insert_image(app.cwd.join("p.png"));
+    let input = tuse_core::build_input(&app.editor.text(), app.refs()).unwrap();
+    assert_eq!(input.text, "#typed @b.txt @a.txt [Image #1]");
+    let png = app.cwd.join("p.png").display().to_string();
+    assert_eq!(
+        input.context,
+        format!("<image id=\"1\" path=\"{png}\"/>\n<file path=\"a.txt\">body</file>")
+    );
+    assert_eq!(input.images.len(), 1);
+    crate::app::cleanup(app);
 }
 
 #[test]

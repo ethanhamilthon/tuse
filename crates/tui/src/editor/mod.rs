@@ -1,17 +1,11 @@
-use std::path::PathBuf;
-
+mod atoms;
 mod layout;
 mod selection;
 
+pub use atoms::{Atom, AtomKind};
+
 /// First code point of the private-use range that stands in for atoms.
 const ATOM_BASE: u32 = 0xF0000;
-
-/// A file, prompt or image in the input. The buffer holds one placeholder
-/// char for it, so deleting and the arrows treat it as a single letter.
-pub struct Atom {
-    pub label: String,
-    pub image: Option<PathBuf>,
-}
 
 /// A multi-line input buffer with a cursor.
 #[derive(Default)]
@@ -32,25 +26,6 @@ impl Editor {
         self.range_text(0, self.buf.len())
     }
 
-    pub fn insert_image(&mut self, path: PathBuf) {
-        let n = 1 + self.atoms.iter().filter(|a| a.image.is_some()).count();
-        self.insert_atom(&format!("[Image #{n}]"), Some(path));
-    }
-
-    pub fn text_expanded(&self) -> String {
-        self.buf
-            .iter()
-            .map(|c| match self.atom(*c) {
-                Some(Atom {
-                    label,
-                    image: Some(path),
-                }) => format!("{}: {}]", label.trim_end_matches(']'), path.display()),
-                Some(a) => a.label.clone(),
-                None => c.to_string(),
-            })
-            .collect()
-    }
-
     fn range_text(&self, a: usize, b: usize) -> String {
         self.buf[a..b]
             .iter()
@@ -63,25 +38,6 @@ impl Editor {
 
     fn atom(&self, c: char) -> Option<&Atom> {
         atom_index(c).and_then(|i| self.atoms.get(i))
-    }
-
-    pub fn insert_atom(&mut self, label: &str, image: Option<PathBuf>) {
-        self.delete_selection();
-        let c = char::from_u32(ATOM_BASE + self.atoms.len() as u32).unwrap_or('?');
-        self.atoms.push(Atom {
-            label: label.to_string(),
-            image,
-        });
-        self.buf.insert(self.cursor, c);
-        self.cursor += 1;
-    }
-
-    /// Paths of the images placed in the input.
-    pub fn images(&self) -> Vec<PathBuf> {
-        self.buf
-            .iter()
-            .filter_map(|c| self.atom(*c)?.image.clone())
-            .collect()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -205,36 +161,5 @@ impl Editor {
         self.clear_selection();
         self.buf.splice(start..end, with.chars());
         self.cursor = start + with.chars().count();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn atom_is_one_letter() {
-        let mut e = Editor::default();
-        e.insert("a ");
-        e.insert_atom("@src/main.rs", None);
-        e.insert(" b");
-        assert_eq!(e.text(), "a @src/main.rs b");
-        assert_eq!(e.buf.len(), 5);
-        e.left();
-        e.left();
-        e.backspace();
-        assert_eq!(e.text(), "a  b");
-        let mut e = Editor::default();
-        e.insert_image("/x.png".into());
-        assert_eq!(e.text(), "[Image #1]");
-        assert_eq!(e.text_expanded(), "[Image #1: /x.png]");
-        e.insert_image("/y.png".into());
-        assert_eq!(e.text(), "[Image #1][Image #2]");
-        e.backspace();
-        e.insert_image("/z.png".into());
-        assert_eq!(e.text(), "[Image #1][Image #3]");
-        e.backspace();
-        assert_eq!(e.images(), [PathBuf::from("/x.png")]);
-        assert_eq!(e.token().1, "");
     }
 }

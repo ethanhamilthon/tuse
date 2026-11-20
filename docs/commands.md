@@ -9,6 +9,8 @@
     the folder name in `~/.tuse/`) instead of a new one; `/resume` picks one inside the TUI.
 - `tuse -p [PROMPT|-]` (`--print`) runs one prompt headless, also with `-c` and `-r`. See
   `docs("headless")`.
+- `tuse json [-c PATH] [-r ID]` serves the session over JSON-RPC 2.0 on stdin/stdout. See
+  `docs("json")`.
 - `tuse connect` adds a provider.
 - `tuse reset [--yes]` replaces the global config folder with the latest `main.yaml`. It deletes
   everything in that folder.

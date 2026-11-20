@@ -21,6 +21,11 @@ const TOPICS: &[(&str, &str, &str)] = &[
         include_str!("../../../docs/headless.md"),
     ),
     (
+        "json",
+        "tuse json: JSON-RPC 2.0 over stdio for editors and other clients",
+        include_str!("../../../docs/json.md"),
+    ),
+    (
         "commands",
         "CLI flags, TUI slash commands, steering and /trace",
         include_str!("../../../docs/commands.md"),

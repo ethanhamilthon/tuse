@@ -10,7 +10,7 @@ Chat Completions compatible API, one tool: `python`.
 - Hooks are Python too: each named hook keeps its own interpreter and processes events in order with the same access.
 - `read()` shows images to the model; files changed by `write()` and `edit()` are shown as a
   colored diff at the end of the call; Python code is syntax highlighted.
-- Headless mode (`tuse -p`) for scripts; sessions in `~/.tuse/<id>/` as JSONL.
+- Headless mode (`tuse -p`) for scripts and a JSON-RPC mode (`tuse json`) for editors; sessions in `~/.tuse/<id>/` as JSONL.
 - Background tasks, 50/25/25 context compaction, retries.
 - YAML config with `include`, `$VAR` and `#{{command}}` expansion and a full theme.
 
@@ -59,6 +59,7 @@ creates `main.yaml` in `~/.config/tuse` (`CONFIG_DIR`) when it is missing.
 tuse [-c|--config PATH] [-r|--resume ID] open the TUI
 tuse -p [PROMPT|-] [-c PATH] [-r ID]      headless: runs the prompt to the end, replies to
                                           stdout, session ID to stderr, exit code 1 on an error
+tuse json [-c PATH] [-r ID]               JSON-RPC 2.0 over stdin/stdout (docs/json.md)
 tuse connect [--config PATH]              add a provider (base url, api key, name)
 tuse reset [--yes] | tuse update          reset the config folder | update the binary
 ```
@@ -162,7 +163,7 @@ hooks:
 
 ## Development
 
-The workspace is split into crates: `config`, `api`, `py`, `core`, `tui` and
+The workspace is split into crates: `config`, `api`, `py`, `core`, `tui`, `rpc` and
 `cli`. See [AGENTS.md](AGENTS.md) for the rules. Run `make check` before committing.
 
 ## License

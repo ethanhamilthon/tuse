@@ -18,6 +18,8 @@ USAGE
                                            headless (`-` reads the prompt from stdin):
                                            runs the prompt to the end, replies to stdout,
                                            the session ID to stderr; exit code 1 on an error
+  tuse json [-c PATH] [-r ID]              a JSON-RPC 2.0 session over stdin/stdout, one
+                                           message per line (see docs/json.md)
   tuse connect [--config PATH]            add a provider: asks base url, api key and name,
                                            fetches its models and saves it to the config
   tuse reset [--yes]                      replace the global config folder with the latest
@@ -45,6 +47,7 @@ fn run(raw: Vec<String>) -> Result<(), String> {
             let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
             connect::run(a.value(&["--config", "-c"]).map(|p| cwd.join(p)))
         }
+        "json" => json(&Args::parse(rest, &["--config", "-c", "--resume", "-r"])?),
         "reset" => update::reset(Args::parse(rest, &[])?.has(&["--yes", "-y"])),
         "update" => update::update(),
         "version" | "--version" | "-V" => {
@@ -92,5 +95,34 @@ fn start(a: &Args) -> Result<(), String> {
     }
     let id = tuse_tui::run(session, cwd, config).map_err(|e| e.to_string())?;
     eprintln!("tuse: session {id}");
+    Ok(())
+}
+
+/// `tuse json`: stdout carries only the protocol; errors go to stderr.
+fn json(a: &Args) -> Result<(), String> {
+    if let Some(f) = a.unknown(&["--config", "-c", "--resume", "-r"]) {
+        return Err(format!("unknown flag {f}\n\n{USAGE}"));
+    }
+    if let Some(p) = a.positional.first() {
+        return Err(format!("unexpected argument `{p}`\n\n{USAGE}"));
+    }
+    let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+    let session = Session::open(Options {
+        cwd: cwd.clone(),
+        config: a.value(&["--config", "-c"]).map(|p| cwd.join(p)),
+        mode: tuse_core::Mode::Json,
+        resume: a.value(&["--resume", "-r"]),
+        start: tuse_core::Start::Launch,
+    })?;
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    for sig in [
+        signal_hook::consts::SIGINT,
+        signal_hook::consts::SIGTERM,
+        signal_hook::consts::SIGHUP,
+    ] {
+        signal_hook::flag::register(sig, stop.clone()).map_err(|e| e.to_string())?;
+    }
+    let stdin = std::io::BufReader::new(std::io::stdin());
+    tuse_rpc::serve(session, stdin, tuse_rpc::Out::new(std::io::stdout()), stop);
     Ok(())
 }

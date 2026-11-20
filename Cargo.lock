@@ -2425,6 +2425,7 @@ dependencies = [
  "tuse-api",
  "tuse-config",
  "tuse-core",
+ "tuse-rpc",
  "tuse-tui",
  "ureq",
 ]
@@ -2467,6 +2468,15 @@ dependencies = [
  "monty",
  "monty-fs",
  "monty-types",
+]
+
+[[package]]
+name = "tuse-rpc"
+version = "0.5.3"
+dependencies = [
+ "serde_json",
+ "tuse-config",
+ "tuse-core",
 ]
 
 [[package]]

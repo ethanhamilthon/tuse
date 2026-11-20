@@ -10,8 +10,9 @@ Rust + Crossterm, OpenAI Chat Completions API. User docs: `README.md` and `docs/
   - `crates/py` - the Python (Monty) runtime: interpreter, `sh`, filesystem and `import` mounts;
   - `crates/core` - sessions, agent loop, tools (`python`, `read`, `write`, `edit`), compaction, hooks, tasks;
   - `crates/tui` - the terminal UI;
+  - `crates/rpc` - `tuse json`: JSON-RPC 2.0 over stdio, a front end like `tui`;
   - `crates/cli` - the `tuse` binary: argument parsing and wiring.
-  Lower layers never depend on higher ones (`tui` and `cli` sit on top).
+  Lower layers never depend on higher ones (`tui`, `rpc` and `cli` sit on top).
 - Minimum tests and comments: test only code that can really break, comment only what is not obvious.
 - No file longer than 250 lines. Split a file before it grows past that.
 - Total project size must not exceed 15,000 lines of code.

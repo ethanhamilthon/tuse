@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2
+
+- Inspect the effective YAML with `/config`. Expanded credentials are visible. Slash commands now work mid-draft without clearing surrounding text.
+- Drag to select and copy chat or panel text. In the editor, use Shift+movement to select, Ctrl/Cmd+A to select all, and Ctrl/Cmd+X to cut.
+- Custom `ask` answers use the multiline editor and restore the original draft. Task notifications appear separately from user messages.
+- Rename Python `show()` to `draw_ui()` (no alias). The built-in prompt no longer injects environment details or `AGENTS.md`; use `systems` for project instructions.
+
 ## 0.5.1
 
 - **Topic-based `docs(topic=None)`.** Split `docs/` into 7 focused topic files (`tool`,

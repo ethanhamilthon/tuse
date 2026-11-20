@@ -5,6 +5,7 @@ use tuse_core::FileDiff;
 /// A `python` call in the chat: its code (colored), then its output, then the
 /// diff of every file it changed.
 pub fn tool(
+    title: &str,
     input: &str,
     output: Option<&str>,
     code: Option<i32>,
@@ -15,13 +16,32 @@ pub fn tool(
     let failed = output.is_some() && code != Some(0);
     let head = Style::fg(if failed { p.err } else { p.info });
     let pad = " ".repeat(crate::text::width(TOOL_PREFIX));
-    let mut lines = source(input, width, head, failed, p);
+    let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    let title = crate::render::clean(&title);
+    let titled = !title.trim().is_empty();
+    let mut lines = source(input, width, head, failed, titled, p);
     let keep = tuse_config::limit(p.ui.tool_line, lines.len());
     if keep < lines.len() {
         lines.truncate(keep);
         if keep > 0 {
             lines.push(vec![span(format!("{pad}{MORE}"), Style::fg(p.dim))]);
         }
+    }
+    if titled && p.ui.tool_line != 0 {
+        lines.insert(
+            0,
+            vec![
+                span(clip(TOOL_PREFIX, width, ""), head),
+                span(
+                    clip(
+                        &title,
+                        width.saturating_sub(pad.len()),
+                        if width > pad.len() { MORE } else { "" },
+                    ),
+                    Style::fg(p.border),
+                ),
+            ],
+        );
     }
     let Some(out) = output else { return lines };
     let out = crate::render::clean(out);
@@ -43,7 +63,14 @@ pub fn tool(
 }
 
 /// The code wrapped to `width`, colored unless the call failed.
-fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<Line> {
+fn source(
+    input: &str,
+    w: usize,
+    head: Style,
+    failed: bool,
+    titled: bool,
+    p: &Palette,
+) -> Vec<Line> {
     let cleaned = crate::render::clean(input.trim());
     let code = if p.ui.fold_strings {
         crate::fold::fold_multiline_strings(&cleaned)
@@ -60,7 +87,9 @@ fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<
     colored
         .into_iter()
         .enumerate()
-        .flat_map(|(i, l)| crate::text::wrap(&l, w, if i == 0 { &first } else { &rest }, &rest))
+        .flat_map(|(i, l)| {
+            crate::text::wrap(&l, w, if i == 0 && !titled { &first } else { &rest }, &rest)
+        })
         .collect()
 }
 
@@ -142,9 +171,37 @@ mod tests {
     }
 
     #[test]
+    fn title_uses_its_own_row_and_color() {
+        let mut p = Palette::new(&Default::default(), &Default::default());
+        p.ui.tool_line = 1;
+        let preview = |title: &str, p: &Palette| {
+            tool(title, "first\nsecond", Some("result"), Some(0), &[], 9, p)
+        };
+        let text = |line: &Line| line.iter().map(|s| s.text.as_str()).collect::<String>();
+        let lines = preview(" Test\n long\x1b title ", &p);
+        assert_eq!(text(&lines[0]), "* Test l…");
+        assert_eq!(lines[0][0].style.fg, p.info);
+        assert_eq!(lines[0][1].style.fg, p.border);
+        assert_eq!(text(&lines[1]), "  first");
+        assert_eq!(text(&preview(" ", &p)[0]), "* first");
+        p.ui.tool_line = 0;
+        let hidden = preview("Test", &p);
+        assert_eq!(hidden.len(), 1);
+        assert_eq!(text(&hidden[0]), "  result");
+    }
+
+    #[test]
     fn tool_output_tabs_do_not_reach_the_terminal() {
         let p = Palette::new(&Default::default(), &Default::default());
-        let lines = tool("x = 1", Some("1\tx\n2\t\x1b[31my"), Some(0), &[], 40, &p);
+        let lines = tool(
+            "",
+            "x = 1",
+            Some("1\tx\n2\t\x1b[31my"),
+            Some(0),
+            &[],
+            40,
+            &p,
+        );
         let text: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
         assert!(!text.contains('\t') && !text.contains('\x1b'), "{text:?}");
         assert!(text.contains("1    x"), "tabs become spaces: {text:?}");

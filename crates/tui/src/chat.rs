@@ -14,6 +14,7 @@ pub enum Entry {
     Reasoning(String),
     Tool {
         id: String,
+        title: String,
         input: String,
         output: Option<String>,
         code: Option<i32>,
@@ -68,6 +69,7 @@ impl Chat {
                 }
                 Record::Tool {
                     id,
+                    title,
                     input,
                     output,
                     code,
@@ -75,6 +77,7 @@ impl Chat {
                     ..
                 } => Entry::Tool {
                     id: id.clone(),
+                    title: title.clone(),
                     input: input.clone(),
                     output: Some(output.clone()),
                     code: *code,

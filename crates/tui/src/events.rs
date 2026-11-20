@@ -55,7 +55,11 @@ impl App {
                 self.streamed_text = false;
             }
             Event::ToolDelta {
-                index, id, code, ..
+                index,
+                id,
+                code,
+                title,
+                ..
             } => {
                 let pos =
                     if let Some((_, pos)) = self.pending_tools.iter().find(|(i, _)| *i == index) {
@@ -71,6 +75,7 @@ impl App {
                             } else {
                                 id
                             },
+                            title: String::new(),
                             input: String::new(),
                             output: None,
                             code: None,
@@ -78,11 +83,21 @@ impl App {
                         });
                         pos
                     };
-                if let Some(Entry::Tool { input, .. }) = self.chat.get_mut(pos) {
+                if let Some(Entry::Tool {
+                    input,
+                    title: shown,
+                    ..
+                }) = self.chat.get_mut(pos)
+                {
+                    if let Some(title) = title {
+                        *shown = title;
+                    }
                     input.push_str(&code);
                 }
             }
-            Event::ToolStart { id, input, .. } => {
+            Event::ToolStart {
+                id, input, title, ..
+            } => {
                 if let Some((n, _)) = self
                     .pending_tools
                     .iter()
@@ -92,17 +107,20 @@ impl App {
                     let (_, pos) = self.pending_tools.remove(n);
                     if let Some(Entry::Tool {
                         id: old,
+                        title: shown,
                         input: text,
                         ..
                     }) = self.chat.get_mut(pos)
                     {
                         *old = id;
+                        *shown = title;
                         *text = input;
                         return;
                     }
                 }
                 self.chat.push(Entry::Tool {
                     id,
+                    title,
                     input,
                     output: None,
                     code: None,

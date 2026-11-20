@@ -17,6 +17,9 @@ pub fn run(session: Arc<Session>, prompt: Option<String>) -> Result<(), String> 
         signal_hook::flag::register(sig, stop.clone()).map_err(|e| e.to_string())?;
     }
     eprintln!("tuse: session {}", session.id);
+    for p in session.config().problems() {
+        eprintln!("tuse: {p}");
+    }
     let events = session.subscribe();
     let prompt = prompt.filter(|p| !p.trim().is_empty());
     if prompt.is_none() {

@@ -118,6 +118,19 @@ impl Config {
         full_model_name(&self.model, &self.provider, &self.connect)
     }
 
+    /// What is wrong in the config but not fatal: each item is one notice.
+    pub fn problems(&self) -> Vec<String> {
+        let mut out = vec![];
+        if !self.effort.is_empty() && !EFFORTS.contains(&self.effort.as_str()) {
+            out.push(format!(
+                "config: unknown effort `{}`, using `default`; use one of {}",
+                self.effort,
+                EFFORTS.join(", ")
+            ));
+        }
+        out
+    }
+
     pub fn default_effort(&self) -> String {
         if EFFORTS.contains(&self.effort.as_str()) {
             self.effort.clone()

@@ -37,6 +37,15 @@ fn includes_merge() {
     assert_eq!(c.prompts["p"], "hi");
     assert_eq!(c.settings.hook_timeout, 30);
     assert_eq!(c.hooks["h"].run, "sh(\"./h.sh\")");
+    assert!(c.problems().is_empty());
+    w("main.yaml", "effort: hgih\n");
+    let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
+    assert_eq!(c.default_effort(), "default");
+    assert!(
+        c.problems()[0].contains("unknown effort `hgih`"),
+        "{:?}",
+        c.problems()
+    );
     std::fs::remove_dir_all(dir).ok();
 }
 

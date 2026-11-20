@@ -48,6 +48,9 @@ impl App {
                     if let Some(panel) = &mut self.panel {
                         panel.invalidate();
                     }
+                    for p in self.session.config().problems() {
+                        self.notice(p);
+                    }
                     self.flash("Config reloaded.");
                 }
                 Err(e) => self.error(format!("Reload failed: {e}")),

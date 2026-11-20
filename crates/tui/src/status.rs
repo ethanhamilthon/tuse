@@ -1,29 +1,24 @@
 use crate::app::App;
 use crate::render::duration;
+use crate::style::{LABEL_SEP, SPINNER, STEERING_LABEL};
 
-/// The working indicator: spinner, time and what the agent is doing; empty when it is idle.
+/// The working indicator: spinner, time and tool title; empty when idle.
 pub fn working(app: &App) -> String {
-    let t = &app.palette.t;
     let Some((elapsed, status)) = app.session.turn_info() else {
         return String::new();
     };
     if app.steering.is_some() {
-        return t.steering_label.clone();
+        return STEERING_LABEL.to_string();
     }
-    let frames = &t.spinner;
-    let spin = frames
-        .get(app.tick % frames.len().max(1))
-        .cloned()
-        .unwrap_or_default();
+    let spin = SPINNER[app.tick % SPINNER.len()];
     if status.is_empty() {
         return format!("{spin} {}", duration(elapsed));
     }
-    format!("{spin} {}{}{status}", duration(elapsed), t.label_sep)
+    format!("{spin} {}{LABEL_SEP}{status}", duration(elapsed))
 }
 
 /// The model indicator: model, effort, context use and cost.
 pub fn model(app: &App) -> String {
-    let t = &app.palette.t;
     let config = app.session.config();
     let (model, effort) = app.session.model();
     let mut parts = vec![config.display_name(&model), effort];
@@ -40,5 +35,5 @@ pub fn model(app: &App) -> String {
     if stats.priced {
         parts.push(format!("${:.2}", stats.cost));
     }
-    parts.join(&t.label_sep)
+    parts.join(LABEL_SEP)
 }

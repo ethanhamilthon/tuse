@@ -67,7 +67,7 @@ impl App {
                     .collect()
             }
             _ => {
-                let max = self.palette.t.file_picker_max;
+                let max = crate::style::FILE_PICKER_MAX;
                 crate::files::list(&self.cwd, &self.file_dir, max)
                     .into_iter()
                     .map(|f| item(f.clone(), "", f))

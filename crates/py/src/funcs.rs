@@ -16,7 +16,6 @@ pub fn names(host: &dyn Host) -> Vec<&'static str> {
 
 pub fn call(host: &dyn Host, name: &str, args: &CallArgs, ctx: &Ctx) -> Result<MontyObject, Fail> {
     let a = Args(args);
-    host.status(name, &a);
     if name != "sh" {
         return host.call(name, &a, ctx);
     }

@@ -33,7 +33,4 @@ pub trait Host: Send + Sync {
     fn adopt(&self, adopt: Adopt) -> Result<(String, File), Adopt> {
         Err(adopt)
     }
-
-    /// Called before every host function, `sh` included (the working indicator).
-    fn status(&self, _name: &str, _args: &Args) {}
 }

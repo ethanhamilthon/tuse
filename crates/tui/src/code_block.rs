@@ -5,8 +5,8 @@ use crate::text::{span, wrap};
 impl Renderer<'_> {
     /// Lines of a fenced or indented block; `python` blocks are colored like tool calls.
     pub(crate) fn code_block(&mut self, t: &str) {
-        let st = Style::fg(self.p.code_block);
-        let pad = " ".repeat(self.p.t.code_indent as usize);
+        let st = Style::fg(self.p.fg);
+        let pad = " ".repeat(crate::style::CODE_INDENT);
         let python = matches!(self.lang.as_str(), "python" | "py");
         for line in t.trim_end_matches('\n').split('\n') {
             let (mut first, _) = self.prefixes();

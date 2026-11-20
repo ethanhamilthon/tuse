@@ -13,14 +13,14 @@ use std::io::Write;
 pub fn draw(app: &mut App, out: &mut impl Write, w: u16, h: u16) -> std::io::Result<()> {
     let (w, h) = (w as usize, h as usize);
     let p = &app.palette;
-    let t = &p.t;
-    let pad = t.pad_x as usize;
+    let ui = &p.ui;
+    let pad = ui.pad_x as usize;
     let inner = w.saturating_sub(pad * 2).max(1);
-    let fr = input_view::frame(t);
+    let fr = input_view::frame(ui);
     let text_w = inner.saturating_sub(fr.left + fr.right).max(1);
     app.input_cols = text_w;
     let (rows, (crow, ccol)) = app.editor.layout(text_w);
-    let input_h = tuse_config::limit(t.input_max_height, rows.len())
+    let input_h = tuse_config::limit(ui.input_max_height, rows.len())
         .max(1)
         .min(h.saturating_sub(fr.head + fr.foot).max(1));
     let input_top = crow.saturating_sub(input_h - 1).min(rows.len() - input_h);
@@ -38,7 +38,7 @@ pub fn draw(app: &mut App, out: &mut impl Write, w: u16, h: u16) -> std::io::Res
     while view.len() < chat_h {
         view.insert(0, vec![]);
     }
-    let cap = chat_h.min(t.list_max_height as usize);
+    let cap = chat_h.min(p.ui.list_max_height);
     if let Some(panel) = &mut app.panel {
         let lines = panel.lines(inner, cap, p);
         view.truncate(chat_h.saturating_sub(lines.len()));

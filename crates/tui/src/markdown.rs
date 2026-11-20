@@ -1,4 +1,4 @@
-use crate::style::{Palette, Style};
+use crate::style::{BULLET, LIST_INDENT, Palette, QUOTE_PREFIX, RULE_CHAR, Style};
 use crate::text::{Line, span, wrap};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
@@ -9,7 +9,7 @@ pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
         width,
         out: vec![],
         cur: vec![],
-        styles: vec![Style::fg(p.assistant)],
+        styles: vec![Style::fg(p.fg)],
         lists: vec![],
         quote: 0,
         code: false,
@@ -57,12 +57,12 @@ impl Renderer<'_> {
     }
 
     fn indent(&self) -> String {
-        " ".repeat(self.lists.len().saturating_sub(1) * self.p.t.list_indent as usize)
+        " ".repeat(self.lists.len().saturating_sub(1) * LIST_INDENT)
     }
 
     pub(crate) fn prefixes(&mut self) -> (Line, Line) {
-        let q = Style::fg(self.p.quote);
-        let quote = self.p.t.quote_prefix.repeat(self.quote);
+        let q = Style::fg(self.p.dim);
+        let quote = QUOTE_PREFIX.repeat(self.quote);
         let mut first = vec![span(quote.clone(), q)];
         let mut rest = first.clone();
         if !self.lists.is_empty() {
@@ -80,7 +80,7 @@ impl Renderer<'_> {
     fn marker_width(&self) -> usize {
         match self.lists.last() {
             Some(Some(n)) => format!("{n}. ").len(),
-            _ => crate::text::width(&self.p.t.bullet),
+            _ => crate::text::width(BULLET),
         }
     }
 
@@ -113,7 +113,7 @@ impl Renderer<'_> {
             Event::Text(t) => self.text(&t),
             Event::Code(t) => {
                 let st = Style {
-                    fg: self.p.code,
+                    fg: self.p.ok,
                     ..self.style()
                 };
                 self.cur.push(span(t.to_string(), st));
@@ -123,10 +123,8 @@ impl Renderer<'_> {
             Event::Rule => {
                 self.flush();
                 let w = self.width.min(40);
-                self.out.push(vec![span(
-                    self.p.t.rule_char.repeat(w),
-                    Style::fg(self.p.dim),
-                )]);
+                self.out
+                    .push(vec![span(RULE_CHAR.repeat(w), Style::fg(self.p.dim))]);
                 self.out.push(vec![]);
             }
             Event::TaskListMarker(done) => self.text(if done { "[x] " } else { "[ ] " }),
@@ -139,13 +137,13 @@ impl Renderer<'_> {
         match tag {
             Tag::Heading { .. } => {
                 self.flush();
-                self.push_style(|_| Style::fg(self.p.heading).bold());
+                self.push_style(|_| Style::fg(self.p.info).bold());
             }
             Tag::Emphasis => self.push_style(|s| s.italic()),
             Tag::Strong => self.push_style(|s| s.bold()),
             Tag::Strikethrough => self.push_style(|s| Style { dim: true, ..s }),
             Tag::Link { .. } => self.push_style(|s| Style {
-                fg: self.p.link,
+                fg: self.p.info,
                 underline: true,
                 ..s
             }),
@@ -184,7 +182,7 @@ impl Renderer<'_> {
                         *n += 1;
                         m
                     }
-                    _ => self.p.t.bullet.clone(),
+                    _ => BULLET.to_string(),
                 };
                 self.item_first = Some(marker);
             }

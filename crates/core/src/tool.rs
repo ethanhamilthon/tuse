@@ -100,7 +100,9 @@ impl Session {
             at: id::now(),
         };
         self.push(&mut st, r);
+        st.status.clear();
         drop(st);
+        self.emit(Event::Status(String::new()));
         self.emit(Event::ToolEnd {
             id: call.id.clone(),
             output: text.clone(),

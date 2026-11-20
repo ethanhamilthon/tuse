@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.0
+
+Breaking config change: simplified UI configuration.
+
+- **10-color themes + `settings.ui`.** Replaced the 92-token `Theme` with 10 base colors
+  (`bg`, `surface`, `fg`, `dim`, `muted`, `border`, `accent`, `ok`, `err`, `info`) with `extend`
+  support. Behavior and layout preferences (`input_design`, `motion`, `tool_line`, `diff_line`,
+  `output_line`, `reasoning_line`, `scroll_step`, `pad_x`, `message_gap`, `list_max_height`,
+  `input_max_height`) moved to `settings.ui` so `/theme` does not overwrite them. Symbols,
+  prefixes, status labels and internal constants moved into code.
+- **Working indicator shows only tool `title`.** Removed `Host::status` (`reading ...`,
+  `writing ...`, `asking user...`, etc.). While the model thinks, the indicator shows only the
+  spinner and elapsed time; during a tool call it shows the call's `title` (and `steering…` when a
+  queued message waits).
+- **`/trace` navigation.** `Left` and `Right` step through opened `/trace` items (with full
+  `Trace N/total role` title) when the input is empty. Both the `/trace` list and opened items
+  clamp at the start and end instead of wrapping.
+- **Styled `/usage` panel.** Multi-color layout using the 10-color palette (`border` keys, `dim`
+  labels and session ID, `fg` model and counts, `info` effort and window, bold `accent` context
+  size, bold `ok` cost) and no duplicate model name when `display == model`.
+
 ## 0.4.1 - 2026-11-19
 
 One tool, a built-in system prompt, one look for every list. **Breaking** for hooks and configs;

@@ -122,7 +122,12 @@ impl Picker {
         if n == 0 {
             return;
         }
-        self.selected = (self.selected as isize + delta).rem_euclid(n as isize) as usize;
+        let next = self.selected as isize + delta;
+        self.selected = if self.kind == Kind::Trace {
+            next.clamp(0, (n - 1) as isize) as usize
+        } else {
+            next.rem_euclid(n as isize) as usize
+        };
         self.follow(height);
     }
 }
@@ -175,5 +180,21 @@ mod tests {
         assert_eq!(p.shown.len(), 2);
         p.filter("zzz");
         assert!(p.current().is_none());
+    }
+
+    #[test]
+    fn trace_picker_clamps_instead_of_wrapping() {
+        let items = ["a", "b", "c"].map(|s| item(s, "", s)).to_vec();
+        let mut trace = Picker::new(Kind::Trace, "Trace", items.clone());
+        trace.moved(-1, 5);
+        assert_eq!(trace.selected, 0);
+        trace.moved(10, 5);
+        assert_eq!(trace.selected, 2);
+        trace.moved(1, 5);
+        assert_eq!(trace.selected, 2);
+
+        let mut other = Picker::new(Kind::Command, "", items);
+        other.moved(-1, 5);
+        assert_eq!(other.selected, 2);
     }
 }

@@ -36,7 +36,8 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 | `prelude` | List of Python snippets, joined and run once before the agent's REPL starts and before every hook. |
 | `hooks` | `name: {events: [...], run: python code}`, see below. |
 | `settings.theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. |
-| `themes` | `name: {extend: base, token: value, ...}`, see below. |
+| `settings.ui` | UI behavior and layout preferences (`input_design`, `motion`, line limits, spacing), see below. |
+| `themes` | `name: {extend: base, bg: ..., ...}`, 10 base colors, see below. |
 
 ## Hooks
 
@@ -89,55 +90,45 @@ only user and assistant text.
 ## Theme
 
 Themes live under `themes`, one key per theme. `extend: other` starts from another
-theme (or `default`, the built-in one) and overrides only the tokens you write.
+theme (or `default`, the built-in Vercel Dark palette) and overrides only the colors you write.
 
-Every UI decision is a token. Colors take `#rrggbb`, `0`-`255`, a name (`red`,
-`dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default.
+A theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`red`,
+`dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default:
 
-- Colors: `accent`, `bg`, `fg`, `dim`, `user`, `user_bg`, `assistant`, `reasoning`,
-  `tool`, `tool_output`, `tool_error`, `diff_add`, `diff_del`, `error`, `notice`, `heading`, `code`,
-  `code_block`, `link`, `quote`, `rule`, `status`.
-- Python syntax in tool calls and in ```` ```python ```` blocks: `syntax_keyword`, `syntax_string`,
-  `syntax_comment`, `syntax_number`, `syntax_function`; the rest of the code keeps `tool`.
-- List colors (every list and text view): `list_fg`, `list_bg`, `list_title`,
-  `list_selected_fg`, `list_selected_bg`, `list_detail`. Input colors: `input_bg` (the `fill`
-  design), `bar` (the `bar` design), and the gradient ends `motion_from`, `motion_to`
-  (`#rrggbb`, so they can be blended).
-- Spacing (all default to `0` except the ones noted): `pad_x`, `input_pad_x`, `list_pad_x`,
-  `message_gap` (1), `list_indent` (2), `code_indent` (2), `input_top_padding` and
-  `input_bottom_padding` (rows in `bar`), `trace_role_width` (the role column of `/trace`, 9).
-- Limits: `list_max_height` (16), `input_max_height` (`-1`: no limit), `scroll_step` (3, lines per
-  wheel notch), `file_picker_max`, `frame_ms`, `motion_period` (cells per wave), `motion_ms` (ms
-  per step).
-- Lines shown in the chat: `tool_line` (the code of a call, default `-1`), `output_line` (1),
-  `diff_line` (the diff of a changed file, 12), `reasoning_line` (`-1`). `0` hides the block,
-  `-1` removes the limit.
-- Symbols: `user_prefix`, `tool_prefix` (`* `), `reasoning_prefix`, `notice_prefix` (`✓ `),
-  `error_prefix`, `bullet`, `quote_prefix`, `rule_char`, `table_sep`, `scroll_mark`,
-  `label_sep`, `list_selected_prefix`, `more`, `spinner` (a list of frames, `◐ ◓ ◑ ◒`),
-  `input_prefix` (default `› `; `""` removes it), `bar_char`, `box_chars` (top left, top
-  right, bottom left, bottom right, vertical), `edge_top`, `edge_bottom`.
-- Texts: `steering_label` (shown instead of the status while a message you sent waits),
-  `ask_custom_label` (the last row of an `ask`), and the statuses of the working indicator,
-  where `{}` is the argument: `thinking_label` (`thinking...`, the start of a turn), `read_label`
-  (`reading {}`), `write_label`, `edit_label`, `grep_label`, `sh_label` (`running {}`),
-  `ask_label` (`asking user...`), `docs_label` (`reading docs...`).
+- `bg` (`#0A0A0A`): main background and selected list item foreground.
+- `surface` (`#1A1A1A`): elevated background (user messages, filled input, lists and panels).
+- `fg` (`#EDEDED`): primary text and code blocks.
+- `dim` (`#A0A0A0`): secondary text (tool output, quotes, list details, notices).
+- `muted` (`#676767`): subtle text (reasoning, syntax comments, motion gradient start).
+- `border` (`#2E2E2E`): horizontal rules, box frames, separators, `/usage` keys.
+- `accent` (`#EDEDED`): primary highlight (status, bar, list title, selected list bg, motion gradient end).
+- `ok` (`#00AC3A`): additions and success (`diff` `+`, inline `code`, strings, `/usage` cost).
+- `err` (`#F32E40`): errors and deletions (`diff` `-`, failed calls, keywords).
+- `info` (`#52A8FF`): tools, headings, links, functions.
+
+## UI settings (`settings.ui`)
+
+UI behavior and layout live under `settings.ui` so switching `/theme` keeps them intact:
+
+- `input_design`: `lines` (default), `box`, `fill` or `bar`.
+- `motion`: `true` (default) or `false`. While the agent works, a gradient from `muted` to `accent`
+  runs along the rules, frame borders, filled edges or bar.
+- Lines shown in the chat (`0` hides the block, `-1` removes the limit): `tool_line` (`-1`),
+  `output_line` (`1`), `diff_line` (`12`), `reasoning_line` (`-1`).
+- Layout and scrolling: `pad_x` (`0`), `message_gap` (`1`), `scroll_step` (`3`),
+  `list_max_height` (`16`), `input_max_height` (`-1`).
 
 ### Input design
 
-`input_design` picks how the input looks. Each design shows the input and two status bars:
-working (spinner, time and what the agent is doing, from the `title` of its call or a function it runs; `steering_label` while a message you sent waits for the agent) and the model (model, effort, context, cost).
+Each design shows the input and two status bars: working (spinner, elapsed time and the current
+tool call's `title`, or `steering…` while a queued message waits) and the model (model, effort,
+context, cost).
 
 - `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.
 - `box`: a frame around the input with the same two labels on its borders.
-- `fill`: the input has its own background (`input_bg`); one status row below, working on the
-  left and the model on the right.
-- `bar`: a colored vertical bar (`bar`) left of the input, a blank row, then the same status
-  row. `input_top_padding` and `input_bottom_padding` add rows above and below the text; the bar
-  runs through them.
-
-While the agent works, a gradient from `motion_from` to `motion_to` runs along the rules, the
-frame's borders, the edges of the filled input or the bar. `motion: false` turns it off.
+- `fill`: the input has `surface` background; one status row below, working on the left and the
+  model on the right.
+- `bar`: an `accent` vertical bar left of the input, a blank row, then the same status row.
 
 ## Files
 

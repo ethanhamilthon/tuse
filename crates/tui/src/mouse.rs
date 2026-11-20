@@ -17,7 +17,7 @@ impl App {
 
     /// `dir` is `-1` for up, `1` for down.
     fn wheel(&mut self, dir: isize) {
-        let step = self.palette.t.scroll_step as isize;
+        let step = self.palette.ui.scroll_step as isize;
         if let Some(p) = &mut self.picker {
             let n = p.shown.len() as isize;
             if n > 0 {
@@ -76,7 +76,7 @@ mod tests {
     #[test]
     fn the_wheel_scrolls_the_chat_and_a_click_moves_the_cursor() {
         let mut app = app();
-        let step = app.palette.t.scroll_step as usize;
+        let step = app.palette.ui.scroll_step as usize;
         app.mouse(event(MouseEventKind::ScrollUp, 0, 0));
         assert_eq!(app.scroll, step);
         app.mouse(event(MouseEventKind::ScrollDown, 0, 0));

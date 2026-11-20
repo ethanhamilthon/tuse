@@ -154,7 +154,7 @@ impl Chat {
                 continue;
             }
             if i > 0 && !out.is_empty() {
-                out.extend((0..p.t.message_gap).map(|_| vec![]));
+                out.extend((0..p.ui.message_gap).map(|_| vec![]));
             }
             out.extend(lines.iter().cloned());
         }

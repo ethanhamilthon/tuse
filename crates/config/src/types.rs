@@ -1,4 +1,4 @@
-use crate::theme::Theme;
+use crate::theme::{Theme, UiSettings};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
@@ -38,6 +38,7 @@ pub struct Settings {
     pub retries: usize,
     /// Name of the active theme; `default` or empty is the built-in one.
     pub theme: String,
+    pub ui: UiSettings,
 }
 
 impl Default for Settings {
@@ -50,6 +51,7 @@ impl Default for Settings {
             max_image_bytes: 5 * 1024 * 1024,
             retries: 5,
             theme: String::new(),
+            ui: UiSettings::default(),
         }
     }
 }

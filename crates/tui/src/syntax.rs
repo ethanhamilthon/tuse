@@ -149,11 +149,11 @@ pub fn highlight(code: &str, base: Style, p: &Palette) -> Vec<Line> {
 pub fn style(k: Kind, base: Style, p: &Palette) -> Style {
     let color = match k {
         Kind::Plain => return base,
-        Kind::Keyword => p.syntax_keyword,
-        Kind::Str => p.syntax_string,
-        Kind::Comment => p.syntax_comment,
-        Kind::Number => p.syntax_number,
-        Kind::Function => p.syntax_function,
+        Kind::Keyword => p.err,
+        Kind::Str => p.ok,
+        Kind::Comment => p.muted,
+        Kind::Number => p.accent,
+        Kind::Function => p.info,
     };
     Style {
         fg: color.or(base.fg),

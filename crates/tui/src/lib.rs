@@ -19,7 +19,6 @@ mod md_stream;
 mod modal;
 mod motion;
 mod mouse;
-mod osc;
 mod panel;
 mod panel_keys;
 mod picker;
@@ -60,10 +59,6 @@ pub fn run(
     cwd: PathBuf,
     config_arg: Option<PathBuf>,
 ) -> std::io::Result<String> {
-    let enabled = Arc::new(std::sync::atomic::AtomicBool::new(
-        session.config().settings.ui.tab_status,
-    ));
-    let panic_enabled = enabled.clone();
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     for sig in [
         signal_hook::consts::SIGINT,
@@ -73,27 +68,22 @@ pub fn run(
         signal_hook::flag::register(sig, stop.clone())?;
     }
     // Created before `setup` so a half-done setup is undone too.
-    let _guard = RestoreGuard(enabled.clone());
+    let _guard = RestoreGuard;
     setup()?;
-    if enabled.load(std::sync::atomic::Ordering::Relaxed) {
-        let mut out = stdout();
-        out.write_all(osc::SAVE.as_bytes())?;
-        out.flush()?;
-    }
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        restore(panic_enabled.load(std::sync::atomic::Ordering::Relaxed));
+        restore();
         prev(info);
     }));
-    main_loop(app::App::new(session, cwd, config_arg), &enabled, &stop)
+    main_loop(app::App::new(session, cwd, config_arg), &stop)
 }
 
 /// Restores the terminal on every way out of `run` (return, `?`, unwinding).
-struct RestoreGuard(Arc<std::sync::atomic::AtomicBool>);
+struct RestoreGuard;
 
 impl Drop for RestoreGuard {
     fn drop(&mut self) {
-        restore(self.0.load(std::sync::atomic::Ordering::Relaxed));
+        restore();
     }
 }
 
@@ -114,11 +104,9 @@ fn setup() -> std::io::Result<()> {
     out.flush()
 }
 
-fn restore(enabled: bool) {
+fn restore() {
     let mut out = stdout();
-    if enabled {
-        let _ = out.write_all(osc::RESTORE.as_bytes());
-    }
+
     let _ = execute!(
         out,
         PopKeyboardEnhancementFlags,
@@ -131,13 +119,8 @@ fn restore(enabled: bool) {
     let _ = terminal::disable_raw_mode();
 }
 
-fn main_loop(
-    mut app: app::App,
-    enabled: &std::sync::atomic::AtomicBool,
-    stop: &std::sync::atomic::AtomicBool,
-) -> std::io::Result<String> {
+fn main_loop(mut app: app::App, stop: &std::sync::atomic::AtomicBool) -> std::io::Result<String> {
     let mut out = BufWriter::with_capacity(1 << 16, stdout());
-    let mut osc = osc::Osc::default();
     let mut renderer = draw::Renderer::default();
     let (mut w, mut h) = terminal::size()?;
     let mut dirty = true;
@@ -169,14 +152,6 @@ fn main_loop(
             last_tick = Instant::now();
             dirty = true;
             immediate = true;
-        }
-        enabled.store(
-            app.session.config().settings.ui.tab_status,
-            std::sync::atomic::Ordering::Relaxed,
-        );
-        if let Some(bytes) = osc.update(&app) {
-            out.write_all(&bytes)?;
-            out.flush()?;
         }
         if dirty && (immediate || last_draw.elapsed() >= Duration::from_millis(style::FRAME_MS)) {
             renderer.draw(&mut app, &mut out, w, h)?;

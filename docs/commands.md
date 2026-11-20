@@ -3,8 +3,12 @@
 ## CLI
 
 - `tuse [--config PATH] [--resume ID]` opens the TUI.
-- `tuse -p [PROMPT|-]` runs one prompt headless: replies go to stdout, the session ID to stderr,
-  and the exit code is 1 after an error. Background tasks are stopped at the end.
+  - `-c`, `--config PATH`: use this config file instead of `./tuse.yaml` or the global
+    `main.yaml` (relative to the working directory).
+  - `-r`, `--resume ID`: open the saved session `ID` (the ID Tuse prints to stderr on exit, or
+    the folder name in `~/.tuse/`) instead of a new one; `/resume` picks one inside the TUI.
+- `tuse -p [PROMPT|-]` (`--print`) runs one prompt headless, also with `-c` and `-r`. See
+  `docs("headless")`.
 - `tuse connect` adds a provider.
 - `tuse reset [--yes]` replaces the global config folder with the latest `main.yaml`. It deletes
   everything in that folder.

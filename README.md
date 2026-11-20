@@ -56,13 +56,16 @@ creates `main.yaml` in `~/.config/tuse` (`CONFIG_DIR`) when it is missing.
 ## Usage
 
 ```
-tuse [--config PATH] [--resume ID]        open the TUI
-tuse -p [PROMPT|-] [--config PATH] [--resume ID]
-                                          headless: runs the prompt to the end, replies to
+tuse [-c|--config PATH] [-r|--resume ID] open the TUI
+tuse -p [PROMPT|-] [-c PATH] [-r ID]      headless: runs the prompt to the end, replies to
                                           stdout, session ID to stderr, exit code 1 on an error
 tuse connect [--config PATH]              add a provider (base url, api key, name)
 tuse reset [--yes] | tuse update          reset the config folder | update the binary
 ```
+
+`--config` picks the config file (else `./tuse.yaml`, else the global `main.yaml`). `--resume ID`
+opens a saved session: the ID is printed to stderr when Tuse exits and is the folder name in
+`~/.tuse/`. Headless mode is described in [docs/headless.md](docs/headless.md).
 
 The agent's tool is `python`, a persistent REPL with these functions:
 

@@ -125,7 +125,7 @@ impl Session {
             };
             self.push(&mut st, r);
         }
-        let system = prompt::system_prompt(&config, st.bounds.drop > 0);
+        let system = prompt::system_prompt(&config, st.bounds.drop > 0, self.mode);
         let (model, effort) = (st.model.clone(), st.effort.clone());
         let req = Request {
             model: split_model(&model).1.to_string(),
@@ -215,7 +215,7 @@ impl Session {
                 drop: b.drop,
             },
         );
-        let system = prompt::system_prompt(config, true);
+        let system = prompt::system_prompt(config, true, self.mode);
         st.context = estimate_tokens(&messages(&st.records, b, &system));
         let text = format!(
             "Context compacted at {} tokens; now about {}.",

@@ -31,7 +31,7 @@ hooks:
         cwd: dir.clone(),
         config: Some(cfg),
         resume: None,
-        headless: true,
+        mode: tuse_core::Mode::Headless,
     })
     .unwrap();
     s.close();

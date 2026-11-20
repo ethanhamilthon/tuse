@@ -33,7 +33,11 @@ impl App {
             "reload" => match self.session.reload() {
                 Ok(()) => {
                     self.palette = Palette::from_config(&self.session.config());
+                    self.palette_gen += 1;
                     self.chat = crate::chat::Chat::from_records(&self.session.records());
+                    if let Some(panel) = &mut self.panel {
+                        panel.invalidate();
+                    }
                     self.notice("Config reloaded.");
                 }
                 Err(e) => self.error(format!("Reload failed: {e}")),
@@ -77,7 +81,12 @@ impl App {
     pub fn open_trace_item(&mut self, at: usize) {
         if let Some((role, text)) = self.trace.get(at) {
             let title = format!("Trace {}/{} {role}", at + 1, self.trace.len());
-            self.panel = Some(Panel::new(title, text.clone()));
+            let panel = match *role {
+                "user" | "agent" | "system" => Panel::markdown(title, text.clone()),
+                "python" => Panel::python(title, text.clone()),
+                _ => Panel::new(title, text.clone()),
+            };
+            self.panel = Some(panel);
             self.trace_item = Some(at);
         }
     }

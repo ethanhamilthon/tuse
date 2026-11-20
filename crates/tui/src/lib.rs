@@ -7,6 +7,7 @@ mod draw;
 mod editor;
 mod events;
 mod files;
+mod fold;
 mod inline;
 mod input_view;
 mod keys;
@@ -39,7 +40,7 @@ use std::io::{BufWriter, Write, stdout};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tuse_core::Session;
+use tuse_core::{Event, Session};
 
 pub use inline::{Field, Tone, ask, say};
 
@@ -93,22 +94,32 @@ fn restore() {
 
 fn main_loop(mut app: app::App) -> std::io::Result<String> {
     let mut out = BufWriter::with_capacity(1 << 16, stdout());
+    let mut renderer = draw::Renderer::default();
+    let (mut w, mut h) = terminal::size()?;
     let mut dirty = true;
+    let mut immediate = true;
     let mut last_tick = Instant::now();
+    let mut last_draw = Instant::now();
     loop {
         while let Ok(e) = app.events.try_recv() {
+            let stream = matches!(e, Event::Text(_) | Event::Reasoning(_));
             app.handle_event(e);
             dirty = true;
+            if !stream {
+                immediate = true;
+            }
         }
         if app.session.busy() && last_tick.elapsed() >= Duration::from_millis(100) {
             app.tick += 1;
             last_tick = Instant::now();
             dirty = true;
+            immediate = true;
         }
-        if dirty {
-            let (w, h) = terminal::size()?;
-            draw::draw(&mut app, &mut out, w, h)?;
+        if dirty && (immediate || last_draw.elapsed() >= Duration::from_millis(style::FRAME_MS)) {
+            renderer.draw(&mut app, &mut out, w, h)?;
             dirty = false;
+            immediate = false;
+            last_draw = Instant::now();
         }
         if app.quit {
             break;
@@ -116,14 +127,28 @@ fn main_loop(mut app: app::App) -> std::io::Result<String> {
         if !event::poll(Duration::from_millis(style::FRAME_MS))? {
             continue;
         }
-        let page = terminal::size()?.1.saturating_sub(4) as usize;
-        match event::read()? {
-            TermEvent::Key(k) => app.key(k, page),
-            TermEvent::Paste(s) => app.paste(&s),
+        let page = h.saturating_sub(4) as usize;
+        let changed = match event::read()? {
+            TermEvent::Key(k) => {
+                app.key(k, page);
+                true
+            }
+            TermEvent::Paste(s) => {
+                app.paste(&s);
+                true
+            }
             TermEvent::Mouse(m) => app.mouse(m),
-            _ => {}
+            TermEvent::Resize(nw, nh) => {
+                w = nw;
+                h = nh;
+                true
+            }
+            _ => false,
+        };
+        if changed {
+            dirty = true;
+            immediate = true;
         }
-        dirty = true;
     }
     let id = app.session.id.clone();
     app.session.close();

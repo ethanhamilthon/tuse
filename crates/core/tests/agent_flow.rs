@@ -137,8 +137,8 @@ fn the_agent_edits_files_runs_tasks_and_reports_status() {
         std::fs::read_to_string(dir.join("a.txt")).unwrap(),
         "one\n2\n"
     );
-    // The indicator only shows the tool title and clears when the tool finishes.
-    assert_eq!(statuses, ["Testing the flow", ""]);
+    // The indicator keeps the tool title until a new title arrives.
+    assert_eq!(statuses, ["Testing the flow"]);
     // The process task is listed and stopped with the session.
     let tasks = s.tasks.list();
     assert_eq!(

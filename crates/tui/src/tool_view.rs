@@ -44,7 +44,12 @@ pub fn tool(
 
 /// The code wrapped to `width`, colored unless the call failed.
 fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<Line> {
-    let code = crate::render::clean(input.trim());
+    let cleaned = crate::render::clean(input.trim());
+    let code = if p.ui.fold_strings {
+        crate::fold::fold_multiline_strings(&cleaned)
+    } else {
+        cleaned
+    };
     let pad = " ".repeat(width(TOOL_PREFIX));
     let colored = if failed {
         code.split('\n').map(|l| vec![span(l, head)]).collect()

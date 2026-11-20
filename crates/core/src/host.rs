@@ -56,7 +56,10 @@ impl Host for SessionHost {
                     .map_err(Fail::runtime)?;
                 Ok(MontyObject::string(id))
             }
-            "docs" => Ok(MontyObject::string(crate::docs::docs())),
+            "docs" => {
+                let topic = a.opt_str(0, "topic")?;
+                Ok(MontyObject::string(crate::docs::docs(topic.as_deref())))
+            }
             _ => crate::host_tasks::call(&s, name, a),
         }
     }

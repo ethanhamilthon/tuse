@@ -32,6 +32,7 @@ pub struct Session {
     pub(crate) python: Mutex<Option<Python>>,
     pub(crate) remote: Mutex<Vec<String>>,
     pub(crate) prints: Mutex<HashSet<String>>,
+    pub(crate) http: tuse_api::HttpAgent,
 }
 
 pub(crate) struct State {
@@ -142,6 +143,7 @@ impl Session {
             python: Mutex::default(),
             remote: Mutex::default(),
             prints: Mutex::default(),
+            http: tuse_api::default_agent(),
         });
         s.start()?;
         Ok(s)

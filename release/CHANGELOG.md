@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.1
+
+- **Topic-based `docs(topic=None)`.** Split `docs/` into 7 focused topic files (`tool`,
+  `functions`, `commands`, `env`, `config`, `hooks`, `theme`), each under 4 KB. `docs()` lists
+  available topics; `docs("<topic>")` returns that section; unknown topics return an error message
+  with the topic list.
+- **Reuse HTTP connection pool.** `Session` keeps a shared `ureq::Agent` across steps via
+  `Client::with_agent`, enabling HTTP keep-alive and TLS session reuse.
+- **Lower Python thread stack.** Reduced the per-call Python interpreter thread stack from 128 MB
+  to 16 MB.
+- **TUI rendering & event loop optimizations.** Visible-window chat slicing (`Chat::window`) avoids
+  cloning off-screen history; streaming redraws throttle to `FRAME_MS`; line-level screen diff and
+  minimal ANSI style transitions skip unchanged rows and redundant resets; event loop caches
+  terminal size via `Resize` events and ignores unhandled mouse/focus events.
+- **Theme cache invalidation.** `/theme` now invalidates the chat and panel render caches so
+  existing messages immediately switch to the new palette.
+- **Persistent working indicator `title`.** The active tool `title` stays visible in the working
+  indicator until a new `title` arrives (or the turn ends).
+- **`tuse update` version output.** Prints `old -> new` (e.g. `0.5.1 -> 0.5.2`) after updating.
+- **`/trace` highlighting.** Opened `user`, `agent` and `system` trace items render with Markdown
+  highlighting; `python` items render with syntax highlighting matching the chat.
+- **`settings.ui.fold_strings` (default `true`).** Folds multiline triple-quoted Python strings in
+  chat tool calls to a single line (`"""first line…"""`), while `/trace` shows the full code.
+
 ## 0.5.0
 
 Breaking config change: simplified UI configuration.

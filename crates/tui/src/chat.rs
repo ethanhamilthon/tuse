@@ -143,22 +143,69 @@ impl Chat {
         self.get_mut(i)
     }
 
-    pub fn lines(&mut self, width: usize, p: &Palette) -> Vec<Line> {
-        let mut out = vec![];
-        for (i, (e, cache)) in self.entries.iter_mut().enumerate() {
+    pub fn invalidate(&mut self) {
+        for (_, cache) in &mut self.entries {
+            *cache = None;
+        }
+    }
+
+    /// Returns only the visible `height` lines ending `scroll` lines above the bottom,
+    /// plus the clamped `scroll`, without cloning off-screen entries.
+    pub fn window(
+        &mut self,
+        width: usize,
+        p: &Palette,
+        scroll: usize,
+        height: usize,
+    ) -> (Vec<Line>, usize) {
+        let gap = p.ui.message_gap as usize;
+        let mut total = 0usize;
+        let mut non_empty = false;
+        for (e, cache) in &mut self.entries {
             if cache.as_ref().is_none_or(|(w, _)| *w != width) {
                 *cache = Some((width, render(e, width, p)));
             }
+            let len = cache.as_ref().unwrap().1.len();
+            if len == 0 {
+                continue;
+            }
+            if non_empty {
+                total += gap;
+            }
+            total += len;
+            non_empty = true;
+        }
+        let clamped = scroll.min(total.saturating_sub(height));
+        let end = total - clamped;
+        let start = end.saturating_sub(height);
+        let mut out = Vec::with_capacity(end - start);
+        let mut pos = 0usize;
+        let mut seen = false;
+        for (_, cache) in &self.entries {
             let lines = &cache.as_ref().unwrap().1;
             if lines.is_empty() {
                 continue;
             }
-            if i > 0 && !out.is_empty() {
-                out.extend((0..p.ui.message_gap).map(|_| vec![]));
+            if seen && gap > 0 {
+                let g_start = pos.max(start);
+                let g_end = (pos + gap).min(end);
+                if g_start < g_end {
+                    out.extend((g_start..g_end).map(|_| vec![]));
+                }
+                pos += gap;
             }
-            out.extend(lines.iter().cloned());
+            let l_start = pos.max(start);
+            let l_end = (pos + lines.len()).min(end);
+            if l_start < l_end {
+                out.extend(lines[l_start - pos..l_end - pos].iter().cloned());
+            }
+            pos += lines.len();
+            seen = true;
+            if pos >= end {
+                break;
+            }
         }
-        out
+        (out, clamped)
     }
 }
 
@@ -174,5 +221,22 @@ mod tests {
         assert!(!c.set_print("p1", "b".into()));
         assert_eq!(c.len(), 2);
         assert!(matches!(c.get_mut(0), Some(Entry::Print { text, .. }) if text == "b"));
+    }
+
+    #[test]
+    fn window_slices_and_invalidate_clears_cache() {
+        let p = Palette::new(
+            &tuse_config::Theme::default(),
+            &tuse_config::UiSettings::default(),
+        );
+        let mut c = Chat::default();
+        c.push(Entry::Notice("one".into()));
+        c.push(Entry::Notice("two".into()));
+        c.push(Entry::Notice("three".into()));
+        let (rows, scroll) = c.window(40, &p, 0, 2);
+        assert_eq!(scroll, 0);
+        assert_eq!(rows.len(), 2);
+        c.invalidate();
+        assert!(c.entries.iter().all(|(_, cache)| cache.is_none()));
     }
 }

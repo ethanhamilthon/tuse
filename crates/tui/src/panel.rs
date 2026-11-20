@@ -5,6 +5,8 @@ use crate::text::{Line, wrap};
 enum Body {
     Text(String),
     Styled(Vec<Line>),
+    Markdown(String),
+    Python(String),
 }
 
 /// Read-only text over the bottom of the chat (`/usage`, a task's output, an opened
@@ -36,15 +38,44 @@ impl Panel {
         }
     }
 
+    pub fn markdown(title: impl Into<String>, text: impl Into<String>) -> Self {
+        Panel {
+            title: title.into(),
+            body: Body::Markdown(text.into()),
+            scroll: 0,
+            cache: None,
+        }
+    }
+
+    pub fn python(title: impl Into<String>, code: impl Into<String>) -> Self {
+        Panel {
+            title: title.into(),
+            body: Body::Python(code.into()),
+            scroll: 0,
+            cache: None,
+        }
+    }
+
+    pub fn invalidate(&mut self) {
+        self.cache = None;
+    }
+
     /// The content wrapped to `width`.
     fn wrapped(&mut self, width: usize, p: &Palette) -> &[Line] {
         if self.cache.as_ref().is_none_or(|(w, _)| *w != width) {
+            let empty = vec![];
             let lines = match &self.body {
                 Body::Text(text) => plain(text, width, Style::fg(p.fg), "", ""),
-                Body::Styled(rows) => {
-                    let empty = vec![];
-                    rows.iter()
-                        .flat_map(|r| wrap(r, width, &empty, &empty))
+                Body::Styled(rows) => rows
+                    .iter()
+                    .flat_map(|r| wrap(r, width, &empty, &empty))
+                    .collect(),
+                Body::Markdown(text) => crate::markdown::render(text, width, p),
+                Body::Python(code) => {
+                    let cleaned = crate::render::clean(code);
+                    crate::syntax::highlight(&cleaned, Style::fg(p.fg), p)
+                        .into_iter()
+                        .flat_map(|r| wrap(&r, width, &empty, &empty))
                         .collect()
                 }
             };
@@ -97,5 +128,24 @@ mod tests {
         assert_eq!(last.len(), 8);
         let short = Panel::new("T", "one").lines(20, 8, &p);
         assert_eq!(short.len(), 3);
+    }
+
+    #[test]
+    fn panel_highlights_markdown_and_python() {
+        let p = Palette::new(&Theme::default(), &UiSettings::default());
+        let mut md = Panel::markdown(
+            "Trace 1/1 agent",
+            "# Heading
+
+`code`",
+        );
+        let md_lines = md.lines(40, 8, &p);
+        assert!(md_lines.iter().flatten().any(|s| s.style.fg == p.info));
+        assert!(md_lines.iter().flatten().any(|s| s.style.fg == p.ok));
+
+        let mut py = Panel::python("Trace 1/1 python", "def f():\n    return \"hi\"");
+        let py_lines = py.lines(40, 8, &p);
+        assert!(py_lines.iter().flatten().any(|s| s.style.fg == p.err));
+        assert!(py_lines.iter().flatten().any(|s| s.style.fg == p.ok));
     }
 }

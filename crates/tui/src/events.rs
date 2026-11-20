@@ -129,7 +129,8 @@ impl App {
             }
             Event::Status(_) => {}
             Event::Flash(t) => self.flash(t),
-            Event::Notice(t) | Event::Notification(t) => self.notice(t),
+            Event::Notice(t) => self.notice(t),
+            Event::Notification(_) => {}
             Event::Error(t) => {
                 self.turn_error = Some(t.clone());
                 self.drop_pending();

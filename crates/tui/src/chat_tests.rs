@@ -1,13 +1,26 @@
 use super::*;
 #[test]
-fn notifications_are_not_user_entries() {
+fn notifications_are_not_chat_entries() {
     let c = Chat::from_records(
-        &[Record::Notification {
-            text: "ready".into(),
-        }],
+        &[
+            Record::Notification {
+                text: "ready".into(),
+            },
+            Record::Notice {
+                text: "notice".into(),
+            },
+        ],
         &str::to_owned,
     );
-    assert!(matches!(&c.entries[0].0, Entry::Notice(t) if t == "ready"));
+    assert_eq!(c.len(), 1);
+    assert!(matches!(&c.entries[0].0, Entry::Notice(t) if t == "notice"));
+    let mut app = crate::app::test_app("notification-chat");
+    let n = app.chat.len();
+    app.handle_event(tuse_core::Event::Notification("ready".into()));
+    assert_eq!(app.chat.len(), n);
+    app.handle_event(tuse_core::Event::Notice("notice".into()));
+    assert!(matches!(&app.chat.entries[n].0, Entry::Notice(t) if t == "notice"));
+    crate::app::cleanup(app);
 }
 
 #[test]

@@ -7,7 +7,7 @@ Chat Completions compatible API, one tool: `python`.
 - The agent works in a persistent Python REPL ([Monty](https://github.com/pydantic/monty), a
   Python subset in Rust) with `read()`, `write()`, `edit()`, `grep()`, `sh()`, `ask()`, `draw_ui()`
   and background `task_*()` functions.
-- Hooks are Python too: each call runs in a fresh interpreter with the same access.
+- Hooks are Python too: each named hook keeps its own interpreter and processes events in order with the same access.
 - `read()` shows images to the model; files changed by `write()` and `edit()` are shown as a
   colored diff at the end of the call; Python code is syntax highlighted.
 - Headless mode (`tuse -p`) for scripts; sessions in `~/.tuse/<id>/` as JSONL.
@@ -127,7 +127,7 @@ models:
 hooks:
   notify:
     events: [turn_end]
-    run: |                      # Python, a fresh interpreter per call
+    run: |                      # Python, one persistent interpreter per hook
       if not cancelled:
           sh("osascript -e 'display notification \"done\"'")
 ```

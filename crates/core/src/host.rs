@@ -21,15 +21,32 @@ const FUNCTIONS: &[&str] = &[
     "docs",
 ];
 
+const HOOK_FUNCTIONS: &[&str] = &[
+    "read",
+    "write",
+    "edit",
+    "grep",
+    "ask",
+    "draw_ui",
+    "task_run",
+    "task_add",
+    "task_get",
+    "task_stop",
+    "task_list",
+    "docs",
+    "set_title",
+];
+
 /// The Python functions that reach into a session. Holds the session weakly:
 /// the session owns the interpreter that owns this.
 pub(crate) struct SessionHost {
     session: Weak<Session>,
+    hook: bool,
 }
 
 impl SessionHost {
-    pub fn new(session: Weak<Session>) -> Self {
-        Self { session }
+    pub fn new(session: Weak<Session>, hook: bool) -> Self {
+        Self { session, hook }
     }
 
     fn session(&self) -> Result<Arc<Session>, Fail> {
@@ -41,7 +58,7 @@ impl SessionHost {
 
 impl Host for SessionHost {
     fn functions(&self) -> &'static [&'static str] {
-        FUNCTIONS
+        if self.hook { HOOK_FUNCTIONS } else { FUNCTIONS }
     }
 
     fn call(&self, name: &str, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
@@ -54,6 +71,22 @@ impl Host for SessionHost {
                     .print(a.str(0, "text")?, a.opt_str(1, "id")?)
                     .map_err(Fail::runtime)?;
                 Ok(MontyObject::string(id))
+            }
+            "set_title" if self.hook => {
+                let text: String = a
+                    .str(0, "text")?
+                    .trim()
+                    .replace(['\r', '\n'], " ")
+                    .chars()
+                    .take(80)
+                    .collect();
+                if text.is_empty() {
+                    return Err(Fail::runtime("empty title"));
+                }
+                let mut st = s.state.lock().unwrap();
+                st.meta.title = text;
+                s.save_meta(&mut st);
+                Ok(MontyObject::none())
             }
             "docs" => {
                 let topic = a.opt_str(0, "topic")?;
@@ -120,10 +153,14 @@ fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
     }
 }
 
-pub(crate) fn python_for(session: Weak<Session>, config: &tuse_config::Config) -> Python {
+pub(crate) fn python_for(
+    session: Weak<Session>,
+    config: &tuse_config::Config,
+    hook: bool,
+) -> Python {
     let s = session.upgrade();
     let mut py = Python::new(
-        Arc::new(SessionHost::new(session)),
+        Arc::new(SessionHost::new(session, hook)),
         config.settings.max_output,
     );
     if let Some(s) = s {
@@ -135,7 +172,7 @@ pub(crate) fn python_for(session: Weak<Session>, config: &tuse_config::Config) -
 impl Session {
     /// The agent's interpreter.
     pub(crate) fn new_python(self: &Arc<Self>, config: &tuse_config::Config) -> Python {
-        python_for(Arc::downgrade(self), config)
+        python_for(Arc::downgrade(self), config, false)
     }
 }
 

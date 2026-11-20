@@ -29,6 +29,7 @@ pub struct Session {
     pub(crate) asks: Mutex<HashMap<String, Sender<String>>>,
     pub(crate) ask_seq: AtomicUsize,
     /// The agent's interpreter; made on the first call, gone with the process.
+    pub(crate) hooks: Mutex<Option<HashMap<String, crate::hook_queue::HookQueue>>>,
     pub(crate) python: Mutex<Option<Python>>,
     pub(crate) remote: Mutex<Vec<String>>,
     pub(crate) prints: Mutex<HashSet<String>>,
@@ -41,6 +42,7 @@ pub(crate) struct State {
     pub model: String,
     pub effort: String,
     pub busy: bool,
+    pub turn_error: Option<String>,
     pub generation: u64,
     pub cancel: Arc<AtomicBool>,
     pub queue: Vec<(InputId, UserInput)>,
@@ -94,6 +96,7 @@ impl Session {
             model: crate::control::or_default(&meta.model, config.default_model()),
             effort: crate::control::or_default(&meta.effort, config.default_effort()),
             busy: false,
+            turn_error: None,
             generation: 0,
             cancel: Arc::default(),
             queue: vec![],
@@ -140,6 +143,7 @@ impl Session {
             subs: Mutex::default(),
             asks: Mutex::default(),
             ask_seq: AtomicUsize::new(0),
+            hooks: Mutex::new(Some(HashMap::new())),
             python: Mutex::default(),
             remote: Mutex::default(),
             prints: Mutex::default(),
@@ -163,9 +167,7 @@ impl Session {
         self.cancel();
         self.tasks.stop_all();
         self.asks.lock().unwrap().clear();
-        for h in self.hook("session_end", Data::default()) {
-            let _ = h.join();
-        }
+        self.finish_hooks();
         self.dir.lock().unwrap().take();
     }
 
@@ -177,7 +179,15 @@ impl Session {
     pub fn reload(&self) -> Result<(), String> {
         let c = load_config(self.config_arg.as_deref(), &self.cwd)?;
         let c = Arc::new(c);
-        *self.config.write().unwrap() = c.clone();
+        {
+            let mut queues = self.hooks.lock().unwrap();
+            *self.config.write().unwrap() = c.clone();
+            if let Some(queues) = queues.as_mut() {
+                for (_, q) in queues.drain() {
+                    q.stale.store(true, std::sync::atomic::Ordering::Release);
+                }
+            }
+        }
         if let Some(py) = self.python.lock().unwrap().as_mut() {
             crate::helpers::install(self, py, &c);
         }

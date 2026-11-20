@@ -4,14 +4,21 @@ use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 impl App {
     /// The wheel scrolls the chat, the open panel or moves the selection of an open list;
     /// a left click in the input puts the cursor there.
-    pub fn mouse(&mut self, m: MouseEvent) {
+    pub fn mouse(&mut self, m: MouseEvent) -> bool {
         match m.kind {
-            MouseEventKind::ScrollUp => self.wheel(-1),
-            MouseEventKind::ScrollDown => self.wheel(1),
-            MouseEventKind::Down(MouseButton::Left) => {
-                self.click(m.column as usize, m.row as usize)
+            MouseEventKind::ScrollUp => {
+                self.wheel(-1);
+                true
             }
-            _ => {}
+            MouseEventKind::ScrollDown => {
+                self.wheel(1);
+                true
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.click(m.column as usize, m.row as usize);
+                true
+            }
+            _ => false,
         }
     }
 

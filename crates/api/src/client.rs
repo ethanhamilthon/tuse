@@ -20,12 +20,19 @@ pub struct Retry<'a> {
     pub error: &'a Error,
 }
 
+pub fn default_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(30))
+        .timeout_read(Duration::from_secs(600))
+        .build()
+}
+
 impl Client {
     pub fn new(base_url: &str, api_key: &str) -> Self {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(Duration::from_secs(30))
-            .timeout_read(Duration::from_secs(600))
-            .build();
+        Self::with_agent(default_agent(), base_url, api_key)
+    }
+
+    pub fn with_agent(agent: ureq::Agent, base_url: &str, api_key: &str) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             api_key: api_key.to_string(),

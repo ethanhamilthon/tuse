@@ -107,7 +107,7 @@ impl Session {
                 format!("no `connect` entry named `{provider}` for model `{model}`"),
             );
         };
-        let client = Client::new(&conn.base_url, &conn.api_key);
+        let client = Client::with_agent(self.http.clone(), &conn.base_url, &conn.api_key);
         let result = client.complete(
             &req,
             config.settings.retries,

@@ -67,18 +67,30 @@ fn confirm(dir: &Path) -> bool {
 
 /// `tuse update`: replaces this binary with the latest release.
 pub fn update() -> Result<(), String> {
+    let old = env!("CARGO_PKG_VERSION");
     let asset = format!("tuse_{}_{}.tar.gz", os()?, arch()?);
     println!("Downloading {asset}");
     let (tarball, sums) = (get(&asset)?, get("checksums.txt")?);
     let tmp = std::env::temp_dir().join(format!("tuse-update-{}", std::process::id()));
     let result = install(&tmp, &asset, &tarball, &sums);
     let _ = std::fs::remove_dir_all(&tmp);
-    result?;
-    println!("Updated tuse");
+    let exe = result?;
+    match run(Command::new(&exe).arg("--version")) {
+        Ok(out) => {
+            let trimmed = out.trim();
+            let new = trimmed.strip_prefix("tuse ").unwrap_or(trimmed);
+            if new.is_empty() {
+                println!("Updated tuse");
+            } else {
+                println!("{old} -> {new}");
+            }
+        }
+        Err(_) => println!("Updated tuse"),
+    }
     Ok(())
 }
 
-fn install(tmp: &Path, asset: &str, tarball: &[u8], sums: &[u8]) -> Result<(), String> {
+fn install(tmp: &Path, asset: &str, tarball: &[u8], sums: &[u8]) -> Result<PathBuf, String> {
     let archive = tmp.join(asset);
     write(&archive, tarball)?;
     let want = String::from_utf8_lossy(sums)
@@ -103,7 +115,8 @@ fn install(tmp: &Path, asset: &str, tarball: &[u8], sums: &[u8]) -> Result<(), S
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755));
     }
-    std::fs::rename(&staged, &exe).map_err(|e| format!("{}: {e}", exe.display()))
+    std::fs::rename(&staged, &exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+    Ok(exe)
 }
 
 fn run(cmd: &mut Command) -> Result<String, String> {

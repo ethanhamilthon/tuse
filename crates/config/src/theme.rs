@@ -43,6 +43,8 @@ pub struct UiSettings {
     pub input_design: String,
     /// `false` turns the working gradient animation off.
     pub motion: bool,
+    /// `true` folds multiline triple-quoted Python strings in chat tool calls.
+    pub fold_strings: bool,
     /// Lines shown per block: `0` hides it, `-1` removes the limit.
     pub tool_line: i32,
     pub diff_line: i32,
@@ -61,6 +63,7 @@ impl Default for UiSettings {
         Self {
             input_design: "lines".into(),
             motion: true,
+            fold_strings: true,
             tool_line: -1,
             diff_line: 12,
             output_line: 1,

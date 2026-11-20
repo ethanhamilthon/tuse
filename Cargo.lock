@@ -2418,7 +2418,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tuse"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde_json",
  "signal-hook",
@@ -2431,7 +2431,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-api"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2440,7 +2440,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-config"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -2448,7 +2448,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64",
  "ignore",
@@ -2462,7 +2462,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-py"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "monty",
  "monty-fs",
@@ -2471,7 +2471,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-tui"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "arboard",
  "crossterm",

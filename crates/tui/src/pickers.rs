@@ -57,6 +57,11 @@ impl App {
             return;
         }
         self.palette = Palette::from_config(&self.session.config());
+        self.palette_gen += 1;
+        self.chat.invalidate();
+        if let Some(panel) = &mut self.panel {
+            panel.invalidate();
+        }
     }
 }
 

@@ -13,7 +13,7 @@ use std::sync::Arc;
 /// Output collected before the head and tail cut; more is dropped.
 const COLLECT: usize = 4 * 1024 * 1024;
 /// Stack of the interpreter thread: deep recursion must not overflow the caller's.
-const STACK: usize = 128 * 1024 * 1024;
+const STACK: usize = 16 * 1024 * 1024;
 
 pub struct Output {
     pub text: String,

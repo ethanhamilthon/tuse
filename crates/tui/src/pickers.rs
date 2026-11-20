@@ -56,7 +56,7 @@ impl App {
             self.error(format!("Can't save the theme: {e}"));
             return;
         }
-        self.palette = Palette::new(&self.session.config().active_theme());
+        self.palette = Palette::from_config(&self.session.config());
     }
 }
 

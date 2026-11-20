@@ -14,7 +14,8 @@ Rust + Crossterm, OpenAI Chat Completions API. User docs: `README.md` and `docs/
   Lower layers never depend on higher ones (`tui` and `cli` sit on top).
 - Minimum tests and comments: test only code that can really break, comment only what is not obvious.
 - No file longer than 250 lines. Split a file before it grows past that.
+- Total project size must not exceed 10,000 lines of code.
 - Everything in English: UI text, comments, docs, commit messages.
-- Every UI decision is a theme token (colors, spacing, limits, symbols); no hardcoded styles in `tui`.
+- Colors come from the 10-token `Theme` and UI behavior/layout from `settings.ui`; no hardcoded colors in `tui` (symbols, labels and internal constants live in code).
 - Run `make check` (fmt, clippy, tests) before committing; CI runs the same checks.
 - Commit after every feature or fix. Releases: bump `version` in `Cargo.toml`, update `release/CHANGELOG.md`, tag `vX.Y.Z`.

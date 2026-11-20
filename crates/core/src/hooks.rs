@@ -74,7 +74,7 @@ impl Session {
                 ("cancelled".into(), MontyObject::bool(data.cancelled)),
             ];
             handles.push(std::thread::spawn(move || {
-                let host = Arc::new(SessionHost::new(Arc::downgrade(&s), true));
+                let host = Arc::new(SessionHost::new(Arc::downgrade(&s)));
                 let mut py = Python::new(host, config.settings.max_output);
                 let secs = config.settings.hook_timeout.max(1);
                 let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(secs));

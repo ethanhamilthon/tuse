@@ -1,5 +1,7 @@
 use crate::chat::Entry;
-use crate::style::{Palette, Style};
+use crate::style::{
+    ERROR_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style, USER_PREFIX,
+};
 use crate::text::{Line, line_width, span, wrap};
 use std::time::Duration;
 
@@ -44,16 +46,15 @@ pub fn plain(text: &str, width: usize, style: Style, first: &str, rest: &str) ->
 }
 
 pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
-    let t = &p.t;
-    let pad = " ".repeat(crate::text::width(&t.user_prefix));
+    let pad = " ".repeat(crate::text::width(USER_PREFIX));
     match e {
         Entry::User { text, images } => {
-            let st = Style::fg(p.user).on(p.user_bg);
+            let st = Style::fg(p.fg).on(p.surface);
             let mut text = text.clone();
             if *images > 0 && !text.contains("[Image") {
                 text.push_str(&format!("\n[{images} image(s)]"));
             }
-            let mut lines = plain(&text, width, st, &t.user_prefix, &pad);
+            let mut lines = plain(&text, width, st, USER_PREFIX, &pad);
             for l in &mut lines {
                 let fill = width.saturating_sub(line_width(l));
                 l.push(span(" ".repeat(fill), st));
@@ -63,9 +64,9 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         Entry::Assistant(text) => crate::markdown::render(text, width, p),
         Entry::Reasoning(text) if text.trim().is_empty() => vec![],
         Entry::Reasoning(text) => {
-            let st = Style::fg(p.reasoning).italic();
-            let all = plain(text.trim(), width, st, &t.reasoning_prefix, &pad);
-            let n = tuse_config::limit(t.reasoning_line, all.len());
+            let st = Style::fg(p.muted).italic();
+            let all = plain(text.trim(), width, st, REASONING_PREFIX, &pad);
+            let n = tuse_config::limit(p.ui.reasoning_line, all.len());
             all[all.len() - n..].to_vec()
         }
         Entry::Tool {
@@ -75,8 +76,8 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             diffs,
             ..
         } => crate::tool_view::tool(input, output.as_deref(), *code, diffs, width, p),
-        Entry::Notice(text) => plain(text, width, Style::fg(p.notice), &t.notice_prefix, &pad),
-        Entry::Error(text) => plain(text, width, Style::fg(p.error), &t.error_prefix, &pad),
+        Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad),
+        Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad),
         Entry::Print { text, .. } => plain(text, width, Style::fg(p.fg), "", ""),
         Entry::TurnEnd {
             elapsed,
@@ -88,8 +89,8 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             } else {
                 "Done in"
             };
-            let text = format!("{word} {}{}{calls} calls", duration(*elapsed), t.label_sep);
-            plain(&text, width, Style::fg(p.notice), &t.notice_prefix, &pad)
+            let text = format!("{word} {}{LABEL_SEP}{calls} calls", duration(*elapsed));
+            plain(&text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad)
         }
     }
 }

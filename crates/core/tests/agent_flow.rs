@@ -137,18 +137,8 @@ fn the_agent_edits_files_runs_tasks_and_reports_status() {
         std::fs::read_to_string(dir.join("a.txt")).unwrap(),
         "one\n2\n"
     );
-    // The indicator went title -> reading -> searching -> running.
-    let pos = |needle: &str| statuses.iter().position(|t| t.contains(needle));
-    let order = [
-        pos("Testing the flow"),
-        pos("writing"),
-        pos("editing"),
-        pos("reading"),
-        pos("searching"),
-        pos("running echo"),
-    ];
-    assert!(order.iter().all(Option::is_some), "{statuses:?}");
-    assert!(order.windows(2).all(|w| w[0] < w[1]), "{statuses:?}");
+    // The indicator only shows the tool title and clears when the tool finishes.
+    assert_eq!(statuses, ["Testing the flow", ""]);
     // The process task is listed and stopped with the session.
     let tasks = s.tasks.list();
     assert_eq!(

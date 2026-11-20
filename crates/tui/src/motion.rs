@@ -1,4 +1,4 @@
-use crate::style::Palette;
+use crate::style::{MOTION_MS, MOTION_PERIOD, Palette};
 use crossterm::style::Color;
 use std::time::Duration;
 
@@ -21,15 +21,14 @@ impl Motion {
     /// `None` when idle, when the theme sets `motion: false`, or when the gradient
     /// colors are not `#rrggbb`.
     pub fn new(p: &Palette, busy: bool, elapsed: Duration) -> Option<Motion> {
-        let t = &p.t;
-        if !busy || !t.motion {
+        if !busy || !p.ui.motion {
             return None;
         }
-        let period = (t.motion_period as usize).max(2);
-        let step = (elapsed.as_millis() / u128::from(t.motion_ms.max(1))) as usize;
+        let period = (MOTION_PERIOD as usize).max(2);
+        let step = (elapsed.as_millis() / u128::from(MOTION_MS.max(1))) as usize;
         Some(Motion {
-            from: rgb(p.motion_from)?,
-            to: rgb(p.motion_to)?,
+            from: rgb(p.muted)?,
+            to: rgb(p.accent)?,
             period,
             shift: step % period,
         })

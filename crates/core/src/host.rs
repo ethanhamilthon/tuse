@@ -26,13 +26,11 @@ const FUNCTIONS: &[&str] = &[
 /// the session owns the interpreter that owns this.
 pub(crate) struct SessionHost {
     session: Weak<Session>,
-    /// Hooks and tasks do not change the working indicator.
-    quiet: bool,
 }
 
 impl SessionHost {
-    pub fn new(session: Weak<Session>, quiet: bool) -> Self {
-        Self { session, quiet }
+    pub fn new(session: Weak<Session>) -> Self {
+        Self { session }
     }
 
     fn session(&self) -> Result<Arc<Session>, Fail> {
@@ -45,28 +43,6 @@ impl SessionHost {
 impl Host for SessionHost {
     fn functions(&self) -> &'static [&'static str] {
         FUNCTIONS
-    }
-
-    fn status(&self, name: &str, a: &Args) {
-        if self.quiet {
-            return;
-        }
-        let Ok(s) = self.session() else { return };
-        let theme = s.config().active_theme();
-        let arg = |key| a.opt_str(0, key).ok().flatten().unwrap_or_default();
-        let text = match name {
-            "read" => theme.read_label.replace("{}", &arg("path")),
-            "write" => theme.write_label.replace("{}", &arg("path")),
-            "edit" => theme.edit_label.replace("{}", &arg("path")),
-            "grep" => theme.grep_label.replace("{}", &arg("pattern")),
-            "sh" => theme
-                .sh_label
-                .replace("{}", &last_line_of_command(&arg("cmd"))),
-            "ask" => theme.ask_label,
-            "docs" => theme.docs_label,
-            _ => return,
-        };
-        s.set_status(text);
     }
 
     fn call(&self, name: &str, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
@@ -110,12 +86,6 @@ impl Host for SessionHost {
     }
 }
 
-/// The first line of a command, short enough for the indicator.
-fn last_line_of_command(cmd: &str) -> String {
-    let line = cmd.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
-    line.trim().chars().take(60).collect()
-}
-
 /// Blocks until the user answers. The time it takes does not count against the
 /// deadline of the call.
 fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
@@ -140,12 +110,8 @@ fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx) -> Result<MontyObject, Fail> {
 }
 
 /// A fresh interpreter with the configured `prelude` already run.
-pub(crate) fn python_for(
-    session: Weak<Session>,
-    config: &tuse_config::Config,
-    quiet: bool,
-) -> Python {
-    let host = Arc::new(SessionHost::new(session.clone(), quiet));
+pub(crate) fn python_for(session: Weak<Session>, config: &tuse_config::Config) -> Python {
+    let host = Arc::new(SessionHost::new(session.clone()));
     let mut py = Python::new(host, config.settings.max_output);
     let prelude = config.prelude.join("\n");
     if !prelude.trim().is_empty() {
@@ -164,7 +130,7 @@ pub(crate) fn python_for(
 impl Session {
     /// The agent's interpreter.
     pub(crate) fn new_python(self: &Arc<Self>, config: &tuse_config::Config) -> Python {
-        python_for(Arc::downgrade(self), config, false)
+        python_for(Arc::downgrade(self), config)
     }
 }
 

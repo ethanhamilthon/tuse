@@ -1,4 +1,4 @@
-use crate::style::{Palette, Style};
+use crate::style::{MORE, Palette, Style, TOOL_PREFIX};
 use crate::text::{Line, clip, span, width};
 use tuse_core::FileDiff;
 
@@ -12,29 +12,28 @@ pub fn tool(
     width: usize,
     p: &Palette,
 ) -> Vec<Line> {
-    let t = &p.t;
     let failed = output.is_some() && code != Some(0);
-    let head = Style::fg(if failed { p.tool_error } else { p.tool });
-    let pad = " ".repeat(crate::text::width(&t.tool_prefix));
+    let head = Style::fg(if failed { p.err } else { p.info });
+    let pad = " ".repeat(crate::text::width(TOOL_PREFIX));
     let mut lines = source(input, width, head, failed, p);
-    let keep = tuse_config::limit(t.tool_line, lines.len());
+    let keep = tuse_config::limit(p.ui.tool_line, lines.len());
     if keep < lines.len() {
         lines.truncate(keep);
         if keep > 0 {
-            lines.push(vec![span(format!("{pad}{}", t.more), Style::fg(p.dim))]);
+            lines.push(vec![span(format!("{pad}{MORE}"), Style::fg(p.dim))]);
         }
     }
     let Some(out) = output else { return lines };
     let out = crate::render::clean(out);
     let all: Vec<&str> = out.trim_end().lines().collect();
-    let shown = tuse_config::limit(t.output_line, all.len());
-    let st = Style::fg(p.tool_output);
+    let shown = tuse_config::limit(p.ui.output_line, all.len());
+    let st = Style::fg(p.dim);
     for l in all.iter().take(shown) {
-        let l = clip(l, width.saturating_sub(pad.len()), &t.more);
+        let l = clip(l, width.saturating_sub(pad.len()), MORE);
         lines.push(vec![span(pad.clone(), st), span(l, st)]);
     }
     if shown > 0 && shown < all.len() {
-        let more = format!("{pad}{} {} more lines", t.more, all.len() - shown);
+        let more = format!("{pad}{MORE} {} more lines", all.len() - shown);
         lines.push(vec![span(more, Style::fg(p.dim))]);
     }
     for d in diffs {
@@ -45,18 +44,14 @@ pub fn tool(
 
 /// The code wrapped to `width`, colored unless the call failed.
 fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<Line> {
-    let t = &p.t;
     let code = crate::render::clean(input.trim());
-    let pad = " ".repeat(width(&t.tool_prefix));
+    let pad = " ".repeat(width(TOOL_PREFIX));
     let colored = if failed {
         code.split('\n').map(|l| vec![span(l, head)]).collect()
     } else {
         crate::syntax::highlight(&code, head, p)
     };
-    let (first, rest) = (
-        vec![span(t.tool_prefix.clone(), head)],
-        vec![span(pad, head)],
-    );
+    let (first, rest) = (vec![span(TOOL_PREFIX, head)], vec![span(pad, head)]);
     colored
         .into_iter()
         .enumerate()
@@ -66,26 +61,25 @@ fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<
 
 /// `path` and its changed lines, colored; a long changed line shows the part around the change.
 fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
-    let t = &p.t;
     let room = w.saturating_sub(pad.len());
     let all: Vec<&str> = d.diff.lines().collect();
     let mut out = vec![vec![span(
-        format!("{pad}{}", clip(&d.path, room, &t.more)),
+        format!("{pad}{}", clip(&d.path, room, MORE)),
         Style::fg(p.dim),
     )]];
-    let shown = tuse_config::limit(t.diff_line, all.len());
-    let pairs = pair_windows(&all[..shown], room, &t.more);
+    let shown = tuse_config::limit(p.ui.diff_line, all.len());
+    let pairs = pair_windows(&all[..shown], room, MORE);
     for (l, text) in all.iter().zip(pairs) {
         let color = match l.chars().next() {
-            Some('+') => p.diff_add,
-            Some('-') => p.diff_del,
-            _ => p.tool_output,
+            Some('+') => p.ok,
+            Some('-') => p.err,
+            _ => p.dim,
         };
         let st = Style::fg(color);
         out.push(vec![span(pad.to_string(), st), span(text, st)]);
     }
     if shown < all.len() {
-        let more = format!("{pad}{} {} more lines", t.more, all.len() - shown);
+        let more = format!("{pad}{MORE} {} more lines", all.len() - shown);
         out.push(vec![span(more, Style::fg(p.dim))]);
     }
     out
@@ -144,7 +138,10 @@ mod tests {
 
     #[test]
     fn tool_output_tabs_do_not_reach_the_terminal() {
-        let p = Palette::new(&tuse_config::Theme::default());
+        let p = Palette::new(
+            &tuse_config::Theme::default(),
+            &tuse_config::UiSettings::default(),
+        );
         let lines = tool("x = 1", Some("1\tx\n2\t\x1b[31my"), Some(0), &[], 40, &p);
         let text: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
         assert!(!text.contains('\t') && !text.contains('\x1b'), "{text:?}");

@@ -26,6 +26,7 @@ mod table;
 mod text;
 mod token_picker;
 mod tool_view;
+mod usage;
 
 use crossterm::event::{
     self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
@@ -112,7 +113,7 @@ fn main_loop(mut app: app::App) -> std::io::Result<String> {
         if app.quit {
             break;
         }
-        if !event::poll(Duration::from_millis(app.palette.t.frame_ms))? {
+        if !event::poll(Duration::from_millis(style::FRAME_MS))? {
             continue;
         }
         let page = terminal::size()?.1.saturating_sub(4) as usize;

@@ -1,12 +1,17 @@
 use crate::render::plain;
 use crate::style::{Palette, Style};
-use crate::text::Line;
+use crate::text::{Line, wrap};
+
+enum Body {
+    Text(String),
+    Styled(Vec<Line>),
+}
 
 /// Read-only text over the bottom of the chat (`/usage`, a task's output, an opened
 /// `/trace` item). It is not part of the conversation; Esc closes it.
 pub struct Panel {
     pub title: String,
-    text: String,
+    body: Body,
     /// First visible content line.
     pub scroll: usize,
     cache: Option<(usize, Vec<Line>)>,
@@ -16,16 +21,33 @@ impl Panel {
     pub fn new(title: impl Into<String>, text: impl Into<String>) -> Self {
         Panel {
             title: title.into(),
-            text: text.into(),
+            body: Body::Text(text.into()),
             scroll: 0,
             cache: None,
         }
     }
 
-    /// The text wrapped to `width`.
+    pub fn styled(title: impl Into<String>, lines: Vec<Line>) -> Self {
+        Panel {
+            title: title.into(),
+            body: Body::Styled(lines),
+            scroll: 0,
+            cache: None,
+        }
+    }
+
+    /// The content wrapped to `width`.
     fn wrapped(&mut self, width: usize, p: &Palette) -> &[Line] {
         if self.cache.as_ref().is_none_or(|(w, _)| *w != width) {
-            let lines = plain(&self.text, width, Style::fg(p.list_fg), "", "");
+            let lines = match &self.body {
+                Body::Text(text) => plain(text, width, Style::fg(p.fg), "", ""),
+                Body::Styled(rows) => {
+                    let empty = vec![];
+                    rows.iter()
+                        .flat_map(|r| wrap(r, width, &empty, &empty))
+                        .collect()
+                }
+            };
             self.cache = Some((width, lines));
         }
         &self.cache.as_ref().unwrap().1
@@ -33,9 +55,8 @@ impl Panel {
 
     /// The panel as screen lines, at most `max_rows` of them, each `width` wide.
     pub fn lines(&mut self, width: usize, max_rows: usize, p: &Palette) -> Vec<Line> {
-        let pad = p.t.list_pad_x as usize;
-        let inner = width.saturating_sub(pad * 2).max(1);
-        let body = max_rows.min(p.t.list_max_height as usize).max(3) - 2;
+        let inner = width.max(1);
+        let body = max_rows.min(p.ui.list_max_height).max(3) - 2;
         let all = self.wrapped(inner, p).to_vec();
         let body = body.min(all.len());
         self.scroll = self.scroll.min(all.len().saturating_sub(body));
@@ -56,11 +77,11 @@ impl Panel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuse_config::Theme;
+    use tuse_config::{Theme, UiSettings};
 
     #[test]
     fn panel_scrolls_within_its_text_and_fits_the_rows() {
-        let p = Palette::new(&Theme::default());
+        let p = Palette::new(&Theme::default(), &UiSettings::default());
         let mut panel = Panel::new(
             "T",
             (0..30)

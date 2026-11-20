@@ -35,7 +35,7 @@ impl Session {
         st.cancel = Arc::new(AtomicBool::new(false));
         st.turn_start = Instant::now();
         st.calls = 0;
-        st.status = self.config().active_theme().thinking_label;
+        st.status = String::new();
         let (generation, cancel) = (st.generation, st.cancel.clone());
         drop(st);
         let s = self.clone();
@@ -155,11 +155,6 @@ impl Session {
             out.calls += st.calls;
         }
         out
-    }
-
-    pub fn usage_report(&self) -> String {
-        let (model, effort) = self.model();
-        usage::report(&self.id, &model, &effort, &self.config(), &self.stats())
     }
 
     /// Shows a choice in the TUI; the receiver gets the answer.

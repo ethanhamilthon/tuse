@@ -1,5 +1,5 @@
 //! Inline prompts for CLI subcommands: they print into the scrollback, no alternate screen.
-use crate::style::Palette;
+use crate::style::{ERROR_PREFIX, LABEL_SEP, MASK_CHAR, NOTICE_PREFIX, Palette, USER_PREFIX};
 use crossterm::event::{
     self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEventKind, KeyModifiers,
 };
@@ -7,7 +7,7 @@ use crossterm::style::{Color, Print, ResetColor, SetForegroundColor};
 use crossterm::terminal::{self, Clear, ClearType};
 use crossterm::{QueueableCommand, execute};
 use std::io::{Result, Stdout, Write, stdout};
-use tuse_config::Theme;
+use tuse_config::{Theme, UiSettings};
 
 pub struct Field<'a> {
     pub label: &'a str,
@@ -42,14 +42,20 @@ impl Drop for Raw {
 /// Prints one styled line.
 pub fn say(theme: &Theme, tone: Tone, text: &str) -> Result<()> {
     let mut out = stdout();
-    line(&mut out, &Palette::new(theme), tone, text, "\n")?;
+    line(
+        &mut out,
+        &Palette::new(theme, &UiSettings::default()),
+        tone,
+        text,
+        "\n",
+    )?;
     out.flush()
 }
 
 fn line(out: &mut Stdout, p: &Palette, tone: Tone, text: &str, nl: &str) -> Result<()> {
     let (prefix, color) = match tone {
-        Tone::Notice => (&p.t.notice_prefix, p.notice),
-        Tone::Error => (&p.t.error_prefix, p.error),
+        Tone::Notice => (NOTICE_PREFIX, p.dim),
+        Tone::Error => (ERROR_PREFIX, p.err),
     };
     paint(out, color, &format!("{prefix}{text}"))?;
     out.queue(Print(nl))?;
@@ -65,9 +71,9 @@ fn paint(out: &mut Stdout, color: Option<Color>, text: &str) -> Result<()> {
     Ok(())
 }
 
-fn shown(p: &Palette, f: &Field, value: &str) -> String {
+fn shown(f: &Field, value: &str) -> String {
     if f.secret && !value.starts_with('$') {
-        p.t.mask_char.repeat(value.chars().count())
+        MASK_CHAR.repeat(value.chars().count())
     } else {
         value.to_string()
     }
@@ -76,9 +82,9 @@ fn shown(p: &Palette, f: &Field, value: &str) -> String {
 fn draw(out: &mut Stdout, p: &Palette, f: &Field, value: &str, last: bool) -> Result<()> {
     out.queue(Print("\r"))?;
     out.queue(Clear(ClearType::CurrentLine))?;
-    paint(out, p.accent, &p.t.user_prefix)?;
-    paint(out, p.dim, &format!("{}{}", f.label, p.t.label_sep))?;
-    paint(out, p.fg, &shown(p, f, value))?;
+    paint(out, p.accent, USER_PREFIX)?;
+    paint(out, p.dim, &format!("{}{LABEL_SEP}", f.label))?;
+    paint(out, p.fg, &shown(f, value))?;
     if last {
         out.queue(Print("\r\n"))?;
     }
@@ -87,7 +93,7 @@ fn draw(out: &mut Stdout, p: &Palette, f: &Field, value: &str, last: bool) -> Re
 
 /// Asks the fields one by one. Enter accepts, Esc or Ctrl+C cancels (`None`).
 pub fn ask(theme: &Theme, fields: &[Field]) -> Result<Option<Vec<String>>> {
-    let p = Palette::new(theme);
+    let p = Palette::new(theme, &UiSettings::default());
     let _raw = Raw::enter()?;
     let mut out = stdout();
     let mut answers = vec![];

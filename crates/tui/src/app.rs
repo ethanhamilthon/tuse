@@ -56,7 +56,7 @@ pub struct App {
 
 impl App {
     pub fn new(session: Arc<Session>, cwd: PathBuf, config_arg: Option<PathBuf>) -> App {
-        let palette = Palette::new(&session.config().active_theme());
+        let palette = Palette::from_config(&session.config());
         let events = session.subscribe();
         let chat = Chat::from_records(&session.records());
         App {
@@ -140,8 +140,7 @@ impl App {
             .map(|o| crate::picker::item(o.clone(), "", o.clone()))
             .collect();
         // The last row is a reminder that the user can write their own answer; its value is empty.
-        let custom = self.palette.t.ask_custom_label.clone();
-        items.push(crate::picker::item(custom, "", ""));
+        items.push(crate::picker::item(crate::style::ASK_CUSTOM_LABEL, "", ""));
         self.picker = Some(Picker::new(crate::picker::Kind::Ask(id), question, items));
     }
 }

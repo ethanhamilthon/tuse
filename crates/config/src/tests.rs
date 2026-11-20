@@ -47,11 +47,19 @@ fn theme_extend() {
     let p = dir.join("main.yaml");
     std::fs::write(
         &p,
-        "settings: {theme: b}\nthemes:\n  a: {accent: red, tool_line: 7}\n  b: {extend: a, accent: blue}\n",
+        "settings:\n  theme: b\n  ui: {tool_line: 7}\nthemes:\n  a: {accent: red, info: green}\n  b: {extend: a, accent: blue}\n",
     )
     .unwrap();
-    let t = load(Some(&p)).unwrap().config.active_theme();
-    assert_eq!((t.accent.as_str(), t.tool_line), ("blue", 7));
+    let cfg = load(Some(&p)).unwrap().config;
+    let t = cfg.active_theme();
+    assert_eq!(
+        (
+            t.accent.as_str(),
+            t.info.as_str(),
+            cfg.settings.ui.tool_line
+        ),
+        ("blue", "green", 7)
+    );
     std::fs::write(&p, "settings: {theme: nope}\n").unwrap();
     assert!(load(Some(&p)).is_err());
     std::fs::remove_dir_all(dir).ok();
@@ -138,38 +146,30 @@ fn defaults_are_what_the_docs_promise() {
         (0, 4096, 10, 30)
     );
     assert_eq!((s.max_image_bytes, s.retries), (5 * 1024 * 1024, 5));
-    let t = crate::Theme::default();
+    let ui = &s.ui;
     assert_eq!(
-        (t.input_max_height, t.tool_line, t.output_line),
+        (ui.input_max_height, ui.tool_line, ui.output_line),
         (-1, -1, 1)
     );
     assert_eq!(
-        (t.reasoning_line, t.pad_x, t.input_pad_x, t.list_pad_x),
-        (-1, 0, 0, 0)
+        (ui.reasoning_line, ui.diff_line, ui.pad_x, ui.message_gap),
+        (-1, 12, 0, 1)
     );
+    assert_eq!((ui.input_design.as_str(), ui.motion), ("lines", true));
+    let t = crate::Theme::default();
     assert_eq!(
-        (t.tool_prefix.as_str(), t.notice_prefix.as_str()),
-        ("* ", "✓ ")
+        (t.bg.as_str(), t.surface.as_str(), t.fg.as_str()),
+        ("#0A0A0A", "#1A1A1A", "#EDEDED")
     );
-    assert_eq!(t.spinner, ["◐", "◓", "◑", "◒"]);
 }
 
 #[test]
-fn theme_input_tokens_are_checked() {
+fn ui_settings_are_checked() {
     let p = std::env::temp_dir().join(format!("tuse-tok-{}.yaml", std::process::id()));
-    std::fs::write(
-        &p,
-        "themes:\n  a: {input_design: box, motion: false, input_prefix: \"\"}\n",
-    )
-    .unwrap();
-    let t = load(Some(&p)).unwrap().config.themes["a"].clone();
-    assert_eq!(
-        (t.input_design.as_str(), t.motion, t.input_prefix.as_str()),
-        ("box", false, "")
-    );
-    std::fs::write(&p, "themes:\n  a: {input_design: round}\n").unwrap();
+    std::fs::write(&p, "settings:\n  ui: {input_design: box, motion: false}\n").unwrap();
+    let ui = load(Some(&p)).unwrap().config.settings.ui;
+    assert_eq!((ui.input_design.as_str(), ui.motion), ("box", false));
+    std::fs::write(&p, "settings:\n  ui: {input_design: round}\n").unwrap();
     assert!(load(Some(&p)).err().unwrap().contains("input_design"));
-    std::fs::write(&p, "themes:\n  a: {box_chars: [x]}\n").unwrap();
-    assert!(load(Some(&p)).err().unwrap().contains("box_chars"));
     std::fs::remove_file(p).ok();
 }

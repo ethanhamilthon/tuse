@@ -26,13 +26,13 @@ impl App {
             "theme" => self.open_themes(),
             "tasks" => self.open_tasks(),
             "usage" => {
-                let r = self.session.usage_report();
-                self.panel = Some(Panel::new("Usage", r));
+                self.panel = Some(crate::usage::panel(&self.session, &self.palette));
+                self.trace_item = None;
             }
             "trace" => self.open_trace(None),
             "reload" => match self.session.reload() {
                 Ok(()) => {
-                    self.palette = Palette::new(&self.session.config().active_theme());
+                    self.palette = Palette::from_config(&self.session.config());
                     self.chat = crate::chat::Chat::from_records(&self.session.records());
                     self.notice("Config reloaded.");
                 }
@@ -72,6 +72,14 @@ impl App {
         self.picker = Some(p);
         self.panel = None;
         self.trace_item = None;
+    }
+
+    pub fn open_trace_item(&mut self, at: usize) {
+        if let Some((role, text)) = self.trace.get(at) {
+            let title = format!("Trace {}/{} {role}", at + 1, self.trace.len());
+            self.panel = Some(Panel::new(title, text.clone()));
+            self.trace_item = Some(at);
+        }
     }
 
     pub fn open_tasks(&mut self) {
@@ -156,10 +164,7 @@ impl App {
             }
             (Kind::Trace, Some(v)) => {
                 let at: usize = v.parse().unwrap_or(0);
-                if let Some((role, text)) = self.trace.get(at) {
-                    self.panel = Some(Panel::new(format!("Trace {at} {role}"), text.clone()));
-                    self.trace_item = Some(at);
-                }
+                self.open_trace_item(at);
             }
             (Kind::Ask(id), v) => {
                 // Typed text is the answer; without it the selected option (the last row is only a hint).

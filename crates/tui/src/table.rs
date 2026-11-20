@@ -1,4 +1,4 @@
-use crate::style::{Palette, Style};
+use crate::style::{Palette, RULE_CHAR, Style, TABLE_SEP};
 use crate::text::{Line, line_width, span};
 
 /// Rows of a Markdown table being collected; the first row is the header.
@@ -19,7 +19,7 @@ impl Table {
                 widths[i] = widths[i].max(line_width(c));
             }
         }
-        let sep = &p.t.table_sep;
+        let sep = TABLE_SEP;
         let total: usize =
             widths.iter().sum::<usize>() + crate::text::width(sep) * cols.saturating_sub(1);
         let fits = total <= width;
@@ -29,7 +29,7 @@ impl Table {
             let mut line: Line = vec![];
             for (i, mut cell) in row.into_iter().enumerate() {
                 if i > 0 {
-                    line.push(span(sep.clone(), dim));
+                    line.push(span(sep, dim));
                 }
                 if r == 0 {
                     cell.iter_mut().for_each(|s| s.style = s.style.bold());
@@ -46,9 +46,7 @@ impl Table {
             }
             out.push(line);
             if r == 0 {
-                let rule =
-                    p.t.rule_char
-                        .repeat(if fits { total } else { width.min(total) });
+                let rule = RULE_CHAR.repeat(if fits { total } else { width.min(total) });
                 out.push(vec![span(rule, dim)]);
             }
         }

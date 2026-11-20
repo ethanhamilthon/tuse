@@ -80,9 +80,7 @@ impl Chat {
                     code: *code,
                     diffs: diffs.clone(),
                 },
-                Record::Notice { text } | Record::Notification { text } => {
-                    Entry::Notice(text.clone())
-                }
+                Record::Notice { text } => Entry::Notice(text.clone()),
                 Record::Error { text } => Entry::Error(text.clone()),
                 Record::TurnEnd {
                     elapsed_ms,

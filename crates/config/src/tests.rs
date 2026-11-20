@@ -40,6 +40,14 @@ fn includes_merge() {
     assert!(c.problems().is_empty());
     w(
         "main.yaml",
+        "systems: [\"$HOME\"]\nhooks: {h: {events: [user_message], run: 'print(f\"$HOME #{{echo x}}\")'}}\nfunctions: {f: {description: d, run: 'return \"${HOME}\"'}}\n",
+    );
+    let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
+    assert_eq!(c.hooks["h"].run, "print(f\"$HOME #{{echo x}}\")");
+    assert_eq!(c.functions["f"].run, "return \"${HOME}\"");
+    assert_ne!(c.systems[0], "$HOME");
+    w(
+        "main.yaml",
         "models: [{name: p/a, window: 1000}, {name: p/b, window: 1000, compact_at: 0}]\n",
     );
     let c = load(Some(&dir.join("main.yaml"))).unwrap().config;

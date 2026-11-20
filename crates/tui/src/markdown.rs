@@ -237,14 +237,7 @@ impl Renderer<'_> {
             TagEnd::Table => {
                 if let Some(t) = self.table.take() {
                     let (first, rest) = self.prefixes();
-                    let width = self.width.saturating_sub(
-                        crate::text::line_width(&first).max(crate::text::line_width(&rest)),
-                    );
-                    for (i, l) in t.render(width, self.p).into_iter().enumerate() {
-                        let mut row = if i == 0 { first.clone() } else { rest.clone() };
-                        row.extend(l);
-                        self.out.push(row);
-                    }
+                    self.out.extend(t.prefixed(self.width, self.p, first, rest));
                 }
                 self.blank();
             }

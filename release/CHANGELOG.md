@@ -2,6 +2,11 @@
 
 ## 0.5.3
 
+- Each hook processes events in order in a persistent interpreter. Hooks receive turn context and can set the session title. Configured Python helpers are available to the agent, tasks and hooks.
+- Full-screen status is reported via OSC 7501 (disable with `settings.ui.osc_status`). Short notices appear in the status row; the turn footer shows elapsed time and model/effort.
+- Russian-layout shortcuts work in supported terminals. Pasted images have compact labels; their paths expand on send.
+- Markdown tables wrap within columns or switch to records on narrow screens. The README now includes benchmark results and is available through `docs("README.md")`.
+
 - Tool code now streams into the chat, with the title shown as soon as it arrives.
 - Removed `prelude`; import a `.py` file from the config folder or use a hook instead.
 - Removed the `VERSION` file; the version now comes only from `Cargo.toml`.

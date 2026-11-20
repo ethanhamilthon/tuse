@@ -14,6 +14,25 @@ Chat Completions compatible API, one tool: `python`.
 - Background tasks, 50/25/25 context compaction, retries.
 - YAML config with `include`, `$VAR` and `#{{command}}` expansion and a full theme.
 
+## Benchmark
+
+Tuse, Claude Code and pi on 5 hard coding tasks (a SQL engine, an MVCC store, a regex engine, a
+dependency solver, a cron scheduler), 6 runs each, 90 runs in total. Model `claude-haiku-5-5` at
+low effort behind one proxy, every agent in its own TUI inside `tmux`, hidden unit tests
+(107 per round) grade each run, 360 s limit.
+
+| Agent | Full pass | Avg score | Avg time | Input tokens / run | Est. cost / run |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Tuse 0.5.1 | 20/30 | 98.5% | 135 s | 142k | $0.20 |
+| Claude Code 2.1.329 | 21/30 | 98.6% | 174 s | 462k | $0.30 |
+| pi 1.5.2 | 13/30 | 72.3% | 160 s | 264k | $0.26 |
+
+Tuse matches Claude Code on quality (one test of 150 apart on `mini_sql`), finishes 22% faster, sends 3.3x fewer
+input tokens (a system prompt of about 2k tokens against about 20k) and costs 32% less. pi lost
+points on one failure: on `mini_sql` the model spent all 32,000 reasoning tokens and the reply was
+cut (`max_tokens`), so nothing was written (0/6); on the other tasks pi scores the same as the rest.
+Cost is an estimate at Haiku-class prices. One model, one setup.
+
 ## Install
 
 ```sh
@@ -123,6 +142,12 @@ models:
     window: 1000000
     compact_at: 600000
     prices: {in: 3, out: 15, cache: 0.3, cache_write: 3.75}
+
+functions:
+  checks:
+    args: "lines=30"
+    description: Run project checks and return the last lines.
+    run: return sh("make check").out.splitlines()[-lines:]
 
 hooks:
   notify:

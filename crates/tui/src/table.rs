@@ -46,6 +46,18 @@ impl Table {
         }
         Some(floor)
     }
+    pub fn prefixed(self, available: usize, p: &Palette, first: Line, rest: Line) -> Vec<Line> {
+        let room = available.saturating_sub(line_width(&first).max(line_width(&rest)));
+        self.render(room, p)
+            .into_iter()
+            .enumerate()
+            .map(|(i, l)| {
+                let mut row = if i == 0 { first.clone() } else { rest.clone() };
+                row.extend(l);
+                row
+            })
+            .collect()
+    }
     pub fn render(self, available: usize, p: &Palette) -> Vec<Line> {
         let dim = Style::fg(p.dim);
         let mut out = vec![];

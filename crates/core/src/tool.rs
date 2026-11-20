@@ -34,7 +34,12 @@ impl Outcome {
 
 impl Session {
     pub(crate) fn set_status(&self, text: String) {
-        self.state.lock().unwrap().status = text.clone();
+        let mut st = self.state.lock().unwrap();
+        if st.status == text {
+            return;
+        }
+        st.status = text.clone();
+        drop(st);
         self.emit(Event::Status(text));
     }
 

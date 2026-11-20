@@ -46,6 +46,7 @@ pub struct App {
     /// The directory the `@` picker lists, relative to `cwd`.
     pub file_dir: String,
     pub flash: Option<(String, std::time::Instant)>,
+    pub pending_tools: Vec<(usize, usize)>,
     pub streaming: Option<usize>,
     pub thinking: Option<usize>,
     /// Lines scrolled up from the bottom of the chat.
@@ -84,6 +85,7 @@ impl App {
             asks: vec![],
             file_dir: String::new(),
             flash: None,
+            pending_tools: vec![],
             streaming: None,
             thinking: None,
             scroll: 0,

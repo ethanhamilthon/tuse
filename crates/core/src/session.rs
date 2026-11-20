@@ -74,7 +74,7 @@ impl Session {
         if opts.resume.is_some() && !crate::store::session_path(&id).join("meta.json").is_file() {
             return Err(format!("no session {id}"));
         }
-        let mut dir = SessionDir::open(&id)?;
+        let mut dir = SessionDir::open(&id, opts.resume.is_none())?;
         let mut records = dir.records();
         for r in history::missing_results(&records) {
             dir.append(&r);
@@ -213,7 +213,7 @@ impl Session {
         st.meta.model = st.model.clone();
         st.meta.effort = st.effort.clone();
         st.meta.updated = crate::id::now();
-        if let Some(d) = self.dir.lock().unwrap().as_ref() {
+        if let Some(d) = self.dir.lock().unwrap().as_mut() {
             d.write_meta(&st.meta);
         }
     }

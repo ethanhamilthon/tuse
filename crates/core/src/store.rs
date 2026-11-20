@@ -25,42 +25,76 @@ pub struct Meta {
     pub updated: String,
 }
 
-/// `~/.tuse/<id>/`: `session.jsonl`, `meta.json`, `lock`, `sock`, `bin/`, `tasks/`.
-/// Holding a `SessionDir` holds the session's lock.
+/// `~/.tuse/<id>/`: `session.jsonl`, `meta.json`, `lock`, `tasks/`, `images/`.
+/// Holding a `SessionDir` holds the session's lock. A new session keeps its records
+/// in memory and creates the folder with its first message, so empty sessions leave nothing.
 pub struct SessionDir {
     pub path: PathBuf,
-    _lock: File,
-    log: File,
+    files: Option<(File, File)>,
+    pending: Vec<String>,
+    meta: Option<Meta>,
 }
 
 impl SessionDir {
-    pub fn open(id: &str) -> Result<Self, String> {
-        let path = session_path(id);
-        std::fs::create_dir_all(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    /// `create`: a new session, whose folder appears later; otherwise the folder is opened now.
+    pub fn open(id: &str, create: bool) -> Result<Self, String> {
+        let mut d = Self {
+            path: session_path(id),
+            files: None,
+            pending: vec![],
+            meta: None,
+        };
+        if !create {
+            d.materialize()?;
+        }
+        Ok(d)
+    }
+
+    fn materialize(&mut self) -> Result<(), String> {
+        if self.files.is_some() {
+            return Ok(());
+        }
+        let path = &self.path;
+        std::fs::create_dir_all(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let lock = File::create(path.join("lock")).map_err(|e| e.to_string())?;
         match lock.try_lock() {
             Ok(()) => {}
             Err(TryLockError::WouldBlock) => {
-                return Err(format!("session {id} is open in another tuse process"));
+                return Err(format!(
+                    "session {} is open in another tuse process",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                ));
             }
             Err(TryLockError::Error(e)) => return Err(e.to_string()),
         }
-        let log = OpenOptions::new()
+        let mut log = OpenOptions::new()
             .create(true)
             .append(true)
             .open(path.join("session.jsonl"))
             .map_err(|e| e.to_string())?;
-        Ok(Self {
-            path,
-            _lock: lock,
-            log,
-        })
+        for line in self.pending.drain(..) {
+            let _ = log.write_all(line.as_bytes());
+        }
+        self.files = Some((lock, log));
+        if let Some(m) = self.meta.take() {
+            self.write_meta(&m);
+        }
+        Ok(())
     }
 
     pub fn append(&mut self, r: &Record) {
-        if let Ok(mut line) = serde_json::to_string(r) {
-            line.push('\n');
-            let _ = self.log.write_all(line.as_bytes());
+        let Ok(mut line) = serde_json::to_string(r) else {
+            return;
+        };
+        line.push('\n');
+        if matches!(r, Record::User { .. }) {
+            let _ = self.materialize();
+        }
+        match &mut self.files {
+            Some((_, log)) => {
+                let _ = log.write_all(line.as_bytes());
+            }
+            None => self.pending.push(line),
         }
     }
 
@@ -75,7 +109,11 @@ impl SessionDir {
             .collect()
     }
 
-    pub fn write_meta(&self, m: &Meta) {
+    pub fn write_meta(&mut self, m: &Meta) {
+        if self.files.is_none() {
+            self.meta = Some(m.clone());
+            return;
+        }
         if let Ok(text) = serde_json::to_string_pretty(m) {
             let _ = std::fs::write(self.path.join("meta.json"), text);
         }

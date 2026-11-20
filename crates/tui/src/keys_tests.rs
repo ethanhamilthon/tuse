@@ -15,6 +15,7 @@ fn expands_prompt_tokens() {
 
 #[test]
 fn editing_withdraws_only_the_waiting_tui_message() {
+    crate::app::test_home();
     // Hold the first request open so the worker cannot take the steering messages.
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let dir = std::env::temp_dir().join(format!("tuse-steering-{}", std::process::id()));

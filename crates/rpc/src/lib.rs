@@ -35,6 +35,7 @@ pub fn serve(
     out: Out,
     stop: Arc<AtomicBool>,
 ) {
+    // Set only after the `initialize` answer is written; until then events wait in the channel.
     let ready = Arc::new(AtomicBool::new(false));
     let events = session.subscribe();
     let done = Arc::new(AtomicBool::new(false));
@@ -42,9 +43,9 @@ pub fn serve(
         let (out, ready, done) = (out.clone(), ready.clone(), done.clone());
         std::thread::spawn(move || {
             while !done.load(Ordering::Relaxed) {
-                if let Ok(e) = events.recv_timeout(Duration::from_millis(50))
-                    && ready.load(Ordering::Acquire)
-                {
+                if !ready.load(Ordering::Acquire) {
+                    std::thread::sleep(Duration::from_millis(10));
+                } else if let Ok(e) = events.recv_timeout(Duration::from_millis(50)) {
                     out.send(&notify("event", events::to_json(&e)));
                 }
             }
@@ -79,17 +80,21 @@ pub fn serve(
         };
         let reply = match req.method.as_str() {
             "initialize" => {
+                let reply = Ok(methods::initialize(&session));
+                if let Some(id) = req.id {
+                    out.send(&answer(id, reply));
+                }
                 ready.store(true, Ordering::Release);
-                Ok(methods::initialize(&session))
-            }
-            _ if !ready.load(Ordering::Acquire) => {
-                Err(Fail(NOT_READY, "call `initialize` first".into()))
+                continue;
             }
             "shutdown" => {
                 if let Some(id) = req.id {
                     out.send(&answer(id, Ok(Value::Null)));
                 }
                 break;
+            }
+            _ if !ready.load(Ordering::Acquire) => {
+                Err(Fail(NOT_READY, "call `initialize` first".into()))
             }
             m => methods::call(&session, m, &req.params),
         };

@@ -1,5 +1,4 @@
-use crate::control::InputId;
-use crate::event::Event;
+use crate::control::{InputId, Subs};
 use crate::history::{self, Bounds};
 use crate::hooks::Data;
 pub use crate::mode::{Mode, Options, Start};
@@ -10,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::mpsc::Sender;
+
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 use tuse_config::Config;
@@ -26,7 +26,7 @@ pub struct Session {
     pub(crate) config: RwLock<Arc<Config>>,
     pub(crate) config_arg: Option<PathBuf>,
     pub(crate) state: Mutex<State>,
-    pub(crate) subs: Mutex<Vec<Sender<Event>>>,
+    pub(crate) subs: Mutex<Subs>,
     pub(crate) ask_seq: AtomicUsize,
     /// The agent's interpreter; made on the first call, gone with the process.
     pub(crate) hooks: Mutex<Option<HashMap<String, crate::hook_queue::HookQueue>>>,
@@ -202,13 +202,6 @@ impl Session {
             },
         );
         Ok(())
-    }
-
-    pub(crate) fn emit(&self, e: Event) {
-        self.subs
-            .lock()
-            .unwrap()
-            .retain(|tx| tx.send(e.clone()).is_ok());
     }
 
     pub(crate) fn push(&self, st: &mut State, r: Record) {

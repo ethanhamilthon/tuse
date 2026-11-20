@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+- Configure `events: [ask]` to run a hook when the main agent needs an answer in the TUI or JSON client. Hooks receive the question, options and ask ID, not the answer.
+- The TUI wraps multiline questions above the options and keeps the question visible while writing a custom answer. Page Up and Page Down scroll longer questions.
+- Python tool titles appear above their code in live and restored chat. `tool_line: 0` hides the title and code without hiding the result.
+- Background task notifications no longer add TUI chat entries. They remain available in `/trace`, session records, the agent context and JSON-RPC.
+
 ## 0.6.0
 
 - Picked `#prompts`, `@files` and `[Image #N]` stay as typed in the chat, title and hooks. The model receives their context separately; `/trace` shows it. Text attachments are capped at 1 KiB. Tokens typed by hand stay literal. See `docs("prompts")`.

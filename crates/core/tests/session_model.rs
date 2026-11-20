@@ -31,7 +31,9 @@ fn a_session_keeps_its_model_when_the_config_changes() {
         r#"{{"id":"{id}","cwd":"{}","title":"t","model":"p/a","effort":"default","created":"","updated":""}}"#,
         dir.display()
     );
-    std::fs::write(dir.join("home").join(&id).join("meta.json"), meta).unwrap();
+    let home = dir.join("home").join(&id);
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("meta.json"), meta).unwrap();
     write("b");
     s.reload().unwrap();
     assert_eq!(s.model().0, "p/a");
@@ -42,5 +44,7 @@ fn a_session_keeps_its_model_when_the_config_changes() {
     let fresh = open(&cfg, &dir, None);
     assert_eq!(fresh.model().0, "p/b");
     fresh.close();
+    // A session closed before its first message leaves no folder.
+    assert!(!dir.join("home").join(&fresh.id).exists());
     std::fs::remove_dir_all(dir).ok();
 }

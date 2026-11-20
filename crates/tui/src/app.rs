@@ -183,8 +183,20 @@ impl App {
     }
 }
 
+/// Points `TUSE_HOME` at a temporary folder once, before any test opens a session.
+#[cfg(test)]
+pub fn test_home() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let home = std::env::temp_dir().join(format!("tuse-home-{}", std::process::id()));
+        // SAFETY: every test that reads the environment calls this first and waits for it.
+        unsafe { std::env::set_var("TUSE_HOME", home) };
+    });
+}
+
 #[cfg(test)]
 pub fn test_app(name: &str, headless: bool) -> App {
+    test_home();
     let cwd = std::env::temp_dir().join(format!("tuse-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&cwd).unwrap();
     let s = Session::open(Options {

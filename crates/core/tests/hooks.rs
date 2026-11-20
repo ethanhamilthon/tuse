@@ -40,6 +40,6 @@ hooks:
         "session_start1\nsession_end2\n"
     );
     assert_eq!(s.title(), "hook title");
-    std::fs::remove_dir_all(tuse_core::tuse_home().join(&s.id)).unwrap();
+    std::fs::remove_dir_all(tuse_core::tuse_home().join(&s.id)).ok();
     std::fs::remove_dir_all(dir).unwrap();
 }

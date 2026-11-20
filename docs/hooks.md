@@ -8,6 +8,7 @@ which gets up to `hook_timeout` before Tuse goes on. There are four events:
 | `process_start` | A session opens in this process. | `reason`: `launch` (Tuse started, also with `--resume`), `new` (`/new`), `resume` (`/resume`), `reload` (`/reload`, on the new config). |
 | `process_end` | The session closes. | `reason`: `exit`, `new`, `resume`, `reload` (on the old config, before it is replaced). |
 | `user_message` | The agent takes a message the user typed (not task notifications). | `text`; `is_first`: the first message of the session (`False` after a resume). |
+| `ask` | The main agent asked a question in the TUI or JSON client (not a background task or hook). Does not wait for the hook or fire on answer or dismissal. | `ask_id`, `question`, `options` (an empty list for free text). |
 | `agent_message` | The agent wrote a message. Messages without text (only tool calls) are skipped, except on a cancel. | `text`; `status`: `working` (tool calls follow), `finished` (the turn is over) or `cancelled` (the user stopped the turn; `text` is what streamed so far, maybe empty). |
 
 Every hook also gets `event`, `hook` (its name), `session` (ID), `cwd`, `model` (`provider/model`)

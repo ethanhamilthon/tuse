@@ -8,6 +8,9 @@ pub use tuse_config::HOOK_EVENTS as EVENTS;
 /// The variables of one event; each event sets its own, the rest are `None`.
 #[derive(Default)]
 pub struct Data {
+    pub ask_id: Option<String>,
+    pub question: Option<String>,
+    pub options: Option<Vec<String>>,
     /// `user_message` and `agent_message`.
     pub text: Option<String>,
     /// `user_message`: the first message of the session.
@@ -53,6 +56,16 @@ impl Session {
                         .map_or_else(MontyObject::none, MontyObject::bool),
                 ),
                 ("status".into(), opt(data.status.map(String::from))),
+                ("ask_id".into(), opt(data.ask_id.clone())),
+                ("question".into(), opt(data.question.clone())),
+                (
+                    "options".into(),
+                    data.options
+                        .as_ref()
+                        .map_or_else(MontyObject::none, |values| {
+                            MontyObject::list(values.iter().map(MontyObject::string))
+                        }),
+                ),
                 ("reason".into(), opt(data.reason.map(String::from))),
             ];
             let queue = queues.entry(name.clone()).or_insert_with(|| {

@@ -24,16 +24,21 @@ fn serve(listener: TcpListener, code: String) {
                 }
                 let mut body = vec![0; len];
                 reader.read_exact(&mut body).unwrap();
-                let delta = if n == 0 {
-                    let args = json!({"code": code, "title": "Testing the flow"}).to_string();
-                    json!({"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "python", "arguments": args}}]})
+                let mut chunks = vec![];
+                if n == 0 {
+                    let args = json!({"code":code,"title":"Testing the flow"}).to_string();
+                    for (i, part) in args.as_bytes().chunks(17).enumerate() {
+                        let mut f = json!({"arguments":std::str::from_utf8(part).unwrap()});
+                        if i == 0 {
+                            f["name"] = json!("python");
+                        }
+                        chunks.push(json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":f}]}}]}));
+                    }
                 } else {
-                    json!({"content": "all done"})
-                };
-                let chunks = [
-                    json!({"choices": [{"delta": delta}]}),
-                    json!({"choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 3}}),
-                ];
+                    chunks.push(json!({"choices":[{"delta":{"content":"all done"}}]}));
+                }
+                chunks
+                    .push(json!({"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":3}}));
                 let mut out = stream;
                 let _ = out.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n");
                 for c in chunks {
@@ -93,15 +98,24 @@ fn the_agent_edits_files_runs_tasks_and_reports_status() {
     let events = s.subscribe();
     s.submit(UserInput::text("go"));
     let (mut statuses, mut ended) = (vec![], false);
+    let mut streamed = String::new();
+    let mut starts = 0;
     let start = Instant::now();
     while !ended && start.elapsed() < Duration::from_secs(60) {
         match events.recv_timeout(Duration::from_millis(200)) {
+            Ok(Event::ToolDelta { code, .. }) => streamed.push_str(&code),
+            Ok(Event::ToolStart { .. }) => {
+                assert_eq!(statuses, ["Testing the flow"]);
+                starts += 1;
+            }
             Ok(Event::Status(t)) => statuses.push(t),
             Ok(Event::TurnEnd { .. }) => ended = true,
             _ => {}
         }
     }
     assert!(ended, "the turn did not end; statuses {statuses:?}");
+    assert_eq!(streamed, CODE);
+    assert_eq!(starts, 1);
     let all = s.records();
     let Some(Record::Tool {
         output,

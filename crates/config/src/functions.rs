@@ -19,3 +19,34 @@ pub fn validate(config: &Config) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn rejects_invalid_definitions() {
+        for (name, description, run) in [
+            ("not-valid", "a", "pass"),
+            ("def", "a", "pass"),
+            ("read", "a", "pass"),
+            ("set_title", "a", "pass"),
+            ("foo", "", "pass"),
+            ("foo", "a", "  "),
+        ] {
+            let mut cfg = Config::default();
+            cfg.functions.insert(
+                name.into(),
+                crate::Function {
+                    args: String::new(),
+                    description: description.into(),
+                    run: run.into(),
+                },
+            );
+            assert!(
+                validate(&cfg)
+                    .unwrap_err()
+                    .contains(&format!("functions.{name}"))
+            );
+        }
+    }
+}

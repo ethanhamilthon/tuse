@@ -186,9 +186,12 @@ impl Renderer<'_> {
                 };
                 self.item_first = Some(marker);
             }
-            Tag::Table(_) => {
+            Tag::Table(align) => {
                 self.flush();
-                self.table = Some(Default::default());
+                self.table = Some(crate::table::Table {
+                    align,
+                    ..Default::default()
+                });
             }
             _ => {}
         }
@@ -233,9 +236,14 @@ impl Renderer<'_> {
             }
             TagEnd::Table => {
                 if let Some(t) = self.table.take() {
-                    let lines = t.render(self.width, self.p);
-                    for l in lines {
-                        self.out.extend(wrap(&l, self.width, &vec![], &vec![]));
+                    let (first, rest) = self.prefixes();
+                    let width = self.width.saturating_sub(
+                        crate::text::line_width(&first).max(crate::text::line_width(&rest)),
+                    );
+                    for (i, l) in t.render(width, self.p).into_iter().enumerate() {
+                        let mut row = if i == 0 { first.clone() } else { rest.clone() };
+                        row.extend(l);
+                        self.out.push(row);
                     }
                 }
                 self.blank();

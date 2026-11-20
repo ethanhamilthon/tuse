@@ -34,6 +34,28 @@ pub fn handle(
             ExtFunctionResult::Return(MontyObject::dict(pairs))
         }
         OsFunctionCall::Import(mut a) => {
+            if a.module == "_tuse_fs" {
+                return ExtFunctionResult::Return(MontyObject::module(
+                    a.module,
+                    monty_types::MontyUuid::from_u128(1),
+                    [(
+                        MontyObject::string("which"),
+                        MontyObject::function("_tuse_which", None),
+                    )],
+                ));
+            }
+            let source = match a.module.as_str() {
+                "glob" => Some(include_str!("../stdlib/glob.py")),
+                "shlex" => Some(include_str!("../stdlib/shlex.py")),
+                "shutil" => Some(include_str!("../stdlib/shutil.py")),
+                _ => None,
+            };
+            if let Some(source) = source {
+                return ExtFunctionResult::ModuleFile(monty_types::ModuleFile {
+                    path: format!("/tuse/stdlib/{}.py", a.module),
+                    source: source.into(),
+                });
+            }
             let mut dirs: Vec<String> = host
                 .module_dirs()
                 .iter()

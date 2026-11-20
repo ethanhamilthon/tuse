@@ -163,7 +163,8 @@ pub fn kill_group(pid: u32) {
         .status();
 }
 
-/// Keeps the head and the tail when `s` is longer than `max` bytes.
+/// Keeps the head and the tail; the result, marker included, is at most `max` bytes.
+/// `max == 0` means no limit.
 pub fn truncate(s: &str, max: usize) -> String {
     if max == 0 || s.len() <= max {
         return s.to_string();
@@ -174,12 +175,36 @@ pub fn truncate(s: &str, max: usize) -> String {
         }
         i
     };
-    let head = floor(max / 2);
-    let tail = floor(s.len() - max / 2);
-    format!(
-        "{}\n[... {} bytes cut ...]\n{}",
-        &s[..head],
-        tail - head,
-        &s[tail..]
-    )
+    let ceil = |mut i: usize| {
+        while !s.is_char_boundary(i) {
+            i += 1;
+        }
+        i
+    };
+    // Size the marker for the widest possible count, so the real one never exceeds it.
+    let marker = |n: usize| format!("\n[... {n} bytes cut ...]\n");
+    let Some(keep) = max.checked_sub(marker(s.len()).len()).filter(|k| *k > 0) else {
+        return s[..floor(max)].to_string();
+    };
+    let head = floor(keep / 2);
+    let tail = ceil(s.len() - (keep - keep / 2));
+    format!("{}{}{}", &s[..head], marker(tail - head), &s[tail..])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate;
+
+    #[test]
+    fn truncate_is_bounded_and_idempotent() {
+        let s = "é".repeat(5000);
+        for max in [1, 5, 20, 30, 31, 100, 4096, 9999] {
+            let a = truncate(&s, max);
+            assert!(a.len() <= max, "{max}: {}", a.len());
+            assert_eq!(truncate(&a, max), a);
+        }
+        let a = truncate(&"x".repeat(10_000), 100);
+        assert!(a.contains("bytes cut") && a.len() <= 100);
+        assert_eq!(truncate("short", 100), "short");
+    }
 }

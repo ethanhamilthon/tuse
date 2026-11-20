@@ -21,9 +21,9 @@ struct Outcome {
 }
 
 impl Outcome {
-    fn err(text: impl Into<String>) -> Self {
+    fn err(text: impl AsRef<str>, max: usize) -> Self {
         Self {
-            text: text.into(),
+            text: tuse_py::truncate(text.as_ref(), max),
             code: Some(1),
             images: vec![],
             diffs: vec![],
@@ -69,20 +69,25 @@ impl Session {
             input: input.clone(),
             title: title.clone(),
         });
+        let max = config.settings.max_output;
         let out = if parsed.is_err() {
-            Outcome::err(format!(
-                "the arguments are not valid JSON: {}",
-                call.arguments
-            ))
+            Outcome::err(
+                format!("the arguments are not valid JSON: {}", call.arguments),
+                max,
+            )
         } else if call.name == TOOL || alias.is_some() {
             self.python_call(&args, cancel, config)
         } else {
-            Outcome::err(format!(
-                "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `ask` inside its `code`",
-                call.name
-            ))
+            Outcome::err(
+                format!(
+                    "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `ask` inside its `code`",
+                    call.name
+                ),
+                max,
+            )
         };
-        let text = tuse_py::truncate(&out.text, config.settings.max_output);
+        // `python_call` output is already cut to `max_output` by the runtime.
+        let text = out.text;
         let Some(mut st) = self.lock_live(generation) else {
             return false;
         };
@@ -117,7 +122,10 @@ impl Session {
         config: &tuse_config::Config,
     ) -> Outcome {
         let Some(code) = args["code"].as_str() else {
-            return Outcome::err("missing argument `code` (a string)");
+            return Outcome::err(
+                "missing argument `code` (a string)",
+                config.settings.max_output,
+            );
         };
         let secs = args["timeout"]
             .as_u64()

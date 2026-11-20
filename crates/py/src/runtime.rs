@@ -47,6 +47,10 @@ impl Python {
         }
     }
 
+    pub fn set_max_output(&mut self, max_output: usize) {
+        self.max_output = max_output;
+    }
+
     /// Runs `code`; `vars` become globals for this run (hooks pass their event data).
     pub fn run(&mut self, code: &str, ctx: &Ctx, vars: Vec<(String, MontyObject)>) -> Output {
         let Some(repl) = self.repl.take() else {

@@ -101,6 +101,11 @@ impl Session {
         self.state.lock().unwrap().records.clone()
     }
 
+    /// Runs `f` on the history without copying it (it can hold large images).
+    pub fn with_records<T>(&self, f: impl FnOnce(&[Record]) -> T) -> T {
+        f(&self.state.lock().unwrap().records)
+    }
+
     /// `(provider/model, effort)`.
     pub fn model(&self) -> (String, String) {
         let st = self.state.lock().unwrap();

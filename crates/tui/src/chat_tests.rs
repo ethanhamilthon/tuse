@@ -32,6 +32,36 @@ fn window_slices_and_invalidate_clears_cache() {
     assert_eq!(rows.len(), 2);
     c.invalidate();
     assert!(c.entries.iter().all(|(_, cache)| cache.is_none()));
+    // Bottom-up rendering gives the same rows as slicing the whole chat.
+    c.push(Entry::Assistant("a\n\nb\n\nc".into()));
+    c.push(Entry::Reasoning(String::new()));
+    c.push(Entry::Error("e".into()));
+    let gap = p.ui.message_gap as usize;
+    let mut all: Vec<Line> = vec![];
+    for (e, _) in &c.entries {
+        let lines = crate::render::render(e, 40, &p);
+        if lines.is_empty() {
+            continue;
+        }
+        if !all.is_empty() {
+            all.extend((0..gap).map(|_| vec![]));
+        }
+        all.extend(lines);
+    }
+    for scroll in 0..all.len() + 3 {
+        let (rows, clamped) = c.window(40, &p, scroll, 3);
+        let s = clamped.min(all.len() - 3);
+        assert_eq!(clamped, scroll.min(all.len() - 3));
+        assert_eq!(
+            rows,
+            all[all.len() - 3 - s..all.len() - s],
+            "scroll {scroll}"
+        );
+    }
+    // Older entries stay unrendered when the screen is full.
+    c.invalidate();
+    c.window(40, &p, 0, 1);
+    assert!(c.entries[0].1.is_none());
 }
 
 #[test]
@@ -56,4 +86,23 @@ fn bench_stream() {
         full.len(),
         start.elapsed()
     );
+}
+
+#[test]
+#[ignore]
+fn bench_resize() {
+    let p = Palette::new(&Default::default(), &Default::default());
+    let mut c = Chat::default();
+    for i in 0..2000 {
+        c.push(Entry::User {
+            text: format!("question {i}"),
+            images: 0,
+        });
+        c.push(Entry::Assistant("## Answer\n\nSome **bold** text and `code`.\n\n```rust\nfn x() {}\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n".into()));
+    }
+    let start = std::time::Instant::now();
+    for w in 60..80 {
+        c.window(w, &p, 0, 50);
+    }
+    eprintln!("BENCH resize x20 over 4000 entries: {:?}", start.elapsed());
 }

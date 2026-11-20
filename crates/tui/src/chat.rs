@@ -168,8 +168,23 @@ impl Chat {
         }
     }
 
+    fn lines(&mut self, i: usize, width: usize, p: &Palette) -> &[Line] {
+        let (e, cache) = &mut self.entries[i];
+        if cache.as_ref().is_none_or(|(w, _)| *w != width) {
+            let lines = match e {
+                Entry::Assistant(t) if self.hot == Some(i) => {
+                    crate::md_stream::render(&mut self.stream, i, t, width, p)
+                }
+                _ => render(e, width, p),
+            };
+            *cache = Some((width, lines));
+        }
+        &cache.as_ref().unwrap().1
+    }
+
     /// Returns only the visible `height` lines ending `scroll` lines above the bottom,
-    /// plus the clamped `scroll`, without cloning off-screen entries.
+    /// plus the clamped `scroll`. Entries are rendered from the bottom up until the
+    /// screen is full, so older ones stay unrendered after a resize or a theme change.
     pub fn window(
         &mut self,
         width: usize,
@@ -178,58 +193,31 @@ impl Chat {
         height: usize,
     ) -> (Vec<Line>, usize) {
         let gap = p.ui.message_gap as usize;
-        let mut total = 0usize;
-        let mut non_empty = false;
-        for (i, (e, cache)) in self.entries.iter_mut().enumerate() {
-            if cache.as_ref().is_none_or(|(w, _)| *w != width) {
-                let lines = match e {
-                    Entry::Assistant(t) if self.hot == Some(i) => {
-                        crate::md_stream::render(&mut self.stream, i, t, width, p)
-                    }
-                    _ => render(e, width, p),
-                };
-                *cache = Some((width, lines));
+        let need = scroll + height;
+        // Lines from the bottom, newest entry first, with the gaps between entries.
+        let mut rev: Vec<Line> = Vec::with_capacity(need);
+        for i in (0..self.entries.len()).rev() {
+            if rev.len() >= need {
+                break;
             }
-            let len = cache.as_ref().unwrap().1.len();
-            if len == 0 {
-                continue;
-            }
-            if non_empty {
-                total += gap;
-            }
-            total += len;
-            non_empty = true;
-        }
-        let clamped = scroll.min(total.saturating_sub(height));
-        let end = total - clamped;
-        let start = end.saturating_sub(height);
-        let mut out = Vec::with_capacity(end - start);
-        let mut pos = 0usize;
-        let mut seen = false;
-        for (_, cache) in &self.entries {
-            let lines = &cache.as_ref().unwrap().1;
+            let lines = self.lines(i, width, p);
             if lines.is_empty() {
                 continue;
             }
-            if seen && gap > 0 {
-                let g_start = pos.max(start);
-                let g_end = (pos + gap).min(end);
-                if g_start < g_end {
-                    out.extend((g_start..g_end).map(|_| vec![]));
-                }
-                pos += gap;
+            let gap_lines = if rev.is_empty() { 0 } else { gap };
+            let take = need - rev.len();
+            let mut block: Vec<Line> = lines.iter().rev().take(take).cloned().collect();
+            if gap_lines > 0 {
+                let mut with_gap: Vec<Line> = (0..gap_lines).map(|_| vec![]).collect();
+                with_gap.append(&mut block);
+                block = with_gap;
             }
-            let l_start = pos.max(start);
-            let l_end = (pos + lines.len()).min(end);
-            if l_start < l_end {
-                out.extend(lines[l_start - pos..l_end - pos].iter().cloned());
-            }
-            pos += lines.len();
-            seen = true;
-            if pos >= end {
-                break;
-            }
+            rev.extend(block);
         }
+        rev.truncate(need);
+        let clamped = scroll.min(rev.len().saturating_sub(height));
+        let end = rev.len().min(clamped + height);
+        let out = rev[clamped..end].iter().rev().cloned().collect();
         (out, clamped)
     }
 }

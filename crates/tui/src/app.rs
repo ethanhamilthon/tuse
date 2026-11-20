@@ -68,7 +68,11 @@ impl App {
     pub fn new(session: Arc<Session>, cwd: PathBuf, config_arg: Option<PathBuf>) -> App {
         let palette = Palette::from_config(&session.config());
         let events = session.subscribe();
-        let chat = Chat::from_records(&session.records(), &|m| session.config().display_name(m));
+        let mut chat =
+            Chat::from_records(&session.records(), &|m| session.config().display_name(m));
+        for p in session.config().problems() {
+            chat.push(Entry::Notice(p));
+        }
         App {
             session,
             events,

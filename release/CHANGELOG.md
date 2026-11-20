@@ -4,6 +4,7 @@
 
 - A built-in function called as a tool of its own (`ask`, `grep`, `sh`...) now runs as `python` code `name(**args)` instead of failing with "unknown tool".
 - A new session creates its folder in `~/.tuse` with the first message; sessions closed before it leave nothing. Tests no longer write to `~/.tuse`.
+- An unknown `effort` in the config shows a notice with the valid values (it still falls back to `default`).
 - Fixed: assistant text that had already streamed was shown twice when a tool call started in the same step.
 
 ## 0.5.3

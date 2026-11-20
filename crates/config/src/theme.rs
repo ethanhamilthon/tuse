@@ -39,6 +39,7 @@ impl Default for Theme {
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct UiSettings {
+    pub osc_status: bool,
     /// `lines`, `box`, `fill` or `bar`.
     pub input_design: String,
     /// `false` turns the working gradient animation off.
@@ -62,6 +63,7 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             input_design: "lines".into(),
+            osc_status: true,
             motion: true,
             fold_strings: true,
             tool_line: -1,

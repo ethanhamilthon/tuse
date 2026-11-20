@@ -31,7 +31,10 @@ impl App {
                 self.chat.push(Entry::User { text, images });
                 self.scroll = 0;
             }
-            Event::TurnStart => {}
+            Event::TurnStart => {
+                self.turn_error = None;
+                self.turn_done = false;
+            }
             Event::Text(t) => self.stream(t, false),
             Event::Reasoning(t) => self.stream(t, true),
             Event::StreamReset => {
@@ -129,6 +132,7 @@ impl App {
             Event::Flash(t) => self.flash(t),
             Event::Notice(t) | Event::Notification(t) => self.notice(t),
             Event::Error(t) => {
+                self.turn_error = Some(t.clone());
                 self.drop_pending();
                 self.error(t)
             }
@@ -142,6 +146,10 @@ impl App {
                 self.streaming = None;
                 self.thinking = None;
                 self.drop_pending();
+                self.turn_done = !cancelled;
+                if cancelled {
+                    self.turn_error = None;
+                }
                 self.chat.push(Entry::TurnEnd {
                     elapsed,
                     model: self.session.config().display_name(&model),

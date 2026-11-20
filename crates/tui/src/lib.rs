@@ -17,6 +17,7 @@ mod list;
 mod markdown;
 mod motion;
 mod mouse;
+mod osc;
 mod panel;
 mod panel_keys;
 mod picker;
@@ -56,14 +57,18 @@ pub fn run(
     cwd: PathBuf,
     config_arg: Option<PathBuf>,
 ) -> std::io::Result<String> {
+    let enabled = Arc::new(std::sync::atomic::AtomicBool::new(
+        session.config().settings.ui.osc_status,
+    ));
+    let panic_enabled = enabled.clone();
     setup()?;
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        restore();
+        restore(panic_enabled.load(std::sync::atomic::Ordering::Relaxed));
         prev(info);
     }));
-    let result = main_loop(app::App::new(session, cwd, config_arg));
-    restore();
+    let result = main_loop(app::App::new(session, cwd, config_arg), &enabled);
+    restore(enabled.load(std::sync::atomic::Ordering::Relaxed));
     result
 }
 
@@ -84,8 +89,11 @@ fn setup() -> std::io::Result<()> {
     out.flush()
 }
 
-fn restore() {
+fn restore(enabled: bool) {
     let mut out = stdout();
+    if enabled {
+        let _ = out.write_all(osc::encode("clear", None, "", "").as_bytes());
+    }
     let _ = execute!(
         out,
         PopKeyboardEnhancementFlags,
@@ -98,8 +106,12 @@ fn restore() {
     let _ = terminal::disable_raw_mode();
 }
 
-fn main_loop(mut app: app::App) -> std::io::Result<String> {
+fn main_loop(
+    mut app: app::App,
+    enabled: &std::sync::atomic::AtomicBool,
+) -> std::io::Result<String> {
     let mut out = BufWriter::with_capacity(1 << 16, stdout());
+    let mut osc = osc::Osc::default();
     let mut renderer = draw::Renderer::default();
     let (mut w, mut h) = terminal::size()?;
     let mut dirty = true;
@@ -131,6 +143,14 @@ fn main_loop(mut app: app::App) -> std::io::Result<String> {
             last_tick = Instant::now();
             dirty = true;
             immediate = true;
+        }
+        enabled.store(
+            app.session.config().settings.ui.osc_status,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        if let Some(bytes) = osc.update(&app) {
+            out.write_all(&bytes)?;
+            out.flush()?;
         }
         if dirty && (immediate || last_draw.elapsed() >= Duration::from_millis(style::FRAME_MS)) {
             renderer.draw(&mut app, &mut out, w, h)?;

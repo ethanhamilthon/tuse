@@ -2,22 +2,21 @@ use crate::app::App;
 use crate::picker::Picker;
 use crate::style::{LIST_SELECTED_PREFIX, MORE, Palette, RULE_CHAR, Style, TRACE_ROLE_WIDTH};
 use crate::text::{Line, clip, line_width, span, width};
-use crossterm::style::Color;
 
 /// The look every list and text view shares: a rule on top, a title line (when there
 /// is a title), then `rows`, all on the list background and `width` wide.
 pub fn framed(title: &str, rows: Vec<Line>, w: usize, p: &Palette) -> Vec<Line> {
-    let base = Style::fg(p.fg).on(p.surface);
+    let base = Style::fg(p.fg).on(p.bg);
     let mut out: Vec<Line> = vec![];
     if !title.is_empty() {
         let text = clip(title, w, MORE);
-        out.push(vec![span(text, Style::fg(p.accent).on(p.surface).bold())]);
+        out.push(vec![span(text, Style::fg(p.accent).bold())]);
     }
     for l in rows {
         let line: Line = l
             .into_iter()
             .map(|mut s| {
-                s.style.bg = s.style.bg.or(p.surface);
+                s.style.bg = s.style.bg.or(p.bg);
                 s
             })
             .collect();
@@ -73,8 +72,11 @@ pub fn picker(app: &mut App, w: usize, max: usize) -> Vec<Line> {
     for (n, &i) in pk.shown.iter().enumerate().skip(pk.scroll).take(rows) {
         let it = &pk.items[i];
         let sel = n == pk.selected;
-        let on = Style::fg(p.bg).on(p.accent);
-        let st = if sel { on } else { Style::fg(p.fg) };
+        let (st, det_st) = if sel {
+            (Style::fg(p.accent), Style::fg(p.dim))
+        } else {
+            (Style::fg(p.border), Style::fg(p.border))
+        };
         let prefix = if sel {
             LIST_SELECTED_PREFIX.to_string()
         } else {
@@ -82,39 +84,16 @@ pub fn picker(app: &mut App, w: usize, max: usize) -> Vec<Line> {
         };
         let mut line = vec![span(prefix, st)];
         if tag_w > 0 {
-            let tag = format!("{:<tag_w$} ", it.tag);
-            let color = if sel {
-                on
-            } else {
-                Style::fg(role_color(p, &it.tag))
-            };
-            line.push(span(tag, color));
+            line.push(span(format!("{:<tag_w$} ", it.tag), st));
         }
         let room = inner.saturating_sub(line_width(&line));
         let label = clip(&it.label.replace('\n', " "), room, MORE);
         line.push(span(label, st));
         let room = inner.saturating_sub(line_width(&line) + 2);
         if !it.detail.is_empty() && room > 4 {
-            let det = if sel { on } else { Style::fg(p.dim) };
-            line.push(span(format!("  {}", clip(&it.detail, room, MORE)), det));
-        }
-        if sel {
-            let fill = inner.saturating_sub(line_width(&line));
-            line.push(span(" ".repeat(fill), on));
+            line.push(span(format!("  {}", clip(&it.detail, room, MORE)), det_st));
         }
         lines.push(line);
     }
     framed(&title, lines, w, p)
-}
-
-fn role_color(p: &Palette, role: &str) -> Option<Color> {
-    match role {
-        "user" | "agent" => p.fg,
-        "thinking" => p.muted,
-        "python" | "tool" => p.info,
-        "output" | "notice" => p.dim,
-        "hook" => p.accent,
-        "error" => p.err,
-        _ => p.dim,
-    }
 }

@@ -8,13 +8,13 @@ theme (or `default`, the built-in Vercel Dark palette) and overrides only the co
 A theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`red`,
 `dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default:
 
-- `bg` (`#0A0A0A`): main background and selected list item foreground.
-- `surface` (`#1A1A1A`): elevated background (user messages, filled input, lists and panels).
+- `bg` (`#0A0A0A`): main background, including lists and panels.
+- `surface` (`#1A1A1A`): elevated background (user messages, filled input); lists and panels do not use it.
 - `fg` (`#EDEDED`): primary text and code blocks.
 - `dim` (`#A0A0A0`): secondary text (tool output, quotes, list details, notices).
 - `muted` (`#676767`): subtle text (reasoning, syntax comments, motion gradient start).
-- `border` (`#2E2E2E`): horizontal rules, box frames, separators, `/usage` keys.
-- `accent` (`#EDEDED`): primary highlight (status, bar, list title, selected list bg, motion gradient end).
+- `border` (`#2E2E2E`): horizontal rules, box frames, separators, `/usage` keys, inactive list items.
+- `accent` (`#EDEDED`): primary highlight (status, bar, list title, selected list item, motion gradient end).
 - `ok` (`#00AC3A`): additions and success (`diff` `+`, inline `code`, strings, `/usage` cost).
 - `err` (`#F32E40`): errors and deletions (`diff` `-`, failed calls, keywords).
 - `info` (`#52A8FF`): tools, headings, links, functions.

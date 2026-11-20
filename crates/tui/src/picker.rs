@@ -14,7 +14,7 @@ pub enum Kind {
 
 impl Kind {
     /// Token pickers filter by the token under the input cursor; the others
-    /// are modal and keep their own query.
+    /// are modal and take over the editor as their search box.
     pub fn is_token(&self) -> bool {
         matches!(self, Kind::Command | Kind::Prompt | Kind::File)
     }
@@ -52,7 +52,6 @@ pub struct Picker {
     pub shown: Vec<usize>,
     pub selected: usize,
     pub scroll: usize,
-    pub query: String,
 }
 
 impl Picker {
@@ -64,7 +63,6 @@ impl Picker {
             items,
             selected: 0,
             scroll: 0,
-            query: String::new(),
         };
         p.filter("");
         p
@@ -79,7 +77,6 @@ impl Picker {
         if self.is_free() {
             return;
         }
-        self.query = q.to_string();
         let trace = (self.kind == Kind::Trace).then(|| crate::trace_filter::parse(q));
         let words = trace.as_ref().map_or(q, |t| t.text.as_str());
         let mut scored: Vec<(i64, usize)> = self

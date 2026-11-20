@@ -114,7 +114,7 @@ Commands: `/new`, `/resume` (sessions started in this folder), `/models` (every 
 providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/usage`,
 `/trace` (a list of the system prompt, messages, thinking, tool calls, outputs and hook runs;
 Enter opens an item in full; `+python`, `-hook` filter by type), `/reload`, `/quit`.
-Every list looks the same and is drawn over the bottom of the chat; typing filters it. `/usage`
+Every list looks the same and is drawn over the bottom of the chat; typing in the input filters it, and the draft comes back on close. `/usage`
 and a task's output open as text in the same frame; Esc closes it. Drag to select text in the chat, panels or input.
 A session keeps its own model: `/models` also saves it to the config for new sessions.
 

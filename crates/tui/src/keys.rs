@@ -1,5 +1,4 @@
 use crate::app::App;
-use crate::picker::Kind;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 impl App {
@@ -141,6 +140,15 @@ impl App {
         if self.ask_input.is_some() {
             return;
         }
+        // The editor is a search box now: a queued message stays queued and
+        // `/`, `@`, `#` are just text.
+        if self.searching() {
+            let q = self.editor.text();
+            if let Some(p) = &mut self.picker {
+                p.filter(&q);
+            }
+            return;
+        }
         if before.is_some_and(|buf| buf != self.editor.buf)
             && let Some(id) = self.steering.take()
         {
@@ -151,21 +159,18 @@ impl App {
 
     pub fn paste(&mut self, s: &str) {
         self.selection = Default::default();
-        if let Some(p) = &mut self.picker
-            && !p.kind.is_token()
-        {
-            if matches!(p.kind, Kind::Ask(_)) {
-                return;
-            }
-            let q = format!("{}{}", p.query, s.replace('\n', " "));
-            p.filter(&q);
+        if self.picker.as_ref().is_some_and(|p| p.is_free()) {
             return;
         }
         if s.is_empty() {
             return self.paste_clipboard();
         }
         let before = self.steering.map(|_| self.editor.buf.clone());
-        self.editor.insert(s);
+        if self.searching() {
+            self.editor.insert(&s.replace('\n', " "));
+        } else {
+            self.editor.insert(s);
+        }
         self.finish_edit(before);
     }
 }

@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+
+- Picked `#prompts`, `@files` and `[Image #N]` stay as typed in the chat, title and hooks. The model receives their context separately; `/trace` shows it. Text attachments are capped at 1 KiB. Tokens typed by hand stay literal. See `docs("prompts")`.
+- Search modal pickers in the input field with normal editing keys. Closing a picker restores the draft. `/models` keeps the filter across refreshes and no longer duplicates unnamed models’ IDs.
+- Pickers and panels use the main background; selection uses the accent foreground, inactive rows the border color.
+- Tool output fits the configured byte limit, including its omission marker. `/reload` updates the live interpreter’s budget.
+- Early session events are buffered for the first subscriber; JSON clients receive the initialize response before startup notices.
 
 - A crashed interpreter (a Monty panic) is recreated: the agent's next `python` call starts a clean one (the failed call says variables and imports are lost), hooks get a fresh one, and a crashed REPL task ends as `exited` instead of staying `idle`.
 - Fix the tab state (OSC 9;4) disappearing on long turns and `ask` waits: it is re-sent every 5s while working or asking. Error and paused now send 100% so terminals draw a visible bar. Turning off `settings.ui.tab_status` with `/reload` restores the title and clears the state.

@@ -18,6 +18,7 @@ fn headless_sessions_explain_what_is_unavailable() {
             config: Some(cfg.clone()),
             mode,
             resume: None,
+            start: Default::default(),
         })
         .unwrap()
     };

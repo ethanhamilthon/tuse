@@ -23,7 +23,10 @@ impl Session {
                     });
                 }
             }
-            Delta::Text(t) => self.emit(Event::Text(t.to_string())),
+            Delta::Text(t) => {
+                self.state.lock().unwrap().partial.push_str(t);
+                self.emit(Event::Text(t.to_string()));
+            }
             Delta::Reasoning(t) => self.emit(Event::Reasoning(t.to_string())),
         }
     }

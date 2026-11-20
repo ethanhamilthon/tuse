@@ -78,6 +78,7 @@ fn start(a: &Args) -> Result<(), String> {
             tuse_core::Mode::Tui
         },
         resume: a.value(&["--resume", "-r"]),
+        start: tuse_core::Start::Launch,
     })?;
     if headless {
         let mut prompt = a.positional.join(" ");

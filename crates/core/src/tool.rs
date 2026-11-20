@@ -1,5 +1,4 @@
 use crate::event::Event;
-use crate::hooks::Data;
 use crate::id;
 use crate::record::{FileDiff, Record};
 use crate::session::Session;
@@ -70,15 +69,6 @@ impl Session {
             input: input.clone(),
             title: title.clone(),
         });
-        self.hook(
-            "tool_start",
-            Data {
-                tool: Some(call.name.clone()),
-                input: Some(input.clone()),
-                title: Some(title.clone()),
-                ..Default::default()
-            },
-        );
         let out = if parsed.is_err() {
             Outcome::err(format!(
                 "the arguments are not valid JSON: {}",
@@ -112,21 +102,10 @@ impl Session {
         drop(st);
         self.emit(Event::ToolEnd {
             id: call.id.clone(),
-            output: text.clone(),
+            output: text,
             code: out.code,
             diffs: out.diffs,
         });
-        self.hook(
-            "tool_end",
-            Data {
-                tool: Some(call.name.clone()),
-                input: Some(input),
-                title: Some(title),
-                output: Some(text),
-                code: out.code,
-                ..Default::default()
-            },
-        );
         true
     }
 

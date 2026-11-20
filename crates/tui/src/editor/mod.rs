@@ -85,20 +85,14 @@ impl Editor {
     }
 
     pub fn backspace(&mut self) {
-        if self.delete_selection() {
-            return;
-        }
-        if self.cursor > 0 {
+        if !self.delete_selection() && self.cursor > 0 {
             self.cursor -= 1;
             self.buf.remove(self.cursor);
         }
     }
 
     pub fn delete(&mut self) {
-        if self.delete_selection() {
-            return;
-        }
-        if self.cursor < self.buf.len() {
+        if !self.delete_selection() && self.cursor < self.buf.len() {
             self.buf.remove(self.cursor);
         }
     }

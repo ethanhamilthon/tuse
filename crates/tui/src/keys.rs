@@ -29,7 +29,7 @@ impl App {
         if self.picker.is_some() && self.picker_key(k, ctrl, shift) {
             return;
         }
-        if self.panel.is_some() && self.panel_key(k.code, page) {
+        if self.panel_key(k.code, page) {
             return;
         }
         let before = self.steering.map(|_| self.editor.buf.clone());

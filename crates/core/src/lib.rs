@@ -2,6 +2,7 @@ mod compaction;
 mod control;
 mod docs;
 mod event;
+mod helpers;
 mod history;
 mod hooks;
 mod host;

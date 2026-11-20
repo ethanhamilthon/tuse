@@ -14,6 +14,7 @@ pub struct Config {
     pub models: Vec<ModelDef>,
     pub systems: Vec<String>,
     pub prompts: BTreeMap<String, String>,
+    pub functions: BTreeMap<String, Function>,
     pub hooks: BTreeMap<String, Hook>,
 }
 
@@ -73,6 +74,14 @@ pub struct Prices {
     pub out: f64,
     pub cache: f64,
     pub cache_write: f64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct Function {
+    pub args: String,
+    pub description: String,
+    pub run: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]

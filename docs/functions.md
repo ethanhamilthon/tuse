@@ -47,3 +47,17 @@ Use `draw_ui` for diagrams, tables, dashboards and live progress in chat.
   (`repl` or `process`), `.code` (what it started with), `.status` (`running`, `idle`, `exited`,
   `stopped`), `.exit` (the exit code of a process), `.queue` and `.output`.
 - `docs(topic=None)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.
+
+## Functions from the config
+
+```yaml
+functions:
+  tail_tests:
+    args: "lines=30"
+    description: Run tests and return the last lines of output.
+    run: return sh("make check").out.splitlines()[-lines:]
+```
+
+Helpers can call other helpers and import modules next to the config. `/reload`
+redefines helpers in the agent's interpreter without clearing its variables.
+A deleted helper remains callable in that interpreter until exit.

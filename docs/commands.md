@@ -26,7 +26,9 @@ pickers) has one look: a rule on top, a title with the position, the rows, all d
 bottom of the chat. Typing filters most lists. In an `ask`, select an option or choose “Write your own answer” to edit a multiline reply without losing your draft. `/usage` and a task's output
 open as text in the same frame (Esc closes it). `/trace` is a list, one row per item (`system`,
 `user`, `agent`, `thinking`, `python`, `tool`, `output`, `notification`, `notice`, `error`, `hook`); Enter opens the item in full
-(with Left/Right to step between items and Esc back to the list).
+(with Left/Right to step between items and Esc back to the list). In the query, `+type` shows only
+that type (`+python+agent`: either), `-type` hides one (`-hook`: all but hooks), and other words
+search the rows (`+python read`). An unknown type shows nothing.
 
 The chat scrolls with the mouse wheel only; the arrows move in the input, and a click in the input
 puts the cursor there. Drag to select rendered text; Ctrl/Cmd+C copies it. In the input, Shift+movement extends the selection, Ctrl/Cmd+A selects all, and Ctrl/Cmd+X cuts.

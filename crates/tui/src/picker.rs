@@ -80,13 +80,24 @@ impl Picker {
             return;
         }
         self.query = q.to_string();
+        let trace = (self.kind == Kind::Trace).then(|| crate::trace_filter::parse(q));
+        let words = trace.as_ref().map_or(q, |t| t.text.as_str());
         let mut scored: Vec<(i64, usize)> = self
             .items
             .iter()
             .enumerate()
-            .filter_map(|(i, it)| score(&format!("{} {}", it.tag, it.label), q).map(|s| (s, i)))
+            .filter(|(_, it)| trace.as_ref().is_none_or(|t| t.allows(&it.tag)))
+            .filter_map(|(i, it)| {
+                let text = if trace.is_some() {
+                    it.label.clone()
+                } else {
+                    format!("{} {}", it.tag, it.label)
+                };
+                score(&text, words).map(|s| (s, i))
+            })
             .collect();
-        if !q.is_empty() {
+        // The trace keeps its order; other lists rank by score.
+        if !words.is_empty() && trace.is_none() {
             scored.sort_by_key(|(s, i)| (-*s, *i));
         }
         self.shown = scored.into_iter().map(|(_, i)| i).collect();

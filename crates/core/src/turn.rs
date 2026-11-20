@@ -17,7 +17,35 @@ enum Step {
 
 impl Session {
     pub(crate) fn turn(self: Arc<Self>, generation: u64, cancel: Arc<AtomicBool>) {
-        self.hook("turn_start", Data::default());
+        let data = {
+            let Some(mut st) = self.lock_live(generation) else {
+                return;
+            };
+            let input = st
+                .queue
+                .iter()
+                .find(|(_, i)| !i.notification)
+                .map(|(_, i)| i.text.clone());
+            if st.meta.title.is_empty()
+                && let Some(input) = &input
+            {
+                st.meta.title = input
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .chars()
+                    .take(80)
+                    .collect();
+                self.save_meta(&mut st);
+            }
+            st.turn_error = None;
+            Data {
+                input,
+                title: Some(st.meta.title.clone()),
+                ..Default::default()
+            }
+        };
+        self.hook("turn_start", data);
         self.emit(Event::TurnStart);
         loop {
             match self.step(generation, &cancel) {
@@ -38,6 +66,7 @@ impl Session {
         if !st.queue.is_empty() {
             return false;
         }
+        let error = st.turn_error.take();
         st.busy = false;
         let (elapsed, calls) = (st.turn_start.elapsed(), st.calls);
         let r = Record::TurnEnd {
@@ -53,7 +82,13 @@ impl Session {
             calls,
             cancelled: false,
         });
-        self.hook("turn_end", Data::default());
+        self.hook(
+            "turn_end",
+            Data {
+                error,
+                ..Default::default()
+            },
+        );
         true
     }
 
@@ -72,17 +107,6 @@ impl Session {
                 self.emit(Event::Notification(input.text.clone()));
                 self.push(&mut st, Record::Notification { text: input.text });
                 continue;
-            }
-            if st.meta.title.is_empty() {
-                st.meta.title = input
-                    .text
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-                    .chars()
-                    .take(80)
-                    .collect();
-                self.save_meta(&mut st);
             }
             self.emit(Event::User {
                 id,
@@ -205,6 +229,7 @@ impl Session {
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
         };
+        st.turn_error = Some(text.clone());
         self.push(&mut st, Record::Error { text: text.clone() });
         drop(st);
         self.emit(Event::Error(text.clone()));

@@ -88,7 +88,7 @@ pub struct Function {
 #[serde(default)]
 pub struct Hook {
     pub events: Vec<String>,
-    /// Python code, run in a fresh interpreter on every event.
+    /// Python code, run in the hook's persistent interpreter.
     pub run: String,
 }
 

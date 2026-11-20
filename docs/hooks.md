@@ -4,12 +4,15 @@ A hook is Python code started on an event; Tuse does not wait for it (except for
 which gets up to `hook_timeout` before Tuse exits). Events: `session_start`, `session_end`,
 `turn_start`, `turn_end`, `tool_start`, `tool_end`, `error`.
 
-Every call runs in a **fresh interpreter** with the same access as the agent's `python` tool:
-`read`, `write`, `edit`, `grep`, `sh`, `ask`, `draw_ui`, `task_*`, files, the whole standard library
-of the sandbox, `import` of `.py` files from the config folder. Nothing is kept
-between calls; keep state in files. A hook stops after `hook_timeout` seconds. An error shows as
-the notice `hook NAME: ...`; `print()` output is dropped. Tool calls a hook makes do not fire
-`tool_*` events. Hooks run concurrently, so two hooks of successive events can finish in any order.
+Each named hook has a persistent interpreter. Its events run in emission order,
+while different hooks can run concurrently. Globals survive between events;
+event variables are refreshed for each call. A timeout resets that interpreter,
+and `/reload` discards queued events and starts fresh interpreters. Exceptions
+produce a `hook NAME: ...` notice. Output from `print()` is discarded.
+
+Hooks have the agent's Python functions plus `set_title(text)`, which updates
+and saves the session title (up to 80 characters). This function is unavailable
+to the agent and background tasks.
 
 Names defined in the hook (`None` when they do not apply, `cancelled` is `False`):
 
@@ -17,9 +20,9 @@ Names defined in the hook (`None` when they do not apply, `cancelled` is `False`
 | --- | --- |
 | `event`, `hook` | The event and the hook's name. |
 | `session`, `cwd`, `model`, `config` | Session ID, working directory, `provider/model`, path of the config file. |
-| `tool`, `input`, `title` | For `tool_start` and `tool_end`: `python`, its code and the `title` the agent gave it. |
+| `tool`, `input`, `title` | For `turn_start`: `input` is the prompt and `title` is the session title. For `tool_start` and `tool_end`: `python`, its code and the `title` the agent gave it. |
 | `output`, `code` | For `tool_end`: the result (cut to `max_output`) and `0`, `1` (error) or `None` (cancelled). |
-| `error` | For `error`: the text. |
+| `error` | For `error` and failed `turn_end`: the text. |
 | `cancelled` | For `turn_end`: the turn was cancelled. |
 
 ```yaml
@@ -37,6 +40,6 @@ hooks:
 ```
 
 To run a script, call it: `run: sh("~/scripts/x.sh")`. Longer code goes into a `.py` file next to
-the config and `run: import notify`.
+the config and call its entry point each time: `import notify; notify.on_event(event, input)`. A module is imported only once per interpreter.
 
 Hooks can call helpers defined under `functions` in the config.

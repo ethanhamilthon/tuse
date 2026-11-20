@@ -80,7 +80,7 @@ fn notify(s: &Arc<Session>) -> tasks::Notify {
 fn run(s: &Arc<Session>, code: &str, name: Option<String>) -> Result<TaskInfo, Fail> {
     let config = s.config();
     let weak = Arc::downgrade(s);
-    let make = Box::new(move || crate::host::python_for(weak, &config));
+    let make = Box::new(move || crate::host::python_for(weak, &config, false));
     let r = s.tasks.run_repl(code, name, &s.cwd, make, notify(s));
     s.emit(Event::Tasks);
     r.map_err(Fail::runtime)

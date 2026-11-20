@@ -1,10 +1,7 @@
-use crate::event::Event;
-use crate::host::last_line;
+use crate::hook_queue::HookQueue;
 use crate::session::Session;
 use std::sync::Arc;
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
-use tuse_py::{Ctx, MontyObject, NEVER};
+use tuse_py::MontyObject;
 
 pub const EVENTS: [&str; 7] = [
     "session_start",
@@ -34,26 +31,26 @@ fn opt(s: Option<String>) -> MontyObject {
 }
 
 impl Session {
-    /// Starts every hook subscribed to `event`, each in its own thread with a
-    /// fresh interpreter, and does not wait for them; the handles let `close` do so.
-    pub(crate) fn hook(self: &Arc<Self>, event: &str, data: Data) -> Vec<JoinHandle<()>> {
+    pub(crate) fn hook(self: &Arc<Self>, event: &str, data: Data) {
+        let model = self.model().0;
+        let mut queues = self.hooks.lock().unwrap();
+        let Some(queues) = queues.as_mut() else {
+            return;
+        };
         let config = self.config();
-        let mut handles = vec![];
         for (name, hook) in &config.hooks {
             if hook.run.trim().is_empty() || !hook.events.iter().any(|e| e == event) {
                 continue;
             }
-            let (s, config, name, run) =
-                (self.clone(), config.clone(), name.clone(), hook.run.clone());
             let vars = vec![
                 ("event".to_string(), MontyObject::string(event)),
-                ("hook".into(), MontyObject::string(&name)),
+                ("hook".into(), MontyObject::string(name)),
                 ("session".into(), MontyObject::string(&self.id)),
                 (
                     "cwd".into(),
                     MontyObject::string(self.cwd.display().to_string()),
                 ),
-                ("model".into(), MontyObject::string(self.model().0)),
+                ("model".into(), MontyObject::string(&model)),
                 (
                     "config".into(),
                     tuse_config::find(self.config_arg.as_deref(), &self.cwd)
@@ -73,19 +70,15 @@ impl Session {
                 ("error".into(), opt(data.error.clone())),
                 ("cancelled".into(), MontyObject::bool(data.cancelled)),
             ];
-            handles.push(std::thread::spawn(move || {
-                let mut py = s.new_python(&config);
-                let secs = config.settings.hook_timeout.max(1);
-                let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(secs));
-                let out = py.run(&run, &ctx, vars);
-                if !out.ok {
-                    s.emit(Event::Notice(format!(
-                        "hook {name}: {}",
-                        last_line(&out.text)
-                    )));
-                }
-            }));
+            let queue = queues.entry(name.clone()).or_insert_with(|| {
+                HookQueue::new(
+                    Arc::downgrade(self),
+                    config.clone(),
+                    name.clone(),
+                    hook.run.clone(),
+                )
+            });
+            let _ = queue.tx.send(vars);
         }
-        handles
     }
 }

@@ -4,6 +4,7 @@ mod docs;
 mod event;
 mod helpers;
 mod history;
+mod hook_queue;
 mod hooks;
 mod host;
 mod host_tasks;

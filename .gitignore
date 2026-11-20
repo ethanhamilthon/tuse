@@ -4,3 +4,6 @@ TUSE-*.md
 /tuse.yaml
 /systems.yaml
 /herdr.yaml
+
+TODO-*.md
+*.html

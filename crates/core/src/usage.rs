@@ -28,3 +28,33 @@ pub fn tokens(n: u64) -> String {
         n => n.to_string(),
     }
 }
+
+impl Stats {
+    /// Adds one record; only `Usage` and `TurnEnd` count.
+    pub(crate) fn add(&mut self, r: &crate::record::Record, config: &tuse_config::Config) {
+        use crate::record::Record;
+        match r {
+            Record::Usage { model, usage: u } => {
+                self.totals.add(u);
+                self.requests += 1;
+                if let Some(p) = config.model_def(model).and_then(|d| d.prices.as_ref()) {
+                    self.cost += cost(u, p);
+                    self.priced = true;
+                }
+            }
+            Record::TurnEnd { calls, .. } => {
+                self.turns += 1;
+                self.calls += calls;
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn of(records: &[crate::record::Record], config: &tuse_config::Config) -> Stats {
+        let mut s = Stats::default();
+        for r in records {
+            s.add(r, config);
+        }
+        s
+    }
+}

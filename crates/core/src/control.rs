@@ -3,7 +3,7 @@ use crate::history;
 use crate::hooks::Data;
 use crate::record::{Record, UserInput};
 use crate::session::Session;
-use crate::usage::{self, Stats};
+use crate::usage::Stats;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, atomic::AtomicBool};
@@ -132,30 +132,16 @@ impl Session {
             .then(|| (st.turn_start.elapsed(), st.status.clone()))
     }
 
+    /// Totals of the session, kept up to date as records arrive. Prices come from the
+    /// config, so the totals are rebuilt once after the config changes.
     pub fn stats(&self) -> Stats {
         let config = self.config();
-        let st = self.state.lock().unwrap();
-        let mut out = Stats {
-            context: st.context,
-            ..Default::default()
-        };
-        for r in &st.records {
-            match r {
-                Record::Usage { model, usage: u } => {
-                    out.totals.add(u);
-                    out.requests += 1;
-                    if let Some(p) = config.model_def(model).and_then(|d| d.prices.as_ref()) {
-                        out.cost += usage::cost(u, p);
-                        out.priced = true;
-                    }
-                }
-                Record::TurnEnd { calls, .. } => {
-                    out.turns += 1;
-                    out.calls += calls;
-                }
-                _ => {}
-            }
+        let mut st = self.state.lock().unwrap();
+        if !Arc::ptr_eq(&st.stats.1, &config) {
+            st.stats = (Stats::of(&st.records, &config), config);
         }
+        let mut out = st.stats.0.clone();
+        out.context = st.context;
         if st.busy {
             out.calls += st.calls;
         }

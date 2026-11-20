@@ -2,6 +2,7 @@ use crate::control::InputId;
 use crate::event::Event;
 use crate::history::{self, Bounds};
 use crate::hooks::Data;
+pub use crate::mode::{Mode, Options};
 use crate::record::{Record, UserInput};
 use crate::store::{Meta, SessionDir};
 use crate::tasks::Tasks;
@@ -53,37 +54,8 @@ pub(crate) struct State {
     pub status: String,
     pub context: u64,
     pub meta: Meta,
-}
-
-/// Who is on the other side of the session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    Tui,
-    /// `tuse -p`: one prompt, nobody to answer.
-    Headless,
-    /// `tuse json`: a client drives the session over JSON-RPC.
-    Json,
-}
-
-impl Session {
-    /// `ask` and `draw_ui` need someone to show them to.
-    pub(crate) fn require_client(&self, what: &str) -> Result<(), String> {
-        if self.mode == Mode::Headless {
-            return Err(format!(
-                "{what} is unavailable in headless mode (tuse -p): there is no user to answer or see it; decide yourself"
-            ));
-        }
-        Ok(())
-    }
-}
-
-pub struct Options {
-    pub cwd: PathBuf,
-    /// `--config PATH`; without it the config is searched for on every (re)load.
-    pub config: Option<PathBuf>,
-    pub mode: Mode,
-    /// Resume this session instead of creating a new one.
-    pub resume: Option<String>,
+    /// Totals of `records` and the config whose prices they use.
+    pub stats: (crate::usage::Stats, Arc<Config>),
 }
 
 impl Session {
@@ -128,6 +100,7 @@ impl Session {
             status: String::new(),
             context: 0,
             meta,
+            stats: Default::default(),
             records: vec![],
         };
         for r in &records {
@@ -146,6 +119,8 @@ impl Session {
                 _ => {}
             }
         }
+        let config = Arc::new(config);
+        st.stats = (crate::usage::Stats::of(&records, &config), config.clone());
         st.records = records;
         let path = dir.path.clone();
         let cwd = PathBuf::from(&st.meta.cwd);
@@ -159,7 +134,7 @@ impl Session {
             mode: opts.mode,
             tasks: Tasks::new(path.join("tasks")),
             dir: Mutex::new(Some(dir)),
-            config: RwLock::new(Arc::new(config)),
+            config: RwLock::new(config),
             config_arg: opts.config,
             state: Mutex::new(st),
             subs: Mutex::default(),
@@ -228,6 +203,8 @@ impl Session {
         if let Some(d) = self.dir.lock().unwrap().as_mut() {
             d.append(&r);
         }
+        let config = st.stats.1.clone();
+        st.stats.0.add(&r, &config);
         st.records.push(r);
     }
 

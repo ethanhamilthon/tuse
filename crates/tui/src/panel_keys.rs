@@ -15,16 +15,16 @@ impl App {
                 Some(at) => self.open_trace(Some(at)),
                 None => self.panel = None,
             },
-            KeyCode::Left if self.editor.is_empty() && self.trace_item.is_some() => {
-                if let Some(at) = self.trace_item {
-                    self.open_trace_item(at.saturating_sub(1));
-                }
-            }
-            KeyCode::Right if self.editor.is_empty() && self.trace_item.is_some() => {
-                if let Some(at) = self.trace_item {
-                    let last = self.trace.len().saturating_sub(1);
-                    self.open_trace_item((at + 1).min(last));
-                }
+            KeyCode::Left | KeyCode::Right
+                if self.editor.is_empty() && self.trace_item.is_some() =>
+            {
+                let at = self.trace_item.unwrap();
+                let next = if code == KeyCode::Left {
+                    at.saturating_sub(1)
+                } else {
+                    (at + 1).min(self.trace.len().saturating_sub(1))
+                };
+                self.open_trace_item(next);
             }
             KeyCode::Up if self.editor.is_empty() => self.panel.as_mut().unwrap().scroll_by(-step),
             KeyCode::Down if self.editor.is_empty() => self.panel.as_mut().unwrap().scroll_by(step),

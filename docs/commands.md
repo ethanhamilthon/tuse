@@ -31,3 +31,5 @@ puts the cursor there. With the mouse captured the terminal's own text selection
 A session keeps its own model and effort. `/models` changes them in the config and in the
 current session; a new session takes them from the config; `/resume` and `/reload` do not
 change the model of an old session.
+
+`/config` opens the full resolved YAML configuration, including expanded API keys. Avoid sharing it without redaction. Esc closes the panel.

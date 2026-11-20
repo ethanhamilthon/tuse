@@ -3,6 +3,7 @@ use crate::style::{Palette, Style};
 use crate::text::{Line, wrap};
 
 enum Body {
+    Yaml(String),
     Text(String),
     Styled(Vec<Line>),
     Markdown(String),
@@ -56,6 +57,13 @@ impl Panel {
         }
     }
 
+    pub fn yaml(title: &str, yaml: String) -> Self {
+        Self {
+            body: Body::Yaml(yaml),
+            ..Self::new(title, "")
+        }
+    }
+
     pub fn invalidate(&mut self) {
         self.cache = None;
     }
@@ -65,6 +73,10 @@ impl Panel {
         if self.cache.as_ref().is_none_or(|(w, _)| *w != width) {
             let empty = vec![];
             let lines = match &self.body {
+                Body::Yaml(text) => text
+                    .lines()
+                    .flat_map(|s| wrap(&crate::yaml_syntax::line(s, p), width, &empty, &empty))
+                    .collect(),
                 Body::Text(text) => plain(text, width, Style::fg(p.fg), "", ""),
                 Body::Styled(rows) => rows
                     .iter()

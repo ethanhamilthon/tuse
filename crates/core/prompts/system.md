@@ -18,6 +18,3 @@ They are always defined, no import needed. Files you change go through `write` a
 - `task_add(id, code)`: queues more code in the live REPL of a task, to run after the current code, in the same interpreter. Returns its place in the queue.
 - `task_get(id, lines=50)` (with the output tail in `.output`), `task_stop(id)`, `task_list()`.
 - `docs(topic=None)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.
-
-# Your config
-`os.environ["TUSE_CURRENT_CONFIG"]` is the path of the config file Tuse is running with. Read and edit it to change settings, prompts, themes, models or hooks; `/reload` applies the edit.

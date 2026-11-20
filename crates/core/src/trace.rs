@@ -41,7 +41,7 @@ impl Session {
     pub fn trace(&self) -> Vec<TraceItem> {
         let config = self.config();
         let st = self.state.lock().unwrap();
-        let system = prompt::system_prompt(&config, &self.cwd, st.bounds.drop > 0);
+        let system = prompt::system_prompt(&config, st.bounds.drop > 0);
         let mut items = vec![item("system", system)];
         for r in &st.records {
             match r {

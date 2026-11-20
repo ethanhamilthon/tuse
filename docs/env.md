@@ -19,6 +19,6 @@ Tuse reads one config file:
 2. `./tuse.yaml` in the working directory.
 3. `$TUSE_GLOBAL_CONFIG`, else `~/.config/tuse/main.yaml`.
 
-The system prompt (this tool and its functions, the environment, `AGENTS.md`) and the default
+The system prompt (this tool and its functions) and the default
 settings are built into the binary; the `systems` of the config come after them. Put your own
 settings in `main.yaml`. `/reload` rebuilds the config after an edit.

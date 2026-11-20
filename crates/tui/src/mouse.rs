@@ -118,6 +118,7 @@ mod tests {
         })
         .unwrap();
         let mut app = App::new(s.clone(), dir, None);
+        app.editor.insert("draft");
         let mut ask = |options: &[&str], typed: &str| {
             let (_, rx) = s
                 .ask("Which?", options.iter().map(|o| o.to_string()).collect())
@@ -129,7 +130,11 @@ mod tests {
                     .unwrap();
                 app.handle_event(e);
             }
-            // Typing is the answer, not a filter: the options stay.
+            if !typed.is_empty() {
+                app.picker.as_mut().unwrap().selected = options.len();
+                app.choose();
+                assert!(app.editor.is_empty());
+            }
             for c in typed.chars() {
                 app.key(
                     crossterm::event::KeyEvent::new(
@@ -139,13 +144,47 @@ mod tests {
                     0,
                 );
             }
-            assert_eq!(app.picker.as_ref().unwrap().shown.len(), options.len() + 1);
-            app.choose();
+            if typed.is_empty() {
+                app.choose();
+            } else {
+                app.key(
+                    crossterm::event::KeyEvent::new(
+                        crossterm::event::KeyCode::Enter,
+                        KeyModifiers::NONE,
+                    ),
+                    0,
+                );
+            }
+            assert_eq!(app.editor.text(), "draft");
             rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap()
         };
         assert_eq!(ask(&["alpha", "beta"], "al"), "al");
         assert_eq!(ask(&["alpha", "beta"], ""), "alpha");
         assert_eq!(ask(&[], "my own words"), "my own words");
+        for cancel in [false, true] {
+            app.handle_event(tuse_core::Event::Ask {
+                id: "pending".into(),
+                question: "Which?".into(),
+                options: vec![],
+            });
+            app.choose();
+            app.paste("custom");
+            if cancel {
+                app.key(
+                    crossterm::event::KeyEvent::new(
+                        crossterm::event::KeyCode::Esc,
+                        KeyModifiers::NONE,
+                    ),
+                    0,
+                );
+            } else {
+                app.handle_event(tuse_core::Event::AskDone {
+                    id: "pending".into(),
+                });
+            }
+            assert!(app.ask_input.is_none());
+            assert_eq!(app.editor.text(), "draft");
+        }
         s.close();
         std::fs::remove_dir_all(tuse_core::tuse_home().join(&s.id)).ok();
         std::fs::remove_dir_all(app.cwd.clone()).ok();

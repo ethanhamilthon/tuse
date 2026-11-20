@@ -7,7 +7,11 @@ impl App {
         match e {
             Event::User { id, text, images } => {
                 if self.steering == Some(id) {
-                    self.editor.clear();
+                    if let Some((_, _, draft)) = &mut self.ask_input {
+                        draft.clear();
+                    } else {
+                        self.editor.clear();
+                    }
                     self.steering = None;
                 }
                 self.chat.push(Entry::User { text, images });
@@ -87,6 +91,12 @@ impl App {
                 }
             }
             Event::AskDone { id } => {
+                if self.ask_input.as_ref().is_some_and(|a| a.0 == id) {
+                    self.editor = self.ask_input.take().unwrap().2;
+                    self.asks.retain(|a| a.0 != id);
+                    self.next_ask();
+                    return;
+                }
                 self.asks.retain(|a| a.0 != id);
                 if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Ask(id.clone()))
                 {

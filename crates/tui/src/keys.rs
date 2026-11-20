@@ -1,8 +1,8 @@
 use crate::app::App;
 use crate::clipboard::Pasted;
+use crate::expand_prompts::expand_prompts;
 use crate::picker::Kind;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use std::collections::BTreeMap;
 
 impl App {
     pub fn picker_rows(&self) -> usize {
@@ -28,6 +28,10 @@ impl App {
         let e = &mut self.editor;
         match k.code {
             KeyCode::Esc => {
+                if self.ask_input.is_some() {
+                    self.finish_answer(None);
+                    return;
+                }
                 if self.session.busy() {
                     self.session.cancel();
                     self.steering = None;
@@ -77,6 +81,9 @@ impl App {
     }
 
     fn finish_edit(&mut self, before: Option<Vec<char>>) {
+        if self.ask_input.is_some() {
+            return;
+        }
         if before.is_some_and(|buf| buf != self.editor.buf)
             && let Some(id) = self.steering.take()
         {
@@ -117,6 +124,7 @@ impl App {
                     self.open_tasks();
                 }
             }
+            _ if matches!(p.kind, Kind::Ask(_)) => {}
             _ if p.kind.is_token() => return false,
             KeyCode::Char(c) if !ctrl => {
                 let q = format!("{}{c}", p.query);
@@ -136,6 +144,9 @@ impl App {
         if let Some(p) = &mut self.picker
             && !p.kind.is_token()
         {
+            if matches!(p.kind, Kind::Ask(_)) {
+                return;
+            }
             let q = format!("{}{}", p.query, s.replace('\n', " "));
             p.filter(&q);
             return;
@@ -167,6 +178,13 @@ impl App {
     }
 
     fn submit(&mut self) {
+        if self.ask_input.is_some() {
+            let answer = self.editor.text().trim().to_string();
+            if !answer.is_empty() {
+                self.finish_answer(Some(answer));
+            }
+            return;
+        }
         if self.steering.is_some() {
             return;
         }
@@ -199,33 +217,6 @@ impl App {
             Err(e) => self.error(e),
         }
     }
-}
-
-/// Replaces every `#name` token with the text of prompt `name`.
-pub fn expand_prompts(text: &str, prompts: &BTreeMap<String, String>) -> String {
-    let mut out = String::new();
-    let mut rest = text;
-    while let Some(i) = rest.find('#') {
-        let at_start = i == 0 || rest[..i].ends_with(char::is_whitespace);
-        let name: String = rest[i + 1..]
-            .chars()
-            .take_while(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
-            .collect();
-        let name = name.trim_end_matches('.');
-        out.push_str(&rest[..i]);
-        match prompts.get(name) {
-            Some(p) if at_start && !name.is_empty() => {
-                out.push_str(p.trim_end());
-                rest = &rest[i + 1 + name.len()..];
-            }
-            _ => {
-                out.push('#');
-                rest = &rest[i + 1..];
-            }
-        }
-    }
-    out.push_str(rest);
-    out
 }
 
 #[cfg(test)]

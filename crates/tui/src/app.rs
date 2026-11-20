@@ -40,6 +40,7 @@ pub struct App {
     pub input_area: Option<InputArea>,
     /// The token whose picker was dismissed with Esc; it stays closed until the token changes.
     pub dismissed: Option<String>,
+    pub ask_input: Option<(String, String, Editor)>,
     pub asks: Vec<(String, String, Vec<String>)>,
     /// The directory the `@` picker lists, relative to `cwd`.
     pub file_dir: String,
@@ -76,6 +77,7 @@ impl App {
             list_rows: 8,
             input_area: None,
             dismissed: None,
+            ask_input: None,
             asks: vec![],
             file_dir: String::new(),
             streaming: None,
@@ -133,7 +135,19 @@ impl App {
         }
     }
 
+    pub fn finish_answer(&mut self, answer: Option<String>) {
+        if let Some((id, _, draft)) = self.ask_input.take() {
+            self.editor = draft;
+            self.session.answer(&id, answer);
+            self.asks.retain(|a| a.0 != id);
+            self.next_ask();
+        }
+    }
+
     pub fn next_ask(&mut self) {
+        if self.ask_input.is_some() {
+            return;
+        }
         let Some((id, question, options)) = self.asks.first().cloned() else {
             return;
         };

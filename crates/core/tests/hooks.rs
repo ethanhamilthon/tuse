@@ -1,8 +1,14 @@
 mod common;
+#[path = "hooks/running.rs"]
+mod running;
 use common::Reply;
 use serde_json::json;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
+
+/// `setup` points `TUSE_HOME` at a folder per test, so the tests of this file take turns.
+static ENV: Mutex<()> = Mutex::new(());
 
 fn wait_turn(events: &std::sync::mpsc::Receiver<Event>) {
     let start = Instant::now();
@@ -26,6 +32,7 @@ fn wait_text(events: &std::sync::mpsc::Receiver<Event>) {
 
 #[test]
 fn hooks_see_process_and_message_events_in_order() {
+    let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
     let addr = common::provider(vec![
         Reply::Call("python", json!({"code": "1", "title": "t"}).to_string()),
         Reply::Text("done"),

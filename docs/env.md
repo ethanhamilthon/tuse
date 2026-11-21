@@ -5,6 +5,7 @@
 | Variable | Meaning |
 | --- | --- |
 | `TUSE_SESSION` | The current session ID (set in `sh`, tasks and `os.environ`). |
+| `TUSE_PARENT` | In: the ID of the parent session; a session started with it records `parent` in its `meta.json`. Out: every tuse process sets it to its own session ID in `sh`, tasks and `os.environ` (replacing an inherited value), so nested runs form a tree for `/childrens`. |
 | `TUSE_GLOBAL_CONFIG` | Path of the global config file. Default `~/.config/tuse/main.yaml`. |
 | `TUSE_HOME` | Where sessions live. Default `~/.tuse`. |
 | `TUSE_RELEASE_URL` | Where `tuse reset` and `tuse update` download from. Default: the latest GitHub release. |

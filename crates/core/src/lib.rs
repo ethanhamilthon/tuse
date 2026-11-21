@@ -1,4 +1,5 @@
 mod alias;
+mod children;
 mod compaction;
 mod control;
 mod docs;
@@ -18,6 +19,7 @@ mod prompt;
 mod questions;
 mod record;
 mod session;
+mod session_env;
 mod store;
 mod stream;
 mod task_repl;
@@ -28,6 +30,7 @@ mod trace;
 mod turn;
 mod usage;
 
+pub use children::{Child, RunningChild, Totals, descendants, running_descendants};
 pub use control::InputId;
 pub use docs::docs;
 pub use event::Event;

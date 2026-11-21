@@ -2,6 +2,7 @@ mod ansi;
 mod app;
 mod ask_view;
 mod chat;
+mod chat_print;
 mod chat_stream;
 mod clipboard;
 mod code_block;

@@ -77,7 +77,7 @@ The agent's tool is `python`, a persistent REPL with these functions:
 - `sh(cmd)` runs `bash -c` and returns `.out`, `.code`, `.ok`; a command that runs over the timeout
   goes on as a background task instead of being killed.
 - `ask(question, options)` shows a list in the TUI and waits; the user can also write their own
-  answer. `draw_ui(text)` draws a plain text block that `draw_ui(text, id=ID)` redraws.
+  answer. `draw_ui(text)` draws a plain text block that `draw_ui(text, id=ID)` redraws (`pin=True` keeps it at the bottom; empty text removes it).
 - `task_run(code)` starts a background Python REPL, `task_add(id, code)` queues more code in it;
   `task_get`, `task_stop` and `task_list` manage them (listed in `/tasks`; the agent gets a
   message when one goes idle or exits).

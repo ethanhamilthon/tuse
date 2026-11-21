@@ -60,7 +60,11 @@ impl Host for SessionHost {
             "ask" => ask(&s, a, ctx, self.origin),
             "draw_ui" => {
                 let id = s
-                    .print(a.str(0, "text")?, a.opt_str(1, "id")?)
+                    .print(
+                        a.str(0, "text")?,
+                        a.opt_str(1, "id")?,
+                        a.bool(2, "pin", false)?,
+                    )
                     .map_err(Fail::runtime)?;
                 Ok(MontyObject::string(id))
             }

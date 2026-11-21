@@ -62,7 +62,9 @@ pub fn to_json(e: &Event) -> Value {
         } => json!({"type": "ask", "id": id, "question": question, "options": options}),
         Event::AskDone { id } => json!({"type": "ask_done", "id": id}),
         Event::Tasks => json!({"type": "tasks"}),
-        Event::Print { id, text } => json!({"type": "print", "id": id, "text": text}),
+        Event::Print { id, text, pin } => {
+            json!({"type": "print", "id": id, "text": text, "pin": pin, "removed": text.is_empty()})
+        }
         Event::Usage => json!({"type": "usage"}),
         Event::Models => json!({"type": "models"}),
     }

@@ -11,6 +11,16 @@ pub enum Mode {
     Json,
 }
 
+impl From<Mode> for tuse_config::Mode {
+    fn from(m: Mode) -> Self {
+        match m {
+            Mode::Tui => Self::Tui,
+            Mode::Headless => Self::Headless,
+            Mode::Json => Self::Json,
+        }
+    }
+}
+
 impl Session {
     /// `ask` and `draw_ui` need someone to show them to.
     pub(crate) fn require_client(&self, what: &str) -> Result<(), String> {

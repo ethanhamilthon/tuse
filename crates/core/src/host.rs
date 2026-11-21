@@ -89,7 +89,7 @@ impl Host for SessionHost {
                         "functions" | "functions.md"
                     )
                 }) {
-                    text.push_str(&crate::helpers::listing(&s.config(), true));
+                    text.push_str(&crate::helpers::listing(&s.config(), s.mode, true));
                 }
                 Ok(MontyObject::string(text))
             }

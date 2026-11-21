@@ -29,7 +29,14 @@ impl App {
         let mut chars = token.chars();
         let (kind, query) = match chars.next() {
             Some('/') => (Kind::Command, chars.as_str()),
-            Some('#') if !self.session.config().prompts.is_empty() => {
+            Some('#')
+                if self
+                    .session
+                    .config()
+                    .prompts
+                    .values()
+                    .any(|p| p.matches(self.session.mode.into())) =>
+            {
                 (Kind::Prompt, chars.as_str())
             }
             Some('@') => (Kind::File, chars.as_str()),
@@ -63,10 +70,18 @@ impl App {
                 .collect(),
             Kind::Prompt => {
                 let config = self.session.config();
+                let mode = self.session.mode.into();
                 config
                     .prompts
                     .iter()
-                    .map(|(k, v)| item(format!("#{k}"), v.lines().next().unwrap_or(""), k.clone()))
+                    .filter(|(_, v)| v.matches(mode))
+                    .map(|(k, v)| {
+                        item(
+                            format!("#{k}"),
+                            v.text().lines().next().unwrap_or(""),
+                            k.clone(),
+                        )
+                    })
                     .collect()
             }
             _ => {
@@ -77,5 +92,55 @@ impl App {
                     .collect()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::editor::AtomKind;
+    use crate::picker::Kind;
+
+    #[test]
+    fn prompt_picker_and_refs_filter_by_mode() {
+        let mut app = crate::app::test_app("prompt-modes");
+        std::fs::write(
+            app.cwd.join("tuse.yaml"),
+            "prompts:\n  hl: {text: only headless, modes: [headless]}\n",
+        )
+        .unwrap();
+        app.session.reload().unwrap();
+        app.editor.insert("#");
+        app.update_token_picker();
+        assert!(app.picker.is_none());
+
+        std::fs::write(
+            app.cwd.join("tuse.yaml"),
+            r#"prompts:
+  plain: plain body
+  tui_only: {text: tui body, modes: [tui]}
+  hl_only: {text: headless body, modes: [headless]}
+"#,
+        )
+        .unwrap();
+        app.session.reload().unwrap();
+        app.update_token_picker();
+        let p = app.picker.as_ref().unwrap();
+        assert_eq!(p.kind, Kind::Prompt);
+        let values: Vec<_> = p.items.iter().map(|i| i.value.as_str()).collect();
+        assert_eq!(values, ["plain", "tui_only"]);
+
+        app.editor.clear();
+        for name in ["plain", "tui_only", "hl_only"] {
+            app.editor
+                .insert_atom(&format!("#{name}"), AtomKind::Prompt(name.into()));
+        }
+        assert_eq!(
+            app.refs().prompts,
+            vec![
+                ("plain".into(), "plain body".into()),
+                ("tui_only".into(), "tui body".into()),
+            ]
+        );
+        crate::app::cleanup(app);
     }
 }

@@ -133,7 +133,7 @@ impl Session {
         };
         drop(st);
         let (provider, _) = split_model(&model);
-        let Some(conn) = config.connect(provider) else {
+        let Some(conn) = config.connect(provider, self.mode.into()) else {
             return self.fail(
                 generation,
                 format!("no `connect` entry named `{provider}` for model `{model}`"),

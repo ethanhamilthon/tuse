@@ -28,13 +28,13 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 | `models` | List of `{name: provider/model, display, window, compact_at, prices}`. `prices` are dollars per 1M tokens: `in`, `out`, `cache` (cached reads) and `cache_write`. |
 | `settings.compact_at` | Context size that triggers compaction (0 turns it off). Unset: 60% of the model's `window` (off when the window is unknown). A model's `compact_at` wins. |
 | `settings.max_output` | Bytes of a tool result kept; longer output is cut in the middle. The agent is told the number. Default 4096. |
-| `settings.tool_timeout` | Seconds before a `python` call is stopped (a running `sh` goes on as a task; time spent in `ask` does not count). Default 10. The agent can pass its own `timeout`. |
+| `settings.tool_timeout` | Seconds before a `python` call is stopped (a running `sh` goes on as a task; time spent in `ask` does not count). Default 10. The agent cannot change it; it runs long jobs with `task_run`. |
 | `settings.hook_timeout` | Seconds before a hook is stopped. Default 30. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
 | `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |
 | `systems` | Texts appended to the built-in system prompt. |
 | `prompts` | `name: text`. `#name` picked in the input sends the text along ([prompts.md](prompts.md)). |
-| `functions` | Named Python helpers with `args`, `description` and `run`. Available to the agent, hooks and tasks. |
+| `functions` | Named Python helpers with `args`, `description` and `run`. Available to the agent, hooks and tasks; `show_agent: false` hides one from the agent only. |
 | `hooks` | `name: {events: [...], run: python code}`, see `docs("hooks")`. |
 | `settings.theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. |
 | `settings.ui` | UI behavior and layout preferences, see `docs("theme")`. |

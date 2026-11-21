@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.4
+
+- `draw_ui` accepts ANSI SGR styling (bold, dim, italic, underline, 16 colors mapped to the theme, 256 and truecolor). Other escape sequences are dropped.
+- Links are clickable: hover highlights them and a left click opens them (`open` / `xdg-open`). This covers Markdown links, bare `https://` URLs and OSC 8 hyperlinks in `draw_ui`; only `http`, `https` and `mailto` open.
+- Functions in the config accept `show_agent: false`: the agent is not told about the helper, but other functions, hooks and tasks can still call it.
+- The `python` tool no longer has a `timeout` argument. A call is stopped after `settings.tool_timeout`; the system prompt tells the agent to run long jobs with `task_run`.
+
 ## 0.6.3
 
 - The input status shows context use as `used/max` (`5.2k/1m`) instead of `tok` or a percentage. `/maxsize 200k` sets the maximum, `/maxsize off` returns to the model's window, and without any it shows `5.2k/?`.

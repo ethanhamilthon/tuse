@@ -35,7 +35,7 @@ that type (`+python+agent`: either), `-type` hides one (`-hook`: all but hooks),
 search the rows (`+python read`). An unknown type shows nothing.
 
 The chat scrolls with the mouse wheel only; the arrows move in the input, and a click in the input
-puts the cursor there. Drag to select rendered text; Ctrl/Cmd+C copies it. In the input, Shift+movement extends the selection, Ctrl/Cmd+A selects all, and Ctrl/Cmd+X cuts.
+puts the cursor there. Links (Markdown, bare `https://` URLs, OSC 8 in `draw_ui`) light up under the pointer and open on click. Drag to select rendered text; Ctrl/Cmd+C copies it. In the input, Shift+movement extends the selection, Ctrl/Cmd+A selects all, and Ctrl/Cmd+X cuts.
 
 A session keeps its own model and effort. `/models` changes them in the config and in the
 current session; a new session takes them from the config; `/resume` and `/reload` do not

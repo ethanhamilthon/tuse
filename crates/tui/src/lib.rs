@@ -1,3 +1,4 @@
+mod ansi;
 mod app;
 mod ask_view;
 mod chat;
@@ -14,6 +15,7 @@ mod inline;
 mod input_view;
 mod keys;
 mod layout_keys;
+mod links;
 mod list;
 mod markdown;
 mod maxsize;

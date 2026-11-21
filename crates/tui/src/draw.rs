@@ -109,6 +109,8 @@ impl Renderer {
                 .take(head + input_h + foot),
         );
         screen.truncate(h);
+        app.links = crate::links::scan(&screen, pad);
+        crate::links::highlight(&mut screen, app.hover, p.accent);
         app.selection
             .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
 
@@ -171,6 +173,7 @@ fn put(
         italic: s.style.italic,
         dim: s.style.dim,
         underline: s.style.underline,
+        link: None,
     };
     apply_style(out, eff, cur)?;
     out.queue(Print(&s.text))?;

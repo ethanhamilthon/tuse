@@ -102,7 +102,10 @@ impl Renderer<'_> {
 
     fn text(&mut self, t: &str) {
         let st = self.style();
-        self.cur.push(span(t, st));
+        if st.link.is_some() {
+            return self.cur.push(span(t, st));
+        }
+        self.cur.extend(crate::links::spans(t, st, self.p));
     }
 
     fn event(&mut self, ev: Event) {
@@ -142,11 +145,9 @@ impl Renderer<'_> {
             Tag::Emphasis => self.push_style(|s| s.italic()),
             Tag::Strong => self.push_style(|s| s.bold()),
             Tag::Strikethrough => self.push_style(|s| Style { dim: true, ..s }),
-            Tag::Link { .. } => self.push_style(|s| Style {
-                fg: self.p.info,
-                underline: true,
-                ..s
-            }),
+            Tag::Link { dest_url, .. } => {
+                self.push_style(|s| crate::links::styled(&dest_url, s, self.p));
+            }
             Tag::BlockQuote(_) => {
                 self.flush();
                 self.quote += 1;

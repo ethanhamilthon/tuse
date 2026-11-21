@@ -124,7 +124,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         }
         Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad),
         Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad),
-        Entry::Print { text, .. } => plain(text, width, Style::fg(p.accent), "", ""),
+        Entry::Print { text, .. } => crate::ansi::lines(text, width, Style::fg(p.accent), p),
         Entry::TurnEnd {
             elapsed,
             model,

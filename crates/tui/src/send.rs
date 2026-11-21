@@ -38,7 +38,9 @@ impl App {
             return;
         }
         if let Some(cmd) = trimmed.strip_prefix('/')
-            && crate::commands::COMMANDS.iter().any(|(n, _)| *n == cmd)
+            && let name = cmd.split(' ').next().unwrap_or("")
+            && crate::commands::COMMANDS.iter().any(|(n, _)| *n == name)
+            && (name == "maxsize" || name == cmd)
         {
             self.editor.clear();
             self.run_command(cmd);

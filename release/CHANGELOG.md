@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.3
+
+- The input status shows context use as `used/max` (`5.2k/1m`) instead of `tok` or a percentage. `/maxsize 200k` sets the maximum, `/maxsize off` returns to the model's window, and without any it shows `5.2k/?`.
+- Tool call headers show elapsed time in milliseconds under one second (`302ms/10s`).
+- `draw_ui` blocks are drawn in the `accent` color.
+- Fix: a question that arrived while another picker (`/tasks`, `/resume`, ...) was open stayed hidden after it closed; it now appears.
+- The system prompt has a `Rules` section: prefer short multi-step scripts over one huge call.
+
 ## 0.6.2
 
 - Tool call titles use `dim`, elapsed/timeout uses `accent`, and output and diff paths use `border`. Terminal tab OSC sequences have been removed.

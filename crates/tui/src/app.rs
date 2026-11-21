@@ -64,6 +64,8 @@ pub struct App {
     /// The queued message whose text is still shown in the input.
     pub steering: Option<InputId>,
     pub quit: bool,
+    /// `/maxsize` override of the model's context window.
+    pub max_size: Option<u64>,
 }
 
 impl App {
@@ -109,6 +111,7 @@ impl App {
             input_cols: 80,
             steering: None,
             quit: false,
+            max_size: None,
         }
     }
 
@@ -176,6 +179,14 @@ impl App {
             self.editor = draft;
             self.session.answer(&id, answer);
             self.asks.retain(|a| a.0 != id);
+            self.next_ask();
+        }
+    }
+
+    /// Shows the oldest queued question once no modal picker is in the way.
+    pub fn resume_ask(&mut self) {
+        let free = self.picker.as_ref().is_none_or(|p| p.kind.is_token());
+        if free && self.ask_input.is_none() && !self.asks.is_empty() {
             self.next_ask();
         }
     }

@@ -23,7 +23,7 @@ pub struct Session {
     pub mode: Mode,
     pub tasks: Tasks,
     pub(crate) dir: Mutex<Option<SessionDir>>,
-    pub(crate) config: RwLock<Arc<Config>>,
+    pub(crate) config: RwLock<(u64, Arc<Config>)>,
     pub(crate) config_arg: Option<PathBuf>,
     pub(crate) state: Mutex<State>,
     pub(crate) subs: Mutex<Subs>,
@@ -143,7 +143,7 @@ impl Session {
             mode: opts.mode,
             tasks: Tasks::new(path.join("tasks")),
             dir: Mutex::new(Some(dir)),
-            config: RwLock::new(config),
+            config: RwLock::new((0, config)),
             config_arg: opts.config,
             state: Mutex::new(st),
             subs: Mutex::default(),
@@ -181,7 +181,7 @@ impl Session {
     }
 
     pub fn config(&self) -> Arc<Config> {
-        self.config.read().unwrap().clone()
+        self.config.read().unwrap().1.clone()
     }
 
     /// Rebuilds the config from its files: `process_end` runs on the old hooks, then
@@ -193,8 +193,7 @@ impl Session {
             self.mode,
         )?);
         self.finish_hooks("reload");
-        *self.config.write().unwrap() = c.clone();
-        self.state.lock().unwrap().remote.clear();
+        self.swap_config(c.clone());
         *self.hooks.lock().unwrap() = Some(Default::default());
         if let Some(py) = self.python.lock().unwrap().as_mut() {
             py.set_max_output(c.settings.max_output);

@@ -46,30 +46,51 @@ impl Session {
         names
     }
 
+    /// Replaces the active config, bumps its generation, and clears cached remote models.
+    pub(crate) fn swap_config(&self, c: Arc<tuse_config::Config>) {
+        let mut cfg = self.config.write().unwrap();
+        cfg.0 += 1;
+        cfg.1 = c;
+        self.state.lock().unwrap().remote.clear();
+    }
+
     /// Asks every `connect` provider for its models in the background.
-    /// Each answer updates the cache and emits `Event::Models`.
+    /// Each answer updates the cache and emits `Event::Models`; stale generations are discarded.
     pub fn fetch_models(self: &Arc<Self>) {
         let mode = self.mode.into();
-        for c in self
-            .config()
-            .connect
-            .iter()
-            .filter(|c| c.matches(mode))
-            .cloned()
-        {
+        let (config_gen, connect) = {
+            let cfg = self.config.read().unwrap();
+            let list: Vec<_> = cfg
+                .1
+                .connect
+                .iter()
+                .filter(|c| c.matches(mode))
+                .cloned()
+                .collect();
+            (cfg.0, list)
+        };
+        for c in connect {
             let s = self.clone();
             std::thread::spawn(
                 move || match Client::new(&c.base_url, &c.api_key).models() {
                     Ok(ids) => {
+                        let cfg = s.config.read().unwrap();
+                        if cfg.0 != config_gen {
+                            return;
+                        }
                         let prefix = format!("{}/", c.name);
                         let mut st = s.state.lock().unwrap();
                         st.remote.retain(|m| !m.starts_with(&prefix));
                         st.remote
                             .extend(ids.into_iter().map(|id| format!("{prefix}{id}")));
-                        drop(st);
+                        drop((st, cfg));
                         s.emit(Event::Models);
                     }
-                    Err(e) => s.emit(Event::Error(format!("{}: can't fetch models: {e}", c.name))),
+                    Err(e) => {
+                        if s.config.read().unwrap().0 == config_gen {
+                            s.emit(Event::Error(format!("{}: can't fetch models: {e}", c.name)));
+                        }
+                    }
                 },
             );
         }

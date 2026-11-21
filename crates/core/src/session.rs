@@ -65,7 +65,7 @@ pub(crate) struct State {
 
 impl Session {
     pub fn open(opts: Options) -> Result<Arc<Session>, String> {
-        let config = load_config(opts.config.as_deref(), &opts.cwd)?;
+        let config = load_config(opts.config.as_deref(), &opts.cwd, opts.mode)?;
         let id = opts
             .resume
             .clone()
@@ -86,13 +86,13 @@ impl Session {
             ..Default::default()
         });
         if opts.resume.is_none() {
-            let r = crate::control::initial_settings(&config);
+            let r = crate::control::initial_settings(&config, opts.mode);
             dir.append(&r);
             records.push(r);
         }
         let mut st = State {
             bounds: Bounds::default(),
-            model: crate::control::or_default(&meta.model, config.default_model()),
+            model: crate::control::or_default(&meta.model, config.default_model(opts.mode.into())),
             effort: crate::control::or_default(&meta.effort, config.default_effort()),
             busy: false,
             turn_error: None,
@@ -187,7 +187,11 @@ impl Session {
     /// Rebuilds the config from its files: `process_end` runs on the old hooks, then
     /// `process_start` on the new ones, each hook in a fresh interpreter.
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
-        let c = Arc::new(load_config(self.config_arg.as_deref(), &self.cwd)?);
+        let c = Arc::new(load_config(
+            self.config_arg.as_deref(),
+            &self.cwd,
+            self.mode,
+        )?);
         self.finish_hooks("reload");
         *self.config.write().unwrap() = c.clone();
         *self.hooks.lock().unwrap() = Some(Default::default());
@@ -238,7 +242,7 @@ impl Session {
     }
 }
 
-fn load_config(arg: Option<&Path>, cwd: &Path) -> Result<Config, String> {
+fn load_config(arg: Option<&Path>, cwd: &Path, mode: Mode) -> Result<Config, String> {
     let path = tuse_config::find(arg, cwd);
-    tuse_config::load(path.as_deref()).map(|l| l.config)
+    tuse_config::load(path.as_deref(), mode.into()).map(|l| l.config)
 }

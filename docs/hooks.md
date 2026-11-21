@@ -44,7 +44,9 @@ To run a script, call it: `run: sh("~/scripts/x.sh")`. Longer code goes into a `
 the config and call its entry point each time: `import notify; notify.on_event(event, text)`. A
 module is imported only once per interpreter.
 
-Hooks can call helpers defined under `functions` in the config.
+Hooks can call helpers defined under `functions` in the config. Set `modes: [tui]`
+(any of `tui`, `headless`, `json`) to limit a hook to specific run modes; omitted or empty
+runs in all modes.
 
 A hook question counts against `hook_timeout`: expiry dismisses it and releases the queue.
 Esc interrupts running hooks without dropping later queued events.

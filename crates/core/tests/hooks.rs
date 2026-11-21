@@ -33,6 +33,8 @@ fn hooks_see_process_and_message_events_in_order() {
     ]);
     let (dir, _) = common::setup("hooks", &addr, "");
     let log = dir.join("events");
+    let tui_log = dir.join("tui");
+    let hl_log = dir.join("hl");
     let cfg = dir.join("main.yaml");
     std::fs::write(
         &cfg,
@@ -55,8 +57,22 @@ hooks:
           f.write(f'{{label()}} {{n}} {{extra}}\n')
       if event == 'user_message' and is_first:
           set_title('hook ' + text)
+  tui_only:
+    modes: [tui]
+    events: [process_start, process_end, user_message]
+    run: |
+      with open('{}', 'a') as f:
+          f.write(f'{{event}}\n')
+  hl_only:
+    modes: [headless]
+    events: [process_start, process_end]
+    run: |
+      with open('{}', 'a') as f:
+          f.write(f'{{event}} {{reason}}\n')
 "#,
-            log.display()
+            log.display(),
+            tui_log.display(),
+            hl_log.display()
         ),
     )
     .unwrap();
@@ -132,6 +148,29 @@ process_end 2 exit
             .any(|(summary, text)| summary == "record user_message ok"
                 && text.contains("text='hi'\nis_first=True")),
         "{hooks:?}"
+    );
+    assert!(!tui_log.exists(), "tui_only hook ran in headless");
+    assert!(!hooks.iter().any(|(s, _)| s.starts_with("tui_only")));
+    assert_eq!(
+        std::fs::read_to_string(&hl_log).unwrap(),
+        "process_start launch\nprocess_end reload\nprocess_start reload\nprocess_end resume\nprocess_start resume\nprocess_end exit\n"
+    );
+    let tui = Session::open(Options {
+        cwd: dir.clone(),
+        config: Some(cfg),
+        mode: Mode::Tui,
+        resume: None,
+        start: Start::Launch,
+    })
+    .unwrap();
+    tui.close();
+    assert_eq!(
+        std::fs::read_to_string(&tui_log).unwrap(),
+        "process_start\nprocess_end\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&hl_log).unwrap(),
+        "process_start launch\nprocess_end reload\nprocess_start reload\nprocess_end resume\nprocess_start resume\nprocess_end exit\n"
     );
     common::cleanup(&dir);
 }

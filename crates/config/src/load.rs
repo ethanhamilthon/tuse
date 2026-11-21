@@ -1,4 +1,4 @@
-use crate::{expand, types::Config};
+use crate::{Mode, expand, mode_matches, types::Config};
 use serde_yaml::{Mapping, Value};
 use std::path::{Path, PathBuf};
 
@@ -37,12 +37,12 @@ pub(crate) fn find_in(explicit: Option<&Path>, cwd: &Path, global: &Path) -> Opt
         .find(|p| p.is_file())
 }
 
-/// Loads `path` and its includes; `None` gives the built-in defaults.
-pub fn load(path: Option<&Path>) -> Result<Loaded, String> {
+/// Loads `path` and its includes for `mode`; `None` gives the built-in defaults.
+pub fn load(path: Option<&Path>, mode: Mode) -> Result<Loaded, String> {
     let mut files = vec![];
     let mut value = Value::Mapping(Mapping::new());
     if let Some(path) = path {
-        merge(&mut value, load_file(path, &mut files, 0)?);
+        merge(&mut value, load_file(path, &mut files, 0, mode)?);
     }
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     if value.get("prelude").is_some() {
@@ -70,7 +70,47 @@ pub fn load(path: Option<&Path>) -> Result<Loaded, String> {
     })
 }
 
-fn load_file(path: &Path, files: &mut Vec<PathBuf>, depth: usize) -> Result<Value, String> {
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IncludeSpec {
+    file: String,
+    #[serde(default)]
+    only: Option<Vec<String>>,
+    #[serde(default)]
+    modes: Vec<Mode>,
+}
+
+fn parse_include(v: Value, path: &Path) -> Result<IncludeSpec, String> {
+    let spec = match v {
+        Value::String(file) => IncludeSpec {
+            file,
+            only: None,
+            modes: vec![],
+        },
+        Value::Mapping(_) => serde_yaml::from_value::<IncludeSpec>(v)
+            .map_err(|e| format!("{}: include: {e}", path.display()))?,
+        _ => {
+            return Err(format!(
+                "{}: include entries must be a path or {{file, only, modes}}",
+                path.display()
+            ));
+        }
+    };
+    if spec.file.trim().is_empty() {
+        return Err(format!(
+            "{}: include: `file` must not be empty",
+            path.display()
+        ));
+    }
+    Ok(spec)
+}
+
+fn load_file(
+    path: &Path,
+    files: &mut Vec<PathBuf>,
+    depth: usize,
+    mode: Mode,
+) -> Result<Value, String> {
     if depth > 16 {
         return Err(format!("{}: include depth limit reached", path.display()));
     }
@@ -84,16 +124,24 @@ fn load_file(path: &Path, files: &mut Vec<PathBuf>, depth: usize) -> Result<Valu
         return Err(format!("{}: top level must be a mapping", path.display()));
     }
     let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-    let includes = own
-        .as_mapping_mut()
-        .and_then(|m| m.remove("include"))
-        .and_then(|v| v.as_sequence().cloned())
-        .unwrap_or_default();
+    let includes = match own.as_mapping_mut().and_then(|m| m.remove("include")) {
+        None | Some(Value::Null) => vec![],
+        Some(Value::Sequence(seq)) => seq,
+        Some(_) => return Err(format!("{}: `include` must be a list", path.display())),
+    };
     let mut merged = Value::Mapping(Mapping::new());
     for inc in includes {
-        let Some(inc) = inc.as_str() else { continue };
-        let inc_path = resolve_path(inc, &dir);
-        let v = load_file(&inc_path, files, depth + 1)?;
+        let spec = parse_include(inc, path)?;
+        if !mode_matches(&spec.modes, mode) {
+            continue;
+        }
+        let inc_path = resolve_path(&spec.file, &dir);
+        let mut v = load_file(&inc_path, files, depth + 1, mode)?;
+        if let Some(only) = &spec.only
+            && let Value::Mapping(m) = &mut v
+        {
+            m.retain(|k, _| k.as_str().is_some_and(|s| only.iter().any(|o| o == s)));
+        }
         merge(&mut merged, v);
     }
     merge(&mut merged, own);

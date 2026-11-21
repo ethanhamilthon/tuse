@@ -207,9 +207,9 @@ impl Session {
 }
 
 /// A new session records the config's model and effort at once and keeps them from then on.
-pub(crate) fn initial_settings(config: &tuse_config::Config) -> Record {
+pub(crate) fn initial_settings(config: &tuse_config::Config, mode: crate::Mode) -> Record {
     Record::Settings {
-        model: config.default_model(),
+        model: config.default_model(mode.into()),
         effort: config.default_effort(),
     }
 }

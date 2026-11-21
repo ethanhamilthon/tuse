@@ -16,6 +16,8 @@ fix this #review @src/main.rs [Image #1]
 - Only what is picked in the input counts: a prompt chosen with the `#` picker, a file chosen
   with `@`, an image pasted with Ctrl+V. A `#name` or `@path` typed by hand is plain text.
 - A prompt is sent once, however often it appears.
+- In config, each `prompts` entry is a plain string or `{text, modes: [tui]}` (no `modes` or
+  empty means all modes; entries excluded by the active mode are hidden from `#` and ignored).
 - Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) are attached as pictures. A pasted image keeps
   its number `N`; one picked with `@` gets the next free one.
 - A text file sends its first 1 KB; a longer one is marked `truncated="true" size="BYTES"`.

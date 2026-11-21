@@ -12,7 +12,14 @@ impl Session {
     /// Asks every `connect` provider for its models in the background.
     /// Each answer updates the cache and emits `Event::Models`.
     pub fn fetch_models(self: &Arc<Self>) {
-        for c in self.config().connect.clone() {
+        let mode = self.mode.into();
+        for c in self
+            .config()
+            .connect
+            .iter()
+            .filter(|c| c.matches(mode))
+            .cloned()
+        {
             let s = self.clone();
             std::thread::spawn(
                 move || match Client::new(&c.base_url, &c.api_key).models() {

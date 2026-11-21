@@ -7,7 +7,7 @@ pub fn run(config_arg: Option<std::path::PathBuf>) -> Result<(), String> {
         tuse_config::find(config_arg.as_deref(), &cwd).unwrap_or_else(tuse_config::global_path);
     // A config that does not exist yet is created by the save below.
     let config = if path.is_file() {
-        tuse_config::load(Some(&path))
+        tuse_config::load(Some(&path), tuse_config::Mode::Tui)
             .map_err(|e| format!("config: {e}"))?
             .config
     } else {

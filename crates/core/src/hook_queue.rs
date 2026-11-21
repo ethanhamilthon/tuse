@@ -114,11 +114,9 @@ impl Session {
         let mut waiting = vec![];
         for (name, q) in queues {
             drop(q.tx);
-            if config
-                .hooks
-                .get(&name)
-                .is_some_and(|h| h.events.iter().any(|e| e == "process_end"))
-            {
+            if config.hooks.get(&name).is_some_and(|h| {
+                h.matches(self.mode.into()) && h.events.iter().any(|e| e == "process_end")
+            }) {
                 waiting.push((q.done, q.stale, q.interrupt));
             } else {
                 q.stale.store(true, Ordering::Release);

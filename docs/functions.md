@@ -59,6 +59,9 @@ functions:
     run: return sh("make check").out.splitlines()[-lines:]
 ```
 
+`show_agent: false` (default `true`) hides a helper from the agent: it is left out of the system
+prompt and of `docs("functions")`, but it stays defined, so other helpers, hooks and tasks can call it.
+
 Helpers can call other helpers and import modules next to the config. `/reload`
 redefines helpers in the agent's interpreter without clearing its variables.
 A deleted helper remains callable in that interpreter until exit.

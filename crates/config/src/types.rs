@@ -78,12 +78,25 @@ pub struct Prices {
     pub cache_write: f64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Function {
     pub args: String,
     pub description: String,
     pub run: String,
+    /// `false` keeps the function out of the agent's prompt and docs; code can still call it.
+    pub show_agent: bool,
+}
+
+impl Default for Function {
+    fn default() -> Self {
+        Self {
+            args: String::new(),
+            description: String::new(),
+            run: String::new(),
+            show_agent: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]

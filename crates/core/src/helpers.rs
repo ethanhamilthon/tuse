@@ -25,16 +25,18 @@ pub fn install(s: &Session, py: &mut Python, config: &Config) {
     }
 }
 
+/// The functions the agent is told about; `show_agent: false` ones stay callable but unlisted.
 pub fn listing(config: &Config, full: bool) -> String {
-    if config.functions.is_empty() {
+    let shown: Vec<_> = config
+        .functions
+        .iter()
+        .filter(|(_, f)| f.show_agent)
+        .collect();
+    if shown.is_empty() {
         return String::new();
     }
     let mut out = String::from("\n\n# Your functions in `python`");
-    for (name, f) in config
-        .functions
-        .iter()
-        .take(if full { usize::MAX } else { 30 })
-    {
+    for (name, f) in shown.iter().take(if full { usize::MAX } else { 30 }) {
         let desc: String = f
             .description
             .chars()
@@ -42,11 +44,39 @@ pub fn listing(config: &Config, full: bool) -> String {
             .collect();
         out.push_str(&format!("\n- `{name}({})`: {desc}", f.args));
     }
-    if !full && config.functions.len() > 30 {
+    if !full && shown.len() > 30 {
         out.push_str(&format!(
             "\nand {} more, see `docs(\"functions\")`",
-            config.functions.len() - 30
+            shown.len() - 30
         ));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hidden_functions_are_not_listed_but_stay_defined() {
+        let mut config = Config::default();
+        for (name, show_agent) in [("seen", true), ("secret", false)] {
+            config.functions.insert(
+                name.into(),
+                tuse_config::Function {
+                    description: "d".into(),
+                    run: "return 1".into(),
+                    show_agent,
+                    ..Default::default()
+                },
+            );
+        }
+        for full in [false, true] {
+            let text = listing(&config, full);
+            assert!(text.contains("`seen("), "{text}");
+            assert!(!text.contains("secret"), "{text}");
+        }
+        config.functions.get_mut("seen").unwrap().show_agent = false;
+        assert!(listing(&config, false).is_empty());
+    }
 }

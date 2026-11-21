@@ -170,6 +170,10 @@ impl App {
             }
             (Kind::Resume, Some(v)) => self.switch(Some(v)),
             (Kind::Theme, Some(v)) => self.set_theme(&v),
+            (Kind::Model, Some(v)) if !v.is_empty() && !self.session.model_available(&v) => {
+                self.restore_draft();
+                self.error(format!("Model `{v}` is unavailable in this mode"));
+            }
             (Kind::Model, Some(v)) => {
                 let (_, effort) = self.session.model();
                 let items = EFFORTS.iter().map(|e| item(*e, "", *e)).collect();

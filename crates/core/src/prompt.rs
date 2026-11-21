@@ -5,8 +5,15 @@ const SYSTEM: &str = include_str!("../prompts/system.md");
 
 pub fn system_prompt(config: &Config, compacted: bool, mode: crate::Mode) -> String {
     let mut parts = vec![fill(SYSTEM, config).trim_end().to_string()];
-    parts[0].push_str(&crate::helpers::listing(config, false));
-    parts.extend(config.systems.iter().map(|s| s.trim_end().to_string()));
+    parts[0].push_str(&crate::helpers::listing(config, mode, false));
+    let cfg_mode = mode.into();
+    parts.extend(
+        config
+            .systems
+            .iter()
+            .filter(|s| s.matches(cfg_mode))
+            .map(|s| s.text().trim_end().to_string()),
+    );
     let mut out = parts.join("\n\n");
     if mode == crate::Mode::Headless {
         out.push_str("\n\nMode: headless (`tuse -p`). There is no user: `ask` and `draw_ui` are unavailable. Decide yourself and finish with a final answer.");

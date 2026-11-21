@@ -2,7 +2,7 @@ use crate::expand::vars;
 use std::path::Path;
 
 fn load(p: Option<&Path>) -> Result<crate::Loaded, String> {
-    crate::load(p)
+    crate::load(p, crate::Mode::Tui)
 }
 
 #[test]
@@ -31,10 +31,13 @@ fn includes_merge() {
     let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
     assert_eq!(c.model, "b");
     assert_eq!(c.effort, "high");
-    assert_eq!(c.systems, ["one", "two"]);
+    assert_eq!(
+        c.systems.iter().map(|s| s.text()).collect::<Vec<_>>(),
+        ["one", "two"]
+    );
     assert_eq!(c.settings.tool_timeout, 5);
     assert_eq!(c.settings.max_output, 10);
-    assert_eq!(c.prompts["p"], "hi");
+    assert_eq!(c.prompts["p"].text(), "hi");
     assert_eq!(c.settings.hook_timeout, 30);
     assert_eq!(c.hooks["h"].run, "sh(\"./h.sh\")");
     assert!(c.problems().is_empty());
@@ -45,7 +48,7 @@ fn includes_merge() {
     let c = load(Some(&dir.join("main.yaml"))).unwrap().config;
     assert_eq!(c.hooks["h"].run, "print(f\"$HOME #{{echo x}}\")");
     assert_eq!(c.functions["f"].run, "return \"${HOME}\"");
-    assert_ne!(c.systems[0], "$HOME");
+    assert_ne!(c.systems[0].text(), "$HOME");
     w(
         "main.yaml",
         "models: [{name: p/a, window: 1000}, {name: p/b, window: 1000, compact_at: 0}]\n",
@@ -206,7 +209,7 @@ fn ui_settings_are_checked() {
 
 #[test]
 fn effective_yaml_contains_default_theme_and_settings() {
-    let c = crate::load(None).unwrap().config;
+    let c = load(None).unwrap().config;
     let value: serde_yaml::Value = serde_yaml::from_str(&c.to_yaml().unwrap()).unwrap();
     assert_eq!(value["themes"]["default"]["bg"], "#0A0A0A");
     assert_eq!(value["settings"]["ui"]["motion"], true);

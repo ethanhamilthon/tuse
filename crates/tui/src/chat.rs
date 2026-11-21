@@ -45,8 +45,9 @@ pub struct Chat {
     pub(crate) entries: Vec<(Entry, Cache)>,
     /// Pinned `draw_ui` blocks in creation order; always rendered after `entries`.
     pub(crate) pins: Vec<(Entry, Cache)>,
-    /// Rows the pins took in the last `window` call, to keep the view anchored.
-    pin_rows: usize,
+    /// Print blocks that sat entirely below the viewport in the last `window` call, with
+    /// their row cost: when one changes size the scroll follows, so the view stays put.
+    pub(crate) below: Vec<(String, usize)>,
     /// The reply that is changing (streaming) and its rendered finished blocks.
     hot: Option<usize>,
     stream: Option<crate::md_stream::Prefix>,
@@ -154,6 +155,13 @@ impl Chat {
         }
     }
 
+    pub(crate) fn slot(&self, i: usize) -> &(Entry, Cache) {
+        match self.entries.get(i) {
+            Some(s) => s,
+            None => &self.pins[i - self.entries.len()],
+        }
+    }
+
     pub(crate) fn lines(&mut self, i: usize, width: usize, p: &Palette) -> &[Line] {
         let n = self.entries.len();
         let (e, cache) = if i < n {
@@ -191,14 +199,7 @@ impl Chat {
         height: usize,
     ) -> (Vec<Line>, usize) {
         let gap = p.ui.message_gap as usize;
-        let rows = self.pin_height(width, p, gap);
-        // Keep the content under the cursor still when the pinned blocks change size.
-        let scroll = if scroll > 0 {
-            (scroll + rows).saturating_sub(self.pin_rows)
-        } else {
-            0
-        };
-        self.pin_rows = rows;
+        let scroll = self.anchor(width, p, scroll);
         let need = scroll + height;
         // Lines from the bottom, newest entry first, with the gaps between entries.
         let mut rev: Vec<Line> = Vec::with_capacity(need);

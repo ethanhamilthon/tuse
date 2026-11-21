@@ -133,6 +133,9 @@ See [docs/config.md](docs/config.md) for every key.
 ```yaml
 include:
   - prompts.yaml
+  - file: shared.yaml
+    only: [connect]
+    modes: [tui, headless]
 
 model: claude-sonnet-5-5
 provider: x

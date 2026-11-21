@@ -1,3 +1,4 @@
+use crate::mode::{Mode, ModeEntry};
 use crate::theme::{Theme, UiSettings};
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -12,8 +13,8 @@ pub struct Config {
     pub settings: Settings,
     pub themes: BTreeMap<String, Theme>,
     pub models: Vec<ModelDef>,
-    pub systems: Vec<String>,
-    pub prompts: BTreeMap<String, String>,
+    pub systems: Vec<ModeEntry>,
+    pub prompts: BTreeMap<String, ModeEntry>,
     pub functions: BTreeMap<String, Function>,
     pub hooks: BTreeMap<String, Hook>,
 }
@@ -24,6 +25,8 @@ pub struct Connect {
     pub name: String,
     pub base_url: String,
     pub api_key: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub modes: Vec<Mode>,
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
@@ -86,6 +89,8 @@ pub struct Function {
     pub run: String,
     /// `false` keeps the function out of the agent's prompt and docs; code can still call it.
     pub show_agent: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub modes: Vec<Mode>,
 }
 
 impl Default for Function {
@@ -95,6 +100,7 @@ impl Default for Function {
             description: String::new(),
             run: String::new(),
             show_agent: true,
+            modes: Vec::new(),
         }
     }
 }
@@ -105,6 +111,8 @@ pub struct Hook {
     pub events: Vec<String>,
     /// Python code, run in the hook's persistent interpreter.
     pub run: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub modes: Vec<Mode>,
 }
 
 pub const HOOK_EVENTS: [&str; 5] = [
@@ -137,8 +145,8 @@ impl Config {
     }
 
     /// The full `provider/model` name of the configured default model.
-    pub fn default_model(&self) -> String {
-        full_model_name(&self.model, &self.provider, &self.connect)
+    pub fn default_model(&self, mode: Mode) -> String {
+        full_model_name(&self.model, &self.provider, &self.connect, mode)
     }
 
     /// What is wrong in the config but not fatal: each item is one notice.
@@ -178,8 +186,10 @@ impl Config {
         self.models.iter().find(|m| m.name == full)
     }
 
-    pub fn connect(&self, name: &str) -> Option<&Connect> {
-        self.connect.iter().find(|c| c.name == name)
+    pub fn connect(&self, name: &str, mode: Mode) -> Option<&Connect> {
+        self.connect
+            .iter()
+            .find(|c| c.matches(mode) && c.name == name)
     }
 
     /// The model's `compact_at`, else `settings.compact_at`, else 60% of the model's window.
@@ -198,14 +208,18 @@ impl Config {
     }
 }
 
-pub fn full_model_name(model: &str, provider: &str, connect: &[Connect]) -> String {
+pub fn full_model_name(model: &str, provider: &str, connect: &[Connect], mode: Mode) -> String {
     if let Some((p, _)) = model.split_once('/')
         && connect.iter().any(|c| c.name == p)
     {
         return model.to_string();
     }
     let provider = if provider.is_empty() {
-        connect.first().map(|c| c.name.as_str()).unwrap_or("")
+        connect
+            .iter()
+            .find(|c| c.matches(mode))
+            .map(|c| c.name.as_str())
+            .unwrap_or("")
     } else {
         provider
     };

@@ -7,9 +7,12 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 
 ## Merging and expansion
 
-- `include` lists other files to load, with paths relative to the including file.
-  Includes merge in order and the later one wins a conflict. The including file
-  wins over all of its includes.
+- `include` lists other files to load, with paths relative to the including file
+  (or absolute / `~/`). Each item is a path string or `{file, only: [keys], modes: [modes]}`.
+  When `only` is set, only those top-level keys are kept from the included file after its
+  own includes are resolved (missing keys are skipped). When `modes` is set and excludes
+  the current run mode, that include is skipped without being read. Includes merge in order
+  and the later one wins a conflict; the including file wins over all of its includes.
 - Mappings merge key by key. Lists (`systems`, `connect`, `models`, hook `events`, ...)
   are concatenated. Any other value is replaced.
 - In every string value, `$VAR` and `${VAR}` become environment variables (empty when
@@ -24,7 +27,7 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 | `model` | Default model, `name` or `provider/name`. |
 | `provider` | The `connect` entry for `model` when it has no `provider/` prefix (default: the first one). |
 | `effort` | `default` (sends no `reasoning_effort`), `low`, `medium`, `high`, `xhigh`, `max`. |
-| `connect` | List of `{name, base_url, api_key}` for OpenAI-compatible endpoints. |
+| `connect` | List of `{name, base_url, api_key, modes?}` for OpenAI-compatible endpoints. |
 | `models` | List of `{name: provider/model, display, window, compact_at, prices}`. `prices` are dollars per 1M tokens: `in`, `out`, `cache` (cached reads) and `cache_write`. |
 | `settings.compact_at` | Context size that triggers compaction (0 turns it off). Unset: 60% of the model's `window` (off when the window is unknown). A model's `compact_at` wins. |
 | `settings.max_output` | Bytes of a tool result kept; longer output is cut in the middle. The agent is told the number. Default 4096. |
@@ -32,13 +35,35 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 | `settings.hook_timeout` | Seconds before a hook is stopped. Default 30. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
 | `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |
-| `systems` | Texts appended to the built-in system prompt. |
-| `prompts` | `name: text`. `#name` picked in the input sends the text along ([prompts.md](prompts.md)). |
-| `functions` | Named Python helpers with `args`, `description` and `run`. Available to the agent, hooks and tasks; `show_agent: false` hides one from the agent only. |
-| `hooks` | `name: {events: [...], run: python code}`, see `docs("hooks")`. |
+| `systems` | Texts appended to the built-in system prompt; each item is a string or `{text, modes}`. |
+| `prompts` | `name: text` or `name: {text, modes}`. `#name` picked in the input sends the text along ([prompts.md](prompts.md)). |
+| `functions` | Named Python helpers with `args`, `description`, `run` and optional `modes`. Available to the agent, hooks and tasks; `show_agent: false` hides one from the agent only. |
+| `hooks` | `name: {events: [...], run: python code, modes?}`, see `docs("hooks")`. |
 | `settings.theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` changes it. |
 | `settings.ui` | UI behavior and layout preferences, see `docs("theme")`. |
 | `themes` | `name: {extend: base, bg: ..., ...}`, 10 base colors, see `docs("theme")`. |
+
+## Modes
+
+Run modes are `tui` (interactive TUI), `headless` (`tuse -p`) and `json` (`tuse json`).
+Entries in `include`, `connect`, `systems`, `prompts`, `functions` and `hooks` may set
+`modes: [tui]` (or any combination). Omitting `modes` or setting `modes: []` enables the
+entry in all modes; outside its listed modes it is not loaded or used. An unknown mode
+name is a config error.
+
+```yaml
+include:
+  - base.yaml
+  - file: shared.yaml
+    only: [connect]
+  - file: tui.yaml
+    modes: [tui]
+
+systems:
+  - Always appended.
+  - text: Interactive instructions.
+    modes: [tui]
+```
 
 ## Compaction
 

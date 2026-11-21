@@ -33,8 +33,12 @@ impl Session {
             return;
         };
         let config = self.config();
+        let mode = self.mode.into();
         for (name, hook) in &config.hooks {
-            if hook.run.trim().is_empty() || !hook.events.iter().any(|e| e == event) {
+            if hook.run.trim().is_empty()
+                || !hook.matches(mode)
+                || !hook.events.iter().any(|e| e == event)
+            {
                 continue;
             }
             let config_path = tuse_config::find(self.config_arg.as_deref(), &self.cwd)

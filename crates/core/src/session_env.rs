@@ -33,6 +33,15 @@ impl Session {
         }
     }
 
+    /// Stamps the end of the process in `meta.json`, even when no turn ever ran.
+    pub(crate) fn record_close(&self) {
+        let mut st = self.state.lock().unwrap();
+        st.meta.closed = crate::id::now();
+        if let Some(d) = self.dir.lock().unwrap().as_mut() {
+            d.write_meta(&st.meta);
+        }
+    }
+
     /// Environment of `sh`, tasks and `os.environ`.
     pub fn env(&self) -> Vec<(String, String)> {
         let model = self.state.lock().unwrap().model.clone();

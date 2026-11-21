@@ -6,6 +6,7 @@
 - Hooks, functions, connections, system texts, prompts and includes accept per-entry `modes` (`tui`, `headless`, `json`). Model availability follows the active connections.
 - `draw_ui(..., pin=True)` keeps a new block at the bottom of the chat. `draw_ui("", id=...)` removes a block, and redraws and removals preserve the scroll position where possible.
 - `/childrens` shows the tree of sessions linked by `TUSE_PARENT`, with token usage, spend and a detail panel.
+- `/childrens` stops counting elapsed time when a child session finishes.
 - The `agent_message` hook receives `tasks` and `children`, listing only running background tasks and descendant sessions.
 
 ## 0.6.4

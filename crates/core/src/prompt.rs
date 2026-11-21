@@ -52,8 +52,7 @@ pub fn tools(config: &Config) -> Vec<Value> {
         ),
         json!({
             "code": {"type": "string", "description": "The Python code to run."},
-            "title": {"type": "string", "description": "What this call does, in a few words and the user's language, e.g. \"Running the tests\". Shown to the user while it runs."},
-            "timeout": {"type": "integer", "description": format!("Seconds before the call is stopped. Default {}.", config.settings.tool_timeout)}
+            "title": {"type": "string", "description": "What this call does, in a few words and the user's language, e.g. \"Running the tests\". Shown to the user while it runs."}
         }),
         &["code", "title"],
     )]

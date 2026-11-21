@@ -63,10 +63,7 @@ impl Session {
         if !title.is_empty() {
             self.set_status(title.clone());
         }
-        let secs = args["timeout"]
-            .as_u64()
-            .unwrap_or(config.settings.tool_timeout)
-            .max(1);
+        let secs = config.settings.tool_timeout.max(1);
         self.emit(Event::ToolStart {
             timeout: secs,
             id: call.id.clone(),

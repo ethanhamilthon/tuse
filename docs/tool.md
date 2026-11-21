@@ -1,6 +1,6 @@
 # The `python` tool
 
-You have one tool, `python(code, title, timeout)`: a persistent REPL. You get the output of
+You have one tool, `python(code, title)`: a persistent REPL. You get the output of
 `print()` plus the value of the last expression (a `str` as it is, `None` nothing, a `sh` result as
 its output and exit code), or a traceback. An error does not end the REPL; a timeout or a cancel
 does not either. The REPL lives until Tuse exits and starts empty after `/resume`.
@@ -8,7 +8,7 @@ does not either. The REPL lives until Tuse exits and starts empty after `/resume
 `title` is a few words about what the call does, in the user's language (`Running the tests`). The
 user sees it in the working indicator; it stays until the next call sets a new `title`.
 
-A call is stopped after `settings.tool_timeout` seconds (pass `timeout` for more). The time the
+A call is stopped after `settings.tool_timeout` seconds (the agent cannot change it; a long job goes to `task_run`). The time the
 user takes to answer an `ask` does not count. Output over `settings.max_output` bytes is cut in
 the middle.
 

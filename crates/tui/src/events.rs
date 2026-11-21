@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::chat::Entry;
+use crate::chat_print::PrintChange;
 use tuse_core::Event;
 
 impl App {
@@ -221,11 +222,11 @@ impl App {
                 }
             }
             Event::Usage => {}
-            Event::Print { id, text } => {
-                if self.chat.set_print(&id, text) {
-                    self.scroll = 0;
-                }
-            }
+            Event::Print { id, text, pin } => match self.chat.set_print(&id, text, pin) {
+                PrintChange::Added => self.scroll = 0,
+                PrintChange::Removed(Some(pos)) => self.shift_after(pos),
+                _ => {}
+            },
             Event::Models => {
                 if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Model) {
                     self.open_models();

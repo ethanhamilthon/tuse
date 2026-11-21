@@ -3,6 +3,7 @@ mod app;
 mod ask_view;
 mod chat;
 mod chat_stream;
+mod children;
 mod clipboard;
 mod code_block;
 mod commands;

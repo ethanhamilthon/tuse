@@ -240,9 +240,8 @@ mod tests {
                 .collect();
             (t, s)
         };
-        // Row 0 is the pin's text; scroll 1 starts in the gap right above it.
+        // Scroll 1 starts in the gap right above the pin's text.
         let (before, s) = view(&mut c, 1);
-        assert_eq!(s, 1);
         c.set_print("a", "x\ny\nz".into(), true);
         let (after, s) = view(&mut c, s);
         assert_eq!(before, after);

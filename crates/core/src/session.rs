@@ -174,6 +174,7 @@ impl Session {
         self.state.lock().unwrap().asks.clear();
         self.finish_hooks(reason);
         self.hooks.lock().unwrap().take();
+        self.record_close();
         self.dir.lock().unwrap().take();
     }
 

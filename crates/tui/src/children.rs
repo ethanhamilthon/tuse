@@ -86,7 +86,8 @@ impl App {
             return self.open_children(None);
         };
         self.children_view = Some(id.to_string());
-        self.panel = Some(Panel::new(format!("Session {}", c.name), detail(&c)));
+        let title = crate::text::clip(&c.name, NAME_MAX, crate::style::MORE);
+        self.panel = Some(Panel::new(format!("Session {title}"), detail(&c)));
     }
 }
 
@@ -117,6 +118,22 @@ mod tests {
             window: Some(200_000),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn long_titles_wrap_in_the_detail_panel() {
+        let p = crate::style::Palette::new(&Default::default(), &Default::default());
+        let mut c = child();
+        c.name = "x".repeat(70) + " should_not_hide_the_end";
+        let mut panel = Panel::new("Session", detail(&c));
+        let text: String = panel
+            .lines(40, 20, &p)
+            .iter()
+            .map(|l| l.iter().map(|s| s.text.as_str()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let flat = text.replace(['\n', ' '], "");
+        assert!(flat.contains(&c.name.replace(' ', "")), "{text}");
     }
 
     #[test]

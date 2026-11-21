@@ -23,6 +23,9 @@ pub struct Meta {
     pub effort: String,
     pub created: String,
     pub updated: String,
+    /// When the process holding the session ended; empty for older sessions.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub closed: String,
     /// The session whose process started this one (`TUSE_PARENT`).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub parent: String,

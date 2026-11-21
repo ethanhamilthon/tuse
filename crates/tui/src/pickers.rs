@@ -4,22 +4,20 @@ use crate::style::Palette;
 use tuse_config::{Config, ModelDef};
 
 impl App {
-    /// Every model the providers reported plus the ones named in `models:`.
-    /// A `models:` entry only adds details (name, window, prices).
+    /// Every available model the providers reported plus the ones named in `models:`.
+    /// A saved/configured current model whose provider is excluded stays visible marked unavailable.
     pub fn open_models(&mut self) {
         let config = self.session.config();
         let (current, _) = self.session.model();
-        let mut names = self.session.remote_models();
-        for m in &config.models {
-            if !names.contains(&m.name) {
-                names.push(m.name.clone());
-            }
-        }
+        let mut names = self.session.available_models();
         if !names.contains(&current) {
             names.insert(0, current.clone());
         }
         names.sort();
-        let items: Vec<Item> = names.iter().map(|n| model_item(&config, n)).collect();
+        let items: Vec<Item> = names
+            .iter()
+            .map(|n| model_item(&config, n, self.session.model_available(n)))
+            .collect();
         let selected = self
             .picker
             .as_ref()
@@ -64,13 +62,16 @@ impl App {
     }
 }
 
-fn model_item(config: &Config, name: &str) -> Item {
+fn model_item(config: &Config, name: &str, available: bool) -> Item {
     let shown = config.display_name(name);
     let mut parts = if shown == name {
         vec![]
     } else {
         vec![name.to_string()]
     };
+    if !available && !name.is_empty() {
+        parts.push("unavailable".to_string());
+    }
     if let Some(m) = config.model_def(name) {
         parts.extend(details(m));
     }
@@ -104,13 +105,51 @@ mod tests {
             models: vec![def("c/opus", ""), def("c/sonnet", "Sonnet")],
             ..Default::default()
         };
-        let plain = model_item(&config, "c/opus");
+        let plain = model_item(&config, "c/opus", true);
         assert_eq!(
             (plain.label.as_str(), plain.detail.as_str()),
             ("c/opus", "200.0k ctx")
         );
-        let named = model_item(&config, "c/sonnet");
+        let named = model_item(&config, "c/sonnet", true);
         assert_eq!(named.detail, "c/sonnet · 200.0k ctx");
-        assert_eq!(model_item(&config, "c/other").detail, "");
+        assert_eq!(model_item(&config, "c/other", true).detail, "");
+        assert_eq!(
+            model_item(&config, "c/opus", false).detail,
+            "unavailable · 200.0k ctx"
+        );
+    }
+
+    #[test]
+    fn model_picker_hides_excluded_providers_and_marks_unavailable_current() {
+        let mut app = crate::app::test_app("picker-modes");
+        std::fs::write(
+            app.cwd.join("tuse.yaml"),
+            r#"connect:
+  - {name: tui_p, base_url: http://127.0.0.1:1, api_key: k, modes: [tui]}
+  - {name: json_p, base_url: http://127.0.0.1:1, api_key: k, modes: [json]}
+models:
+  - {name: tui_p/a}
+  - {name: json_p/b}
+  - {name: json_p/saved}
+"#,
+        )
+        .unwrap();
+        app.session.reload().unwrap();
+        app.session.set_model("json_p/saved", "default");
+        app.paste("keep me");
+        app.open_models();
+        let p = app.picker.as_ref().unwrap();
+        let items: Vec<_> = p
+            .items
+            .iter()
+            .map(|i| (i.value.as_str(), i.detail.as_str()))
+            .collect();
+        assert_eq!(items, [("json_p/saved", "unavailable"), ("tui_p/a", "")]);
+
+        // Selecting the unavailable current model is refused and restores the draft.
+        app.choose();
+        assert!(app.picker.is_none());
+        assert_eq!(app.editor.text(), "keep me");
+        crate::app::cleanup(app);
     }
 }

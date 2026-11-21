@@ -150,14 +150,7 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         }
         "model.list" => {
             s.fetch_models();
-            let config = s.config();
-            let mut all: Vec<String> = config.models.iter().map(|m| m.name.clone()).collect();
-            for m in s.remote_models() {
-                if !all.contains(&m) {
-                    all.push(m);
-                }
-            }
-            Ok(json!(all))
+            Ok(json!(s.available_models()))
         }
         "config.get" => s
             .config()

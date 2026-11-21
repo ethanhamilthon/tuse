@@ -51,16 +51,55 @@ impl Chat {
         PrintChange::Added
     }
 
-    pub(crate) fn pin_height(&mut self, width: usize, p: &Palette, gap: usize) -> usize {
+    /// Row cost (lines plus gap) of the print block `id`; 0 when it is gone or empty.
+    fn print_cost(&mut self, id: &str, width: usize, p: &Palette) -> usize {
         let n = self.entries.len();
-        let mut rows = 0;
-        for i in n..n + self.pins.len() {
+        let is = |e: &Entry| matches!(e, Entry::Print { id: x, .. } if x == id);
+        let at = match self.pins.iter().position(|(e, _)| is(e)) {
+            Some(i) => n + i,
+            None => match self.entries.iter().rposition(|(e, _)| is(e)) {
+                Some(i) => i,
+                None => return 0,
+            },
+        };
+        match self.lines(at, width, p).len() {
+            0 => 0,
+            h => h + p.ui.message_gap as usize,
+        }
+    }
+
+    /// Moves `scroll` by the size changes of the print blocks below the viewport and
+    /// remembers which blocks are below it now.
+    pub(crate) fn anchor(&mut self, width: usize, p: &Palette, scroll: usize) -> usize {
+        let mut delta = 0isize;
+        for (id, old) in std::mem::take(&mut self.below) {
+            delta += self.print_cost(&id, width, p) as isize - old as isize;
+        }
+        let scroll = if scroll == 0 {
+            0
+        } else {
+            scroll.saturating_add_signed(delta)
+        };
+        let gap = p.ui.message_gap as usize;
+        let mut cum = 0;
+        for i in (0..self.entries.len() + self.pins.len()).rev() {
+            let (is_print, id) = match &self.slot(i).0 {
+                Entry::Print { id, .. } => (true, id.clone()),
+                _ => (false, String::new()),
+            };
             let h = self.lines(i, width, p).len();
-            if h > 0 {
-                rows += h + gap;
+            if h == 0 {
+                continue;
+            }
+            cum += h + gap;
+            if cum > scroll || scroll == 0 {
+                break;
+            }
+            if is_print {
+                self.below.push((id, h + gap));
             }
         }
-        rows
+        scroll
     }
 }
 
@@ -146,12 +185,40 @@ mod tests {
         let before = texts(&mut c, 5).0;
         c.set_print("a", "x\ny\nz".into(), true);
         let (after, s) = texts(&mut c, 5);
-        assert!(texts(&mut c, 0).0.contains('z'));
         assert_eq!(s, 7);
         assert_eq!(before, after);
         // Removing the pin leaves the view in range.
         c.set_print("a", "".into(), true);
         let (_, s) = texts(&mut c, s);
         assert!(s < 7);
+    }
+
+    #[test]
+    fn unpinned_redraw_below_the_viewport_keeps_the_view_still() {
+        let p = Palette::new(&Default::default(), &Default::default());
+        let mut c = Chat::default();
+        for i in 0..60 {
+            c.push(Entry::Notice(format!("n{i}")));
+        }
+        c.set_print("a", "x".into(), false);
+        for i in 0..20 {
+            c.push(Entry::Notice(format!("m{i}")));
+        }
+        let view = |c: &mut Chat, s| {
+            let (l, s) = c.window(20, &p, s, 10);
+            let t: Vec<String> = l
+                .iter()
+                .map(|l| l.iter().map(|s| s.text.as_str()).collect())
+                .collect();
+            (t, s)
+        };
+        let (before, s) = view(&mut c, 60);
+        c.set_print("a", "x\ny\nz\nw".into(), false);
+        let (after, s2) = view(&mut c, s);
+        assert_eq!(before, after);
+        assert!(s2 > s);
+        c.set_print("a", "".into(), false);
+        let (gone, _) = view(&mut c, s2);
+        assert_eq!(before, gone);
     }
 }

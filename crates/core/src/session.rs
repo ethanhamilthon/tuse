@@ -5,7 +5,7 @@ pub use crate::mode::{Mode, Options, Start};
 use crate::record::{Record, UserInput};
 use crate::store::{Meta, SessionDir};
 use crate::tasks::Tasks;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::mpsc::Sender;
@@ -55,8 +55,8 @@ pub(crate) struct State {
     pub partial: String,
     /// Open `ask`s and where their answers go.
     pub asks: HashMap<String, Sender<String>>,
-    /// IDs of the `draw_ui` blocks.
-    pub prints: HashSet<String>,
+    /// Live `draw_ui` blocks: ID -> pinned at creation.
+    pub prints: HashMap<String, bool>,
     /// Models the providers have reported.
     pub remote: Vec<String>,
     /// Totals of `records` and the config whose prices they use.
@@ -109,7 +109,7 @@ impl Session {
             stats: Default::default(),
             partial: String::new(),
             asks: HashMap::new(),
-            prints: HashSet::new(),
+            prints: HashMap::new(),
             remote: vec![],
             records: vec![],
         };

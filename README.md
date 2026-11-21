@@ -97,6 +97,7 @@ the provider's models, says how many it got and adds the `connect` entry to the 
 | mouse wheel | scroll the chat (or the open list) |
 | Up / Down, Left / Right, Home / End | move in the input |
 | click in the input | put the cursor there |
+| hover / click a link | highlight it / open it in the browser |
 | Ctrl+V, Cmd+V | paste; an image becomes `[Image #n]` in the input and is attached when the message is sent |
 | Ctrl/Cmd+C | copy selected text; otherwise clear the input or quit if empty |
 | SIGINT, SIGTERM, SIGHUP | quit and reset the terminal (SIGKILL cannot; run `reset` after it) |

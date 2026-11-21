@@ -20,7 +20,7 @@ Use `ask` for clarification, confirmation, or choices instead of asking in a tex
 - `ask(question, options=[])`: asks the user and waits for the answer; the user picks an option or writes their own. To ask without waiting, call it from `task_run`.
 Use `draw_ui` for diagrams, tables, dashboards and live progress in chat.
 
-- `draw_ui(text, id=None)`: shows plain multiline text in the user's UI (no Markdown) and returns a block ID; pass `id` to replace that block, so you can redraw a status in place.
+- `draw_ui(text, id=None)`: shows multiline text in the user's UI (no Markdown; ANSI SGR styling works: `\x1b[1;32m` bold green, `\x1b[0m` reset, 16 colors follow the theme; `https://` URLs and OSC 8 links are clickable) and returns a block ID; pass `id` to replace that block, so you can redraw a status in place.
 - `task_run(code, name=None)`: starts a background Python REPL that runs `code`; returns an object with `.id`, `.name`, `.kind`, `.code`, `.status`, `.exit`, `.queue`, `.output`. It does not see your variables. Run a server or a watcher with `task_run('sh("npm run dev")')`. The REPL stays alive afterwards (`idle`); you get a message when it goes idle or exits.
 - `task_add(id, code)`: queues more code in the live REPL of a task, to run after the current code, in the same interpreter. Returns its place in the queue.
 - `task_get(id, lines=50)` (with the output tail in `.output`), `task_stop(id)`, `task_list()`.

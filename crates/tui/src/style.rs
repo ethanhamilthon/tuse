@@ -40,6 +40,8 @@ pub struct Style {
     pub italic: bool,
     pub dim: bool,
     pub underline: bool,
+    /// A clickable URL, interned by `links::intern`.
+    pub link: Option<u32>,
 }
 
 impl Style {

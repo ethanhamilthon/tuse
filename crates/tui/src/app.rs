@@ -30,6 +30,9 @@ pub struct App {
     pub chat: Chat,
     pub editor: Editor,
     pub selection: crate::selection::Selection,
+    /// Links on the screen at the last draw, and the one under the pointer.
+    pub links: Vec<crate::links::LinkBox>,
+    pub hover: Option<u32>,
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
     /// The `/trace` item shown in the panel; Esc goes back to the list at this item.
@@ -87,6 +90,8 @@ impl App {
             chat,
             editor: Editor::default(),
             selection: Default::default(),
+            links: vec![],
+            hover: None,
             picker: None,
             panel: None,
             trace_item: None,

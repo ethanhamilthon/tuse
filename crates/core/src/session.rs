@@ -79,12 +79,16 @@ impl Session {
             dir.append(&r);
             records.push(r);
         }
-        let meta = crate::store::read_meta(&dir.path).unwrap_or_else(|| Meta {
+        let mut meta = crate::store::read_meta(&dir.path).unwrap_or_else(|| Meta {
             id: id.clone(),
             cwd: opts.cwd.display().to_string(),
             created: crate::id::now(),
             ..Default::default()
         });
+        if let Some(p) = std::env::var("TUSE_PARENT").ok().filter(|p| !p.is_empty()) {
+            meta.parent = p;
+            dir.write_meta(&meta);
+        }
         if opts.resume.is_none() {
             let r = crate::control::initial_settings(&config);
             dir.append(&r);
@@ -228,6 +232,7 @@ impl Session {
         let model = self.state.lock().unwrap().model.clone();
         let mut env = vec![
             ("TUSE_SESSION".into(), self.id.clone()),
+            ("TUSE_PARENT".into(), self.id.clone()),
             ("TUSE_CWD".into(), self.cwd.display().to_string()),
             ("TUSE_MODEL".into(), model),
         ];

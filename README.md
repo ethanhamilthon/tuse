@@ -112,7 +112,7 @@ Editing it withdraws it from the queue without interrupting the turn. Press Ente
 the edited draft. Esc still stops the turn.
 
 Commands: `/new`, `/resume` (sessions started in this folder), `/models` (every model the
-providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/usage`,
+providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/childrens` (tree of child tuse sessions started with `TUSE_PARENT`, with tokens and spend), `/usage`,
 `/maxsize` (the max context shown as `5.2k/1m` in the status), `/trace` (a list of the system prompt, messages, thinking, tool calls, outputs and hook runs;
 Enter opens an item in full; `+python`, `-hook` filter by type), `/reload`, `/quit`.
 Every list looks the same and is drawn over the bottom of the chat; typing in the input filters it, and the draft comes back on close. `/usage`

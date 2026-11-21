@@ -5,13 +5,14 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-pub const COMMANDS: [(&str, &str); 11] = [
+pub const COMMANDS: [(&str, &str); 12] = [
     ("config", "show resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
     ("models", "switch model and effort"),
     ("theme", "switch the theme"),
     ("tasks", "background tasks"),
+    ("childrens", "child sessions of this one"),
     ("usage", "context, tokens and cost"),
     ("maxsize", "set the max context size, e.g. /maxsize 1m"),
     ("trace", "everything in this session"),
@@ -37,6 +38,7 @@ impl App {
             "models" => self.open_models(),
             "theme" => self.open_themes(),
             "tasks" => self.open_tasks(),
+            "childrens" => self.open_children(),
             "usage" => {
                 self.panel = Some(crate::usage::panel(&self.session, &self.palette));
                 self.trace_item = None;

@@ -23,6 +23,7 @@ pub const COMMANDS: [(&str, &str); 12] = [
 impl App {
     pub fn run_command(&mut self, name: &str) {
         let (name, arg) = name.split_once(' ').unwrap_or((name, ""));
+        self.children_view = None;
         match name {
             "maxsize" => self.set_maxsize(arg),
             "config" => match self.session.config().to_yaml() {
@@ -38,7 +39,7 @@ impl App {
             "models" => self.open_models(),
             "theme" => self.open_themes(),
             "tasks" => self.open_tasks(),
-            "childrens" => self.open_children(),
+            "childrens" => self.open_children(None),
             "usage" => {
                 self.panel = Some(crate::usage::panel(&self.session, &self.palette));
                 self.trace_item = None;
@@ -188,6 +189,7 @@ impl App {
                     self.error(format!("Can't save the model: {e}"));
                 }
             }
+            (Kind::Children, Some(v)) => self.open_child_detail(&v),
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.tasks.get(&v) {
                     let out = tuse_core::tail(&t.log, 200);

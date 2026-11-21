@@ -19,6 +19,17 @@ pub struct Data {
     pub status: Option<&'static str>,
     /// `process_start` / `process_end`: `launch`, `new`, `resume`, `reload` or `exit`.
     pub reason: Option<&'static str>,
+    /// `agent_message`: running background tasks, `(id, name, kind)`.
+    pub tasks: Option<Vec<[String; 3]>>,
+    /// `agent_message`: running descendant sessions.
+    pub children: Option<Vec<crate::children::RunningChild>>,
+}
+
+fn entries(rows: Vec<Vec<(&str, MontyObject)>>) -> MontyObject {
+    MontyObject::list(
+        rows.into_iter()
+            .map(|r| MontyObject::dict(r.into_iter().map(|(k, v)| (MontyObject::string(k), v)))),
+    )
 }
 
 fn opt(s: Option<String>) -> MontyObject {
@@ -67,6 +78,39 @@ impl Session {
                         }),
                 ),
                 ("reason".into(), opt(data.reason.map(String::from))),
+                (
+                    "tasks".into(),
+                    data.tasks.clone().map_or_else(MontyObject::none, |t| {
+                        entries(
+                            t.into_iter()
+                                .map(|[id, name, kind]| {
+                                    vec![
+                                        ("id", MontyObject::string(id)),
+                                        ("name", MontyObject::string(name)),
+                                        ("kind", MontyObject::string(kind)),
+                                    ]
+                                })
+                                .collect(),
+                        )
+                    }),
+                ),
+                (
+                    "children".into(),
+                    data.children.clone().map_or_else(MontyObject::none, |c| {
+                        entries(
+                            c.into_iter()
+                                .map(|c| {
+                                    vec![
+                                        ("id", MontyObject::string(c.id)),
+                                        ("name", MontyObject::string(c.name)),
+                                        ("cwd", MontyObject::string(c.cwd)),
+                                        ("elapsed", MontyObject::int(c.elapsed_secs as i64)),
+                                    ]
+                                })
+                                .collect(),
+                        )
+                    }),
+                ),
             ];
             let queue = queues.entry(name.clone()).or_insert_with(|| {
                 HookQueue::new(
@@ -90,9 +134,23 @@ impl Session {
     }
 
     pub(crate) fn agent_message_hook(self: &Arc<Self>, text: String, status: &'static str) {
+        let listened = self
+            .config()
+            .hooks
+            .values()
+            .any(|h| !h.run.trim().is_empty() && h.events.iter().any(|e| e == "agent_message"));
+        if !listened {
+            return;
+        }
+        let tasks = (self.tasks.list().into_iter())
+            .filter(|t| t.status == "running")
+            .map(|t| [t.id, t.name, t.kind])
+            .collect();
         let data = Data {
             text: Some(text),
             status: Some(status),
+            tasks: Some(tasks),
+            children: Some(crate::children::running_descendants(&self.id)),
             ..Default::default()
         };
         self.hook("agent_message", data);

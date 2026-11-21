@@ -36,9 +36,8 @@ search the rows (`+python read`). An unknown type shows nothing.
 
 `/childrens` lists all descendants of the session, at any depth, running and finished: sessions whose
 `meta.json` has `parent` set (from `TUSE_PARENT`, see `env.md`), indented per level. A row shows the
-name (title or short ID), `running` (its session lock is held) or `done`, the folder, the elapsed time,
-in/out/cached tokens, context used/max (`?` when the model's window is unknown) and the spend (only for
-models with `prices`). A row with children also shows `subtree` totals. Nothing is locked or changed.
+name (title or short ID), `running` (its session lock is held) or `done`, the elapsed time,
+and input+output tokens and the spend (only for models with `prices`; the detail view also has the folder, cached tokens and context used/max, `?` when the model's window is unknown). A row with children also shows `all` (subtree) totals. Rows are compact (status, elapsed, total tokens and spend); Enter opens every field of the row (full ID, folder, in/out/cached, context, spend, subtree totals), Esc goes back to the list. A child that sets `TUSE_PARENT` shows up as soon as it starts, before its first prompt. Nothing is locked or changed.
 
 The chat scrolls with the mouse wheel only; the arrows move in the input, and a click in the input
 puts the cursor there. Links (Markdown, bare `https://` URLs, OSC 8 in `draw_ui`) light up under the pointer and open on click. Drag to select rendered text; Ctrl/Cmd+C copies it. In the input, Shift+movement extends the selection, Ctrl/Cmd+A selects all, and Ctrl/Cmd+X cuts.

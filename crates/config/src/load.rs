@@ -50,7 +50,8 @@ pub fn load(path: Option<&Path>, mode: Mode) -> Result<Loaded, String> {
             "{name}: `prelude` is no longer supported; use hooks or `import`"
         ));
     }
-    expand::walk(&mut value);
+    expand::validate_modes(&value).map_err(|e| format!("{name}: {e}"))?;
+    expand::walk(&mut value, mode);
     crate::themes::resolve(&mut value).map_err(|e| format!("{name}: {e}"))?;
     let config: Config = serde_yaml::from_value(value).map_err(|e| format!("{name}: {e}"))?;
     config

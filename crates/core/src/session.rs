@@ -194,6 +194,7 @@ impl Session {
         )?);
         self.finish_hooks("reload");
         *self.config.write().unwrap() = c.clone();
+        self.state.lock().unwrap().remote.clear();
         *self.hooks.lock().unwrap() = Some(Default::default());
         if let Some(py) = self.python.lock().unwrap().as_mut() {
             py.set_max_output(c.settings.max_output);

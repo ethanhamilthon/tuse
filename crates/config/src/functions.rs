@@ -40,6 +40,7 @@ mod tests {
                     args: String::new(),
                     description: description.into(),
                     run: run.into(),
+                    ..Default::default()
                 },
             );
             assert!(

@@ -221,6 +221,7 @@ hooks:
 
     s.submit(UserInput::text("c"));
     wait_text(&events);
+    std::thread::sleep(Duration::from_millis(200));
     s.cancel();
     let lines = wait_lines(&log, 6);
     assert_eq!(

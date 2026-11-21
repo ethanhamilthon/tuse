@@ -4,8 +4,7 @@ use crate::panel::Panel;
 use crate::picker::Picker;
 use crate::style::Palette;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::mpsc::Receiver;
+use std::sync::{Arc, mpsc::Receiver};
 use tuse_core::{Event, InputId, Options, Session};
 
 /// Where the input text is on the screen at the last draw, for mouse clicks.
@@ -37,7 +36,6 @@ pub struct App {
     pub panel: Option<Panel>,
     /// The `/trace` item shown in the panel; Esc goes back to the list at this item.
     pub trace_item: Option<usize>,
-    /// The `/childrens` session shown in the panel; Esc goes back to the list at it.
     pub children_view: Option<String>,
     /// `(role, text)` of every `/trace` item.
     pub trace: Vec<(&'static str, String)>,

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.5
+
+- Config includes accept `only` to import selected top-level keys from a file.
+- Hooks, functions, connections, system texts, prompts and includes accept per-entry `modes` (`tui`, `headless`, `json`). Model availability follows the active connections.
+- `draw_ui(..., pin=True)` keeps a new block at the bottom of the chat. `draw_ui("", id=...)` removes a block, and redraws and removals preserve the scroll position where possible.
+- `/childrens` shows the tree of sessions linked by `TUSE_PARENT`, with token usage, spend and a detail panel.
+- The `agent_message` hook receives `tasks` and `children`, listing only running background tasks and descendant sessions.
+
 ## 0.6.4
 
 - `draw_ui` accepts ANSI SGR styling (bold, dim, italic, underline, 16 colors mapped to the theme, 256 and truecolor). Other escape sequences are dropped.

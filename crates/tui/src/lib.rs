@@ -16,6 +16,7 @@ mod keys;
 mod layout_keys;
 mod list;
 mod markdown;
+mod maxsize;
 mod md_stream;
 mod modal;
 mod motion;

@@ -25,7 +25,10 @@ impl App {
                         self.next_ask();
                     }
                     k if k.is_token() => self.dismissed = Some(self.editor.token().1),
-                    _ => self.restore_draft(),
+                    _ => {
+                        self.restore_draft();
+                        self.resume_ask();
+                    }
                 }
             }
             KeyCode::Char('x') if ctrl && p.kind == Kind::Task => {

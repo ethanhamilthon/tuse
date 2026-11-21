@@ -5,7 +5,7 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-pub const COMMANDS: [(&str, &str); 10] = [
+pub const COMMANDS: [(&str, &str); 11] = [
     ("config", "show resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
@@ -13,6 +13,7 @@ pub const COMMANDS: [(&str, &str); 10] = [
     ("theme", "switch the theme"),
     ("tasks", "background tasks"),
     ("usage", "context, tokens and cost"),
+    ("maxsize", "set the max context size, e.g. /maxsize 1m"),
     ("trace", "everything in this session"),
     ("reload", "rebuild the config from its files"),
     ("quit", "exit"),
@@ -20,7 +21,9 @@ pub const COMMANDS: [(&str, &str); 10] = [
 
 impl App {
     pub fn run_command(&mut self, name: &str) {
+        let (name, arg) = name.split_once(' ').unwrap_or((name, ""));
         match name {
+            "maxsize" => self.set_maxsize(arg),
             "config" => match self.session.config().to_yaml() {
                 Ok(yaml) => {
                     self.trace_item = None;
@@ -210,5 +213,6 @@ impl App {
         if self.picker.is_none() {
             self.update_token_picker();
         }
+        self.resume_ask();
     }
 }

@@ -14,6 +14,15 @@ pub fn duration(d: Duration) -> String {
     }
 }
 
+/// Elapsed time of a tool call: milliseconds under one second, else `duration`.
+pub fn call_time(d: Duration) -> String {
+    if d.as_secs() == 0 {
+        format!("{}ms", d.as_millis())
+    } else {
+        duration(d)
+    }
+}
+
 /// Tabs become spaces and control characters (ESC included) are dropped,
 /// so text from scripts cannot move the cursor or break the width.
 pub(crate) fn clean(text: &str) -> String {
@@ -96,7 +105,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             {
                 let label = format!(
                     " {}/{}",
-                    duration(elapsed.unwrap_or_else(|| start.elapsed())),
+                    call_time(elapsed.unwrap_or_else(|| start.elapsed())),
                     duration(*limit)
                 );
                 let left = width.saturating_sub(crate::text::width(&label));
@@ -115,7 +124,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         }
         Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad),
         Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad),
-        Entry::Print { text, .. } => plain(text, width, Style::fg(p.fg), "", ""),
+        Entry::Print { text, .. } => plain(text, width, Style::fg(p.accent), "", ""),
         Entry::TurnEnd {
             elapsed,
             model,
@@ -133,5 +142,20 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             let text = parts.join(LABEL_SEP);
             plain(&text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn call_time_uses_milliseconds_under_a_second() {
+        let ms = Duration::from_millis;
+        assert_eq!(call_time(ms(0)), "0ms");
+        assert_eq!(call_time(ms(302)), "302ms");
+        assert_eq!(call_time(ms(999)), "999ms");
+        assert_eq!(call_time(ms(1000)), "1s");
+        assert_eq!(call_time(ms(61_000)), "1m1s");
     }
 }

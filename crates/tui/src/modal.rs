@@ -29,6 +29,7 @@ impl App {
     pub(crate) fn close_modal(&mut self) {
         self.picker = None;
         self.restore_draft();
+        self.resume_ask();
     }
 
     pub(crate) fn restore_draft(&mut self) {

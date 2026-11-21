@@ -22,7 +22,9 @@ When the user sends a message in the TUI during a turn, it stays dimmed in the i
 the agent takes it. Editing the waiting message withdraws it without stopping the turn;
 Enter sends the edited draft.
 
-`/new`, `/resume`, `/models`, `/theme`, `/tasks`, `/usage`, `/trace`, `/config`, `/reload`, `/quit`.
+`/new`, `/resume`, `/models`, `/theme`, `/tasks`, `/usage`, `/maxsize`, `/trace`, `/config`, `/reload`, `/quit`.
+The input status shows context use as `used/max`, e.g. `5.2k/1m`. `/maxsize 200k` (or `1m`) sets the maximum for this run, `/maxsize off` goes back to the model's `window`; with neither it shows `5.2k/?`.
+A question that arrives while another list is open waits and appears when that list closes.
 Every list (`/resume`, `/models`, `/theme`, `/tasks`, `/trace`, an `ask`, and the `/`, `#` and `@`
 pickers) has one look: a rule on top, a title with the position, the rows, all drawn over the
 bottom of the chat. Typing filters most lists: the input becomes the search box (one line, with the usual editing keys and mouse), your draft is set aside and comes back when the list closes. In an `ask`, select an option or choose “Write your own answer” to edit a multiline reply without losing your draft. Page Up and Page Down scroll a long question in either answer mode. `/usage` and a task's output

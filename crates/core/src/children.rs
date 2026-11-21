@@ -77,7 +77,9 @@ fn node(m: &Meta, depth: usize, now: u64, config: &Config) -> Child {
     let end = if running {
         now
     } else {
-        crate::id::parse(&m.updated).unwrap_or(now)
+        let last = crate::id::parse(&m.updated);
+        let closed = crate::id::parse(&m.closed);
+        last.max(closed).unwrap_or(now)
     };
     Child {
         id: m.id.clone(),

@@ -81,7 +81,9 @@ impl Chat {
             scroll.saturating_add_signed(delta)
         };
         let gap = p.ui.message_gap as usize;
-        let mut cum = 0;
+        // Rows from the bottom to the top of the entry's text, as `window` lays them out:
+        // the gap sits below every entry but the last.
+        let mut end = 0;
         for i in (0..self.entries.len() + self.pins.len()).rev() {
             let (is_print, id) = match &self.slot(i).0 {
                 Entry::Print { id, .. } => (true, id.clone()),
@@ -91,8 +93,8 @@ impl Chat {
             if h == 0 {
                 continue;
             }
-            cum += h + gap;
-            if cum > scroll || scroll == 0 {
+            end += if end == 0 { h } else { h + gap };
+            if end > scroll || scroll == 0 {
                 break;
             }
             if is_print {
@@ -220,5 +222,30 @@ mod tests {
         c.set_print("a", "".into(), false);
         let (gone, _) = view(&mut c, s2);
         assert_eq!(before, gone);
+    }
+
+    #[test]
+    fn redraw_of_a_block_just_below_the_viewport_keeps_the_view_still() {
+        let p = Palette::new(&Default::default(), &Default::default());
+        let mut c = Chat::default();
+        for i in 0..30 {
+            c.push(Entry::Notice(format!("n{i}")));
+        }
+        c.set_print("a", "x".into(), true);
+        let view = |c: &mut Chat, s| {
+            let (l, s) = c.window(20, &p, s, 10);
+            let t: Vec<String> = l
+                .iter()
+                .map(|l| l.iter().map(|s| s.text.as_str()).collect())
+                .collect();
+            (t, s)
+        };
+        // Row 0 is the pin's text; scroll 1 starts in the gap right above it.
+        let (before, s) = view(&mut c, 1);
+        assert_eq!(s, 1);
+        c.set_print("a", "x\ny\nz".into(), true);
+        let (after, s) = view(&mut c, s);
+        assert_eq!(before, after);
+        assert_eq!(s, 3);
     }
 }

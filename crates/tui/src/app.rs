@@ -37,6 +37,8 @@ pub struct App {
     pub panel: Option<Panel>,
     /// The `/trace` item shown in the panel; Esc goes back to the list at this item.
     pub trace_item: Option<usize>,
+    /// The `/childrens` session shown in the panel; Esc goes back to the list at it.
+    pub children_view: Option<String>,
     /// `(role, text)` of every `/trace` item.
     pub trace: Vec<(&'static str, String)>,
     /// Rows the open list shows (set while drawing); the keys keep the selection in view.
@@ -95,6 +97,7 @@ impl App {
             picker: None,
             panel: None,
             trace_item: None,
+            children_view: None,
             trace: vec![],
             list_rows: 8,
             input_area: None,

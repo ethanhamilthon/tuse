@@ -81,11 +81,7 @@ fn node(m: &Meta, depth: usize, now: u64, config: &Config) -> Child {
     };
     Child {
         id: m.id.clone(),
-        name: if m.title.is_empty() {
-            short(&m.id)
-        } else {
-            m.title.clone()
-        },
+        name: display_name(m),
         depth,
         running,
         cwd: m.cwd.clone(),
@@ -102,6 +98,73 @@ impl crate::session::Session {
     /// Every descendant of this session; see `descendants`.
     pub fn children(&self) -> Vec<Child> {
         descendants(&self.id, &self.config())
+    }
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Metas of all sessions with a parent, grouped by it, oldest first.
+fn by_parent(root: &str) -> HashMap<String, Vec<Meta>> {
+    let mut by_parent: HashMap<String, Vec<Meta>> = HashMap::new();
+    for e in std::fs::read_dir(tuse_home())
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        if let Some(m) = read_meta(&e.path()).filter(|m| !m.parent.is_empty() && m.id != root) {
+            by_parent.entry(m.parent.clone()).or_default().push(m);
+        }
+    }
+    for v in by_parent.values_mut() {
+        v.sort_by(|a, b| a.created.cmp(&b.created).then(a.id.cmp(&b.id)));
+    }
+    by_parent
+}
+
+/// A running descendant: no logs are read, so it is cheap enough for hooks.
+#[derive(Debug, Clone)]
+pub struct RunningChild {
+    pub id: String,
+    pub name: String,
+    pub cwd: String,
+    pub elapsed_secs: u64,
+}
+
+/// Running descendants of `root` at any depth, as a flat list.
+pub fn running_descendants(root: &str) -> Vec<RunningChild> {
+    let by_parent = by_parent(root);
+    let now = now_secs();
+    let (mut out, mut seen, mut todo) = (vec![], HashSet::new(), vec![root.to_string()]);
+    while let Some(p) = todo.pop() {
+        for m in by_parent.get(&p).into_iter().flatten() {
+            if !seen.insert(m.id.clone()) {
+                continue;
+            }
+            todo.push(m.id.clone());
+            if is_locked(&tuse_home().join(&m.id)) {
+                let start = crate::id::parse(&m.created).unwrap_or(now);
+                out.push(RunningChild {
+                    id: m.id.clone(),
+                    name: display_name(m),
+                    cwd: m.cwd.clone(),
+                    elapsed_secs: now.saturating_sub(start),
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out
+}
+
+fn display_name(m: &Meta) -> String {
+    if m.title.is_empty() {
+        short(&m.id)
+    } else {
+        m.title.clone()
     }
 }
 

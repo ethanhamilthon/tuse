@@ -53,7 +53,7 @@ impl SessionDir {
         Ok(d)
     }
 
-    fn materialize(&mut self) -> Result<(), String> {
+    pub(crate) fn materialize(&mut self) -> Result<(), String> {
         if self.files.is_some() {
             return Ok(());
         }

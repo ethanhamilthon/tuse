@@ -11,9 +11,13 @@ impl App {
             return false;
         }
         match code {
-            KeyCode::Esc => match self.trace_item {
-                Some(at) => self.open_trace(Some(at)),
-                None => self.panel = None,
+            KeyCode::Esc => match (self.trace_item, self.children_view.take()) {
+                (_, Some(id)) => {
+                    self.panel = None;
+                    self.open_children(Some(&id));
+                }
+                (Some(at), None) => self.open_trace(Some(at)),
+                (None, None) => self.panel = None,
             },
             KeyCode::Left | KeyCode::Right
                 if self.editor.is_empty() && self.trace_item.is_some() =>

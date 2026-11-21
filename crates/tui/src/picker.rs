@@ -8,6 +8,7 @@ pub enum Kind {
     Theme,
     Effort(String),
     Task,
+    Children,
     Trace,
     Ask(String),
 }

@@ -23,6 +23,9 @@ pub struct Meta {
     pub effort: String,
     pub created: String,
     pub updated: String,
+    /// The session whose process started this one (`TUSE_PARENT`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub parent: String,
 }
 
 /// `~/.tuse/<id>/`: `session.jsonl`, `meta.json`, `lock`, `tasks/` and pasted `images/`.
@@ -99,14 +102,7 @@ impl SessionDir {
     }
 
     pub fn records(&self) -> Vec<Record> {
-        let Ok(f) = File::open(self.path.join("session.jsonl")) else {
-            return vec![];
-        };
-        BufReader::new(f)
-            .lines()
-            .map_while(Result::ok)
-            .filter_map(|l| serde_json::from_str(&l).ok())
-            .collect()
+        read_records(&self.path)
     }
 
     pub fn write_meta(&mut self, m: &Meta) {
@@ -118,6 +114,24 @@ impl SessionDir {
             let _ = std::fs::write(self.path.join("meta.json"), text);
         }
     }
+}
+
+/// Lines that do not parse (a half-written last one) are skipped.
+pub fn read_records(dir: &Path) -> Vec<Record> {
+    let Ok(f) = File::open(dir.join("session.jsonl")) else {
+        return vec![];
+    };
+    BufReader::new(f)
+        .lines()
+        .map_while(Result::ok)
+        .filter_map(|l| serde_json::from_str(&l).ok())
+        .collect()
+}
+
+/// Whether some process holds the session's lock. The probe takes a shared lock and drops it at once.
+pub fn is_locked(dir: &Path) -> bool {
+    File::open(dir.join("lock"))
+        .is_ok_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
 }
 
 pub fn read_meta(dir: &Path) -> Option<Meta> {

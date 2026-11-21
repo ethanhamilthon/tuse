@@ -1,4 +1,5 @@
 mod alias;
+mod children;
 mod compaction;
 mod control;
 mod docs;
@@ -28,6 +29,7 @@ mod trace;
 mod turn;
 mod usage;
 
+pub use children::{Child, Totals, descendants};
 pub use control::InputId;
 pub use docs::docs;
 pub use event::Event;

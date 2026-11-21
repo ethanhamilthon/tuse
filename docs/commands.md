@@ -22,10 +22,10 @@ When the user sends a message in the TUI during a turn, it stays dimmed in the i
 the agent takes it. Editing the waiting message withdraws it without stopping the turn;
 Enter sends the edited draft.
 
-`/new`, `/resume`, `/models`, `/theme`, `/tasks`, `/usage`, `/maxsize`, `/trace`, `/config`, `/reload`, `/quit`.
+`/new`, `/resume`, `/models`, `/theme`, `/tasks`, `/childrens`, `/usage`, `/maxsize`, `/trace`, `/config`, `/reload`, `/quit`.
 The input status shows context use as `used/max`, e.g. `5.2k/1m`. `/maxsize 200k` (or `1m`) sets the maximum for this run, `/maxsize off` goes back to the model's `window`; with neither it shows `5.2k/?`.
 A question that arrives while another list is open waits and appears when that list closes.
-Every list (`/resume`, `/models`, `/theme`, `/tasks`, `/trace`, an `ask`, and the `/`, `#` and `@`
+Every list (`/resume`, `/models`, `/theme`, `/tasks`, `/childrens`, `/trace`, an `ask`, and the `/`, `#` and `@`
 pickers) has one look: a rule on top, a title with the position, the rows, all drawn over the
 bottom of the chat. Typing filters most lists: the input becomes the search box (one line, with the usual editing keys and mouse), your draft is set aside and comes back when the list closes. In an `ask`, select an option or choose “Write your own answer” to edit a multiline reply without losing your draft. Page Up and Page Down scroll a long question in either answer mode. `/usage` and a task's output
 open as text in the same frame (Esc closes it). `/trace` is a list, one row per item (`system`,
@@ -33,6 +33,12 @@ open as text in the same frame (Esc closes it). `/trace` is a list, one row per 
 (with Left/Right to step between items and Esc back to the list). In the query, `+type` shows only
 that type (`+python+agent`: either), `-type` hides one (`-hook`: all but hooks), and other words
 search the rows (`+python read`). An unknown type shows nothing.
+
+`/childrens` lists all descendants of the session, at any depth, running and finished: sessions whose
+`meta.json` has `parent` set (from `TUSE_PARENT`, see `env.md`), indented per level. A row shows the
+name (title or short ID), `running` (its session lock is held) or `done`, the folder, the elapsed time,
+in/out/cached tokens, context used/max (`?` when the model's window is unknown) and the spend (only for
+models with `prices`). A row with children also shows `subtree` totals. Nothing is locked or changed.
 
 The chat scrolls with the mouse wheel only; the arrows move in the input, and a click in the input
 puts the cursor there. Links (Markdown, bare `https://` URLs, OSC 8 in `draw_ui`) light up under the pointer and open on click. Drag to select rendered text; Ctrl/Cmd+C copies it. In the input, Shift+movement extends the selection, Ctrl/Cmd+A selects all, and Ctrl/Cmd+X cuts.

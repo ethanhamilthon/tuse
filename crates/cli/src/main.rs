@@ -14,15 +14,17 @@ USAGE
                                            to stderr on exit, see /resume)
   tuse json [-c PATH] [-r ID]              a JSON-RPC 2.0 session over stdin/stdout, one
                                            message per line (see docs/json.md)
-  tuse connect [--config PATH]            add a provider: asks base url, api key and name,
-                                           fetches its models and saves it to the config
+  tuse connect                            add a provider: asks base url, api key and name,
+                                           fetches its models and saves it in ~/.tuse/tuse.db
+  tuse disconnect NAME                    remove a provider
+  tuse providers                          list the providers
   tuse reset [--yes]                      replace the global config folder with the latest
-                                           main.yaml
+                                           main.lua
   tuse update                             update the binary
   tuse version | tuse help
 
-The config is --config, else ./tuse.yaml, else $TUSE_GLOBAL_CONFIG, else
-~/.config/tuse/main.yaml.";
+The config is --config, else ./tuse.lua, else $TUSE_GLOBAL_CONFIG, else
+~/.config/tuse/main.lua: a Lua file that returns a table.";
 
 fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -36,10 +38,16 @@ fn run(raw: Vec<String>) -> Result<(), String> {
     let sub = raw.first().map(String::as_str).unwrap_or("");
     let rest = raw.get(1..).unwrap_or_default();
     match sub {
-        "connect" => {
-            let a = Args::parse(rest, &["--config", "-c"])?;
-            let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
-            connect::run(a.value(&["--config", "-c"]).map(|p| cwd.join(p)))
+        "connect" => connect::run(tuse_core::theme(
+            &std::env::current_dir().unwrap_or_default(),
+        )),
+        "disconnect" => match rest {
+            [name] => connect::remove(name),
+            _ => Err(format!("usage: tuse disconnect NAME\n\n{USAGE}")),
+        },
+        "providers" => {
+            connect::list();
+            Ok(())
         }
         "json" => json(&Args::parse(rest, &["--config", "-c", "--resume", "-r"])?),
         "reset" => update::reset(Args::parse(rest, &[])?.has(&["--yes", "-y"])),

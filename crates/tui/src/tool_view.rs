@@ -2,7 +2,7 @@ use crate::style::{MORE, Palette, Style, TOOL_PREFIX};
 use crate::text::{Line, clip, span, width};
 use tuse_core::FileDiff;
 
-/// A `python` call in the chat: its code (colored), then its output, then the
+/// A `lua` call in the chat: its code (colored), then its output, then the
 /// diff of every file it changed.
 pub fn tool(
     title: &str,

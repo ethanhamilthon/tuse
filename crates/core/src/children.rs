@@ -1,5 +1,5 @@
 use crate::record::Record;
-use crate::store::{Meta, is_locked, read_meta, read_records, tuse_home};
+use crate::store::{Meta, is_locked, read_records, with_parents};
 use crate::usage::cost;
 use std::collections::{HashMap, HashSet};
 use tuse_api::Usage;
@@ -70,9 +70,8 @@ fn own(records: &[Record], config: &Config) -> (Totals, u64, Option<u64>) {
 }
 
 fn node(m: &Meta, depth: usize, now: u64, config: &Config) -> Child {
-    let dir = tuse_home().join(&m.id);
-    let running = is_locked(&dir);
-    let (own, context, window) = own(&read_records(&dir), config);
+    let running = is_locked(&m.id);
+    let (own, context, window) = own(&read_records(&m.id), config);
     let start = crate::id::parse(&m.created).unwrap_or(now);
     let end = if running {
         now
@@ -112,14 +111,8 @@ fn now_secs() -> u64 {
 /// Metas of all sessions with a parent, grouped by it, oldest first.
 fn by_parent(root: &str) -> HashMap<String, Vec<Meta>> {
     let mut by_parent: HashMap<String, Vec<Meta>> = HashMap::new();
-    for e in std::fs::read_dir(tuse_home())
-        .into_iter()
-        .flatten()
-        .flatten()
-    {
-        if let Some(m) = read_meta(&e.path()).filter(|m| !m.parent.is_empty() && m.id != root) {
-            by_parent.entry(m.parent.clone()).or_default().push(m);
-        }
+    for m in with_parents().into_iter().filter(|m| m.id != root) {
+        by_parent.entry(m.parent.clone()).or_default().push(m);
     }
     for v in by_parent.values_mut() {
         v.sort_by(|a, b| a.created.cmp(&b.created).then(a.id.cmp(&b.id)));
@@ -147,7 +140,7 @@ pub fn running_descendants(root: &str) -> Vec<RunningChild> {
                 continue;
             }
             todo.push(m.id.clone());
-            if is_locked(&tuse_home().join(&m.id)) {
+            if is_locked(&m.id) {
                 let start = crate::id::parse(&m.created).unwrap_or(now);
                 out.push(RunningChild {
                     id: m.id.clone(),
@@ -174,14 +167,8 @@ fn display_name(m: &Meta) -> String {
 /// (siblings oldest first), running or finished.
 pub fn descendants(root: &str, config: &Config) -> Vec<Child> {
     let mut by_parent: HashMap<String, Vec<Meta>> = HashMap::new();
-    for e in std::fs::read_dir(tuse_home())
-        .into_iter()
-        .flatten()
-        .flatten()
-    {
-        if let Some(m) = read_meta(&e.path()).filter(|m| !m.parent.is_empty() && m.id != root) {
-            by_parent.entry(m.parent.clone()).or_default().push(m);
-        }
+    for m in with_parents().into_iter().filter(|m| m.id != root) {
+        by_parent.entry(m.parent.clone()).or_default().push(m);
     }
     for v in by_parent.values_mut() {
         v.sort_by(|a, b| a.created.cmp(&b.created).then(a.id.cmp(&b.id)));

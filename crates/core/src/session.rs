@@ -5,13 +5,11 @@ pub use crate::mode::{Mode, Options, Start};
 use crate::record::{Record, UserInput};
 use crate::store::{Meta, SessionDir};
 use crate::tasks::Tasks;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 use tuse_config::Config;
-use tuse_py::Python;
 
 /// One conversation. A process holds at most one open session, and a session
 /// can be open in one process only (`SessionDir` holds a file lock).
@@ -25,9 +23,12 @@ pub struct Session {
     pub(crate) config_arg: Option<PathBuf>,
     pub(crate) state: Mutex<State>,
     pub(crate) subs: Mutex<Subs>,
-    /// The agent's interpreter; made on the first call, gone with the process.
-    pub(crate) hooks: Mutex<Option<HashMap<String, crate::hook_queue::HookQueue>>>,
-    pub(crate) python: Mutex<Option<Python>>,
+    /// The VM of the session: config, the agent's code, hooks and tasks.
+    pub(crate) vm: tuse_lua::Vm,
+    /// Whether hooks still fire; off once the session closes.
+    pub(crate) hooks_on: std::sync::atomic::AtomicBool,
+    /// Hook runs still going: (hook, event, cancel flag).
+    pub(crate) hook_runs: crate::hooks::Runs,
     pub(crate) http: tuse_api::HttpAgent,
 }
 
@@ -58,21 +59,23 @@ pub(crate) struct State {
 
 impl Session {
     pub fn open(opts: Options) -> Result<Arc<Session>, String> {
-        let config = load_config(opts.config.as_deref(), &opts.cwd, opts.mode)?;
+        static MIGRATED: std::sync::Once = std::sync::Once::new();
+        MIGRATED.call_once(crate::migrate::sessions);
         let id = opts
             .resume
             .clone()
             .unwrap_or_else(crate::id::new_session_id);
-        if opts.resume.is_some() && !crate::store::session_path(&id).join("meta.json").is_file() {
+        if opts.resume.is_some() && crate::store::read_meta(&id).is_none() {
             return Err(format!("no session {id}"));
         }
         let mut dir = SessionDir::open(&id, opts.resume.is_none())?;
+        let (vm, weak, config) = start_vm(&opts)?;
         let mut records = dir.records();
         for r in history::missing_results(&records) {
             dir.append(&r);
             records.push(r);
         }
-        let mut meta = crate::store::read_meta(&dir.path).unwrap_or_else(|| Meta {
+        let mut meta = crate::store::read_meta(&id).unwrap_or_else(|| Meta {
             id: id.clone(),
             cwd: opts.cwd.display().to_string(),
             created: crate::id::now(),
@@ -125,23 +128,27 @@ impl Session {
         st.records = records;
         let path = dir.path.clone();
         let cwd = PathBuf::from(&st.meta.cwd);
-        let s = Arc::new(Session {
-            id,
-            cwd: if opts.resume.is_some() && cwd.is_dir() {
-                cwd
-            } else {
-                opts.cwd
-            },
-            mode: opts.mode,
-            tasks: Tasks::new(path.join("tasks")),
-            dir: Mutex::new(Some(dir)),
-            config: RwLock::new((0, config)),
-            config_arg: opts.config,
-            state: Mutex::new(st),
-            subs: Mutex::default(),
-            hooks: Mutex::new(Some(HashMap::new())),
-            python: Mutex::default(),
-            http: tuse_api::default_agent(),
+        let s = Arc::new_cyclic(|me| {
+            *weak.lock().unwrap() = me.clone();
+            Session {
+                id,
+                cwd: if opts.resume.is_some() && cwd.is_dir() {
+                    cwd
+                } else {
+                    opts.cwd
+                },
+                mode: opts.mode,
+                tasks: Tasks::new(path.join("tasks")),
+                dir: Mutex::new(Some(dir)),
+                config: RwLock::new((0, config)),
+                config_arg: opts.config,
+                state: Mutex::new(st),
+                subs: Mutex::default(),
+                vm,
+                hooks_on: std::sync::atomic::AtomicBool::new(true),
+                hook_runs: Default::default(),
+                http: tuse_api::default_agent(),
+            }
         });
         s.hook(
             "process_start",
@@ -162,7 +169,6 @@ impl Session {
         self.cancel_turn();
         self.tasks.stop_all();
         self.finish_hooks(reason);
-        self.hooks.lock().unwrap().take();
         self.record_close();
         self.dir.lock().unwrap().take();
     }
@@ -175,21 +181,22 @@ impl Session {
         self.config.read().unwrap().1.clone()
     }
 
-    /// Rebuilds the config from its files: `process_end` runs on the old hooks, then
-    /// `process_start` on the new ones, each hook in a fresh interpreter.
+    /// Runs the config file again in the same VM (the agent's globals stay):
+    /// `process_end` runs on the old hooks, then `process_start` on the new ones.
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
-        let c = Arc::new(load_config(
-            self.config_arg.as_deref(),
-            &self.cwd,
-            self.mode,
-        )?);
+        let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
+        let mode = self.mode.into();
+        let c = self
+            .vm
+            .call(move |lua| crate::config_lua::prepare(lua, path.as_deref(), mode))?;
         self.finish_hooks("reload");
-        self.swap_config(c.clone());
-        *self.hooks.lock().unwrap() = Some(Default::default());
-        if let Some(py) = self.python.lock().unwrap().as_mut() {
-            py.set_max_output(c.settings.max_output);
-            crate::helpers::install(self, py, &c);
-        }
+        let c = Arc::new(c);
+        let c2 = c.clone();
+        self.vm
+            .call(move |lua| crate::config_lua::commit(lua, &c2, mode))?;
+        self.swap_config(c);
+        self.hooks_on
+            .store(true, std::sync::atomic::Ordering::Release);
         self.hook(
             "process_start",
             Data {
@@ -201,7 +208,17 @@ impl Session {
     }
 }
 
-fn load_config(arg: Option<&Path>, cwd: &Path, mode: Mode) -> Result<Config, String> {
-    let path = tuse_config::find(arg, cwd);
-    tuse_config::load(path.as_deref(), mode.into()).map(|l| l.config)
+/// The session's VM with the config loaded. The session is not built yet, so the VM
+/// gets a slot that `open` fills.
+fn start_vm(opts: &Options) -> Result<(tuse_lua::Vm, crate::host::Slot, Config), String> {
+    let slot = crate::host::Slot::default();
+    let vm = tuse_lua::Vm::new(Arc::new(crate::host::SessionHost(slot.clone())), |_| {});
+    let path = tuse_config::find(opts.config.as_deref(), &opts.cwd);
+    let mode = opts.mode.into();
+    let s2 = slot.clone();
+    let config = vm.call(move |lua| {
+        crate::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
+        crate::config_lua::load(lua, path.as_deref(), mode)
+    })?;
+    Ok((vm, slot, config))
 }

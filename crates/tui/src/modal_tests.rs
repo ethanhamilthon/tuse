@@ -21,7 +21,7 @@ fn type_text(app: &mut App, s: &str) {
 fn search_is_edited_in_the_editor_and_esc_restores_the_draft() {
     let mut app = crate::app::test_app("modal-search");
     app.paste("my draft");
-    let items = ["alpha beta", "gallery", "/trace +python"]
+    let items = ["alpha beta", "gallery", "/trace +lua"]
         .map(|s| item(s, "", s))
         .to_vec();
     app.open_modal(Picker::new(Kind::Resume, "Resume", items));
@@ -42,10 +42,10 @@ fn search_is_edited_in_the_editor_and_esc_restores_the_draft() {
     press(&mut app, KeyCode::Enter, KeyModifiers::SHIFT);
     press(&mut app, KeyCode::End, KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
-    app.paste("/trace\n+py");
-    assert_eq!(app.editor.text(), "/trace +py");
+    app.paste("/trace\n+lu");
+    assert_eq!(app.editor.text(), "/trace +lu");
     assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Resume);
-    assert_eq!(labels(&app), ["/trace +python"]);
+    assert_eq!(labels(&app), ["/trace +lua"]);
     press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
     press(&mut app, KeyCode::Char('c'), KeyModifiers::CONTROL);
     assert!(!app.quit && app.picker.is_some());

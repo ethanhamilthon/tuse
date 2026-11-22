@@ -1,18 +1,19 @@
 # Tuse
 
 A minimal AI coding agent for the terminal. Rust + Crossterm, any OpenAI
-Chat Completions compatible API, one tool: `python`.
+Chat Completions compatible API, one tool: `lua`.
 
 - Full-screen TUI with Markdown rendering and pickers for `/` commands, `#` prompts and `@` files.
-- The agent works in a persistent Python REPL ([Monty](https://github.com/pydantic/monty), a
-  Python subset in Rust) with `read()`, `write()`, `edit()`, `grep()`, `sh()`
-  and background `task_*()` functions.
-- Hooks are Python too: each named hook keeps its own interpreter and processes events in order with the same access.
+- The agent works in a persistent Lua 5.4 VM with `read()`, `write()`, `edit()`, `grep()`,
+  `sh()`, `sleep()` and `spawn()`. The model picks the timeout of each call; nothing is cut.
+- One VM per session runs the config, the agent's code, hooks and background tasks as
+  coroutines: while one waits on `sh`, the others go on.
 - `read()` shows images to the model; files changed by `write()` and `edit()` are shown as a
-  colored diff at the end of the call; Python code is syntax highlighted.
-- A JSON-RPC mode (`tuse json`) for editors; sessions in `~/.tuse/<id>/` as JSONL.
-- Background tasks, 50/25/25 context compaction, retries.
-- YAML config with `include`, `$VAR` and `#{{command}}` expansion and a full theme.
+  colored diff at the end of the call; Lua code is syntax highlighted.
+- A JSON-RPC mode (`tuse json`) for editors; sessions, providers and the last picks in SQLite
+  (`~/.tuse/tuse.db`).
+- 50/25/25 context compaction, retries.
+- The config is a Lua file that returns a table: hooks and helpers are plain Lua functions.
 
 ## Benchmark
 
@@ -40,48 +41,46 @@ curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/in
 ```
 
 The script puts `tuse` into `~/.local/bin`. On a first install (no `TUSE_GLOBAL_CONFIG` and
-no `~/.config/tuse`) it runs `tuse reset`, which installs `main.yaml`, and then `tuse connect`.
+no `~/.config/tuse`) it runs `tuse reset`, which installs `main.lua`, and then `tuse connect`.
 The system prompt and the default settings are built into the binary.
 `TUSE_VERSION=0.3.0` picks a version, `TUSE_BIN_DIR` the folder.
 
-`tuse update` updates the binary; your `main.yaml` is not touched.
-`tuse reset` deletes the config folder and installs a fresh `main.yaml`.
+`tuse update` updates the binary; your `main.lua` is not touched.
+`tuse reset` deletes the config folder and installs a fresh `main.lua`.
 
 Or build it: `cargo install --git https://github.com/ethanhamilthon/tuse tuse`, then copy
-[main.yaml](release/main.yaml) to `~/.config/tuse/`.
+[main.lua](release/main.lua) to `~/.config/tuse/`.
 
 From a checkout, `make install` builds the release binary into `~/.local/bin` (`BIN_DIR`) and
-creates `main.yaml` in `~/.config/tuse` (`CONFIG_DIR`) when it is missing.
+creates `main.lua` in `~/.config/tuse` (`CONFIG_DIR`) when it is missing.
 
 ## Usage
 
 ```
 tuse [-c|--config PATH] [-r|--resume ID] open the TUI
 tuse json [-c PATH] [-r ID]               JSON-RPC 2.0 over stdin/stdout (docs/json.md)
-tuse connect [--config PATH]              add a provider (base url, api key, name)
+tuse connect                              add a provider (base url, api key, name)
+tuse providers | tuse disconnect NAME     list | remove providers
 tuse reset [--yes] | tuse update          reset the config folder | update the binary
 ```
 
-`--config` picks the config file (else `./tuse.yaml`, else the global `main.yaml`). `--resume ID`
-opens a saved session: the ID is printed to stderr when Tuse exits and is the folder name in
-`~/.tuse/`.
+`--config` picks the config file (else `./tuse.lua`, else the global `main.lua`). `--resume ID`
+opens a saved session: the ID is printed to stderr when Tuse exits.
 
-The agent's tool is `python`, a persistent REPL with these functions:
+The agent's tool is `lua(code, title, timeout)`, a persistent Lua 5.4 VM with these functions:
 
 - `read(path)`: numbered text lines in pages, or an image the model sees. `write(path, content)`
   creates or replaces a file atomically. `edit(path, old, new)` replaces exact, unique text. The
   user sees what `write` and `edit` changed as a diff at the end of the call.
-- `grep(pattern, path)`: a regex search that respects `.gitignore`.
-- `sh(cmd)` runs `bash -c` and returns `.out`, `.code`, `.ok`; a command that runs over the timeout
-  goes on as a background task instead of being killed.
-- `task_run(code)` starts a background Python REPL, `task_add(id, code)` queues more code in it;
-  `task_get`, `task_stop` and `task_list` manage them (listed in `/tasks`; the agent gets a
-  message when one goes idle or exits).
+- `grep(pattern, {path = "."})`: a regex search that respects `.gitignore`.
+- `sh(cmd)` runs `bash -c` and returns `.out`, `.code`, `.ok`; it is killed at its timeout.
+- `spawn(fn, name)` runs a function as a background task in the same VM; `task_get`, `task_stop`
+  and `task_list` manage them (listed in `/tasks`; the agent gets a message when one ends).
 
-The REPL lives as long as the process. Every call has a `title` that the working indicator shows.
+The VM lives as long as the process. Every call has a `title` that the working indicator shows.
 
 `tuse connect` asks for the base url, the API key (`$ENV` works too) and a name, fetches
-the provider's models, says how many it got and adds the `connect` entry to the config.
+the provider's models, says how many it got and saves the provider in `~/.tuse/tuse.db`.
 
 ### TUI
 
@@ -110,62 +109,62 @@ the edited draft. Esc still stops the turn.
 Commands: `/new`, `/resume` (sessions started in this folder), `/models` (every model the
 providers report, then effort), `/theme`, `/tasks` (Enter shows output, Ctrl+X stops), `/childrens` (tree of child tuse sessions started with `TUSE_PARENT`, with tokens and spend), `/usage`,
 `/maxsize` (the max context shown as `5.2k/1m` in the status), `/trace` (a list of the system prompt, messages, thinking, tool calls, outputs and hook runs;
-Enter opens an item in full; `+python`, `-hook` filter by type), `/reload`, `/quit`.
+Enter opens an item in full; `+lua`, `-hook` filter by type), `/reload`, `/quit`.
 Every list looks the same and is drawn over the bottom of the chat; typing in the input filters it, and the draft comes back on close. `/usage`
 and a task's output open as text in the same frame; Esc closes it. Drag to select text in the chat, panels or input.
-A session keeps its own model: `/models` also saves it to the config for new sessions.
+A session keeps its own model: `/models` also remembers it for new sessions.
 
 `#name` inserts a prompt from the config; `@` picks a file or folder from the current folder
 (`@dir/*` lists what is inside `dir`). The message keeps `#name` and `@path` as typed; the prompt
 text and the file go to the model in a hidden block ([docs/prompts.md](docs/prompts.md)).
 Files, prompts and images are one unit in the input: arrows and Backspace move over them whole.
-`/models` and `/theme` write your choice to the active config.
+`/models` and `/theme` remember your choice in the database; it wins over the config file.
 
 ## Config
 
-Tuse reads `--config PATH`, else `./tuse.yaml`, else `~/.config/tuse/main.yaml`.
+Tuse runs `--config PATH`, else `./tuse.lua`, else `~/.config/tuse/main.lua`.
 See [docs/config.md](docs/config.md) for every key.
 
-```yaml
-include:
-  - prompts.yaml
-  - file: shared.yaml
-    only: [connect]
-    modes: [tui, json]
+```lua
+local shared = require("shared")       -- shared.lua next to this file
 
-model: claude-sonnet-5-5
-provider: x
-effort: high          # default | low | medium | high | xhigh | max
+return {
+  model = "x/claude-sonnet-5-5",
+  effort = "high",                     -- default | low | medium | high | xhigh | max
+  systems = shared.systems,
 
-connect:
-  - name: x
-    base_url: http://127.0.0.1:8317/v1
-    api_key: $API_KEY
+  models = {
+    { name = "x/claude-sonnet-5-5", display = "Sonnet 5.5", window = 1000000,
+      compact_at = 600000, prices = { ["in"] = 3, out = 15, cache = 0.3, cache_write = 3.75 } },
+  },
 
-models:
-  - name: x/claude-sonnet-5-5
-    display: Sonnet 5.5
-    window: 1000000
-    compact_at: 600000
-    prices: {in: 3, out: 15, cache: 0.3, cache_write: 3.75}
+  functions = {
+    checks = {
+      args = "lines",
+      description = "Run project checks and return the last lines.",
+      run = function(lines)
+        local out = sh("make check"):lines()
+        return table.concat(out, "\n", math.max(1, #out - (lines or 30) + 1))
+      end,
+    },
+  },
 
-functions:
-  checks:
-    args: "lines=30"
-    description: Run project checks and return the last lines.
-    run: return sh("make check").out.splitlines()[-lines:]
-
-hooks:
-  notify:
-    events: [agent_message]     # process_start, process_end, user_message, agent_message
-    run: |                      # Python, one persistent interpreter per hook
-      if status == "finished":
-          sh("osascript -e 'display notification \"done\"'")
+  hooks = {
+    notify = {
+      events = { "agent_message" },  -- process_start, process_end, user_message, agent_message
+      run = function(e)
+        if e.status == "finished" then
+          sh([[osascript -e 'display notification "done"']])
+        end
+      end,
+    },
+  },
+}
 ```
 
 ## Development
 
-The workspace is split into crates: `config`, `api`, `py`, `core`, `tui`, `rpc` and
+The workspace is split into crates: `config`, `api`, `lua`, `core`, `tui`, `rpc` and
 `cli`. See [AGENTS.md](AGENTS.md) for the rules. Run `make check` before committing.
 
 ## License

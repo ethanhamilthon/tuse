@@ -1,51 +1,36 @@
 # Hooks
 
-A hook is Python code started on an event; Tuse does not wait for it, except for `process_end`,
-which gets up to `hook_timeout` before Tuse goes on. There are four events:
+A hook is a Lua function called on an event; Tuse does not wait for it, except for
+`process_end`, which gets up to `hook_timeout` before Tuse goes on. There are four events:
 
-| Event | When | Variables |
+| Event | When | Fields |
 | --- | --- | --- |
 | `process_start` | A session opens in this process. | `reason`: `launch` (Tuse started, also with `--resume`), `new` (`/new`), `resume` (`/resume`), `reload` (`/reload`, on the new config). |
 | `process_end` | The session closes. | `reason`: `exit`, `new`, `resume`, `reload` (on the old config, before it is replaced). |
-| `user_message` | The agent takes a message the user typed (not task notifications). | `text`; `is_first`: the first message of the session (`False` after a resume). |
-| `agent_message` | The agent wrote a message. Messages without text (only tool calls) are skipped, except on a cancel. | `text`; `status`: `working` (tool calls follow), `finished` (the turn is over) or `cancelled` (the user stopped the turn; `text` is what streamed so far, maybe empty); `tasks`: this session's background tasks that are `running` (not idle, exited or stopped), a list of `{id, name, kind}`; `children`: running descendant sessions at any depth (see `/childrens`; running = holds its session lock), a flat list of `{id, name, cwd, elapsed}` with `elapsed` in seconds. Both are empty lists when nothing runs, for every `status`. |
+| `user_message` | The agent takes a message the user typed (not task notifications). | `text`; `is_first`: the first message of the session (`false` after a resume). |
+| `agent_message` | The agent wrote a message. Messages without text (only tool calls) are skipped, except on a cancel. | `text`; `status`: `working` (tool calls follow), `finished` (the turn is over) or `cancelled` (the user stopped the turn; `text` is what streamed so far, maybe empty); `tasks`: this session's running background tasks, a list of `{id, name}`; `children`: running descendant sessions at any depth (see `/childrens`; running = holds its session lock), a flat list of `{id, name, cwd, elapsed}` with `elapsed` in seconds. Both are empty lists when nothing runs, for every `status`. |
 
-Every hook also gets `event`, `hook` (its name), `session` (ID), `cwd`, `model` (`provider/model`)
-and `config` (path of the config file). Names an event does not set are `None`. A hook listening
-to an unknown event shows a notice.
+The function gets one table `e` with the event's fields and also `event`, `hook` (its name),
+`session` (ID), `cwd`, `model` (`provider/model`) and `config` (path of the config file). Fields
+an event does not set are `nil`. A hook listening to an unknown event shows a notice.
 
-Each named hook has a persistent interpreter. Its events run in emission order, while different
-hooks can run concurrently. Globals survive between events; event variables are refreshed for each
-call. A timeout resets that interpreter; `/reload` runs `process_end` on the old hooks, then
-`process_start` on the new ones, each in a fresh interpreter. Exceptions produce a
-`hook NAME: ...` notice. Every run is kept in the session and listed in `/trace` as a `hook`
-item (name, event, ok or the error, duration and the event's variables). Output from `print()` is discarded. Code under `run` is passed as is:
-`$VAR` and `#{{cmd}}` are not expanded there (use `os.environ` and `sh`).
-
-Hooks and agent calls share the same functions, including `set_title(text)`, which updates and saves the session
-title (up to 80 characters).
-
-```yaml
-hooks:
-  notify:
-    events: [agent_message]
-    run: |
-      if status == "finished":
-          sh(f"osascript -e 'display notification \"done\" with title \"{model}\"'")
-  title:
-    events: [user_message]
-    run: |
-      if is_first:
-          set_title(text.splitlines()[0][:40])
+```lua
+return {
+  hooks = {
+    notify = {
+      events = {"agent_message"},
+      modes = {"tui"},
+      run = function(e)
+        if e.status == "finished" then sh("say done") end
+      end,
+    },
+  },
+}
 ```
 
-To run a script, call it: `run: sh("~/scripts/x.sh")`. Longer code goes into a `.py` file next to
-the config and call its entry point each time: `import notify; notify.on_event(event, text)`. A
-module is imported only once per interpreter.
-
-Hooks can call helpers defined under `functions` in the config. Set `modes: [tui]`
-(`tui` or `json`) to limit a hook to specific run modes; omitted or empty
-runs in all modes.
-
-Esc interrupts running hooks without dropping later queued events.
-Timed-out shell processes can become tasks just as in agent calls.
+Hooks run as coroutines in the session's VM, so they share its globals and helpers (and the
+upvalues of the config file, which survive between events). The events of one hook run in
+emission order; different hooks can run concurrently, and they keep running while the agent
+waits on `sh`. Each run has `hook_timeout` seconds (default 30); Esc stops the runs going on.
+An error produces a `hook NAME: ...` notice. `/reload` runs `process_end` on the old hooks, then
+`process_start` on the new ones. Every run is listed in `/trace` with its fields and time.

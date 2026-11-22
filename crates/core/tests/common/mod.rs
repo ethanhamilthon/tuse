@@ -80,21 +80,27 @@ fn answer(stream: std::net::TcpStream, reply: Reply) {
     let _ = out.write_all(b"data: [DONE]\n\n");
 }
 
-/// A temporary folder with `TUSE_HOME` inside it and a config for `addr`.
+/// A temporary folder with `TUSE_HOME` inside it, provider `p` at `addr` and a
+/// `tuse.lua` whose table has `extra` (Lua fields) besides the model.
 /// Each test file holds one test, so setting the environment is safe.
 pub fn setup(name: &str, addr: &str, extra: &str) -> (PathBuf, PathBuf) {
     let dir = std::env::temp_dir().join(format!("tuse-{name}-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
     std::fs::create_dir_all(&dir).unwrap();
     // SAFETY: see above.
-    unsafe { std::env::set_var("TUSE_HOME", dir.join("home")) };
-    let cfg = dir.join("tuse.yaml");
-    std::fs::write(
-        &cfg,
-        format!(
-            "model: p/m\nconnect: [{{name: p, base_url: 'http://{addr}', api_key: k}}]\n{extra}"
-        ),
-    )
+    unsafe {
+        std::env::set_var("TUSE_HOME", dir.join("home"));
+        std::env::remove_var("TUSE_PARENT");
+    }
+    tuse_core::add_provider(&tuse_config::Connect {
+        name: "p".into(),
+        base_url: format!("http://{addr}"),
+        api_key: "k".into(),
+        modes: vec![],
+    })
     .unwrap();
+    let cfg = dir.join("tuse.lua");
+    std::fs::write(&cfg, format!("return {{\n  model = 'p/m',\n{extra}\n}}\n")).unwrap();
     (dir, cfg)
 }
 

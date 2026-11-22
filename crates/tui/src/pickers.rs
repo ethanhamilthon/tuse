@@ -49,7 +49,7 @@ impl App {
     }
 
     pub fn set_theme(&mut self, name: &str) {
-        if let Err(e) = self.session.save_in_settings("theme", name) {
+        if let Err(e) = self.session.save_choice("theme", name) {
             self.error(format!("Can't save the theme: {e}"));
             return;
         }
@@ -122,16 +122,21 @@ mod tests {
     #[test]
     fn model_picker_hides_excluded_providers_and_marks_unavailable_current() {
         let mut app = crate::app::test_app("picker-modes");
+        for (name, mode) in [
+            ("tui_p", tuse_config::Mode::Tui),
+            ("json_p", tuse_config::Mode::Json),
+        ] {
+            tuse_core::add_provider(&tuse_config::Connect {
+                name: name.into(),
+                base_url: "http://127.0.0.1:1".into(),
+                api_key: "k".into(),
+                modes: vec![mode],
+            })
+            .unwrap();
+        }
         std::fs::write(
-            app.cwd.join("tuse.yaml"),
-            r#"connect:
-  - {name: tui_p, base_url: http://127.0.0.1:1, api_key: k, modes: [tui]}
-  - {name: json_p, base_url: http://127.0.0.1:1, api_key: k, modes: [json]}
-models:
-  - {name: tui_p/a}
-  - {name: json_p/b}
-  - {name: json_p/saved}
-"#,
+            app.cwd.join("tuse.lua"),
+            "return { models = { {name = 'tui_p/a'}, {name = 'json_p/b'}, {name = 'json_p/saved'} } }",
         )
         .unwrap();
         app.session.reload().unwrap();

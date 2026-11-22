@@ -88,7 +88,7 @@ impl Session {
         (st.generation == generation).then_some(st)
     }
 
-    fn step(self: &Arc<Self>, generation: u64, cancel: &AtomicBool) -> Step {
+    fn step(self: &Arc<Self>, generation: u64, cancel: &Arc<AtomicBool>) -> Step {
         let config = self.config();
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;

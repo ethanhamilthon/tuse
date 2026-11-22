@@ -33,13 +33,16 @@ fn editing_withdraws_only_the_waiting_tui_message() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let dir = std::env::temp_dir().join(format!("tuse-steering-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let cfg = dir.join("tuse.yaml");
+    let cfg = dir.join("tuse.lua");
     let addr = listener.local_addr().unwrap();
-    std::fs::write(
-        &cfg,
-        format!("model: p/m\nconnect: [{{name: p, base_url: 'http://{addr}', api_key: test}}]\n"),
-    )
+    tuse_core::add_provider(&tuse_config::Connect {
+        name: "steer".into(),
+        base_url: format!("http://{addr}"),
+        api_key: "test".into(),
+        modes: vec![],
+    })
     .unwrap();
+    std::fs::write(&cfg, "return { model = 'steer/m' }").unwrap();
     let session = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg.clone()),
@@ -151,7 +154,7 @@ fn streamed_text_is_not_repeated_after_a_tool_delta() {
     app.handle_event(Event::ToolDelta {
         index: 0,
         id: "c1".into(),
-        name: "python".into(),
+        name: "lua".into(),
         code: "1".into(),
         title: None,
     });

@@ -6,9 +6,9 @@ use tuse_core::{Event, Options, Record, Session, UserInput};
 
 #[test]
 fn a_session_records_its_parent_and_hands_its_own_id_to_subprocesses() {
-    let code = r#"print("got=" + sh("echo $TUSE_PARENT").out.strip())"#;
+    let code = r#"print("got=" .. sh("echo $TUSE_PARENT").out:gsub("%s+$", ""))"#;
     let args = json!({"code": code, "title": "env"}).to_string();
-    let addr = common::provider(vec![Reply::Call("python", args), Reply::Text("done")]);
+    let addr = common::provider(vec![Reply::Call("lua", args), Reply::Text("done")]);
     let (dir, cfg) = common::setup("parent", &addr, "");
     // SAFETY: this file holds one test, so nothing else reads the environment meanwhile.
     unsafe { std::env::set_var("TUSE_PARENT", "outer") };
@@ -28,11 +28,8 @@ fn a_session_records_its_parent_and_hands_its_own_id_to_subprocesses() {
             break;
         }
     }
-    let meta = std::fs::read_to_string(dir.join("home").join(&s.id).join("meta.json")).unwrap();
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&meta).unwrap()["parent"],
-        "outer"
-    );
+    let parent = tuse_core::descendants("outer", &s.config());
+    assert_eq!(parent.first().map(|c| c.id.as_str()), Some(s.id.as_str()));
     let want = format!("got={}", s.id);
     let seen = s
         .records()

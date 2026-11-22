@@ -1,7 +1,8 @@
+use crate::db;
 use crate::record::Record;
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use std::fs::{File, OpenOptions, TryLockError};
-use std::io::{BufRead, BufReader, Write};
+use std::fs::{File, TryLockError};
 use std::path::{Path, PathBuf};
 
 pub fn tuse_home() -> PathBuf {
@@ -11,9 +12,11 @@ pub fn tuse_home() -> PathBuf {
     }
 }
 
+/// `~/.tuse/<id>/`: the lock, `tasks/` logs and pasted `images/`.
 pub fn session_path(id: &str) -> PathBuf {
     tuse_home().join(id)
 }
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Meta {
     pub id: String,
@@ -23,7 +26,7 @@ pub struct Meta {
     pub effort: String,
     pub created: String,
     pub updated: String,
-    /// When the process holding the session ended; empty for older sessions.
+    /// When the process holding the session ended.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub closed: String,
     /// The session whose process started this one (`TUSE_PARENT`).
@@ -31,24 +34,34 @@ pub struct Meta {
     pub parent: String,
 }
 
-/// `~/.tuse/<id>/`: `session.jsonl`, `meta.json`, `lock`, `tasks/` and pasted `images/`.
-/// Holding a `SessionDir` holds the session's lock. A new session keeps its records
-/// in memory and creates the folder with its first message, so empty sessions leave nothing.
+/// A session in the database. Holding it holds the session's lock. A new session
+/// keeps its records in memory until its first message, so empty sessions leave nothing.
 pub struct SessionDir {
+    pub id: String,
     pub path: PathBuf,
-    files: Option<(File, File)>,
-    pending: Vec<String>,
+    lock: Option<File>,
+    pending: Vec<Record>,
     meta: Option<Meta>,
+    seq: i64,
 }
 
 impl SessionDir {
-    /// `create`: a new session, whose folder appears later; otherwise the folder is opened now.
+    /// `create`: a new session, stored later; otherwise it is locked now.
     pub fn open(id: &str, create: bool) -> Result<Self, String> {
+        let seq = db::with(|c| {
+            c.query_row(
+                "SELECT COALESCE(MAX(seq), 0) FROM records WHERE session = ?1",
+                [id],
+                |r| r.get(0),
+            )
+        })?;
         let mut d = Self {
+            id: id.to_string(),
             path: session_path(id),
-            files: None,
+            lock: None,
             pending: vec![],
             meta: None,
+            seq,
         };
         if !create {
             d.materialize()?;
@@ -57,7 +70,7 @@ impl SessionDir {
     }
 
     pub(crate) fn materialize(&mut self) -> Result<(), String> {
-        if self.files.is_some() {
+        if self.lock.is_some() {
             return Ok(());
         }
         let path = &self.path;
@@ -68,20 +81,15 @@ impl SessionDir {
             Err(TryLockError::WouldBlock) => {
                 return Err(format!(
                     "session {} is open in another tuse process",
-                    path.file_name().unwrap_or_default().to_string_lossy()
+                    self.id
                 ));
             }
             Err(TryLockError::Error(e)) => return Err(e.to_string()),
         }
-        let mut log = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path.join("session.jsonl"))
-            .map_err(|e| e.to_string())?;
-        for line in self.pending.drain(..) {
-            let _ = log.write_all(line.as_bytes());
+        self.lock = Some(lock);
+        for r in std::mem::take(&mut self.pending) {
+            self.append(&r);
         }
-        self.files = Some((lock, log));
         if let Some(m) = self.meta.take() {
             self.write_meta(&m);
         }
@@ -89,68 +97,126 @@ impl SessionDir {
     }
 
     pub fn append(&mut self, r: &Record) {
-        let Ok(mut line) = serde_json::to_string(r) else {
-            return;
-        };
-        line.push('\n');
         if matches!(r, Record::User { .. }) {
             let _ = self.materialize();
         }
-        match &mut self.files {
-            Some((_, log)) => {
-                let _ = log.write_all(line.as_bytes());
-            }
-            None => self.pending.push(line),
+        if self.lock.is_none() {
+            self.pending.push(r.clone());
+            return;
         }
+        let Ok(body) = serde_json::to_string(r) else {
+            return;
+        };
+        self.seq += 1;
+        let (id, seq) = (&self.id, self.seq);
+        let _ = db::with(|c| {
+            c.execute(
+                "INSERT INTO records(session, seq, body) VALUES (?1, ?2, ?3)",
+                params![id, seq, body],
+            )
+        });
     }
 
     pub fn records(&self) -> Vec<Record> {
-        read_records(&self.path)
+        read_records(&self.id)
     }
 
     pub fn write_meta(&mut self, m: &Meta) {
-        if self.files.is_none() {
+        if self.lock.is_none() {
             self.meta = Some(m.clone());
             return;
         }
-        if let Ok(text) = serde_json::to_string_pretty(m) {
-            let _ = std::fs::write(self.path.join("meta.json"), text);
-        }
+        let _ = put_meta(m);
     }
 }
 
-/// Lines that do not parse (a half-written last one) are skipped.
-pub fn read_records(dir: &Path) -> Vec<Record> {
-    let Ok(f) = File::open(dir.join("session.jsonl")) else {
-        return vec![];
-    };
-    BufReader::new(f)
-        .lines()
-        .map_while(Result::ok)
-        .filter_map(|l| serde_json::from_str(&l).ok())
-        .collect()
+pub(crate) fn put_meta(m: &Meta) -> Result<(), String> {
+    let body = serde_json::to_string(m).map_err(|e| e.to_string())?;
+    db::with(|c| {
+        c.execute(
+            "INSERT INTO sessions(id, meta, cwd, parent, updated) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(id) DO UPDATE SET meta = ?2, cwd = ?3, parent = ?4, updated = ?5",
+            params![m.id, body, m.cwd, m.parent, m.updated],
+        )
+        .map(|_| ())
+    })
+}
+
+pub fn read_records(id: &str) -> Vec<Record> {
+    db::with(|c| {
+        let mut q = c.prepare("SELECT body FROM records WHERE session = ?1 ORDER BY seq")?;
+        let rows = q.query_map([id], |r| r.get::<_, String>(0))?;
+        Ok(rows
+            .flatten()
+            .filter_map(|b| serde_json::from_str(&b).ok())
+            .collect())
+    })
+    .unwrap_or_default()
 }
 
 /// Whether some process holds the session's lock. The probe takes a shared lock and drops it at once.
-pub fn is_locked(dir: &Path) -> bool {
-    File::open(dir.join("lock"))
+pub fn is_locked(id: &str) -> bool {
+    File::open(session_path(id).join("lock"))
         .is_ok_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
 }
 
-pub fn read_meta(dir: &Path) -> Option<Meta> {
-    serde_json::from_str(&std::fs::read_to_string(dir.join("meta.json")).ok()?).ok()
+pub fn read_meta(id: &str) -> Option<Meta> {
+    let body: Option<String> = db::with(|c| {
+        c.query_row("SELECT meta FROM sessions WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .optional()
+    })
+    .ok()
+    .flatten();
+    serde_json::from_str(&body?).ok()
+}
+
+fn metas(sql: &str, arg: &str) -> Vec<Meta> {
+    db::with(|c| {
+        let mut q = c.prepare(sql)?;
+        let rows = q.query_map([arg], |r| r.get::<_, String>(0))?;
+        Ok(rows
+            .flatten()
+            .filter_map(|b| serde_json::from_str(&b).ok())
+            .collect())
+    })
+    .unwrap_or_default()
 }
 
 /// Sessions started in `cwd` that have at least one message, newest first.
 pub fn list_sessions(cwd: &Path) -> Vec<Meta> {
     let cwd = cwd.display().to_string();
-    let mut out: Vec<Meta> = std::fs::read_dir(tuse_home())
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| read_meta(&e.path()))
-        .filter(|m| m.cwd == cwd && !m.title.is_empty())
-        .collect();
-    out.sort_by(|a, b| b.updated.cmp(&a.updated));
-    out
+    metas(
+        "SELECT meta FROM sessions WHERE cwd = ?1 ORDER BY updated DESC",
+        &cwd,
+    )
+    .into_iter()
+    .filter(|m: &Meta| !m.title.is_empty())
+    .collect()
+}
+
+/// Every session with a parent.
+pub fn with_parents() -> Vec<Meta> {
+    metas("SELECT meta FROM sessions WHERE parent != ?1", "")
+}
+
+/// The last model, effort and theme picked in the UI win over the config file.
+pub(crate) fn apply_state(config: &mut tuse_config::Config) {
+    config.connect = db::providers();
+    for c in &mut config.connect {
+        c.api_key = tuse_config::env_value(&c.api_key);
+    }
+    for (key, slot) in [
+        ("model", &mut config.model),
+        ("effort", &mut config.effort),
+        ("theme", &mut config.settings.theme),
+    ] {
+        if let Some(v) = db::get_state(key).filter(|v| !v.is_empty()) {
+            *slot = v;
+        }
+    }
+    if !config.themes.contains_key(&config.settings.theme) {
+        config.settings.theme.clear();
+    }
 }

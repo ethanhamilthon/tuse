@@ -1,6 +1,7 @@
 use crate::mode::{Mode, ModeEntry};
 use crate::theme::{Theme, UiSettings};
 use serde::Deserialize;
+
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
@@ -9,6 +10,8 @@ pub struct Config {
     pub model: String,
     pub provider: String,
     pub effort: String,
+    /// Providers come from the database (`tuse connect`), never from the file.
+    #[serde(skip)]
     pub connect: Vec<Connect>,
     pub settings: Settings,
     pub themes: BTreeMap<String, Theme>,
@@ -35,7 +38,7 @@ pub struct Settings {
     /// Unset: 60% of the model's `window` when it is known; `0` turns compaction off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compact_at: Option<u64>,
-    pub max_output: usize,
+    /// Seconds a `lua` call gets when the agent passes no `timeout`.
     pub tool_timeout: u64,
     pub hook_timeout: u64,
     pub max_image_bytes: usize,
@@ -49,7 +52,6 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             compact_at: None,
-            max_output: 4096,
             tool_timeout: 10,
             hook_timeout: 30,
             max_image_bytes: 5 * 1024 * 1024,
@@ -86,7 +88,6 @@ pub struct Prices {
 pub struct Function {
     pub args: String,
     pub description: String,
-    pub run: String,
     /// `false` keeps the function out of the agent's prompt and docs; code can still call it.
     pub show_agent: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -98,7 +99,6 @@ impl Default for Function {
         Self {
             args: String::new(),
             description: String::new(),
-            run: String::new(),
             show_agent: true,
             modes: Vec::new(),
         }
@@ -109,8 +109,6 @@ impl Default for Function {
 #[serde(default)]
 pub struct Hook {
     pub events: Vec<String>,
-    /// Python code, run in the hook's persistent interpreter.
-    pub run: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub modes: Vec<Mode>,
 }
@@ -125,10 +123,11 @@ pub const HOOK_EVENTS: [&str; 4] = [
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
 
 impl Config {
-    pub fn to_yaml(&self) -> Result<String, String> {
+    /// The effective config as pretty JSON (without providers).
+    pub fn to_json(&self) -> String {
         let mut effective = self.clone();
         effective.themes.entry("default".into()).or_default();
-        serde_yaml::to_string(&effective).map_err(|e| e.to_string())
+        serde_json::to_string_pretty(&effective).unwrap_or_default()
     }
 
     pub fn theme_name(&self) -> &str {
@@ -232,4 +231,18 @@ pub fn full_model_name(model: &str, provider: &str, connect: &[Connect], mode: M
 /// Splits `provider/model` into its parts.
 pub fn split_model(full: &str) -> (&str, &str) {
     full.split_once('/').unwrap_or(("", full))
+}
+
+/// `$VAR` or `${VAR}` as the whole value reads the environment; anything else is literal.
+pub fn env_value(v: &str) -> String {
+    let name = v
+        .strip_prefix("${")
+        .and_then(|r| r.strip_suffix('}'))
+        .or_else(|| v.strip_prefix('$'));
+    match name {
+        Some(n) if !n.is_empty() && n.chars().all(|c| c == '_' || c.is_ascii_alphanumeric()) => {
+            std::env::var(n).unwrap_or_default()
+        }
+        _ => v.to_string(),
+    }
 }

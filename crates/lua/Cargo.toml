@@ -1,11 +1,10 @@
 [package]
-name = "tuse-py"
+name = "tuse-lua"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
-monty = "1.6.0"
-monty-types = "1.6.0"
-monty-fs = "1.6.0"
+mlua.workspace = true
+serde_json.workspace = true

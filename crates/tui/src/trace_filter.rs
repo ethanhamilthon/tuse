@@ -5,7 +5,7 @@ pub const TYPES: &[&str] = &[
     "user",
     "agent",
     "thinking",
-    "python",
+    "lua",
     "tool",
     "output",
     "notification",
@@ -32,7 +32,7 @@ pub fn parse(q: &str) -> Query {
             words.push(word);
             continue;
         }
-        // `+python+agent` and `+python-agent` are several tokens in one word.
+        // `+lua+agent` and `+lua-agent` are several tokens in one word.
         let mut rest = word;
         while let Some(sign) = rest.chars().next().filter(|c| matches!(c, '+' | '-')) {
             let body = &rest[1..];
@@ -75,9 +75,9 @@ mod tests {
             let q = parse(q);
             TYPES.iter().copied().filter(|t| q.allows(t)).collect()
         };
-        assert_eq!(allowed("+python+agent"), ["agent", "python"]);
-        assert_eq!(allowed("+python read"), ["python"]);
-        assert_eq!(parse("+python read  me").text, "read me");
+        assert_eq!(allowed("+lua+agent"), ["agent", "lua"]);
+        assert_eq!(allowed("+lua read"), ["lua"]);
+        assert_eq!(parse("+lua read  me").text, "read me");
         assert_eq!(allowed("-hook").len(), TYPES.len() - 1);
         assert!(allowed("+agent-agent").is_empty());
         assert!(allowed("+hooks").is_empty() && parse("+hooks").bad);

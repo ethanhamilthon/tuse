@@ -40,7 +40,7 @@ pub(crate) struct Renderer<'a> {
     code: bool,
     /// The language of the open fenced block.
     pub(crate) lang: String,
-    /// A triple-quoted string left open by the line before (Python blocks).
+    /// A long string or comment left open by the line before (Lua blocks).
     pub(crate) open: String,
     item_first: Option<String>,
     table: Option<crate::table::Table>,

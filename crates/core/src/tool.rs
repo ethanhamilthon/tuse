@@ -6,10 +6,9 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use tuse_api::ToolCall;
-use tuse_py::{Ctx, Python};
 
 /// The only tool.
-pub const TOOL: &str = "python";
+pub const TOOL: &str = "lua";
 
 /// The result of one call.
 struct Outcome {
@@ -21,9 +20,9 @@ struct Outcome {
 }
 
 impl Outcome {
-    fn err(text: impl AsRef<str>, max: usize) -> Self {
+    fn err(text: impl Into<String>) -> Self {
         Self {
-            text: tuse_py::truncate(text.as_ref(), max),
+            text: text.into(),
             code: Some(1),
             images: vec![],
             diffs: vec![],
@@ -46,16 +45,12 @@ impl Session {
     pub(crate) fn tool(
         self: &Arc<Self>,
         generation: u64,
-        cancel: &AtomicBool,
+        cancel: &Arc<AtomicBool>,
         call: &ToolCall,
         config: &tuse_config::Config,
     ) -> bool {
         let parsed = serde_json::from_str::<serde_json::Value>(&call.arguments);
-        let mut args = parsed.as_ref().cloned().unwrap_or_default();
-        let alias = crate::alias::code(&call.name, &args);
-        if let Some(code) = &alias {
-            args["code"] = code.clone().into();
-        }
+        let args = parsed.as_ref().cloned().unwrap_or_default();
         let input = args["code"]
             .as_str()
             .map_or_else(|| call.arguments.clone(), String::from);
@@ -63,7 +58,7 @@ impl Session {
         if !title.is_empty() {
             self.set_status(title.clone());
         }
-        let secs = config.settings.tool_timeout.max(1);
+        let secs = timeout_of(&args, config);
         self.emit(Event::ToolStart {
             timeout: secs,
             id: call.id.clone(),
@@ -71,24 +66,19 @@ impl Session {
             input: input.clone(),
             title: title.clone(),
         });
-        let max = config.settings.max_output;
         let out = if parsed.is_err() {
-            Outcome::err(
-                format!("the arguments are not valid JSON: {}", call.arguments),
-                max,
-            )
-        } else if call.name == TOOL || alias.is_some() {
-            self.python_call(&args, cancel, config, secs)
+            Outcome::err(format!(
+                "the arguments are not valid JSON: {}",
+                call.arguments
+            ))
+        } else if call.name == TOOL {
+            self.lua_call(&args, cancel, secs)
         } else {
-            Outcome::err(
-                format!(
-                    "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `sh` inside its `code`",
-                    call.name
-                ),
-                max,
-            )
+            Outcome::err(format!(
+                "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `sh` inside its `code`",
+                call.name
+            ))
         };
-        // `python_call` output is already cut to `max_output` by the runtime.
         let text = out.text;
         let Some(mut st) = self.lock_live(generation) else {
             return false;
@@ -116,43 +106,31 @@ impl Session {
         true
     }
 
-    /// Runs `code` in the session's interpreter.
-    fn python_call(
+    /// Runs `code` as a job of the session's VM.
+    fn lua_call(
         self: &Arc<Self>,
         args: &serde_json::Value,
-        cancel: &AtomicBool,
-        config: &tuse_config::Config,
+        cancel: &Arc<AtomicBool>,
         secs: u64,
     ) -> Outcome {
         let Some(code) = args["code"].as_str() else {
-            return Outcome::err(
-                "missing argument `code` (a string)",
-                config.settings.max_output,
-            );
+            return Outcome::err("missing argument `code` (a string)");
         };
-        let ctx = Ctx::new(cancel, Instant::now() + Duration::from_secs(secs)).adopting();
-        let mut slot = self.python.lock().unwrap();
-        let o = run_in_slot(
-            &mut slot,
-            || self.new_python(config),
-            code,
-            &ctx,
-            config.settings.max_output,
+        let stop = tuse_lua::Stop::new(
+            cancel.clone(),
+            Some(Instant::now() + Duration::from_secs(secs)),
         );
-        drop(slot);
-        let cancelled = cancel.load(std::sync::atomic::Ordering::Relaxed);
+        let d = self.vm.run(code, "lua", stop);
         Outcome {
-            code: if o.ok {
-                Some(0)
-            } else if cancelled {
-                None
-            } else {
-                Some(1)
+            code: match (d.ok, d.stop) {
+                (true, _) => Some(0),
+                (false, Some("cancelled")) => None,
+                _ => Some(1),
             },
-            text: o.text,
-            images: ctx.take_images(),
-            diffs: ctx
-                .take_diffs()
+            text: d.text,
+            images: d.images,
+            diffs: d
+                .diffs
                 .into_iter()
                 .map(|(path, diff)| FileDiff { path, diff })
                 .collect(),
@@ -160,62 +138,11 @@ impl Session {
     }
 }
 
-const RESTART_NOTE: &str = "\n[the interpreter crashed; it restarts from scratch on the next call, so all variables and imports are lost]";
-
-/// Runs `code` in the slot's interpreter (made on demand). A crashed interpreter is
-/// dropped so the next call gets a clean one.
-fn run_in_slot(
-    slot: &mut Option<Python>,
-    make: impl FnOnce() -> Python,
-    code: &str,
-    ctx: &Ctx,
-    max: usize,
-) -> tuse_py::Output {
-    let py = slot.get_or_insert_with(make);
-    let mut o = py.run(code, ctx, vec![]);
-    if !py.is_alive() {
-        *slot = None;
-        o.text.push_str(RESTART_NOTE);
-        o.text = tuse_py::truncate(&o.text, max);
-    }
-    o
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tuse_py::{Args, Fail, Host, MontyObject, NEVER};
-
-    struct Boom;
-    impl Host for Boom {
-        fn functions(&self) -> &'static [&'static str] {
-            &["boom"]
-        }
-        fn call(&self, _: &str, _: &Args, _: &Ctx) -> Result<MontyObject, Fail> {
-            panic!("boom")
-        }
-        fn cwd(&self) -> std::path::PathBuf {
-            std::env::temp_dir()
-        }
-        fn env(&self) -> Vec<(String, String)> {
-            vec![]
-        }
-        fn module_dirs(&self) -> Vec<std::path::PathBuf> {
-            vec![]
-        }
-    }
-
-    #[test]
-    fn a_crashed_interpreter_is_replaced_on_the_next_call() {
-        let ctx = Ctx::new(&NEVER, Instant::now() + Duration::from_secs(10));
-        let make = || Python::new(Arc::new(Boom), 1000);
-        let mut slot = None;
-        assert!(run_in_slot(&mut slot, make, "x = 1", &ctx, 4096).ok);
-        let o = run_in_slot(&mut slot, make, "boom()", &ctx, 4096);
-        assert!(!o.ok && o.text.contains("lost"), "{}", o.text);
-        assert!(slot.is_none());
-        let o = run_in_slot(&mut slot, make, "x", &ctx, 4096);
-        assert!(!o.ok && o.text.contains("NameError"), "{}", o.text);
-        assert!(slot.is_some());
-    }
+/// `timeout` of the call (seconds, no upper limit), else `settings.tool_timeout`.
+fn timeout_of(args: &serde_json::Value, config: &tuse_config::Config) -> u64 {
+    let own = args["timeout"]
+        .as_f64()
+        .filter(|t| *t > 0.0)
+        .map(|t| t.ceil() as u64);
+    own.unwrap_or(config.settings.tool_timeout).max(1)
 }

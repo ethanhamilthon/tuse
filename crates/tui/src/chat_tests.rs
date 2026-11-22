@@ -32,7 +32,7 @@ fn titles_follow_the_existing_tool_entry() {
         app.handle_event(Event::ToolDelta {
             index: 0,
             id: "id".into(),
-            name: "python".into(),
+            name: "lua".into(),
             code: code.into(),
             title: title.map(String::from),
         });
@@ -47,7 +47,7 @@ fn titles_follow_the_existing_tool_entry() {
     app.handle_event(Event::ToolStart {
         timeout: 150,
         id: "id".into(),
-        tool: "python".into(),
+        tool: "lua".into(),
         input: "1".into(),
         title: "final".into(),
     });
@@ -61,7 +61,7 @@ fn titles_follow_the_existing_tool_entry() {
     let restored = Chat::from_records(
         &[Record::Tool {
             id: "id".into(),
-            tool: "python".into(),
+            tool: "lua".into(),
             input: "1".into(),
             title: "saved".into(),
             output: String::new(),

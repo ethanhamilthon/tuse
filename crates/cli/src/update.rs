@@ -41,10 +41,10 @@ fn global() -> Result<(PathBuf, PathBuf), String> {
     }
 }
 
-/// `tuse reset`: replaces the global config folder with the latest `main.yaml`.
+/// `tuse reset`: replaces the global config folder with the latest `main.lua`.
 pub fn reset(yes: bool) -> Result<(), String> {
     let (dir, file) = global()?;
-    let main = get("main.yaml")?;
+    let main = get("main.lua")?;
     if dir.exists() {
         if !yes && !confirm(&dir) {
             return Err("cancelled".into());

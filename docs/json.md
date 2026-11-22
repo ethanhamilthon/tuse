@@ -27,7 +27,7 @@ blocks, like `@` files in the TUI ([prompts.md](prompts.md)). A missing file fai
 | `session.info` / `.records` / `.trace` / `.stats` | the session, its history, `/trace` items, `/usage` totals |
 | `session.list` | `{cwd?}` → saved sessions, for `--resume` |
 | `model.get` / `model.set` / `model.list` | `{model, effort}`; the list fetches provider models (then a `models` event) |
-| `config.get` / `config.reload` / `config.set` | the YAML; reload; `{key, value, scope: global or settings}` |
+| `config.get` / `config.reload` / `config.set` | the resolved config as JSON; reload; `{key, value}` remembers `model`, `effort` or `theme` in the database |
 | `tasks.list` / `tasks.get` / `tasks.stop` | `{id, lines?}` |
 | `shutdown` | closes the session and exits |
 

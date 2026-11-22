@@ -45,7 +45,7 @@ the binary, so the file holds only what you change. `tuse reset` installs a fres
 
 ## Modes
 
-Run modes are `tui` (interactive TUI), `headless` (`tuse -p`) and `json` (`tuse json`).
+Run modes are `tui` (interactive TUI) and `json` (`tuse json`).
 Entries in `include`, `connect`, `systems`, `prompts`, `functions` and `hooks` may set
 `modes: [tui]` (or any combination). Omitting `modes` or setting `modes: []` enables the
 entry in all modes; outside its listed modes it is not loaded, expanded (`#{{command}}` does not run) or used. An unknown mode

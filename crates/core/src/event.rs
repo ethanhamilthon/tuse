@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-/// What a session tells its front ends (TUI or headless printer).
+/// What a session tells its front ends (TUI or JSON-RPC).
 #[derive(Debug, Clone)]
 pub enum Event {
     Notification(String),

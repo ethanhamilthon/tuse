@@ -15,7 +15,7 @@ fn a_session_records_its_parent_and_hands_its_own_id_to_subprocesses() {
     let s = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg),
-        mode: tuse_core::Mode::Headless,
+        mode: tuse_core::Mode::Json,
         resume: None,
         start: Default::default(),
     })

@@ -12,13 +12,8 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "functions",
-        "Built-in Python functions (read, write, edit, grep, sh, ask, draw_ui, task_*, docs)",
+        "Built-in Python functions (read, write, edit, grep, sh, task_*, docs)",
         include_str!("../../../docs/functions.md"),
-    ),
-    (
-        "headless",
-        "tuse -p: running one prompt from scripts, stdout/stderr, exit codes",
-        include_str!("../../../docs/headless.md"),
     ),
     (
         "json",

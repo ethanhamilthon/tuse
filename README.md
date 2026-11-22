@@ -10,7 +10,7 @@ Chat Completions compatible API, one tool: `python`.
 - Hooks are Python too: each named hook keeps its own interpreter and processes events in order with the same access.
 - `read()` shows images to the model; files changed by `write()` and `edit()` are shown as a
   colored diff at the end of the call; Python code is syntax highlighted.
-- Headless mode (`tuse -p`) for scripts and a JSON-RPC mode (`tuse json`) for editors; sessions in `~/.tuse/<id>/` as JSONL.
+- A JSON-RPC mode (`tuse json`) for editors; sessions in `~/.tuse/<id>/` as JSONL.
 - Background tasks, 50/25/25 context compaction, retries.
 - YAML config with `include`, `$VAR` and `#{{command}}` expansion and a full theme.
 
@@ -57,8 +57,6 @@ creates `main.yaml` in `~/.config/tuse` (`CONFIG_DIR`) when it is missing.
 
 ```
 tuse [-c|--config PATH] [-r|--resume ID] open the TUI
-tuse -p [PROMPT|-] [-c PATH] [-r ID]      headless: runs the prompt to the end, replies to
-                                          stdout, session ID to stderr, exit code 1 on an error
 tuse json [-c PATH] [-r ID]               JSON-RPC 2.0 over stdin/stdout (docs/json.md)
 tuse connect [--config PATH]              add a provider (base url, api key, name)
 tuse reset [--yes] | tuse update          reset the config folder | update the binary
@@ -66,7 +64,7 @@ tuse reset [--yes] | tuse update          reset the config folder | update the b
 
 `--config` picks the config file (else `./tuse.yaml`, else the global `main.yaml`). `--resume ID`
 opens a saved session: the ID is printed to stderr when Tuse exits and is the folder name in
-`~/.tuse/`. Headless mode is described in [docs/headless.md](docs/headless.md).
+`~/.tuse/`.
 
 The agent's tool is `python`, a persistent REPL with these functions:
 
@@ -133,7 +131,7 @@ include:
   - prompts.yaml
   - file: shared.yaml
     only: [connect]
-    modes: [tui, headless]
+    modes: [tui, json]
 
 model: claude-sonnet-5-5
 provider: x

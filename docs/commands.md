@@ -7,8 +7,6 @@
     `main.yaml` (relative to the working directory).
   - `-r`, `--resume ID`: open the saved session `ID` (the ID Tuse prints to stderr on exit, or
     the folder name in `~/.tuse/`) instead of a new one; `/resume` picks one inside the TUI.
-- `tuse -p [PROMPT|-]` (`--print`) runs one prompt headless, also with `-c` and `-r`. See
-  `docs("headless")`.
 - `tuse json [-c PATH] [-r ID]` serves the session over JSON-RPC 2.0 on stdin/stdout. See
   `docs("json")`.
 - `tuse connect` adds a provider.

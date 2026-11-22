@@ -44,7 +44,7 @@ the config and call its entry point each time: `import notify; notify.on_event(e
 module is imported only once per interpreter.
 
 Hooks can call helpers defined under `functions` in the config. Set `modes: [tui]`
-(any of `tui`, `headless`, `json`) to limit a hook to specific run modes; omitted or empty
+(`tui` or `json`) to limit a hook to specific run modes; omitted or empty
 runs in all modes.
 
 Esc interrupts running hooks without dropping later queued events.

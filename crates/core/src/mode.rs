@@ -4,8 +4,6 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Tui,
-    /// `tuse -p`: one prompt, nobody to answer.
-    Headless,
     /// `tuse json`: a client drives the session over JSON-RPC.
     Json,
 }
@@ -14,7 +12,6 @@ impl From<Mode> for tuse_config::Mode {
     fn from(m: Mode) -> Self {
         match m {
             Mode::Tui => Self::Tui,
-            Mode::Headless => Self::Headless,
             Mode::Json => Self::Json,
         }
     }

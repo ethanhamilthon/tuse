@@ -91,7 +91,7 @@ mod tests {
         for (name, modes) in [
             ("all", vec![]),
             ("only_tui", vec![tuse_config::Mode::Tui]),
-            ("only_hl", vec![tuse_config::Mode::Headless]),
+            ("only_json", vec![tuse_config::Mode::Json]),
         ] {
             config.functions.insert(
                 name.into(),
@@ -104,10 +104,10 @@ mod tests {
             );
         }
         let tui = listing(&config, crate::Mode::Tui, false);
-        assert!(tui.contains("`all(") && tui.contains("`only_tui(") && !tui.contains("only_hl"));
-        let hl = listing(&config, crate::Mode::Headless, true);
-        assert!(hl.contains("`all(") && hl.contains("`only_hl(") && !hl.contains("only_tui"));
-        let json = listing(&config, crate::Mode::Json, false);
-        assert!(json.contains("`all(") && !json.contains("only_tui") && !json.contains("only_hl"));
+        assert!(tui.contains("`all(") && tui.contains("`only_tui(") && !tui.contains("only_json"));
+        let json = listing(&config, crate::Mode::Json, true);
+        assert!(
+            json.contains("`all(") && json.contains("`only_json(") && !json.contains("only_tui")
+        );
     }
 }

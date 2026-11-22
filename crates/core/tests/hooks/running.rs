@@ -38,7 +38,7 @@ hooks:
       with open('{unexpected}', 'a') as f:
           f.write(str(tasks) + str(children))
   record:
-    modes: [headless]
+    modes: [json]
     events: [user_message, agent_message]
     run: |
       def names(v, key):
@@ -55,7 +55,7 @@ hooks:
         Session::open(Options {
             cwd: dir.clone(),
             config: Some(cfg.clone()),
-            mode: Mode::Headless,
+            mode: Mode::Json,
             resume: None,
             start: Start::Launch,
         })

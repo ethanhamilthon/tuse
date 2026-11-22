@@ -15,7 +15,7 @@ fn the_marker_reports_the_real_number_of_cut_bytes() {
     let s = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg),
-        mode: tuse_core::Mode::Headless,
+        mode: tuse_core::Mode::Json,
         resume: None,
         start: Default::default(),
     })

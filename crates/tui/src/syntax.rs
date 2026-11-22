@@ -1,4 +1,4 @@
-//! A small Python tokenizer for coloring code. It never fails: broken or
+//! A small Lua tokenizer for coloring code. It never fails: broken or
 //! half-written code (a call is shown while it streams) is colored as far as it goes.
 use crate::style::{Palette, Style};
 use crate::text::{Line, span};
@@ -14,68 +14,88 @@ pub enum Kind {
 }
 
 const KEYWORDS: &[&str] = &[
-    "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue",
-    "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import",
-    "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while",
-    "with", "yield",
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in",
+    "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
 ];
 
-/// The host functions of the `python` tool.
+/// The host functions of the `lua` tool.
 const FUNCTIONS: &[&str] = &[
     "sh",
     "read",
     "write",
     "edit",
     "grep",
-    "task_run",
-    "task_add",
+    "sleep",
+    "spawn",
     "task_get",
     "task_stop",
     "task_list",
     "docs",
+    "print",
+    "inspect",
 ];
 
 type Runs = Vec<(Kind, String)>;
 
-/// Splits one line into runs. `open` is the quote of a triple-quoted string left open by
-/// the line before (empty when none); it is updated for the next line.
+/// Splits one line into runs. `open` is the closer of a long string or comment left
+/// open by the line before (`]]`, `]=]`, ...; empty when none); it is updated for the next line.
+/// A long comment's closer starts with `-`, so the next line knows to color it as a comment.
 pub fn tokens(line: &str, open: &mut String) -> Runs {
     let c: Vec<char> = line.chars().collect();
     let mut out: Runs = vec![];
     let mut i = 0;
     if !open.is_empty() {
-        let (text, closed) = body(&c, 0, open);
-        i = text.chars().count();
-        out.push((Kind::Str, text));
+        let comment = open.starts_with('-');
+        let close: Vec<char> = open.trim_start_matches('-').chars().collect();
+        let (end, closed) = find(&c, 0, &close);
+        out.push((
+            if comment { Kind::Comment } else { Kind::Str },
+            c[..end].iter().collect(),
+        ));
         if !closed {
             return out;
         }
         open.clear();
+        i = end;
     }
     while i < c.len() {
         let ch = c[i];
         let start = i;
-        let kind = if ch == '#' {
-            i = c.len();
+        let kind = if ch == '-' && c.get(i + 1) == Some(&'-') {
+            match long_open(&c, i + 2) {
+                Some(close) => {
+                    let (end, closed) = find(&c, i + 2, &close);
+                    if !closed {
+                        *open = format!("-{}", close.iter().collect::<String>());
+                    }
+                    i = end;
+                }
+                None => i = c.len(),
+            }
             Kind::Comment
+        } else if ch == '[' && long_open(&c, i).is_some() {
+            let close = long_open(&c, i).unwrap_or_default();
+            let (end, closed) = find(&c, i, &close);
+            if !closed {
+                *open = close.iter().collect();
+            }
+            i = end;
+            Kind::Str
         } else if ch.is_ascii_digit()
             || (ch == '.' && c.get(i + 1).is_some_and(char::is_ascii_digit))
         {
             i = scan(&c, i, |x| x.is_ascii_alphanumeric() || x == '.' || x == '_');
             Kind::Number
         } else if ch == '"' || ch == '\'' {
-            i = string(&c, i, open);
+            i = quoted(&c, i);
             Kind::Str
         } else if ch.is_alphabetic() || ch == '_' {
             i = scan(&c, i, |x| x.is_alphanumeric() || x == '_');
             let word: String = c[start..i].iter().collect();
-            let prefix = word.len() <= 2 && word.chars().all(|x| "rbfuRBFU".contains(x));
-            if prefix && matches!(c.get(i), Some('"' | '\'')) {
-                i = string(&c, i, open);
-                Kind::Str
-            } else if KEYWORDS.contains(&word.as_str()) {
+            let after = c[i..].iter().find(|x| !x.is_whitespace());
+            if KEYWORDS.contains(&word.as_str()) {
                 Kind::Keyword
-            } else if FUNCTIONS.contains(&word.as_str()) || c.get(i) == Some(&'(') {
+            } else if FUNCTIONS.contains(&word.as_str()) || matches!(after, Some('(' | '{' | '"')) {
                 Kind::Function
             } else {
                 Kind::Plain
@@ -93,6 +113,32 @@ pub fn tokens(line: &str, open: &mut String) -> Runs {
     out
 }
 
+/// `[[`, `[=[`, ... at `at`: the matching closer.
+fn long_open(c: &[char], at: usize) -> Option<Vec<char>> {
+    if c.get(at) != Some(&'[') {
+        return None;
+    }
+    let eq = c[at + 1..].iter().take_while(|x| **x == '=').count();
+    (c.get(at + 1 + eq) == Some(&'[')).then(|| {
+        let mut close = vec![']'];
+        close.extend(std::iter::repeat_n('=', eq));
+        close.push(']');
+        close
+    })
+}
+
+/// The end of `close` searched from `from` (just past it), or the end of the line.
+fn find(c: &[char], from: usize, close: &[char]) -> (usize, bool) {
+    let mut i = from;
+    while i < c.len() {
+        if !close.is_empty() && c[i..].starts_with(close) && i > from {
+            return (i + close.len(), true);
+        }
+        i += 1;
+    }
+    (c.len(), false)
+}
+
 fn scan(c: &[char], from: usize, keep: impl Fn(char) -> bool) -> usize {
     let mut j = from;
     while j < c.len() && keep(c[j]) {
@@ -101,34 +147,21 @@ fn scan(c: &[char], from: usize, keep: impl Fn(char) -> bool) -> usize {
     j
 }
 
-/// The end of a string whose opening quote is at `c[at]`; a triple quote left open is stored in `open`.
-fn string(c: &[char], at: usize, open: &mut String) -> usize {
+/// The end of a quoted string that opens at `at` (or the end of the line).
+fn quoted(c: &[char], at: usize) -> usize {
     let q = c[at];
-    let triple = c.get(at + 1) == Some(&q) && c.get(at + 2) == Some(&q);
-    let quote: String = std::iter::repeat_n(q, if triple { 3 } else { 1 }).collect();
-    let from = at + quote.len();
-    let (text, closed) = body(c, from, &quote);
-    if !closed && triple {
-        *open = quote;
-    }
-    from + text.chars().count()
-}
-
-/// The text of a string from `from` to its closing `quote` (included) or the end of the line.
-fn body(c: &[char], from: usize, quote: &str) -> (String, bool) {
-    let q: Vec<char> = quote.chars().collect();
-    let mut i = from;
+    let mut i = at + 1;
     while i < c.len() {
         if c[i] == '\\' {
             i += 2;
             continue;
         }
-        if c[i..].starts_with(&q) {
-            return (c[from..i + q.len()].iter().collect(), true);
+        if c[i] == q {
+            return i + 1;
         }
         i += 1;
     }
-    (c[from.min(c.len())..].iter().collect(), false)
+    c.len()
 }
 
 /// The colored lines of `code`, one per source line, on top of `base`.
@@ -172,28 +205,31 @@ mod tests {
 
     #[test]
     fn colors_keywords_strings_comments_numbers_and_host_functions() {
-        let got = colored("for x in read('a.txt'): n = 42  # note");
+        let got = colored("for x in read('a.txt') do n = 42 end -- note");
         let want = [
             (Kind::Keyword, "for"),
             (Kind::Keyword, "in"),
             (Kind::Function, "read"),
             (Kind::Str, "'a.txt'"),
+            (Kind::Keyword, "do"),
             (Kind::Number, "42"),
-            (Kind::Comment, "# note"),
+            (Kind::Keyword, "end"),
+            (Kind::Comment, "-- note"),
         ];
         let want: Vec<(Kind, String)> = want.iter().map(|(k, s)| (*k, s.to_string())).collect();
         assert_eq!(got, want);
-        // Unterminated and triple-quoted strings do not break the line or the next one.
         assert_eq!(colored("x = 'abc"), [(Kind::Str, "'abc".to_string())]);
+        // Long strings and comments run over lines.
         let mut open = String::new();
-        tokens("s = \"\"\"first", &mut open);
-        assert_eq!(open, "\"\"\"");
-        let rest = tokens("second\"\"\" + y", &mut open);
-        assert_eq!(rest[0], (Kind::Str, "second\"\"\"".to_string()));
+        tokens("s = [==[first", &mut open);
+        assert_eq!(open, "]==]");
+        let rest = tokens("second]==] .. y", &mut open);
+        assert_eq!(rest[0], (Kind::Str, "second]==]".to_string()));
         assert!(open.is_empty());
+        tokens("--[[ a", &mut open);
         assert_eq!(
-            colored("f\"{a}\" + 1")[0],
-            (Kind::Str, "f\"{a}\"".to_string())
+            tokens("b ]] x", &mut open)[0],
+            (Kind::Comment, "b ]]".to_string())
         );
     }
 }

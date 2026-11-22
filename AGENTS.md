@@ -5,10 +5,10 @@ Rust + Crossterm, OpenAI Chat Completions API. User docs: `README.md` and `docs/
 ## Rules
 
 - Separate crates with a clear split of responsibility, one crate per layer:
-  - `crates/config` - YAML loading, includes, `$VAR` and `#{{cmd}}` expansion, theme tokens;
+  - `crates/config` - config types, checks and theme tokens (built from the table `tuse.lua` returns);
   - `crates/api` - Chat Completions client: streaming, retries, usage;
-  - `crates/py` - the Python (Monty) runtime: interpreter, `sh`, filesystem and `import` mounts;
-  - `crates/core` - sessions, agent loop, tools (`python`, `read`, `write`, `edit`), compaction, hooks, tasks;
+  - `crates/lua` - the Lua 5.4 (mlua) runtime: one VM thread, the coroutine scheduler, `sh`, `sleep`, `spawn`;
+  - `crates/core` - sessions and SQLite storage, agent loop, tools (`lua`, `read`, `write`, `edit`), compaction, hooks, tasks;
   - `crates/tui` - the terminal UI;
   - `crates/rpc` - `tuse json`: JSON-RPC 2.0 over stdio, a front end like `tui`;
   - `crates/cli` - the `tuse` binary: argument parsing and wiring.

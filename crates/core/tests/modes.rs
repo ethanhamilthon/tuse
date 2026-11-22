@@ -20,49 +20,56 @@ fn wait_turn(events: &std::sync::mpsc::Receiver<Event>) -> Option<String> {
 #[test]
 fn modes_filter_systems_functions_connect_and_includes() {
     let code = r#"
-print("all=" + str(f_all()))
-print("hl=" + str(f_hl()))
-try:
-    f_tui()
-    print("tui=ok")
-except Exception as e:
-    print("tui=missing:" + str(e))
-print("docs_has_hl=" + str("`f_hl(" in docs("functions")))
-print("docs_has_tui=" + str("`f_tui(" in docs("functions")))
+print("all=" .. f_all())
+print("hl=" .. f_hl())
+print("tui=" .. tostring(f_tui))
+print("docs_has_hl=" .. tostring(docs("functions"):find("`f_hl(", 1, true) ~= nil))
+print("docs_has_tui=" .. tostring(docs("functions"):find("`f_tui(", 1, true) ~= nil))
 "#;
     let addr = common::provider(vec![
-        Reply::Call("python", json!({"code": code, "title": "t"}).to_string()),
+        Reply::Call("lua", json!({"code": code, "title": "t"}).to_string()),
         Reply::Text("done"),
         Reply::Text("tui ok"),
     ]);
     let (dir, _) = common::setup("modes", &addr, "");
     std::fs::write(
-        dir.join("inc.yaml"),
-        "systems: [from-tui-include]\neffort: high\n",
+        dir.join("inc.lua"),
+        "return { systems = {'from-tui-include'}, effort = 'high' }",
     )
     .unwrap();
-    let cfg = dir.join("main.yaml");
+    let gw = |name: &str, modes| tuse_config::Connect {
+        name: name.into(),
+        base_url: format!("http://{addr}"),
+        api_key: "k".into(),
+        modes,
+    };
+    tuse_core::add_provider(&gw(
+        "p",
+        vec![tuse_config::Mode::Json, tuse_config::Mode::Tui],
+    ))
+    .unwrap();
+    tuse_core::add_provider(&gw("tui_gw", vec![tuse_config::Mode::Tui])).unwrap();
+    let cfg = dir.join("main.lua");
     std::fs::write(
         &cfg,
-        format!(
-            r#"include:
-  - file: inc.yaml
-    only: [systems]
-    modes: [tui]
-model: p/m
-connect:
-  - {{name: p, base_url: 'http://{addr}', api_key: k, modes: [json, tui]}}
-  - {{name: tui_gw, base_url: 'http://{addr}', api_key: k, modes: [tui]}}
-systems:
-  - plain-sys
-  - {{text: tui-sys, modes: [tui]}}
-  - {{text: hl-sys, modes: [json]}}
-functions:
-  f_all: {{description: all, run: "return 1"}}
-  f_hl: {{description: hl, run: "return 2", modes: [json]}}
-  f_tui: {{description: tui, run: "return 3", modes: [tui]}}
-"#
-        ),
+        r#"local systems = {"plain-sys"}
+if MODE == "tui" then
+  systems[#systems + 1] = "tui-sys"
+  for _, s in ipairs(require("inc").systems) do
+    systems[#systems + 1] = s
+  end
+end
+systems[#systems + 1] = {text = "hl-sys", modes = {"json"}}
+return {
+  model = "p/m",
+  systems = systems,
+  functions = {
+    f_all = {description = "all", run = function() return 1 end},
+    f_hl = {description = "hl", run = function() return 2 end, modes = {"json"}},
+    f_tui = {description = "tui", run = function() return 3 end, modes = {"tui"}},
+  },
+}
+"#,
     )
     .unwrap();
     let open = |mode| {
@@ -100,9 +107,9 @@ functions:
     for want in [
         "all=1",
         "hl=2",
-        "tui=missing",
-        "docs_has_hl=True",
-        "docs_has_tui=False",
+        "tui=nil",
+        "docs_has_hl=true",
+        "docs_has_tui=false",
     ] {
         assert!(out.contains(want), "missing `{want}` in:\n{out}");
     }
@@ -114,7 +121,7 @@ functions:
     assert!(err.contains("no `connect` entry named `tui_gw`"), "{err}");
     hl.close();
 
-    // Tui: gets tui include (only systems, not effort), tui-sys, f_tui, and tui_gw works.
+    // Tui: gets the systems of the required file (not its effort), tui-sys, f_tui, and tui_gw works.
     // fetch_models only queries connect entries matching the active mode.
     let m_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let m_addr = m_listener.local_addr().unwrap();
@@ -135,14 +142,22 @@ functions:
             let _ = s.flush();
         }
     });
-    let m_cfg = dir.join("models.yaml");
-    std::fs::write(
-        &m_cfg,
-        format!(
-            "connect:\n  - {{name: tui_p, base_url: 'http://{m_addr}', api_key: k, modes: [tui]}}\n  - {{name: hl_p, base_url: 'http://{m_addr}', api_key: k, modes: [json]}}\n"
-        ),
-    )
-    .unwrap();
+    for (name, mode) in [
+        ("tui_p", tuse_config::Mode::Tui),
+        ("hl_p", tuse_config::Mode::Json),
+    ] {
+        tuse_core::add_provider(&tuse_config::Connect {
+            name: name.into(),
+            base_url: format!("http://{m_addr}"),
+            api_key: "k".into(),
+            modes: vec![mode],
+        })
+        .unwrap();
+    }
+    tuse_core::remove_provider("p").unwrap();
+    tuse_core::remove_provider("tui_gw").unwrap();
+    let m_cfg = dir.join("models.lua");
+    std::fs::write(&m_cfg, "return {}").unwrap();
     let m_hl = Session::open(Options {
         cwd: dir.clone(),
         config: Some(m_cfg),
@@ -164,6 +179,10 @@ functions:
     }
     assert_eq!(m_hl.remote_models(), ["hl_p/m1"]);
     m_hl.close();
+    tuse_core::remove_provider("tui_p").unwrap();
+    tuse_core::remove_provider("hl_p").unwrap();
+    tuse_core::add_provider(&gw("p", vec![])).unwrap();
+    tuse_core::add_provider(&gw("tui_gw", vec![tuse_config::Mode::Tui])).unwrap();
 
     let tui = open(Mode::Tui);
     assert_eq!(tui.config().effort, "");

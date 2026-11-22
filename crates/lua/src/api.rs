@@ -1,0 +1,186 @@
+use crate::Host;
+use crate::job::{Done, Job, Out, Stop, stopped, with_run};
+use crate::sched::{Sched, sh_value};
+use crate::sh::Proc;
+use mlua::{Function, HookTriggers, Lua, LuaSerdeExt, MultiValue, Table, Value, VmState};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+const PRELUDE: &str = include_str!("prelude.lua");
+
+pub fn host(lua: &Lua) -> Arc<dyn Host> {
+    lua.app_data_ref::<Arc<dyn Host>>().unwrap().clone()
+}
+
+/// The globals every VM has: `print`, `sh`, `sleep`, `spawn`, `json`, `inspect`.
+pub fn install(lua: &Lua) -> mlua::Result<()> {
+    let g = lua.globals();
+    let tuse = lua.create_table()?;
+    let marker = lua.create_table()?;
+    lua.set_named_registry_value("tuse.sched", marker.clone())?;
+    tuse.set("sh_start", lua.create_function(sh_start)?)?;
+    tuse.set("block", lua.create_function(block)?)?;
+    g.set("print", lua.create_function(print)?)?;
+    let io: Table = g.get("io")?;
+    io.set("write", lua.create_function(write)?)?;
+    g.set("spawn", lua.create_function(spawn)?)?;
+    g.set("json", json(lua)?)?;
+    lua.load(PRELUDE)
+        .set_name("=prelude")
+        .call::<()>((tuse.clone(), marker))?;
+    lua.set_named_registry_value("tuse.render", tuse.get::<Function>("render")?)?;
+    lua.set_named_registry_value("tuse.wrap", tuse.get::<Function>("wrap")?)?;
+    wrap(lua, &g, &["spawn"])?;
+    let j: Table = g.get("json")?;
+    wrap(lua, &j, &["encode", "decode"])?;
+    lua.set_named_registry_value("tuse.sh", tuse.get::<Table>("sh_mt")?)?;
+    // A loop that never calls the host still ends at its deadline or on a cancel.
+    lua.set_global_hook(
+        HookTriggers::new().every_nth_instruction(1000),
+        |lua, _| match stopped(lua) {
+            Some(why) => Err(mlua::Error::runtime(why)),
+            None => Ok(VmState::Continue),
+        },
+    )?;
+    Ok(())
+}
+
+/// Replaces the Rust functions `names` of `t` with wrappers that raise plain string errors.
+pub fn wrap(lua: &Lua, t: &Table, names: &[&str]) -> mlua::Result<()> {
+    let w: Function = lua.named_registry_value("tuse.wrap")?;
+    for n in names {
+        let f: Function = t.get(*n)?;
+        t.set(*n, w.call::<Function>(f)?)?;
+    }
+    Ok(())
+}
+
+fn text_of(lua: &Lua, args: MultiValue, sep: &str) -> mlua::Result<String> {
+    let tostring: Function = lua.globals().get("tostring")?;
+    let mut parts = vec![];
+    for v in args {
+        parts.push(match v {
+            Value::String(s) => s.to_string_lossy(),
+            v => tostring.call::<String>(v)?,
+        });
+    }
+    Ok(parts.join(sep))
+}
+
+fn emit(lua: &Lua, s: &str) {
+    if with_run(lua, |j| j.out.put(s)).is_none() {
+        eprint!("{s}");
+    }
+}
+
+fn print(lua: &Lua, args: MultiValue) -> mlua::Result<()> {
+    let mut s = text_of(lua, args, "\t")?;
+    s.push('\n');
+    emit(lua, &s);
+    Ok(())
+}
+
+fn write(lua: &Lua, args: MultiValue) -> mlua::Result<()> {
+    let s = text_of(lua, args, "")?;
+    emit(lua, &s);
+    Ok(())
+}
+
+/// Starts `bash -c cmd`; returns the key the coroutine then waits on.
+fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64> {
+    let h = host(lua);
+    let mut cwd = h.cwd();
+    let mut env = h.env();
+    let mut deadline = with_run(lua, |j| j.stop.deadline).flatten();
+    if let Some(o) = opts {
+        if let Some(t) = o.get::<Option<f64>>("timeout")? {
+            let own = Instant::now() + Duration::from_secs_f64(t.max(0.0));
+            deadline = Some(deadline.map_or(own, |d| d.min(own)));
+        }
+        if let Some(c) = o.get::<Option<String>>("cwd")? {
+            cwd = cwd.join(c);
+        }
+        if let Some(e) = o.get::<Option<Table>>("env")? {
+            for pair in e.pairs::<String, String>() {
+                env.push(pair?);
+            }
+        }
+    }
+    let p = Proc::start(&cmd, &cwd, &env, deadline).map_err(mlua::Error::runtime)?;
+    Ok(lua.app_data_mut::<Sched>().unwrap().add_proc(p))
+}
+
+/// The blocking form of a wait, where the code cannot yield.
+fn block(lua: &Lua, (kind, arg): (String, Value)) -> mlua::Result<(bool, Value)> {
+    let stop = with_run(lua, |j| j.stop.clone()).unwrap_or_default();
+    match kind.as_str() {
+        "sleep" => {
+            let until =
+                Instant::now() + Duration::from_secs_f64(arg.as_f64().unwrap_or(0.0).max(0.0));
+            while Instant::now() < until {
+                if let Some(why) = stop.reason() {
+                    return Ok((false, Value::String(lua.create_string(why)?)));
+                }
+                std::thread::sleep(Duration::from_millis(10).min(until - Instant::now()));
+            }
+            Ok((true, Value::Nil))
+        }
+        _ => {
+            let key = arg.as_integer().unwrap_or(0) as u64;
+            let p = lua.app_data_mut::<Sched>().unwrap().take_proc(key);
+            let p = p.ok_or_else(|| mlua::Error::runtime("no such process"))?;
+            let out = p.wait(|| stop.reason().is_some());
+            Ok((true, sh_value(lua, out)))
+        }
+    }
+}
+
+/// `spawn(fn, name)`: runs `fn` as a background task in this VM; returns the task ID.
+fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<String> {
+    let h = host(lua);
+    let name = name.unwrap_or_default();
+    let t = h.task_start(&name).map_err(mlua::Error::runtime)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&t.log)
+        .map_err(|e| mlua::Error::runtime(format!("{}: {e}", t.log.display())))?;
+    let id = t.id.clone();
+    let job = Job::new(
+        lua,
+        f,
+        MultiValue::new(),
+        Stop::new(t.cancel, None),
+        Out::File(file),
+        move |_, d: Done| h.task_end(&t.id, d),
+    )?;
+    job.start(lua);
+    Ok(id)
+}
+
+/// JSON as Lua: `null` becomes `nil`.
+pub fn to_lua(lua: &Lua, v: &serde_json::Value) -> mlua::Result<Value> {
+    let o = mlua::serde::SerializeOptions::new()
+        .serialize_none_to_null(false)
+        .serialize_unit_to_null(false);
+    lua.to_value_with(v, o)
+}
+
+fn json(lua: &Lua) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set(
+        "encode",
+        lua.create_function(|lua, v: Value| {
+            let j: serde_json::Value = lua.from_value(v)?;
+            Ok(j.to_string())
+        })?,
+    )?;
+    t.set(
+        "decode",
+        lua.create_function(|lua, s: String| {
+            let j: serde_json::Value = serde_json::from_str(&s).map_err(mlua::Error::runtime)?;
+            to_lua(lua, &j)
+        })?,
+    )?;
+    Ok(t)
+}

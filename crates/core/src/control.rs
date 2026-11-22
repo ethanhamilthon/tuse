@@ -99,11 +99,7 @@ impl Session {
 
     /// Stops the running turn right away; its thread finds itself stale and exits.
     pub fn cancel(self: &Arc<Self>) {
-        if let Some(queues) = self.hooks.lock().unwrap().as_mut() {
-            for queue in queues.values() {
-                queue.interrupt.store(true, Ordering::Release);
-            }
-        }
+        self.stop_hook_runs();
         self.cancel_turn();
     }
 

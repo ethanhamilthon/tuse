@@ -1,14 +1,10 @@
-use super::{diff, fs, io_fail};
+use super::{diff, fail, fs, io_fail};
 use std::path::Path;
-use tuse_py::{ExcType, Fail};
 
 /// Writes `content`; returns the confirmation and the diff of the change.
-pub fn run(path: &Path, content: &str) -> Result<(String, String), Fail> {
+pub fn run(path: &Path, content: &str) -> Result<(String, String), String> {
     if path.is_dir() {
-        return Err(Fail::of(
-            ExcType::IsADirectoryError,
-            format!("{} is a directory", path.display()),
-        ));
+        return Err(fail(format!("{} is a directory", path.display())));
     }
     let before = std::fs::read(path)
         .ok()

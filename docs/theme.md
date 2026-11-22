@@ -2,7 +2,7 @@
 
 ## Theme
 
-Themes live under `themes`, one key per theme. `extend: other` starts from another
+Themes live under `themes`, one key per theme. `extend = "other"` starts from another
 theme (or `default`, the built-in Vercel Dark palette) and overrides only the colors you write.
 
 A theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`red`,
@@ -19,6 +19,13 @@ A theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`
 - `err` (`#F32E40`): errors and deletions (`diff` `-`, failed calls, keywords).
 - `info` (`#52A8FF`): tools, headings, links, functions.
 
+```lua
+return {
+  settings = { theme = "warm" },
+  themes = { warm = { extend = "default", accent = "#FFB86C", info = "bright_blue" } },
+}
+```
+
 ## UI settings (`settings.ui`)
 
 UI behavior and layout live under `settings.ui` so switching `/theme` keeps them intact:
@@ -26,8 +33,8 @@ UI behavior and layout live under `settings.ui` so switching `/theme` keeps them
 - `input_design`: `lines` (default), `box`, `fill` or `bar`.
 - `motion`: `true` (default) or `false`. While the agent works, a gradient from `muted` to `accent`
   runs along the rules, frame borders, filled edges or bar.
-- `fold_strings`: `true` (default) or `false`. Folds multiline triple-quoted Python strings in chat
-  tool calls to a single line (`"""first line…"""`). `/trace` always shows the full code.
+- `fold_strings`: `true` (default) or `false`. Folds multiline Lua long strings (`[[...]]`) in chat
+  tool calls to a single line (`[[first line…]]`). `/trace` always shows the full code.
 - Lines shown in the chat (`0` hides the block, `-1` removes the limit): `tool_line` (`-1`),
   `output_line` (`1`), `diff_line` (`12`), `reasoning_line` (`-1`).
 - Layout and scrolling: `pad_x` (`0`), `message_gap` (`1`), `scroll_step` (`3`),

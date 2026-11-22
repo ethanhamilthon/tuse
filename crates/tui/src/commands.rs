@@ -6,7 +6,7 @@ use crate::style::Palette;
 use tuse_config::EFFORTS;
 
 pub const COMMANDS: [(&str, &str); 12] = [
-    ("config", "show resolved config"),
+    ("config", "show the resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
     ("models", "switch model and effort"),
@@ -16,7 +16,7 @@ pub const COMMANDS: [(&str, &str); 12] = [
     ("usage", "context, tokens and cost"),
     ("maxsize", "set the max context size, e.g. /maxsize 1m"),
     ("trace", "everything in this session"),
-    ("reload", "rebuild the config from its files"),
+    ("reload", "run the config file again"),
     ("quit", "exit"),
 ];
 
@@ -26,13 +26,10 @@ impl App {
         self.children_view = None;
         match name {
             "maxsize" => self.set_maxsize(arg),
-            "config" => match self.session.config().to_yaml() {
-                Ok(yaml) => {
-                    self.trace_item = None;
-                    self.panel = Some(Panel::yaml("Config", yaml));
-                }
-                Err(e) => self.error(e),
-            },
+            "config" => {
+                self.trace_item = None;
+                self.panel = Some(Panel::new("Config", self.session.config().to_json()));
+            }
             "new" => self.switch(None),
             "quit" => self.quit = true,
             "resume" => self.open_resume(),
@@ -103,7 +100,7 @@ impl App {
             let title = format!("Trace {}/{} {role}", at + 1, self.trace.len());
             let panel = match *role {
                 "user" | "agent" | "system" => Panel::markdown(title, text.clone()),
-                "python" => Panel::python(title, text.clone()),
+                "lua" => Panel::lua(title, text.clone()),
                 _ => Panel::new(title, text.clone()),
             };
             self.panel = Some(panel);
@@ -117,20 +114,11 @@ impl App {
             .tasks
             .list()
             .into_iter()
-            .map(|t| {
-                let status = match (t.status.as_str(), t.exit) {
-                    ("exited", Some(c)) => format!("exited {c}"),
-                    ("idle" | "running", _) if t.queue > 0 => {
-                        format!("{}, {} queued", t.status, t.queue)
-                    }
-                    (s, _) => s.to_string(),
-                };
-                item(format!("{} {}", t.id, t.name), status, t.id)
-            })
+            .map(|t| item(format!("{} {}", t.id, t.name), t.status, t.id))
             .collect();
         if items.is_empty() {
             self.close_modal();
-            self.flash("No tasks. The agent starts them with `task_run()`.");
+            self.flash("No tasks. The agent starts them with `spawn()`.");
             return;
         }
         let selected = self
@@ -187,8 +175,8 @@ impl App {
                 self.session.set_model(model, &v);
                 let saved = self
                     .session
-                    .save_setting("model", model)
-                    .and_then(|()| self.session.save_setting("effort", &v));
+                    .save_choice("model", model)
+                    .and_then(|()| self.session.save_choice("effort", &v));
                 if let Err(e) = saved {
                     self.error(format!("Can't save the model: {e}"));
                 }
@@ -198,7 +186,7 @@ impl App {
                 if let Some(t) = self.session.tasks.get(&v) {
                     let out = tuse_core::tail(&t.log, 200);
                     let title = format!("Task {} {} [{}]", t.id, t.name, t.status);
-                    self.panel = Some(Panel::new(title, format!("{}\n\n{out}", t.code)));
+                    self.panel = Some(Panel::new(title, out));
                 }
             }
             (Kind::Trace, Some(v)) => {

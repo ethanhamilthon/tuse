@@ -1,58 +1,62 @@
 # Functions
 
-Always defined in `python` and in hooks. Errors are Python exceptions.
+Always defined in `lua`, in hooks and in tasks. Errors are Lua errors with a plain message:
+catch them with `pcall`. Options are passed as a table, like `read(path, {offset = 40})`.
 
-- `read(path, offset=1, limit=2000)`: a text file with line numbers; long files come in pages
-  (the end says which `offset` continues; a page never exceeds `max_output`). An image (png, jpg,
-  gif, webp) is shown to you with the result. A binary file gives a short message, a directory
-  lists its entries. Images over `settings.max_image_bytes` raise `ValueError`.
+- `read(path, {offset=1, limit=2000})`: a text file with line numbers; long files come in pages
+  (the end says which `offset` continues). An image (png, jpg, gif, webp) is shown to you with the
+  result. A binary file gives a short message. Images over `settings.max_image_bytes` raise an error.
 - `write(path, content)`: creates the file (and missing folders) or replaces it. The write is
   atomic and keeps the file's permissions.
-- `edit(path, old, new, replace_all=False)`: replaces exact text. `old` must be found, and unique
-  unless `replace_all` is set; otherwise `ValueError` (it lists the lines of every match). A CRLF
-  file matches `\n` in `old` and keeps its CRLF.
+- `edit(path, old, new, {all=false})`: replaces exact text. `old` must be found, and unique
+  unless `all` is set; otherwise an error lists the lines of every match. A CRLF file matches
+  `\n` in `old` and keeps its CRLF.
 - Files changed by `write` and `edit` are shown to the user as a diff at the end of the call; you
   only get a short confirmation.
-- `grep(pattern, path=".", glob=None, ignore_case=False, context=0, limit=100)`: searches file
+- `grep(pattern, {path=".", glob=nil, ignore_case=false, context=0, limit=100})`: searches file
   contents with a regex and returns `path:line: text` per match (`path-line- text` for context
   lines). It respects `.gitignore` and skips binary files and `.git`. `glob` is a file filter such
-  as `*.rs`. A bad pattern raises `ValueError`.
-- `sh(cmd, timeout=None, cwd=None, env=None)`: `bash -c cmd`, stdout and stderr merged. Returns
-  `.out`, `.code` (`None` when killed), `.ok` (`code == 0`), `.timed_out` and `.task`. `TUSE_SESSION`,
-  `TUSE_CWD`, `TUSE_MODEL` and `TUSE_CURRENT_CONFIG` are set. **A command still running at its
-  timeout (its own or the call's) is not killed**: it goes on as a background process task,
-  `.task` is its ID and `.out` has what it printed so far (the rest is in `task_get(id).output`).
-  Esc kills it, and so does a timeout inside a hook or a task.
-- `task_run(code, name=None)`: starts a **background Python REPL** that runs `code` (a string). It
-  is a new interpreter with the same functions and the filesystem, but it does not
-  see your variables. Run a server with `task_run('sh("npm run dev")')`. `print()` and the value of
-  the last expression go to the task log. The REPL stays alive when the code ends (`idle`); you get
-  a message each time it goes idle, and when a process task exits. A task has no deadline.
-- `task_add(id, code)`: queues one more snippet in the live REPL of a task. It runs after the
-  current code, in the same interpreter (it sees the variables of the earlier code), in the order
-  of the calls; an exception in one snippet does not stop the next. Its output goes to the same
-  log after a `--- task_add #N` line. Returns its place in the queue. A process task has no REPL.
-- `task_get(id, lines=50)` returns the task with the log tail in `.output`, `task_stop(id)` stops
-  it (a REPL is cancelled and closed), `task_list()` lists them. A task has `.id`, `.name`, `.kind`
-  (`repl` or `process`), `.code` (what it started with), `.status` (`running`, `idle`, `exited`,
-  `stopped`), `.exit` (the exit code of a process), `.queue` and `.output`.
-- `docs(topic=None)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.
+  as `*.rs`. A bad pattern raises an error.
+- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: `bash -c cmd`, stdout and stderr merged. Returns a
+  table with `.out`, `.code` (`nil` when killed), `.ok` (`code == 0`), `.timed_out` and
+  `:lines()`; `tostring(r)` is the output plus an exit note. `TUSE_SESSION`, `TUSE_CWD`,
+  `TUSE_MODEL` and `TUSE_CURRENT_CONFIG` are set. At its own timeout or the deadline of the call
+  the process group is killed; Esc kills it too. While it runs, hooks and tasks go on.
+- `sleep(seconds)`: waits without holding up the other coroutines.
+- `spawn(fn, name)`: runs `fn` as a background task in the same VM, so it sees your globals and
+  functions; returns its ID (`t1`, `t2`, ...). Run a server with
+  `spawn(function() sh("npm run dev") end, "dev")`. A task has no deadline. Its `print` goes to
+  `tasks/<id>.log`, followed by what it returned or its error. When it ends on its own, you get a
+  message with its last line.
+- `task_get(id, lines=50)` returns the task with the log tail in `.output`, `task_stop(id)` stops it
+  (its coroutine gets a `cancelled` error at its next wait), `task_list()` lists them. A task has
+  `.id`, `.name`, `.status` (`running`, `done`, `failed`, `stopped`), `.started` and `.ended`.
+- `json.encode(value)`, `json.decode(text)` (`null` becomes `nil`) and `inspect(value)`.
+- `set_title(text)` names the session; `docs(topic)`: call `docs()` to list documentation topics,
+  or `docs("<topic>")` to read one.
 
 ## Functions from the config
 
-```yaml
-functions:
-  tail_tests:
-    args: "lines=30"
-    description: Run tests and return the last lines of output.
-    run: return sh("make check").out.splitlines()[-lines:]
+```lua
+return {
+  functions = {
+    tail_tests = {
+      args = "lines",
+      description = "Run tests and return the last lines of output.",
+      run = function(lines)
+        local out = sh("make check"):lines()
+        return table.concat(out, "\n", math.max(1, #out - (lines or 30) + 1))
+      end,
+    },
+  },
+}
 ```
 
-`show_agent: false` (default `true`) hides a helper from the agent: it is left out of the system
-prompt and of `docs("functions")`, but it stays defined, so other helpers, hooks and tasks can call it.
-Set `modes: [tui]` (`tui` or `json`) to load a helper only in those run modes;
-omitted or empty loads it in all modes.
+Each `run` becomes a global of the VM under the function's name. `args` is only the text shown
+to the agent between the parentheses. `show_agent = false` (default `true`) hides a helper from
+the agent: it is left out of the system prompt and of `docs("functions")`, but it stays defined,
+so other helpers, hooks and tasks can call it. Set `modes = {"tui"}` (`tui` or `json`) to define a
+helper only in those run modes; omitted or empty defines it in all modes.
 
-Helpers can call other helpers and import modules next to the config. `/reload`
-redefines helpers in the agent's interpreter without clearing its variables.
-A deleted helper remains callable in that interpreter until exit.
+`/reload` runs the config file again in the same VM: helpers are redefined and the agent's
+globals stay. A deleted helper remains defined until exit.

@@ -39,7 +39,6 @@ mod token_picker;
 mod tool_view;
 mod trace_filter;
 mod usage;
-mod yaml_syntax;
 
 use crossterm::event::{
     self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,

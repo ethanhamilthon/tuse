@@ -58,14 +58,14 @@ mod tests {
                 reasoning: String::new(),
                 tool_calls: vec![ToolCall {
                     id: format!("c{n}"),
-                    name: "python".into(),
+                    name: "lua".into(),
                     arguments: "{}".into(),
                 }],
                 at: String::new(),
             },
             Record::Tool {
                 id: format!("c{n}"),
-                tool: "python".into(),
+                tool: "lua".into(),
                 input: "ls".into(),
                 images: vec![],
                 diffs: vec![],

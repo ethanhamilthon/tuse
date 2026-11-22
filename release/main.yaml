@@ -1,3 +1,0 @@
-# Your Tuse config. `tuse reset` writes this file; `tuse update` never touches it.
-# The system prompt and the default settings are built into the binary: write only
-# what you want to change (settings, systems, themes, hooks, ...). See `docs/config.md`.

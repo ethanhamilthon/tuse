@@ -4,7 +4,7 @@ use crate::session::Session;
 
 /// One entry of `/trace`.
 pub struct TraceItem {
-    /// `system`, `user`, `agent`, `thinking`, `python` (or `tool` for another name),
+    /// `system`, `user`, `agent`, `thinking`, `lua` (or `tool` for another name),
     /// `output`, `notification`, `notice`, `error` or `hook`.
     pub role: &'static str,
     /// The first meaningful line.
@@ -14,8 +14,8 @@ pub struct TraceItem {
 }
 
 fn role_of(tool: &str) -> &'static str {
-    if tool == "python" || crate::alias::is_builtin(tool) {
-        "python"
+    if tool == crate::tool::TOOL {
+        "lua"
     } else {
         "tool"
     }

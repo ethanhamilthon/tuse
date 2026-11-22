@@ -28,7 +28,7 @@ fn call(id: &str) -> Record {
         reasoning: String::new(),
         tool_calls: vec![ToolCall {
             id: id.into(),
-            name: "python".into(),
+            name: "lua".into(),
             arguments: r#"{"code":"read('a.png')"}"#.into(),
         }],
         at: String::new(),
@@ -38,7 +38,7 @@ fn call(id: &str) -> Record {
 fn result(id: &str, images: Vec<String>) -> Record {
     Record::Tool {
         id: id.into(),
-        tool: "python".into(),
+        tool: "lua".into(),
         title: String::new(),
         input: "read('a.png')".into(),
         output: "ok".into(),
@@ -121,7 +121,7 @@ fn a_crash_mid_step_gets_placeholder_results() {
     };
     tool_calls.push(ToolCall {
         id: "c2".into(),
-        name: "python".into(),
+        name: "lua".into(),
         arguments: "not json".into(),
     });
     records.push(result("c1", vec![]));

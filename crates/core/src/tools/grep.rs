@@ -1,47 +1,51 @@
+use super::fail;
 use super::resolve;
 use ignore::WalkBuilder;
 use ignore::overrides::OverrideBuilder;
 use regex::RegexBuilder;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use tuse_py::{Args, Ctx, ExcType, Fail, MontyObject};
 
 const DEFAULT_LIMIT: usize = 100;
 /// Characters of a matching line shown.
 const LINE_CHARS: usize = 300;
 
-/// `grep(pattern, path=".", glob=None, ignore_case=False, context=0, limit=100)`
-pub fn call(a: &Args, ctx: &Ctx, cwd: &Path) -> Result<MontyObject, Fail> {
-    let pattern = a.str(0, "pattern")?;
-    let root = resolve(&a.opt_str(1, "path")?.unwrap_or_else(|| ".".into()), cwd);
-    let glob = a.opt_str(2, "glob")?;
-    let ignore_case = a.bool(3, "ignore_case", false)?;
-    let context = a.opt_int(4, "context")?.map_or(0, |n| n.max(0) as usize);
-    let limit = a
-        .opt_int(5, "limit")?
-        .map_or(DEFAULT_LIMIT, |n| n.max(1) as usize);
-    let re = RegexBuilder::new(&pattern)
+pub struct Opts {
+    pub path: Option<String>,
+    pub glob: Option<String>,
+    pub ignore_case: bool,
+    pub context: usize,
+    pub limit: Option<usize>,
+}
+
+/// `grep(pattern, {path, glob, ignore_case, context, limit})`; `stopped` ends a long walk.
+pub fn run(
+    pattern: &str,
+    o: Opts,
+    cwd: &Path,
+    stopped: &dyn Fn() -> bool,
+) -> Result<String, String> {
+    let root = resolve(o.path.as_deref().unwrap_or("."), cwd);
+    let (glob, ignore_case, context) = (o.glob, o.ignore_case, o.context);
+    let limit = o.limit.unwrap_or(DEFAULT_LIMIT).max(1);
+    let re = RegexBuilder::new(pattern)
         .case_insensitive(ignore_case)
         .build()
-        .map_err(|e| Fail::value(format!("bad pattern: {e}")))?;
+        .map_err(|e| fail(format!("bad pattern: {e}")))?;
     if !root.exists() {
-        return Err(Fail::of(
-            ExcType::FileNotFoundError,
-            format!("{}: no such file or folder", root.display()),
-        ));
+        return Err(fail(format!("{}: no such file or folder", root.display())));
     }
     let mut walk = WalkBuilder::new(&root);
     walk.hidden(false).filter_entry(|e| e.file_name() != ".git");
     if let Some(g) = glob {
         let mut o = OverrideBuilder::new(&root);
-        o.add(&g)
-            .map_err(|e| Fail::value(format!("bad glob: {e}")))?;
-        walk.overrides(o.build().map_err(|e| Fail::value(e.to_string()))?);
+        o.add(&g).map_err(|e| fail(format!("bad glob: {e}")))?;
+        walk.overrides(o.build().map_err(|e| fail(e.to_string()))?);
     }
     let (mut out, mut found, mut cut) = (Vec::new(), 0usize, false);
     'files: for entry in walk.build().flatten() {
-        if ctx.stopped() {
-            return Err(Fail::of(ExcType::TimeoutError, "grep was stopped"));
+        if stopped() {
+            return Err(fail("grep was stopped"));
         }
         if !entry.file_type().is_some_and(|t| t.is_file()) {
             continue;
@@ -91,14 +95,14 @@ pub fn call(a: &Args, ctx: &Ctx, cwd: &Path) -> Result<MontyObject, Fail> {
         }
     }
     if out.is_empty() {
-        return Ok(MontyObject::string("[no matches]"));
+        return Ok("[no matches]".into());
     }
     if cut {
         out.push(format!(
             "[stopped at {limit} matches; narrow the pattern or raise limit]"
         ));
     }
-    Ok(MontyObject::string(out.join("\n")))
+    Ok(out.join("\n"))
 }
 
 fn clip(l: &str) -> String {

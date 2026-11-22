@@ -15,36 +15,44 @@ fn wait_lines(path: &std::path::Path, n: usize) -> Vec<String> {
 #[test]
 fn agent_message_lists_only_running_tasks_and_children() {
     let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
-    let code = "task_run(\"while True:\\n    sh('sleep 0.1')\", name='loop')";
+    let code = "spawn(function() while true do sleep(0.1) end end, 'loop')";
     let addr = common::provider(vec![
         Reply::Text("one"),
-        Reply::Call("python", json!({"code": code, "title": "t"}).to_string()),
+        Reply::Call("lua", json!({"code": code, "title": "t"}).to_string()),
         Reply::Text("two"),
         Reply::Stall("partial"),
     ]);
     let (dir, _) = common::setup("hook-running", &addr, "");
     let log = dir.join("events");
-    let cfg = dir.join("main.yaml");
+    let cfg = dir.join("main.lua");
     std::fs::write(
         &cfg,
         format!(
-            r#"model: p/m
-connect: [{{name: p, base_url: 'http://{addr}', api_key: k}}]
-hooks:
-  tui_only:
-    modes: [tui]
-    events: [agent_message]
-    run: |
-      with open('{unexpected}', 'a') as f:
-          f.write(str(tasks) + str(children))
-  record:
-    modes: [json]
-    events: [user_message, agent_message]
-    run: |
-      def names(v, key):
-          return None if v is None else [x[key] for x in v]
-      with open('{}', 'a') as f:
-          f.write(f"{{event}} {{status}} {{names(tasks, 'name')}} {{names(children, 'id')}}\n")
+            r#"local function names(v, key)
+  if v == nil then return "nil" end
+  local out = {{}}
+  for _, x in ipairs(v) do out[#out + 1] = x[key] end
+  return "[" .. table.concat(out, ",") .. "]"
+end
+return {{
+  model = "p/m",
+  hooks = {{
+    tui_only = {{
+      modes = {{"tui"}},
+      events = {{"agent_message"}},
+      run = function(e) io.open("{unexpected}", "a"):write("x"):close() end,
+    }},
+    record = {{
+      modes = {{"json"}},
+      events = {{"user_message", "agent_message"}},
+      run = function(e)
+        local f = io.open("{}", "a")
+        f:write(e.event, " ", tostring(e.status), " ", names(e.tasks, "name"), " ", names(e.children, "id"), "\n")
+        f:close()
+      end,
+    }},
+  }},
+}}
 "#,
             log.display(),
             unexpected = dir.join("unexpected").display()
@@ -66,7 +74,7 @@ hooks:
     s.submit(UserInput::text("a"));
     wait_turn(&events);
     let lines = wait_lines(&log, 2);
-    assert_eq!(lines[0], "user_message None None None");
+    assert_eq!(lines[0], "user_message nil nil nil");
     assert_eq!(lines[1], "agent_message finished [] []");
 
     // A child with an explicit parent is found before its first prompt.
@@ -83,7 +91,7 @@ hooks:
     let lines = wait_lines(&log, 4);
     assert_eq!(
         lines[3],
-        format!("agent_message finished ['loop'] ['{}']", child.id)
+        format!("agent_message finished [loop] [{}]", child.id)
     );
 
     s.submit(UserInput::text("c"));
@@ -93,7 +101,7 @@ hooks:
     let lines = wait_lines(&log, 6);
     assert_eq!(
         lines[5],
-        format!("agent_message cancelled ['loop'] ['{}']", child.id)
+        format!("agent_message cancelled [loop] [{}]", child.id)
     );
 
     child.close();

@@ -1,6 +1,7 @@
 target/
 .DS_Store
 TUSE-*.md
+/tuse.lua
 /tuse.yaml
 /systems.yaml
 /herdr.yaml

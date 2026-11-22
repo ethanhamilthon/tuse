@@ -1,7 +1,7 @@
+use super::fail;
 use base64::Engine;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use tuse_py::{ExcType, Fail};
 
 pub const DEFAULT_LIMIT: usize = 2000;
 /// Characters of one line shown; the rest is cut.
@@ -13,31 +13,25 @@ pub struct Read {
     pub image: Option<String>,
 }
 
-pub fn run(
-    path: &Path,
-    offset: usize,
-    limit: usize,
-    max_image: usize,
-    budget: usize,
-) -> Result<Read, Fail> {
+pub fn run(path: &Path, offset: usize, limit: usize, max_image: usize) -> Result<Read, String> {
     let io = |e: std::io::Error| super::io_fail(path, &e);
     let meta = std::fs::metadata(path).map_err(io)?;
     if meta.is_dir() {
-        return Err(Fail::of(
-            ExcType::IsADirectoryError,
-            format!("{} is a directory; list it with os.listdir", path.display()),
-        ));
+        return Err(fail(format!(
+            "{} is a directory; list it with sh(\"ls\")",
+            path.display()
+        )));
     }
     if let Some(mime) = crate::input::image_mime(path) {
         return image(path, mime, meta.len() as usize, max_image);
     }
-    let text = text(path, offset, limit, budget).map_err(io)?;
+    let text = text(path, offset, limit).map_err(io)?;
     Ok(Read { text, image: None })
 }
 
-fn image(path: &Path, mime: &str, size: usize, max: usize) -> Result<Read, Fail> {
+fn image(path: &Path, mime: &str, size: usize, max: usize) -> Result<Read, String> {
     if size > max {
-        return Err(Fail::value(format!(
+        return Err(fail(format!(
             "{} is {size} bytes, over the image limit of {max} bytes (settings.max_image_bytes)",
             path.display()
         )));
@@ -50,8 +44,8 @@ fn image(path: &Path, mime: &str, size: usize, max: usize) -> Result<Read, Fail>
     })
 }
 
-/// Numbered lines `offset..offset + limit`, within `budget` bytes.
-fn text(path: &Path, offset: usize, limit: usize, budget: usize) -> std::io::Result<String> {
+/// Numbered lines `offset..offset + limit`.
+fn text(path: &Path, offset: usize, limit: usize) -> std::io::Result<String> {
     let mut reader = BufReader::new(std::fs::File::open(path)?);
     if reader.fill_buf()?.iter().take(8192).any(|&b| b == 0) {
         let size = std::fs::metadata(path)?.len();
@@ -76,7 +70,7 @@ fn text(path: &Path, offset: usize, limit: usize, budget: usize) -> std::io::Res
             None => line.to_string(),
         };
         let row = format!("{n}\t{line}\n");
-        if last >= offset && (n - offset >= limit || out.len() + row.len() > budget) {
+        if last >= offset && n - offset >= limit {
             full = true;
             continue;
         }
@@ -110,13 +104,13 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("t.txt");
         std::fs::write(&f, "a\nb\nc\nd\n").unwrap();
-        let t = text(&f, 2, 2, 1000).unwrap();
+        let t = text(&f, 2, 2).unwrap();
         assert_eq!(t, "2\tb\n3\tc\n[lines 2-3 of 4; continue with offset=4]");
-        assert!(text(&f, 9, 2, 1000).unwrap().contains("past the end"));
+        assert!(text(&f, 9, 2).unwrap().contains("past the end"));
         std::fs::write(&f, "").unwrap();
-        assert_eq!(text(&f, 1, 2, 1000).unwrap(), "[empty file]");
+        assert_eq!(text(&f, 1, 2).unwrap(), "[empty file]");
         std::fs::write(&f, b"ab\0cd").unwrap();
-        assert!(text(&f, 1, 2, 1000).unwrap().starts_with("[binary file"));
+        assert!(text(&f, 1, 2).unwrap().starts_with("[binary file"));
         std::fs::remove_dir_all(dir).ok();
     }
 }

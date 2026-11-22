@@ -12,12 +12,13 @@ repository = "https://github.com/ethanhamilthon/tuse"
 tuse-config = { path = "crates/config" }
 tuse-api = { path = "crates/api" }
 tuse-core = { path = "crates/core" }
-tuse-py = { path = "crates/py" }
+tuse-lua = { path = "crates/lua" }
+mlua = { version = "0.12", features = ["lua54", "vendored", "serde"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
 tuse-tui = { path = "crates/tui" }
 tuse-rpc = { path = "crates/rpc" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
 ureq = "2.12"
 crossterm = "0.28"
 pulldown-cmark = { version = "0.12", default-features = false }

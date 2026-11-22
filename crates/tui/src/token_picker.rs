@@ -101,8 +101,8 @@ mod tests {
     fn prompt_picker_and_refs_filter_by_mode() {
         let mut app = crate::app::test_app("prompt-modes");
         std::fs::write(
-            app.cwd.join("tuse.yaml"),
-            "prompts:\n  hl: {text: only json, modes: [json]}\n",
+            app.cwd.join("tuse.lua"),
+            "return { prompts = { hl = {text = 'only json', modes = {'json'}} } }",
         )
         .unwrap();
         app.session.reload().unwrap();
@@ -111,12 +111,12 @@ mod tests {
         assert!(app.picker.is_none());
 
         std::fs::write(
-            app.cwd.join("tuse.yaml"),
-            r#"prompts:
-  plain: plain body
-  tui_only: {text: tui body, modes: [tui]}
-  hl_only: {text: json body, modes: [json]}
-"#,
+            app.cwd.join("tuse.lua"),
+            r#"return { prompts = {
+  plain = "plain body",
+  tui_only = {text = "tui body", modes = {"tui"}},
+  hl_only = {text = "json body", modes = {"json"}},
+} }"#,
         )
         .unwrap();
         app.session.reload().unwrap();

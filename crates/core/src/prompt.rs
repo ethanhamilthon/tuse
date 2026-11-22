@@ -21,19 +21,9 @@ pub fn system_prompt(config: &Config, compacted: bool, mode: crate::Mode) -> Str
     out
 }
 
-/// `4096` bytes as `4 KB`, so the number in the prompt reads like the setting.
-fn size(n: usize) -> String {
-    if n >= 1024 && n.is_multiple_of(1024) {
-        format!("{} KB", n / 1024)
-    } else {
-        format!("{n} bytes")
-    }
-}
-
-/// Fills `{max_output}` and `{tool_timeout}`.
+/// Fills `{tool_timeout}`.
 fn fill(text: &str, config: &Config) -> String {
-    text.replace("{max_output}", &size(config.settings.max_output))
-        .replace("{tool_timeout}", &config.settings.tool_timeout.to_string())
+    text.replace("{tool_timeout}", &config.settings.tool_timeout.to_string())
 }
 
 fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
@@ -49,14 +39,12 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
 
 pub fn tools(config: &Config) -> Vec<Value> {
     vec![tool(
-        "python",
-        &format!(
-            "Run Python code in a persistent REPL (variables and imports stay between calls). Returns what the code prints plus the value of the last expression, or a traceback; output over {} is cut in the middle. Files and search: read(), write(), edit(), grep(); programs: sh(cmd).",
-            size(config.settings.max_output)
-        ),
+        "lua",
+        "Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Files and search: read(), write(), edit(), grep(); programs: sh(cmd).",
         json!({
-            "code": {"type": "string", "description": "The Python code to run."},
-            "title": {"type": "string", "description": "What this call does, in a few words and the user's language, e.g. \"Running the tests\". Shown to the user while it runs."}
+            "code": {"type": "string", "description": "The Lua code to run."},
+            "title": {"type": "string", "description": "What this call does, in a few words and the user's language, e.g. \"Running the tests\". Shown to the user while it runs."},
+            "timeout": {"type": "integer", "description": format!("Seconds before the call is stopped; default {}, no upper limit.", config.settings.tool_timeout)}
         }),
         &["code", "title"],
     )]

@@ -180,7 +180,11 @@ pub fn test_home() {
     ONCE.call_once(|| {
         let home = std::env::temp_dir().join(format!("tuse-home-{}", std::process::id()));
         // SAFETY: every test that reads the environment calls this first and waits for it.
-        unsafe { std::env::set_var("TUSE_HOME", home) };
+        unsafe {
+            std::env::set_var("TUSE_HOME", &home);
+            std::env::set_var("TUSE_GLOBAL_CONFIG", home.join("none.lua"));
+            std::env::remove_var("TUSE_PARENT");
+        }
     });
 }
 

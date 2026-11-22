@@ -1,118 +1,189 @@
-use crate::hook_queue::HookQueue;
+use crate::record::Record;
 use crate::session::Session;
-use std::sync::Arc;
-use tuse_py::MontyObject;
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tuse_lua::mlua::{Function, Lua, MultiValue};
+use tuse_lua::{Done, Job, Out, Stop};
 
 pub use tuse_config::HOOK_EVENTS as EVENTS;
 
-/// The variables of one event; each event sets its own, the rest are `None`.
+/// The variables of one event; each event sets its own, the rest are `nil`.
 #[derive(Default)]
 pub struct Data {
-    /// `user_message` and `agent_message`.
     pub text: Option<String>,
-    /// `user_message`: the first message of the session.
     pub is_first: Option<bool>,
-    /// `agent_message`: `working`, `finished` or `cancelled`.
     pub status: Option<&'static str>,
-    /// `process_start` / `process_end`: `launch`, `new`, `resume`, `reload` or `exit`.
     pub reason: Option<&'static str>,
-    /// `agent_message`: running background tasks, `(id, name, kind)`.
-    pub tasks: Option<Vec<[String; 3]>>,
-    /// `agent_message`: running descendant sessions.
+    /// `agent_message`: running background tasks, `(id, name)`.
+    pub tasks: Option<Vec<[String; 2]>>,
     pub children: Option<Vec<crate::children::RunningChild>>,
 }
 
-fn entries(rows: Vec<Vec<(&str, MontyObject)>>) -> MontyObject {
-    MontyObject::list(
-        rows.into_iter()
-            .map(|r| MontyObject::dict(r.into_iter().map(|(k, v)| (MontyObject::string(k), v)))),
-    )
+/// Per hook: whether a run is going, the events waiting behind it, and the flag
+/// that stops the running one.
+#[derive(Default)]
+pub(crate) struct Lane {
+    busy: bool,
+    queue: Vec<Value>,
+    cancel: Arc<AtomicBool>,
 }
 
-fn opt(s: Option<String>) -> MontyObject {
-    s.map_or_else(MontyObject::none, MontyObject::string)
-}
+pub(crate) type Runs = Arc<Mutex<HashMap<String, Lane>>>;
+
+/// Variables every hook gets; the trace lists only the event's own.
+const COMMON: &[&str] = &["event", "hook", "session", "cwd", "model", "config"];
 
 fn listens(hook: &tuse_config::Hook, mode: tuse_config::Mode, event: &str) -> bool {
-    !hook.run.trim().is_empty() && hook.matches(mode) && hook.events.iter().any(|e| e == event)
+    hook.matches(mode) && hook.events.iter().any(|e| e == event)
 }
 
 impl Session {
     pub(crate) fn hook(self: &Arc<Self>, event: &str, data: Data) {
-        let model = self.model().0;
-        let mut queues = self.hooks.lock().unwrap();
-        let Some(queues) = queues.as_mut() else {
+        if !self.hooks_on.load(Ordering::Acquire) {
             return;
-        };
+        }
         let config = self.config();
         let mode = self.mode.into();
+        let config_path = tuse_config::find(self.config_arg.as_deref(), &self.cwd)
+            .map(|p| p.display().to_string());
         for (name, hook) in &config.hooks {
             if !listens(hook, mode, event) {
                 continue;
             }
-            let config_path = tuse_config::find(self.config_arg.as_deref(), &self.cwd)
-                .map(|p| p.display().to_string());
-            let vars = vec![
-                ("event".to_string(), MontyObject::string(event)),
-                ("hook".into(), MontyObject::string(name)),
-                ("session".into(), MontyObject::string(&self.id)),
-                (
-                    "cwd".into(),
-                    MontyObject::string(self.cwd.display().to_string()),
-                ),
-                ("model".into(), MontyObject::string(&model)),
-                ("config".into(), opt(config_path)),
-                ("text".into(), opt(data.text.clone())),
-                (
-                    "is_first".into(),
-                    data.is_first
-                        .map_or_else(MontyObject::none, MontyObject::bool),
-                ),
-                ("status".into(), opt(data.status.map(String::from))),
-                ("reason".into(), opt(data.reason.map(String::from))),
-                (
-                    "tasks".into(),
-                    data.tasks.clone().map_or_else(MontyObject::none, |t| {
-                        entries(
-                            t.into_iter()
-                                .map(|[id, name, kind]| {
-                                    vec![
-                                        ("id", MontyObject::string(id)),
-                                        ("name", MontyObject::string(name)),
-                                        ("kind", MontyObject::string(kind)),
-                                    ]
-                                })
-                                .collect(),
-                        )
-                    }),
-                ),
-                (
-                    "children".into(),
-                    data.children.clone().map_or_else(MontyObject::none, |c| {
-                        entries(
-                            c.into_iter()
-                                .map(|c| {
-                                    vec![
-                                        ("id", MontyObject::string(c.id)),
-                                        ("name", MontyObject::string(c.name)),
-                                        ("cwd", MontyObject::string(c.cwd)),
-                                        ("elapsed", MontyObject::int(c.elapsed_secs as i64)),
-                                    ]
-                                })
-                                .collect(),
-                        )
-                    }),
-                ),
-            ];
-            let queue = queues.entry(name.clone()).or_insert_with(|| {
-                HookQueue::new(
-                    Arc::downgrade(self),
-                    config.clone(),
-                    name.clone(),
-                    hook.run.clone(),
-                )
+            let vars = json!({
+                "event": event,
+                "hook": name,
+                "session": self.id,
+                "cwd": self.cwd.display().to_string(),
+                "model": self.model().0,
+                "config": config_path,
+                "text": data.text,
+                "is_first": data.is_first,
+                "status": data.status,
+                "reason": data.reason,
+                "tasks": data.tasks.as_ref().map(|t| t.iter().map(|[id, name]| json!({"id": id, "name": name})).collect::<Vec<_>>()),
+                "children": data.children.as_ref().map(|c| c.iter().map(|c| json!({
+                    "id": c.id, "name": c.name, "cwd": c.cwd, "elapsed": c.elapsed_secs
+                })).collect::<Vec<_>>()),
             });
-            let _ = queue.tx.send(vars);
+            let mut runs = self.hook_runs.lock().unwrap();
+            let lane = runs.entry(name.clone()).or_default();
+            lane.queue.push(vars);
+            if !lane.busy {
+                lane.busy = true;
+                drop(runs);
+                self.next_hook(name.clone());
+            }
+        }
+    }
+
+    /// Starts the oldest waiting event of hook `name`, if any.
+    fn next_hook(self: &Arc<Self>, name: String) {
+        let (vars, cancel) = {
+            let mut runs = self.hook_runs.lock().unwrap();
+            let Some(lane) = runs.get_mut(&name) else {
+                return;
+            };
+            if lane.queue.is_empty() {
+                lane.busy = false;
+                return;
+            }
+            lane.cancel = Arc::default();
+            (lane.queue.remove(0), lane.cancel.clone())
+        };
+        let secs = self.config().settings.hook_timeout.max(1);
+        let stop = Stop::new(cancel, Some(Instant::now() + Duration::from_secs(secs)));
+        let weak = Arc::downgrade(self);
+        let started = Instant::now();
+        self.vm.post(move |lua| {
+            let s2 = weak.clone();
+            let (n2, v2) = (name.clone(), vars.clone());
+            let done = move |_: &Lua, d: Done| {
+                if let Some(s) = s2.upgrade() {
+                    s.hook_done(&n2, &v2, d, started);
+                }
+            };
+            let start = || -> tuse_lua::mlua::Result<()> {
+                let f: Function = crate::config_lua::code_of(lua, "hooks", &name)
+                    .ok_or_else(|| tuse_lua::mlua::Error::runtime("run is gone"))?;
+                let arg = tuse_lua::to_lua(lua, &vars)?;
+                let job = Job::new(
+                    lua,
+                    f,
+                    MultiValue::from_vec(vec![arg]),
+                    stop,
+                    Out::Buf(String::new()),
+                    done,
+                )?;
+                job.start(lua);
+                Ok(())
+            };
+            if let Err(e) = start()
+                && let Some(s) = weak.upgrade()
+            {
+                let d = Done {
+                    ok: false,
+                    text: tuse_lua::message(&e),
+                    stop: None,
+                    diffs: vec![],
+                    images: vec![],
+                };
+                s.hook_done(&name, &vars, d, started);
+            }
+        });
+    }
+
+    fn hook_done(self: &Arc<Self>, name: &str, vars: &Value, d: Done, started: Instant) {
+        let error = (!d.ok).then(|| crate::host::error_line(&d.text));
+        if let Some(e) = &error {
+            self.emit(crate::Event::Notice(format!("hook {name}: {e}")));
+        }
+        let r = Record::Hook {
+            name: name.to_string(),
+            event: vars["event"].as_str().unwrap_or("").to_string(),
+            vars: describe(vars),
+            error,
+            ms: started.elapsed().as_millis() as u64,
+        };
+        let mut st = self.state.lock().unwrap();
+        self.push(&mut st, r);
+        drop(st);
+        self.next_hook(name.to_string());
+    }
+
+    /// Fires `process_end` and waits up to `hook_timeout` for every hook run to end;
+    /// the runs still going then are stopped. No hook fires after this.
+    pub(crate) fn finish_hooks(self: &Arc<Self>, reason: &'static str) {
+        self.hook(
+            "process_end",
+            Data {
+                reason: Some(reason),
+                ..Default::default()
+            },
+        );
+        self.hooks_on.store(false, Ordering::Release);
+        let secs = self.config().settings.hook_timeout.max(1);
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        loop {
+            let busy = self.hook_runs.lock().unwrap().values().any(|l| l.busy);
+            if !busy || Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        for lane in self.hook_runs.lock().unwrap().values_mut() {
+            lane.queue.clear();
+            lane.cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Esc stops the hook runs going now; later events still fire.
+    pub(crate) fn stop_hook_runs(&self) {
+        for lane in self.hook_runs.lock().unwrap().values() {
+            lane.cancel.store(true, Ordering::Relaxed);
         }
     }
 
@@ -126,17 +197,18 @@ impl Session {
     }
 
     pub(crate) fn agent_message_hook(self: &Arc<Self>, text: String, status: &'static str) {
-        let listened = self
+        let mode = self.mode.into();
+        if !self
             .config()
             .hooks
             .values()
-            .any(|h| listens(h, self.mode.into(), "agent_message"));
-        if !listened {
+            .any(|h| listens(h, mode, "agent_message"))
+        {
             return;
         }
         let tasks = (self.tasks.list().into_iter())
-            .filter(|t| t.status == "running")
-            .map(|t| [t.id, t.name, t.kind])
+            .filter(|t| t.alive())
+            .map(|t| [t.id, t.name])
             .collect();
         let data = Data {
             text: Some(text),
@@ -147,4 +219,23 @@ impl Session {
         };
         self.hook("agent_message", data);
     }
+}
+
+fn describe(vars: &Value) -> String {
+    let Some(m) = vars.as_object() else {
+        return String::new();
+    };
+    m.iter()
+        .filter(|(k, v)| !COMMON.contains(&k.as_str()) && !v.is_null())
+        .map(|(k, v)| {
+            let v = match v {
+                Value::String(s) => format!("{s:?}"),
+                v => v.to_string(),
+            };
+            let short: String = v.chars().take(200).collect();
+            let cut = if short.len() < v.len() { "…" } else { "" };
+            format!("{k}={short}{cut}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

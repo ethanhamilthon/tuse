@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- The agent's tool is `lua(code, title, timeout)`: Lua 5.4 (mlua) instead of Python (Monty). The model picks the timeout of each call, with no upper limit; `settings.tool_timeout` is the default.
+- Nothing is cut: tool output, `sh().out` and task logs are kept whole. `settings.max_output` is gone.
+- One VM per session runs the config, the agent's code, hooks and tasks as coroutines. `sh`, `sleep` and waits yield, so hooks and tasks keep running while a call waits.
+- `spawn(fn, name)` runs a function as a background task in the same VM. `task_run`, `task_add` and process tasks are gone; `sh` kills its process at the timeout instead of handing it over.
+- The config is `tuse.lua` / `~/.config/tuse/main.lua`, returning a table. Hooks and helpers are Lua functions; `include`, `$VAR` and `#{{cmd}}` give way to `require`, `os.getenv` and `io.popen`. `/reload` runs the file again in the same VM and keeps the agent's globals.
+- Sessions, providers and the last picked model, effort and theme live in SQLite (`~/.tuse/tuse.db`). Old `session.jsonl` sessions move in on the first start. `tuse connect` saves providers there; `tuse providers` and `tuse disconnect NAME` are new.
+- Removed: `ask`, `draw_ui`, the `ask` hook event, headless mode (`tuse -p`), and model calls of functions as separate tools.
+
 ## 0.6.5
 
 - Config includes accept `only` to import selected top-level keys from a file.

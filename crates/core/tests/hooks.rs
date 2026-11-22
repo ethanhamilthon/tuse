@@ -34,7 +34,7 @@ fn wait_text(events: &std::sync::mpsc::Receiver<Event>) {
 fn hooks_see_process_and_message_events_in_order() {
     let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
     let addr = common::provider(vec![
-        Reply::Call("python", json!({"code": "1", "title": "t"}).to_string()),
+        Reply::Call("lua", json!({"code": "1", "title": "t"}).to_string()),
         Reply::Text("done"),
         Reply::Stall("partial"),
     ]);
@@ -42,40 +42,46 @@ fn hooks_see_process_and_message_events_in_order() {
     let log = dir.join("events");
     let tui_log = dir.join("tui");
     let hl_log = dir.join("hl");
-    let cfg = dir.join("main.yaml");
+    let cfg = dir.join("main.lua");
     std::fs::write(
         &cfg,
         format!(
-            r#"model: p/m
-connect: [{{name: p, base_url: 'http://{addr}', api_key: k}}]
-functions:
-  label:
-    description: Label the current event
-    run: return event
-hooks:
-  record:
-    events: [process_start, process_end, user_message, agent_message, turn_end]
-    run: |
-      if event == 'process_start':
-          n = 0
-      n += 1
-      extra = {{'process_start': reason, 'process_end': reason, 'user_message': f'{{text}} {{is_first}}', 'agent_message': f'{{text}} {{status}}'}}[event]
-      with open('{}', 'a') as f:
-          f.write(f'{{label()}} {{n}} {{extra}}\n')
-      if event == 'user_message' and is_first:
-          set_title('hook ' + text)
-  tui_only:
-    modes: [tui]
-    events: [process_start, process_end, user_message]
-    run: |
-      with open('{}', 'a') as f:
-          f.write(f'{{event}}\n')
-  hl_only:
-    modes: [json]
-    events: [process_start, process_end]
-    run: |
-      with open('{}', 'a') as f:
-          f.write(f'{{event}} {{reason}}\n')
+            r#"local n = 0
+local function append(path, line)
+  local f = assert(io.open(path, "a"))
+  f:write(line, "\n")
+  f:close()
+end
+return {{
+  model = "p/m",
+  functions = {{
+    label = {{ description = "Label the current event", run = function(e) return e.event end }},
+  }},
+  hooks = {{
+    record = {{
+      events = {{"process_start", "process_end", "user_message", "agent_message", "turn_end"}},
+      run = function(e)
+        if e.event == "process_start" then n = 0 end
+        n = n + 1
+        local extra = e.reason
+        if e.event == "user_message" then extra = e.text .. " " .. tostring(e.is_first) end
+        if e.event == "agent_message" then extra = e.text .. " " .. e.status end
+        append("{}", label(e) .. " " .. n .. " " .. extra)
+        if e.event == "user_message" and e.is_first then set_title("hook " .. e.text) end
+      end,
+    }},
+    tui_only = {{
+      modes = {{"tui"}},
+      events = {{"process_start", "process_end", "user_message"}},
+      run = function(e) append("{}", e.event) end,
+    }},
+    hl_only = {{
+      modes = {{"json"}},
+      events = {{"process_start", "process_end"}},
+      run = function(e) append("{}", e.event .. " " .. e.reason) end,
+    }},
+  }},
+}}
 "#,
             log.display(),
             tui_log.display(),
@@ -130,11 +136,11 @@ hooks:
     assert_eq!(
         std::fs::read_to_string(&log).unwrap(),
         "process_start 1 launch
-user_message 2 hi True
+user_message 2 hi true
 agent_message 3 done finished
 process_end 4 reload
 process_start 1 reload
-user_message 2 stop me False
+user_message 2 stop me false
 agent_message 3 partial cancelled
 process_end 4 resume
 process_start 1 resume
@@ -153,7 +159,7 @@ process_end 2 exit
         hooks
             .iter()
             .any(|(summary, text)| summary == "record user_message ok"
-                && text.contains("text='hi'\nis_first=True")),
+                && text.contains("is_first=true\ntext=\"hi\"")),
         "{hooks:?}"
     );
     assert!(!tui_log.exists(), "tui_only hook ran in json");

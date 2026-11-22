@@ -43,7 +43,7 @@ pub struct UiSettings {
     pub input_design: String,
     /// `false` turns the working gradient animation off.
     pub motion: bool,
-    /// `true` folds multiline triple-quoted Python strings in chat tool calls.
+    /// `true` folds multiline Lua long strings (`[[...]]`) in chat tool calls.
     pub fold_strings: bool,
     /// Lines shown per block: `0` hides it, `-1` removes the limit.
     pub tool_line: i32,

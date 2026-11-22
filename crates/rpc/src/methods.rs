@@ -138,22 +138,19 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             s.fetch_models();
             Ok(json!(s.available_models()))
         }
-        "config.get" => s
-            .config()
-            .to_yaml()
-            .map(Value::String)
-            .map_err(Fail::session),
+        "config.get" => {
+            serde_json::to_value(&*s.config()).map_err(|e| Fail::session(e.to_string()))
+        }
         "config.reload" => s.reload().map(|_| Value::Null).map_err(Fail::session),
         "config.set" => {
             let key = str_param(p, "key")?;
             let value = str_param(p, "value")?;
-            match p["scope"].as_str().unwrap_or("global") {
-                "global" => s.save_setting(&key, &value),
-                "settings" => s.save_in_settings(&key, &value),
-                _ => return Err(Fail::params("`scope` must be `global` or `settings`")),
+            if !matches!(key.as_str(), "model" | "effort" | "theme") {
+                return Err(Fail::params("`key` must be `model`, `effort` or `theme`"));
             }
-            .map(|_| Value::Null)
-            .map_err(Fail::session)
+            s.save_choice(&key, &value)
+                .map(|_| Value::Null)
+                .map_err(Fail::session)
         }
         "tasks.list" => {
             serde_json::to_value(s.tasks.list()).map_err(|e| Fail::session(e.to_string()))

@@ -50,7 +50,7 @@ mod tests {
         app.trace = vec![
             ("user", "hi".into()),
             ("agent", "hello".into()),
-            ("python", "1 + 1".into()),
+            ("lua", "1 + 1".into()),
         ];
         app.open_trace_item(0);
         assert_eq!(app.panel.as_ref().unwrap().title, "Trace 1/3 user");
@@ -65,7 +65,7 @@ mod tests {
         assert_eq!(app.panel.as_ref().unwrap().title, "Trace 2/3 agent");
         assert!(app.panel_key(KeyCode::Right, 10));
         assert_eq!(app.trace_item, Some(2));
-        assert_eq!(app.panel.as_ref().unwrap().title, "Trace 3/3 python");
+        assert_eq!(app.panel.as_ref().unwrap().title, "Trace 3/3 lua");
         assert!(app.panel_key(KeyCode::Right, 10));
         assert_eq!(app.trace_item, Some(2));
 

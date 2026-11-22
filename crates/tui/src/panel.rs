@@ -3,11 +3,10 @@ use crate::style::{Palette, Style};
 use crate::text::{Line, wrap};
 
 enum Body {
-    Yaml(String),
     Text(String),
     Styled(Vec<Line>),
     Markdown(String),
-    Python(String),
+    Lua(String),
 }
 
 /// Read-only text over the bottom of the chat (`/usage`, a task's output, an opened
@@ -35,11 +34,8 @@ impl Panel {
     pub fn markdown(title: impl Into<String>, value: impl Into<String>) -> Self {
         Self::with_body(title, Body::Markdown(value.into()))
     }
-    pub fn python(title: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::with_body(title, Body::Python(value.into()))
-    }
-    pub fn yaml(title: impl Into<String>, value: String) -> Self {
-        Self::with_body(title, Body::Yaml(value))
+    pub fn lua(title: impl Into<String>, value: impl Into<String>) -> Self {
+        Self::with_body(title, Body::Lua(value.into()))
     }
     pub fn styled(title: impl Into<String>, value: Vec<Line>) -> Self {
         Self::with_body(title, Body::Styled(value))
@@ -53,17 +49,13 @@ impl Panel {
         if self.cache.as_ref().is_none_or(|(w, _)| *w != width) {
             let empty = vec![];
             let lines = match &self.body {
-                Body::Yaml(text) => text
-                    .lines()
-                    .flat_map(|s| wrap(&crate::yaml_syntax::line(s, p), width, &empty, &empty))
-                    .collect(),
                 Body::Text(text) => plain(text, width, Style::fg(p.fg), "", ""),
                 Body::Styled(rows) => rows
                     .iter()
                     .flat_map(|r| wrap(r, width, &empty, &empty))
                     .collect(),
                 Body::Markdown(text) => crate::markdown::render(text, width, p),
-                Body::Python(code) => {
+                Body::Lua(code) => {
                     let cleaned = crate::render::clean(code);
                     crate::syntax::highlight(&cleaned, Style::fg(p.fg), p)
                         .into_iter()
@@ -123,7 +115,7 @@ mod tests {
     }
 
     #[test]
-    fn panel_highlights_markdown_and_python() {
+    fn panel_highlights_markdown_and_lua() {
         let p = Palette::new(&Theme::default(), &UiSettings::default());
         let mut md = Panel::markdown(
             "Trace 1/1 agent",
@@ -135,7 +127,7 @@ mod tests {
         assert!(md_lines.iter().flatten().any(|s| s.style.fg == p.info));
         assert!(md_lines.iter().flatten().any(|s| s.style.fg == p.ok));
 
-        let mut py = Panel::python("Trace 1/1 python", "def f():\n    return \"hi\"");
+        let mut py = Panel::lua("Trace 1/1 lua", "local function f()\n  return \"hi\"\nend");
         let py_lines = py.lines(40, 8, &p);
         assert!(py_lines.iter().flatten().any(|s| s.style.fg == p.err));
         assert!(py_lines.iter().flatten().any(|s| s.style.fg == p.ok));

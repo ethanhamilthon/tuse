@@ -14,8 +14,7 @@ use support::{Lines, Pipe, event, reply};
 #[test]
 fn startup_errors_arrive_after_the_initialize_answer() {
     let addr = common::provider(vec![]);
-    let extra =
-        "hooks:\n  broken:\n    events: [process_start]\n    run: raise Exception('boom')\n";
+    let extra = "  hooks = { broken = { events = {'process_start'}, run = function() error('boom') end } },";
     let (dir, cfg) = common::setup("rpc-early", &addr, extra);
     let session = Session::open(Options {
         cwd: dir.clone(),

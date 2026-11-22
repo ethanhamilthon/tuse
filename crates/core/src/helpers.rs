@@ -1,33 +1,4 @@
-use crate::{Event, Session, host::last_line};
-use std::time::{Duration, Instant};
 use tuse_config::Config;
-use tuse_py::{Ctx, NEVER, Python};
-
-pub fn install(s: &Session, py: &mut Python, config: &Config) {
-    let ctx = Ctx::new(
-        &NEVER,
-        Instant::now() + Duration::from_secs(config.settings.hook_timeout.max(1)),
-    );
-    let mode = s.mode.into();
-    for (name, f) in &config.functions {
-        if !f.matches(mode) {
-            continue;
-        }
-        let mut src = format!("def {name}({}):\n", f.args);
-        for line in f.run.lines() {
-            src.push_str("    ");
-            src.push_str(line);
-            src.push('\n');
-        }
-        let out = py.run(&src, &ctx, vec![]);
-        if !out.ok {
-            s.emit(Event::Notice(format!(
-                "function {name}: {}",
-                last_line(&out.text)
-            )));
-        }
-    }
-}
 
 /// The functions the agent is told about; `show_agent: false` ones stay callable but unlisted.
 pub fn listing(config: &Config, mode: crate::Mode, full: bool) -> String {
@@ -40,7 +11,7 @@ pub fn listing(config: &Config, mode: crate::Mode, full: bool) -> String {
     if shown.is_empty() {
         return String::new();
     }
-    let mut out = String::from("\n\n# Your functions in `python`");
+    let mut out = String::from("\n\n# Your functions in `lua`");
     for (name, f) in shown.iter().take(if full { usize::MAX } else { 30 }) {
         let desc: String = f
             .description
@@ -70,7 +41,6 @@ mod tests {
                 name.into(),
                 tuse_config::Function {
                     description: "d".into(),
-                    run: "return 1".into(),
                     show_agent,
                     ..Default::default()
                 },
@@ -97,7 +67,6 @@ mod tests {
                 name.into(),
                 tuse_config::Function {
                     description: "d".into(),
-                    run: "return 1".into(),
                     modes,
                     ..Default::default()
                 },

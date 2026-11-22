@@ -30,7 +30,7 @@ fn session(id: &str, parent: &str, tokens: u64, model: &str) {
 }
 
 #[test]
-fn tree_totals_status_and_torn_lines() {
+fn tree_totals_and_status() {
     let home = std::env::temp_dir().join(format!("tuse-children-{}", std::process::id()));
     // SAFETY: this is the only test in the crate's unit tests that sets `TUSE_HOME`.
     unsafe { std::env::set_var("TUSE_HOME", &home) };
@@ -48,11 +48,6 @@ fn tree_totals_status_and_torn_lines() {
     session("b", "a", 200, "p/m");
     session("live", "a", 5, "other");
     session("other", "unrelated", 1, "p/m");
-    let mut log = std::fs::OpenOptions::new()
-        .append(true)
-        .open(home.join("b/session.jsonl"))
-        .unwrap();
-    std::io::Write::write_all(&mut log, b"{\"t\":\"usage\",\"mo").unwrap();
 
     let list = descendants("root", &config);
     let ids: Vec<_> = list.iter().map(|c| (c.id.as_str(), c.depth)).collect();

@@ -1,10 +1,8 @@
-//! Models sometimes call a function of `python` (`ask`, `grep`...) as a tool of its own;
+//! Models sometimes call a function of `python` (`read`, `grep`...) as a tool of its own;
 //! such a call runs as `python` code instead of failing with "unknown tool".
 use serde_json::Value;
 
 const BUILTINS: &[&str] = &[
-    "ask",
-    "draw_ui",
     "read",
     "write",
     "edit",
@@ -81,14 +79,6 @@ mod tests {
 
     #[test]
     fn builds_calls_for_builtins_only() {
-        let c = code(
-            "ask",
-            &json!({"question": "Go \"on\"?", "options": "[\"yes\", \"no\"]", "title": "t"}),
-        );
-        assert_eq!(
-            c.unwrap(),
-            r#"ask(options=["yes", "no"], question="Go \"on\"?")"#
-        );
         let c = code(
             "grep",
             &json!({"pattern": "x", "ignore_case": true, "limit": 3, "glob": null}),

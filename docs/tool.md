@@ -8,8 +8,7 @@ does not either. The REPL lives until Tuse exits and starts empty after `/resume
 `title` is a few words about what the call does, in the user's language (`Running the tests`). The
 user sees it in the working indicator; it stays until the next call sets a new `title`.
 
-A call is stopped after `settings.tool_timeout` seconds (the agent cannot change it; a long job goes to `task_run`). The time the
-user takes to answer an `ask` does not count. Output over `settings.max_output` bytes is cut in
+A call is stopped after `settings.tool_timeout` seconds (the agent cannot change it; a long job goes to `task_run`). Output over `settings.max_output` bytes is cut in
 the middle.
 
 The REPL runs a Python subset ([Monty](https://github.com/pydantic/monty)): no `subprocess`, no
@@ -26,6 +25,6 @@ library modules are missing, `open` cannot open `/dev/null` or `/dev/tty`, and `
 does not accept a callable replacement. Monty 1.6 also lacks `re.subn`, `Path.home()` and
 ordering for `Path` objects: use `Path(os.environ["HOME"])` and `sorted(paths, key=str)`. Use `sh` when a command needs native OS facilities.
 
-The functions (`read`, `grep`, `ask`, `sh`...) live inside `python`; they are not tools. When a
+The functions (`read`, `grep`, `sh`...) live inside `python`; they are not tools. When a
 model still calls one as a tool of its own, Tuse runs it as `python` code `name(**args)`, and the
-chat and `/trace` show that code. A list sent as a JSON string (`options: "[...]"`) is parsed.
+chat and `/trace` show that code.

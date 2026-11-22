@@ -85,34 +85,3 @@ fn model_to_effort_keeps_the_draft_and_a_refresh_keeps_the_search() {
     assert_eq!(app.editor.text(), "draft");
     crate::app::cleanup(app);
 }
-
-#[test]
-fn a_question_that_arrived_behind_a_picker_shows_when_it_closes() {
-    for (code, kind, value) in [
-        (KeyCode::Esc, Kind::Resume, "one"),
-        (KeyCode::Enter, Kind::Theme, "default"),
-    ] {
-        let mut app = crate::app::test_app("modal-ask");
-        app.paste("draft");
-        app.open_modal(Picker::new(
-            kind.clone(),
-            "Modal",
-            vec![item(value, "", value)],
-        ));
-        app.handle_event(tuse_core::Event::Ask {
-            id: "q1".into(),
-            question: "Which?".into(),
-            options: vec!["a".into()],
-        });
-        assert_eq!(app.picker.as_ref().unwrap().kind, kind);
-        press(&mut app, code, KeyModifiers::NONE);
-        let p = app
-            .picker
-            .as_ref()
-            .unwrap_or_else(|| panic!("no ask after {code:?}"));
-        assert_eq!(p.kind, Kind::Ask("q1".into()));
-        assert_eq!(p.title, "Which?");
-        assert_eq!(app.editor.text(), "draft");
-        crate::app::cleanup(app);
-    }
-}

@@ -22,13 +22,6 @@ impl App {
     }
 
     pub(super) fn submit(&mut self) {
-        if self.ask_input.is_some() {
-            let answer = self.editor.text().trim().to_string();
-            if !answer.is_empty() {
-                self.finish_answer(Some(answer));
-            }
-            return;
-        }
         if self.steering.is_some() {
             return;
         }

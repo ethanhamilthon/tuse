@@ -18,17 +18,8 @@ impl App {
             KeyCode::Esc => {
                 let p = self.picker.take().unwrap();
                 match &p.kind {
-                    Kind::Ask(id) => {
-                        let id = id.clone();
-                        self.session.answer(&id, None);
-                        self.asks.retain(|a| a.0 != id);
-                        self.next_ask();
-                    }
                     k if k.is_token() => self.dismissed = Some(self.editor.token().1),
-                    _ => {
-                        self.restore_draft();
-                        self.resume_ask();
-                    }
+                    _ => self.restore_draft(),
                 }
             }
             KeyCode::Char('x') if ctrl && p.kind == Kind::Task => {
@@ -38,7 +29,6 @@ impl App {
                     self.open_tasks();
                 }
             }
-            _ if matches!(p.kind, Kind::Ask(_)) => {}
             _ if p.kind.is_token() => return false,
             _ => return !edits_text(k),
         }

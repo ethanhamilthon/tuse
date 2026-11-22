@@ -82,7 +82,7 @@ impl Session {
         } else {
             Outcome::err(
                 format!(
-                    "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `ask` inside its `code`",
+                    "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `sh` inside its `code`",
                     call.name
                 ),
                 max,

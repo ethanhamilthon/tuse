@@ -5,7 +5,7 @@ pub const PARSE: i64 = -32700;
 pub const INVALID: i64 = -32600;
 pub const NO_METHOD: i64 = -32601;
 pub const PARAMS: i64 = -32602;
-/// Errors that come from the session ("busy", "no ask a3", ...).
+/// Errors that come from the session ("busy", "no task t3", ...).
 pub const SESSION: i64 = -32000;
 /// A method before `initialize`.
 pub const NOT_READY: i64 = -32002;

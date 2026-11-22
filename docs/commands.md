@@ -40,7 +40,7 @@ name (title or short ID), `running` (its session lock is held) or `done`, the el
 and input+output tokens and the spend (only for models with `prices`; the detail view also has the folder, cached tokens and context used/max, `?` when the model's window is unknown). A row with children also shows `all` (subtree) totals. Rows are compact (status, elapsed, total tokens and spend); Enter opens every field of the row (full ID, folder, in/out/cached, context, spend, subtree totals), Esc goes back to the list. A child that sets `TUSE_PARENT` shows up as soon as it starts, before its first prompt. Nothing is locked or changed.
 
 The chat scrolls with the mouse wheel only; the arrows move in the input, and a click in the input
-puts the cursor there. Links (Markdown, bare `https://` URLs, OSC 8 in `draw_ui`) light up under the pointer and open on click. Drag to select rendered text; Ctrl/Cmd+C copies it. In the input, Shift+movement extends the selection, Ctrl/Cmd+A selects all, and Ctrl/Cmd+X cuts.
+puts the cursor there. Links (Markdown, bare `https://` URLs, OSC 8) light up under the pointer and open on click. Drag to select rendered text; Ctrl/Cmd+C copies it. In the input, Shift+movement extends the selection, Ctrl/Cmd+A selects all, and Ctrl/Cmd+X cuts.
 
 A session keeps its own model and effort. `/models` changes them in the config and in the
 current session; a new session takes them from the config; `/resume` and `/reload` do not

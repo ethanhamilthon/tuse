@@ -30,14 +30,6 @@ impl App {
             return;
         }
         self.selection = Default::default();
-        if self.ask_active() && matches!(k.code, KeyCode::PageUp | KeyCode::PageDown) {
-            if k.code == KeyCode::PageUp {
-                self.ask_scroll = self.ask_scroll.saturating_sub(1);
-            } else {
-                self.ask_scroll = self.ask_scroll.saturating_add(1);
-            }
-            return;
-        }
         if self.picker.is_some() && self.picker_key(k, ctrl, shift) {
             return;
         }
@@ -69,10 +61,6 @@ impl App {
         }
         match k.code {
             KeyCode::Esc => {
-                if self.ask_input.is_some() {
-                    self.finish_answer(None);
-                    return;
-                }
                 self.session.cancel();
                 self.steering = None;
             }
@@ -143,9 +131,6 @@ impl App {
         }
     }
     pub(super) fn finish_edit(&mut self, before: Option<Vec<char>>) {
-        if self.ask_input.is_some() {
-            return;
-        }
         // The editor is a search box now: a queued message stays queued and
         // `/`, `@`, `#` are just text.
         if self.searching() {
@@ -165,9 +150,6 @@ impl App {
 
     pub fn paste(&mut self, s: &str) {
         self.selection = Default::default();
-        if self.picker.as_ref().is_some_and(|p| p.is_free()) {
-            return;
-        }
         if s.is_empty() {
             return self.paste_clipboard();
         }

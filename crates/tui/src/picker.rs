@@ -10,7 +10,6 @@ pub enum Kind {
     Task,
     Children,
     Trace,
-    Ask(String),
 }
 
 impl Kind {
@@ -69,15 +68,7 @@ impl Picker {
         p
     }
 
-    /// An `ask` offers fixed choices rather than a filterable list.
-    pub fn is_free(&self) -> bool {
-        matches!(self.kind, Kind::Ask(_))
-    }
-
     pub fn filter(&mut self, q: &str) {
-        if self.is_free() {
-            return;
-        }
         let trace = (self.kind == Kind::Trace).then(|| crate::trace_filter::parse(q));
         let words = trace.as_ref().map_or(q, |t| t.text.as_str());
         let mut scored: Vec<(i64, usize)> = self

@@ -8,7 +8,6 @@ which gets up to `hook_timeout` before Tuse goes on. There are four events:
 | `process_start` | A session opens in this process. | `reason`: `launch` (Tuse started, also with `--resume`), `new` (`/new`), `resume` (`/resume`), `reload` (`/reload`, on the new config). |
 | `process_end` | The session closes. | `reason`: `exit`, `new`, `resume`, `reload` (on the old config, before it is replaced). |
 | `user_message` | The agent takes a message the user typed (not task notifications). | `text`; `is_first`: the first message of the session (`False` after a resume). |
-| `ask` | The main agent asked a question in the TUI or JSON client (not a background task or hook). Does not wait for the hook or fire on answer or dismissal. | `ask_id`, `question`, `options` (an empty list for free text). |
 | `agent_message` | The agent wrote a message. Messages without text (only tool calls) are skipped, except on a cancel. | `text`; `status`: `working` (tool calls follow), `finished` (the turn is over) or `cancelled` (the user stopped the turn; `text` is what streamed so far, maybe empty); `tasks`: this session's background tasks that are `running` (not idle, exited or stopped), a list of `{id, name, kind}`; `children`: running descendant sessions at any depth (see `/childrens`; running = holds its session lock), a flat list of `{id, name, cwd, elapsed}` with `elapsed` in seconds. Both are empty lists when nothing runs, for every `status`. |
 
 Every hook also gets `event`, `hook` (its name), `session` (ID), `cwd`, `model` (`provider/model`)
@@ -48,6 +47,5 @@ Hooks can call helpers defined under `functions` in the config. Set `modes: [tui
 (any of `tui`, `headless`, `json`) to limit a hook to specific run modes; omitted or empty
 runs in all modes.
 
-A hook question counts against `hook_timeout`: expiry dismisses it and releases the queue.
 Esc interrupts running hooks without dropping later queued events.
 Timed-out shell processes can become tasks just as in agent calls.

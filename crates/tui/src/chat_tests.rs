@@ -162,25 +162,3 @@ fn bench_resize() {
     }
     eprintln!("BENCH resize x20 over 4000 entries: {:?}", start.elapsed());
 }
-
-#[test]
-fn draw_ui_blocks_use_the_accent_color() {
-    let theme = tuse_config::Theme {
-        accent: "#ff0000".into(),
-        ..Default::default()
-    };
-    let p = Palette::new(&theme, &Default::default());
-    let print = Entry::Print {
-        id: "p".into(),
-        text: "hello".into(),
-    };
-    let lines = crate::render::render(&print, 40, &p);
-    assert!(!lines.is_empty());
-    assert!(
-        lines
-            .iter()
-            .flatten()
-            .filter(|s| !s.text.is_empty())
-            .all(|s| s.style.fg == p.accent && s.style.fg != p.fg)
-    );
-}

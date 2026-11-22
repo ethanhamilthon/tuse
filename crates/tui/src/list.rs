@@ -32,7 +32,7 @@ pub fn framed(title: &str, rows: Vec<Line>, w: usize, p: &Palette) -> Vec<Line> 
 
 /// The title of a picker: its name and the position; the query is in the input.
 fn title_of(pk: &Picker) -> String {
-    if pk.title.is_empty() || pk.is_free() || pk.shown.is_empty() {
+    if pk.title.is_empty() || pk.shown.is_empty() {
         return pk.title.clone();
     }
     format!("{} {}/{}", pk.title, pk.selected + 1, pk.shown.len())

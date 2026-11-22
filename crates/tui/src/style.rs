@@ -30,7 +30,6 @@ pub const EDGE_TOP: &str = "▄";
 pub const EDGE_BOTTOM: &str = "▀";
 pub const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
 pub const STEERING_LABEL: &str = "steering…";
-pub const ASK_CUSTOM_LABEL: &str = "Write your own answer…";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Style {

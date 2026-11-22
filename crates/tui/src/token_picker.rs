@@ -102,7 +102,7 @@ mod tests {
         let mut app = crate::app::test_app("prompt-modes");
         std::fs::write(
             app.cwd.join("tuse.yaml"),
-            "prompts:\n  hl: {text: only headless, modes: [headless]}\n",
+            "prompts:\n  hl: {text: only json, modes: [json]}\n",
         )
         .unwrap();
         app.session.reload().unwrap();
@@ -115,7 +115,7 @@ mod tests {
             r#"prompts:
   plain: plain body
   tui_only: {text: tui body, modes: [tui]}
-  hl_only: {text: headless body, modes: [headless]}
+  hl_only: {text: json body, modes: [json]}
 "#,
         )
         .unwrap();

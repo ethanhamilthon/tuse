@@ -71,7 +71,7 @@ hooks:
       with open('{}', 'a') as f:
           f.write(f'{{event}}\n')
   hl_only:
-    modes: [headless]
+    modes: [json]
     events: [process_start, process_end]
     run: |
       with open('{}', 'a') as f:
@@ -87,7 +87,7 @@ hooks:
         Session::open(Options {
             cwd: dir.clone(),
             config: Some(cfg.clone()),
-            mode: Mode::Headless,
+            mode: Mode::Json,
             resume,
             start,
         })
@@ -156,7 +156,7 @@ process_end 2 exit
                 && text.contains("text='hi'\nis_first=True")),
         "{hooks:?}"
     );
-    assert!(!tui_log.exists(), "tui_only hook ran in headless");
+    assert!(!tui_log.exists(), "tui_only hook ran in json");
     assert!(!hooks.iter().any(|(s, _)| s.starts_with("tui_only")));
     assert_eq!(
         std::fs::read_to_string(&hl_log).unwrap(),

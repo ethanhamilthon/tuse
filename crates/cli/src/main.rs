@@ -1,10 +1,8 @@
 mod args;
 mod connect;
-mod headless;
 mod update;
 
 use args::Args;
-use std::io::Read;
 
 use tuse_core::{Options, Session};
 
@@ -14,10 +12,6 @@ USAGE
   tuse [-c|--config PATH] [-r|--resume ID] open the TUI; -c picks the config file,
                                            -r ID opens a saved session (its ID is printed
                                            to stderr on exit, see /resume)
-  tuse -p [PROMPT|-] [-c PATH] [-r ID]
-                                           headless (`-` reads the prompt from stdin):
-                                           runs the prompt to the end, replies to stdout,
-                                           the session ID to stderr; exit code 1 on an error
   tuse json [-c PATH] [-r ID]              a JSON-RPC 2.0 session over stdin/stdout, one
                                            message per line (see docs/json.md)
   tuse connect [--config PATH]            add a provider: asks base url, api key and name,
@@ -63,36 +57,21 @@ fn run(raw: Vec<String>) -> Result<(), String> {
 }
 
 fn start(a: &Args) -> Result<(), String> {
-    if let Some(f) = a.unknown(&["--config", "-c", "--resume", "-r", "-p", "--print"]) {
+    if let Some(f) = a.unknown(&["--config", "-c", "--resume", "-r"]) {
         return Err(format!("unknown flag {f}\n\n{USAGE}"));
     }
-    let headless = a.has(&["-p", "--print"]);
-    if !headless && !a.positional.is_empty() {
-        return Err(format!("unknown command `{}`\n\n{USAGE}", a.positional[0]));
+    if let Some(p) = a.positional.first() {
+        return Err(format!("unknown command `{p}`\n\n{USAGE}"));
     }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let config = a.value(&["--config", "-c"]).map(|p| cwd.join(p));
     let session = Session::open(Options {
         cwd: cwd.clone(),
         config: config.clone(),
-        mode: if headless {
-            tuse_core::Mode::Headless
-        } else {
-            tuse_core::Mode::Tui
-        },
+        mode: tuse_core::Mode::Tui,
         resume: a.value(&["--resume", "-r"]),
         start: tuse_core::Start::Launch,
     })?;
-    if headless {
-        let mut prompt = a.positional.join(" ");
-        if prompt == "-" {
-            prompt.clear();
-            std::io::stdin()
-                .read_to_string(&mut prompt)
-                .map_err(|e| e.to_string())?;
-        }
-        return headless::run(session, Some(prompt));
-    }
     let id = tuse_tui::run(session, cwd, config).map_err(|e| e.to_string())?;
     eprintln!("tuse: session {id}");
     Ok(())

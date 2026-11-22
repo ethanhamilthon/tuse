@@ -51,15 +51,15 @@ print("docs_has_tui=" + str("`f_tui(" in docs("functions")))
     modes: [tui]
 model: p/m
 connect:
-  - {{name: p, base_url: 'http://{addr}', api_key: k, modes: [headless, tui]}}
+  - {{name: p, base_url: 'http://{addr}', api_key: k, modes: [json, tui]}}
   - {{name: tui_gw, base_url: 'http://{addr}', api_key: k, modes: [tui]}}
 systems:
   - plain-sys
   - {{text: tui-sys, modes: [tui]}}
-  - {{text: hl-sys, modes: [headless]}}
+  - {{text: hl-sys, modes: [json]}}
 functions:
   f_all: {{description: all, run: "return 1"}}
-  f_hl: {{description: hl, run: "return 2", modes: [headless]}}
+  f_hl: {{description: hl, run: "return 2", modes: [json]}}
   f_tui: {{description: tui, run: "return 3", modes: [tui]}}
 "#
         ),
@@ -76,8 +76,8 @@ functions:
         .unwrap()
     };
 
-    // Headless: gets plain-sys + hl-sys + f_all + f_hl, excludes tui include/sys/func.
-    let hl = open(Mode::Headless);
+    // Json: gets plain-sys + hl-sys + f_all + f_hl, excludes tui include/sys/func.
+    let hl = open(Mode::Json);
     let sys = &hl.trace()[0].text;
     assert!(sys.contains("plain-sys") && sys.contains("hl-sys"), "{sys}");
     assert!(
@@ -107,7 +107,7 @@ functions:
         assert!(out.contains(want), "missing `{want}` in:\n{out}");
     }
 
-    // Switching to a tui-only connect in headless fails the turn cleanly.
+    // Switching to a tui-only connect in json fails the turn cleanly.
     hl.set_model("tui_gw/m", "default");
     hl.submit(UserInput::text("fail"));
     let err = wait_turn(&events).expect("expected connect error");
@@ -139,14 +139,14 @@ functions:
     std::fs::write(
         &m_cfg,
         format!(
-            "connect:\n  - {{name: tui_p, base_url: 'http://{m_addr}', api_key: k, modes: [tui]}}\n  - {{name: hl_p, base_url: 'http://{m_addr}', api_key: k, modes: [headless]}}\n"
+            "connect:\n  - {{name: tui_p, base_url: 'http://{m_addr}', api_key: k, modes: [tui]}}\n  - {{name: hl_p, base_url: 'http://{m_addr}', api_key: k, modes: [json]}}\n"
         ),
     )
     .unwrap();
     let m_hl = Session::open(Options {
         cwd: dir.clone(),
         config: Some(m_cfg),
-        mode: Mode::Headless,
+        mode: Mode::Json,
         resume: None,
         start: Default::default(),
     })
@@ -178,16 +178,6 @@ functions:
     tui.submit(UserInput::text("hi"));
     assert_eq!(wait_turn(&events), None);
     tui.close();
-
-    // Json: p is excluded (headless, tui only), so a turn fails on connect.
-    let js = open(Mode::Json);
-    let sys = &js.trace()[0].text;
-    assert!(sys.contains("plain-sys") && !sys.contains("tui-sys") && !sys.contains("hl-sys"));
-    let events = js.subscribe();
-    js.submit(UserInput::text("hi"));
-    let err = wait_turn(&events).expect("expected connect error in json");
-    assert!(err.contains("no `connect` entry named `p`"), "{err}");
-    js.close();
 
     common::cleanup(&dir);
 }

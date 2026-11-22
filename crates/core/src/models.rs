@@ -148,7 +148,7 @@ mod tests {
         assert!(model_available(&config, Mode::Tui, "tui_only/m"));
         assert!(!model_available(&config, Mode::Json, "tui_only/m"));
         assert!(model_available(&config, Mode::Json, "json_only/m"));
-        assert!(!model_available(&config, Mode::Headless, "json_only/m"));
+        assert!(!model_available(&config, Mode::Tui, "json_only/m"));
         assert!(!model_available(&config, Mode::Tui, "missing/m"));
         assert!(!model_available(&config, Mode::Tui, "unprefixed"));
         assert!(!model_available(&config, Mode::Tui, ""));

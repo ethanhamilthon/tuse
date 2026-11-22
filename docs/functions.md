@@ -50,7 +50,7 @@ functions:
 
 `show_agent: false` (default `true`) hides a helper from the agent: it is left out of the system
 prompt and of `docs("functions")`, but it stays defined, so other helpers, hooks and tasks can call it.
-Set `modes: [tui]` (any of `tui`, `headless`, `json`) to load a helper only in those run modes;
+Set `modes: [tui]` (`tui` or `json`) to load a helper only in those run modes;
 omitted or empty loads it in all modes.
 
 Helpers can call other helpers and import modules next to the config. `/reload`

@@ -1,11 +1,10 @@
 use serde::Deserialize;
 
-/// Where Tuse runs: `tui`, `headless` (`tuse -p`) or `json` (`tuse json`).
+/// Where Tuse runs: `tui` or `json` (`tuse json`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     Tui,
-    Headless,
     Json,
 }
 

@@ -42,7 +42,7 @@ fn the_agent_edits_files_runs_tasks_and_reports_status() {
     let s = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg),
-        mode: tuse_core::Mode::Headless,
+        mode: tuse_core::Mode::Json,
         resume: None,
         start: Default::default(),
     })

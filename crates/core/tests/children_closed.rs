@@ -11,7 +11,7 @@ fn a_child_closed_without_a_prompt_has_a_stable_elapsed() {
     let s = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg),
-        mode: tuse_core::Mode::Headless,
+        mode: tuse_core::Mode::Json,
         resume: None,
         start: Default::default(),
     })

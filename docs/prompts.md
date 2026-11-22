@@ -25,5 +25,5 @@ fix this #review @src/main.rs [Image #1]
   Missing files and folders are skipped.
 
 `/trace` shows the text with its context. After compaction, the dropped messages are summarized
-from their text only. `tuse -p` sends the prompt as given; `tuse json` builds the context from
+from their text only. `tuse json` builds the context from
 `files` and `images` in `turn.submit` ([json.md](json.md)).

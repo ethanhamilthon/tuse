@@ -205,22 +205,10 @@ impl App {
                 let at: usize = v.parse().unwrap_or(0);
                 self.open_trace_item(at);
             }
-            (Kind::Ask(id), Some(answer)) => {
-                if answer.is_empty() {
-                    self.panel = None;
-                    self.ask_input = Some((id.clone(), p.title, std::mem::take(&mut self.editor)));
-                    return;
-                }
-                let id = id.clone();
-                self.session.answer(&id, Some(answer));
-                self.asks.retain(|a| a.0 != id);
-                self.next_ask();
-            }
             _ => {}
         }
         if self.picker.is_none() {
             self.update_token_picker();
         }
-        self.resume_ask();
     }
 }

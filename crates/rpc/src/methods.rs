@@ -11,7 +11,6 @@ pub const METHODS: &[&str] = &[
     "turn.submit",
     "turn.withdraw",
     "turn.cancel",
-    "ask.answer",
     "session.info",
     "session.records",
     "session.trace",
@@ -50,7 +49,7 @@ pub fn initialize(s: &Session) -> Value {
         "session": info(s),
         "model": model,
         "effort": effort,
-        "capabilities": {"methods": METHODS, "ask": true, "draw_ui": true},
+        "capabilities": {"methods": METHODS},
     })
 }
 
@@ -102,19 +101,6 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         }
         "turn.cancel" => {
             s.cancel();
-            Ok(Value::Null)
-        }
-        "ask.answer" => {
-            let id = str_param(p, "id")?;
-            if !s.has_ask(&id) {
-                return Err(Fail::session(format!("no ask {id}")));
-            }
-            let answer = match &p["answer"] {
-                Value::Null => None,
-                Value::String(a) => Some(a.clone()),
-                _ => return Err(Fail::params("`answer` must be a string or null")),
-            };
-            s.answer(&id, answer);
             Ok(Value::Null)
         }
         "session.info" => Ok(info(s)),

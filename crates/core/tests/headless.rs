@@ -2,11 +2,11 @@ mod common;
 use common::Reply;
 use serde_json::json;
 use std::time::{Duration, Instant};
-use tuse_core::{Event, Mode, Options, Record, Session, UserInput};
+use tuse_core::{Event, Mode, Options, Session, UserInput};
 
 #[test]
-fn headless_sessions_explain_what_is_unavailable() {
-    let code = "try:\n    ask('ok?')\nexcept RuntimeError as e:\n    print(e)\ntry:\n    draw_ui('x')\nexcept RuntimeError as e:\n    print(e)\n";
+fn headless_sessions_say_so_in_the_prompt() {
+    let code = "print('ok')";
     let addr = common::provider(vec![
         Reply::Call("python", json!({"code": code, "title": "t"}).to_string()),
         Reply::Text("done"),
@@ -32,19 +32,6 @@ fn headless_sessions_explain_what_is_unavailable() {
             break;
         }
     }
-    let output = s.records().into_iter().find_map(|r| match r {
-        Record::Tool { output, .. } => Some(output),
-        _ => None,
-    });
-    let output = output.expect("no tool call");
-    assert!(
-        output.contains("ask is unavailable in headless mode (tuse -p)"),
-        "{output}"
-    );
-    assert!(
-        output.contains("draw_ui is unavailable in headless mode"),
-        "{output}"
-    );
     s.close();
     let tui = open(Mode::Tui);
     assert!(!tui.trace()[0].text.contains("Mode: headless"));

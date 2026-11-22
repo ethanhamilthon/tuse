@@ -13,7 +13,7 @@ use support::{Lines, Pipe, event, reply, until};
 
 #[test]
 fn a_client_drives_a_session() {
-    let code = "print('answer:', ask('Deploy?', ['yes', 'no']))";
+    let code = "print('answer:', 'yes')";
     let addr = common::provider(vec![
         Reply::Call(
             "python",
@@ -68,10 +68,6 @@ fn a_client_drives_a_session() {
     call(4, "turn.submit", json!({"text": "deploy it"}));
     assert_eq!(reply(&out, 4)["result"]["queued"], false);
     assert_eq!(event(&out, "user")["text"], "deploy it");
-    let ask = event(&out, "ask");
-    assert_eq!(ask["question"], "Deploy?");
-    call(5, "ask.answer", json!({"id": ask["id"], "answer": "yes"}));
-    assert_eq!(reply(&out, 5)["result"], Value::Null);
     let end = event(&out, "tool_end");
     assert!(
         end["output"].as_str().unwrap().contains("answer: yes"),
@@ -89,7 +85,7 @@ fn a_client_drives_a_session() {
     call(7, "session.records", json!({}));
     let records = reply(&out, 7)["result"].clone();
     assert!(records.as_array().unwrap().iter().any(|r| r["t"] == "tool"));
-    call(8, "ask.answer", json!({"id": "a9", "answer": "x"}));
+    call(8, "tasks.get", json!({"id": "t9"}));
     assert_eq!(reply(&out, 8)["error"]["code"], -32000);
     call(9, "shutdown", json!({}));
     assert_eq!(reply(&out, 9)["result"], Value::Null);

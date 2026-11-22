@@ -7,9 +7,7 @@ use crate::store::{Meta, SessionDir};
 use crate::tasks::Tasks;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize};
-use std::sync::mpsc::Sender;
-
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 use tuse_config::Config;
@@ -27,7 +25,6 @@ pub struct Session {
     pub(crate) config_arg: Option<PathBuf>,
     pub(crate) state: Mutex<State>,
     pub(crate) subs: Mutex<Subs>,
-    pub(crate) ask_seq: AtomicUsize,
     /// The agent's interpreter; made on the first call, gone with the process.
     pub(crate) hooks: Mutex<Option<HashMap<String, crate::hook_queue::HookQueue>>>,
     pub(crate) python: Mutex<Option<Python>>,
@@ -53,10 +50,6 @@ pub(crate) struct State {
     pub meta: Meta,
     /// Assistant text streamed in the current step; `agent_message` gets it on a cancel.
     pub partial: String,
-    /// Open `ask`s and where their answers go.
-    pub asks: HashMap<String, Sender<String>>,
-    /// Live `draw_ui` blocks: ID -> pinned at creation.
-    pub prints: HashMap<String, bool>,
     /// Models the providers have reported.
     pub remote: Vec<String>,
     /// Totals of `records` and the config whose prices they use.
@@ -108,8 +101,6 @@ impl Session {
             meta,
             stats: Default::default(),
             partial: String::new(),
-            asks: HashMap::new(),
-            prints: HashMap::new(),
             remote: vec![],
             records: vec![],
         };
@@ -148,7 +139,6 @@ impl Session {
             config_arg: opts.config,
             state: Mutex::new(st),
             subs: Mutex::default(),
-            ask_seq: AtomicUsize::new(0),
             hooks: Mutex::new(Some(HashMap::new())),
             python: Mutex::default(),
             http: tuse_api::default_agent(),
@@ -171,7 +161,6 @@ impl Session {
         }
         self.cancel_turn();
         self.tasks.stop_all();
-        self.state.lock().unwrap().asks.clear();
         self.finish_hooks(reason);
         self.hooks.lock().unwrap().take();
         self.record_close();

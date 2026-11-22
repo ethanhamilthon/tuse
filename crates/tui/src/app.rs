@@ -44,12 +44,8 @@ pub struct App {
     pub input_area: Option<InputArea>,
     /// The token whose picker was dismissed with Esc; it stays closed until the token changes.
     pub dismissed: Option<String>,
-    pub ask_scroll: usize,
-    pub ask_controls: usize,
-    pub ask_input: Option<(String, String, Editor)>,
     /// The input draft set aside while a modal picker uses the editor as its search box.
     pub saved_editor: Option<Editor>,
-    pub asks: Vec<(String, String, Vec<String>)>,
     /// The directory the `@` picker lists, relative to `cwd`.
     pub file_dir: String,
     pub turn_error: Option<String>,
@@ -100,11 +96,7 @@ impl App {
             list_rows: 8,
             input_area: None,
             dismissed: None,
-            ask_scroll: 0,
-            ask_controls: 0,
-            ask_input: None,
             saved_editor: None,
-            asks: vec![],
             file_dir: String::new(),
             turn_error: None,
             flash: None,
@@ -178,41 +170,6 @@ impl App {
         if let Some(e) = err {
             self.error(e);
         }
-    }
-
-    pub fn finish_answer(&mut self, answer: Option<String>) {
-        if let Some((id, _, draft)) = self.ask_input.take() {
-            self.editor = draft;
-            self.session.answer(&id, answer);
-            self.asks.retain(|a| a.0 != id);
-            self.next_ask();
-        }
-    }
-
-    /// Shows the oldest queued question once no modal picker is in the way.
-    pub fn resume_ask(&mut self) {
-        let free = self.picker.as_ref().is_none_or(|p| p.kind.is_token());
-        if free && self.ask_input.is_none() && !self.asks.is_empty() {
-            self.next_ask();
-        }
-    }
-
-    pub fn next_ask(&mut self) {
-        if self.ask_input.is_some() {
-            return;
-        }
-        let Some((id, question, options)) = self.asks.first().cloned() else {
-            return;
-        };
-        self.ask_scroll = 0;
-        self.ask_controls = 0;
-        let mut items: Vec<_> = options
-            .iter()
-            .map(|o| crate::picker::item(o.clone(), "", o.clone()))
-            .collect();
-        // The last row is a reminder that the user can write their own answer; its value is empty.
-        items.push(crate::picker::item(crate::style::ASK_CUSTOM_LABEL, "", ""));
-        self.picker = Some(Picker::new(crate::picker::Kind::Ask(id), question, items));
     }
 }
 

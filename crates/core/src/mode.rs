@@ -1,4 +1,3 @@
-use crate::session::Session;
 use std::path::PathBuf;
 
 /// Who is on the other side of the session.
@@ -18,18 +17,6 @@ impl From<Mode> for tuse_config::Mode {
             Mode::Headless => Self::Headless,
             Mode::Json => Self::Json,
         }
-    }
-}
-
-impl Session {
-    /// `ask` and `draw_ui` need someone to show them to.
-    pub(crate) fn require_client(&self, what: &str) -> Result<(), String> {
-        if self.mode == Mode::Headless {
-            return Err(format!(
-                "{what} is unavailable in headless mode (tuse -p): there is no user to answer or see it; decide yourself"
-            ));
-        }
-        Ok(())
     }
 }
 

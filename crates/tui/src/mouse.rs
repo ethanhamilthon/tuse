@@ -11,7 +11,7 @@ impl App {
                 && point.0 < a.row + a.height
                 && point.1 >= a.col
                 && point.1 < a.col + a.cols
-        }) && self.picker.as_ref().is_none_or(|p| !p.is_free());
+        });
         match m.kind {
             MouseEventKind::ScrollUp => {
                 self.wheel(-1);
@@ -90,9 +90,6 @@ impl App {
     }
 
     fn click(&mut self, x: usize, y: usize) {
-        if self.picker.as_ref().is_some_and(|p| p.is_free()) {
-            return;
-        }
         let Some(a) = self.input_area else { return };
         if y < a.row || y >= a.row + a.height || x < a.col {
             return;
@@ -159,80 +156,6 @@ mod tests {
         assert_eq!(app.editor.cursor, 2);
         app.mouse(event(MouseEventKind::Down(MouseButton::Left), 4, 3));
         assert_eq!(app.editor.cursor, 2);
-        crate::app::cleanup(app);
-    }
-
-    #[test]
-    fn an_ask_sends_the_typed_text_else_the_selected_option() {
-        let mut app = crate::app::test_app("ask");
-        let s = app.session.clone();
-        app.editor.insert("draft");
-        let mut ask = |options: &[&str], typed: &str| {
-            let (_, rx) = s
-                .ask("Which?", options.iter().map(|o| o.to_string()).collect())
-                .unwrap();
-            while app.picker.is_none() {
-                let e = app
-                    .events
-                    .recv_timeout(std::time::Duration::from_secs(5))
-                    .unwrap();
-                app.handle_event(e);
-            }
-            if !typed.is_empty() {
-                app.picker.as_mut().unwrap().selected = options.len();
-                app.choose();
-                assert!(app.editor.is_empty());
-            }
-            for c in typed.chars() {
-                app.key(
-                    crossterm::event::KeyEvent::new(
-                        crossterm::event::KeyCode::Char(c),
-                        KeyModifiers::NONE,
-                    ),
-                    0,
-                );
-            }
-            if typed.is_empty() {
-                app.choose();
-            } else {
-                app.key(
-                    crossterm::event::KeyEvent::new(
-                        crossterm::event::KeyCode::Enter,
-                        KeyModifiers::NONE,
-                    ),
-                    0,
-                );
-            }
-            assert_eq!(app.editor.text(), "draft");
-            rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap()
-        };
-        assert_eq!(ask(&["alpha", "beta"], "al"), "al");
-        assert_eq!(ask(&["alpha", "beta"], ""), "alpha");
-        assert_eq!(ask(&[], "my own words"), "my own words");
-        for cancel in [false, true] {
-            app.handle_event(tuse_core::Event::Ask {
-                id: "pending".into(),
-                question: "Which?".into(),
-                options: vec![],
-            });
-            app.choose();
-            app.paste("custom");
-            if cancel {
-                app.key(
-                    crossterm::event::KeyEvent::new(
-                        crossterm::event::KeyCode::Esc,
-                        KeyModifiers::NONE,
-                    ),
-                    0,
-                );
-            } else {
-                app.handle_event(tuse_core::Event::AskDone {
-                    id: "pending".into(),
-                });
-            }
-            assert!(app.ask_input.is_none());
-            assert_eq!(app.editor.text(), "draft");
-        }
         crate::app::cleanup(app);
     }
 }

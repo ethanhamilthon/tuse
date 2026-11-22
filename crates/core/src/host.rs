@@ -3,7 +3,6 @@ use crate::tools;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 use tuse_py::{Adopt, Args, Ctx, Fail, Host, MontyObject, Python};
 
 const FUNCTIONS: &[&str] = &[
@@ -11,8 +10,6 @@ const FUNCTIONS: &[&str] = &[
     "write",
     "edit",
     "grep",
-    "ask",
-    "draw_ui",
     "task_run",
     "task_add",
     "task_get",
@@ -22,23 +19,15 @@ const FUNCTIONS: &[&str] = &[
     "set_title",
 ];
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Origin {
-    Main,
-    Background,
-    Hook,
-}
-
 /// The Python functions that reach into a session. Holds the session weakly:
 /// the session owns the interpreter that owns this.
 pub(crate) struct SessionHost {
     session: Weak<Session>,
-    origin: Origin,
 }
 
 impl SessionHost {
-    pub fn new(session: Weak<Session>, origin: Origin) -> Self {
-        Self { session, origin }
+    pub fn new(session: Weak<Session>) -> Self {
+        Self { session }
     }
 
     fn session(&self) -> Result<Arc<Session>, Fail> {
@@ -57,17 +46,6 @@ impl Host for SessionHost {
         let s = self.session()?;
         match name {
             "read" | "write" | "edit" | "grep" => tools::call(name, a, ctx, &s.cwd, &s.config()),
-            "ask" => ask(&s, a, ctx, self.origin),
-            "draw_ui" => {
-                let id = s
-                    .print(
-                        a.str(0, "text")?,
-                        a.opt_str(1, "id")?,
-                        a.bool(2, "pin", false)?,
-                    )
-                    .map_err(Fail::runtime)?;
-                Ok(MontyObject::string(id))
-            }
             "set_title" => {
                 let text: String = a
                     .str(0, "text")?
@@ -126,48 +104,10 @@ impl Host for SessionHost {
     }
 }
 
-/// Blocks until the user answers. The time it takes does not count against the
-/// deadline of the call.
-fn ask(s: &Arc<Session>, a: &Args, ctx: &Ctx, origin: Origin) -> Result<MontyObject, Fail> {
-    a.deny(2, "wait")?;
-    let question = a.str(0, "question")?;
-    let options = a.str_list(1, "options")?;
-    let (id, rx) = s.ask(&question, options.clone()).map_err(Fail::runtime)?;
-    if origin == Origin::Main {
-        s.hook(
-            "ask",
-            crate::hooks::Data {
-                ask_id: Some(id.clone()),
-                question: Some(question),
-                options: Some(options),
-                ..Default::default()
-            },
-        );
-    }
-    let _paused = (origin != Origin::Hook).then(|| ctx.pause());
-    loop {
-        match rx.recv_timeout(Duration::from_millis(50)) {
-            Ok(answer) => return Ok(MontyObject::string(answer)),
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(Fail::runtime("dismissed"));
-            }
-            Err(_) if ctx.cancelled() || (origin == Origin::Hook && ctx.expired()) => {
-                s.answer(&id, None);
-                return Err(Fail::runtime("stopped before the user answered"));
-            }
-            Err(_) => {}
-        }
-    }
-}
-
-pub(crate) fn python_for(
-    session: Weak<Session>,
-    config: &tuse_config::Config,
-    origin: Origin,
-) -> Python {
+pub(crate) fn python_for(session: Weak<Session>, config: &tuse_config::Config) -> Python {
     let s = session.upgrade();
     let mut py = Python::new(
-        Arc::new(SessionHost::new(session, origin)),
+        Arc::new(SessionHost::new(session)),
         config.settings.max_output,
     );
     if let Some(s) = s {
@@ -179,7 +119,7 @@ pub(crate) fn python_for(
 impl Session {
     /// The agent's interpreter.
     pub(crate) fn new_python(self: &Arc<Self>, config: &tuse_config::Config) -> Python {
-        python_for(Arc::downgrade(self), config, Origin::Main)
+        python_for(Arc::downgrade(self), config)
     }
 }
 

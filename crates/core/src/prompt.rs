@@ -16,7 +16,7 @@ pub fn system_prompt(config: &Config, compacted: bool, mode: crate::Mode) -> Str
     );
     let mut out = parts.join("\n\n");
     if mode == crate::Mode::Headless {
-        out.push_str("\n\nMode: headless (`tuse -p`). There is no user: `ask` and `draw_ui` are unavailable. Decide yourself and finish with a final answer.");
+        out.push_str("\n\nMode: headless (`tuse -p`). There is no user to answer. Decide yourself and finish with a final answer.");
     }
     if compacted {
         out.push_str("\n\nEarlier parts of this conversation were compacted to save context: old tool calls and their outputs were removed and some later outputs were cut to their first line.");

@@ -51,22 +51,7 @@ pub enum Event {
         effort: String,
         cancelled: bool,
     },
-    Ask {
-        id: String,
-        question: String,
-        options: Vec<String>,
-    },
-    AskDone {
-        id: String,
-    },
     Tasks,
-    /// `draw_ui()`: a plain text block; the same `id` replaces the earlier one.
-    /// Empty `text` removes the block; `pin` keeps it below every other entry.
-    Print {
-        id: String,
-        text: String,
-        pin: bool,
-    },
     Usage,
     /// A provider's model list arrived.
     Models,

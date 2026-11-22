@@ -23,24 +23,6 @@ Always defined in `python` and in hooks. Errors are Python exceptions.
   timeout (its own or the call's) is not killed**: it goes on as a background process task,
   `.task` is its ID and `.out` has what it printed so far (the rest is in `task_get(id).output`).
   Esc kills it, and so does a timeout inside a hook or a task.
-Use `ask` for clarification, confirmation, or choices instead of asking in a text reply.
-
-- `ask(question, options=[])`: asks the user and **waits** for the answer. The user picks an option
-  or writes their own answer (the last row of the list), so the result is any text. To ask without
-  waiting, call it from a task (not headless): `task_run('print(ask("Deploy?", ["yes", "no"]))')`.
-Use `draw_ui` for diagrams, tables, dashboards and live progress in chat.
-
-- `draw_ui(text, id=None, pin=False)`: shows multiline text in the user's UI, without Markdown, and returns
-  a block ID. `draw_ui(text, id=ID)` replaces that block, so a script can redraw its own interface in
-  place. `pin=True` keeps a new block at the very bottom of the chat, after every other entry
-  (several pins stay in creation order; new messages appear above them). `draw_ui("", id=ID)`
-  removes a block, pinned or not, and frees the ID. Blocks are not saved in the session.
-  The text may carry ANSI SGR styling: `0` reset, `1` bold, `2` dim, `3` italic, `4` underline,
-  `30-37`/`90-97` foreground and `40-47`/`100-107` background (the 16 colors map to theme tokens),
-  `38;5;n`, `48;5;n`, `38;2;r;g;b` and `48;2;r;g;b`. Every other escape (cursor moves, clearing,
-  titles) is dropped. `https://` URLs and OSC 8 hyperlinks (`\x1b]8;;URL\x07text\x1b]8;;\x07`) are
-  clickable; only `http`, `https` and `mailto` open. JSON-RPC `print` events carry the raw text, `pin` and `removed`.
-- Headless (`tuse -p`): `ask` and `draw_ui` raise `RuntimeError`, in tasks and hooks too.
 - `task_run(code, name=None)`: starts a **background Python REPL** that runs `code` (a string). It
   is a new interpreter with the same functions and the filesystem, but it does not
   see your variables. Run a server with `task_run('sh("npm run dev")')`. `print()` and the value of

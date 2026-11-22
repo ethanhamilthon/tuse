@@ -115,8 +115,7 @@ pub struct Hook {
     pub modes: Vec<Mode>,
 }
 
-pub const HOOK_EVENTS: [&str; 5] = [
-    "ask",
+pub const HOOK_EVENTS: [&str; 4] = [
     "process_start",
     "process_end",
     "user_message",

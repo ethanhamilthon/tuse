@@ -1,6 +1,5 @@
 use crate::app::App;
 use crate::chat::Entry;
-use crate::chat_print::PrintChange;
 use tuse_core::Event;
 
 impl App {
@@ -22,11 +21,7 @@ impl App {
         match e {
             Event::User { id, text, images } => {
                 if self.steering == Some(id) {
-                    if let Some((_, _, draft)) = &mut self.ask_input {
-                        draft.clear();
-                    } else {
-                        self.editor.clear();
-                    }
+                    self.editor.clear();
                     self.steering = None;
                 }
                 self.chat.push(Entry::User { text, images });
@@ -192,41 +187,12 @@ impl App {
                     cancelled,
                 });
             }
-            Event::Ask {
-                id,
-                question,
-                options,
-            } => {
-                self.asks.push((id, question, options));
-                if self.picker.as_ref().is_none_or(|p| p.kind.is_token()) {
-                    self.next_ask();
-                }
-            }
-            Event::AskDone { id } => {
-                if self.ask_input.as_ref().is_some_and(|a| a.0 == id) {
-                    self.editor = self.ask_input.take().unwrap().2;
-                    self.asks.retain(|a| a.0 != id);
-                    self.next_ask();
-                    return;
-                }
-                self.asks.retain(|a| a.0 != id);
-                if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Ask(id.clone()))
-                {
-                    self.picker = None;
-                    self.next_ask();
-                }
-            }
             Event::Tasks => {
                 if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Task) {
                     self.open_tasks();
                 }
             }
             Event::Usage => {}
-            Event::Print { id, text, pin } => match self.chat.set_print(&id, text, pin) {
-                PrintChange::Added => self.scroll = 0,
-                PrintChange::Removed(Some(pos)) => self.shift_after(pos),
-                _ => {}
-            },
             Event::Models => {
                 if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Model) {
                     self.open_models();

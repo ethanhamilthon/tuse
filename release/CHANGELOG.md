@@ -4,6 +4,13 @@
 
 - Tuse no longer keeps running at 100% CPU after its terminal is closed. If the UI does not stop within 2 seconds of a hangup, or after the terminal goes away, Tuse closes the session (with `process_end` hooks) and exits.
 - `sh` runs commands in their own session, without a controlling terminal. An interactive shell such as `zsh -ic` can no longer take the terminal and leave Tuse suspended (`suspended (tty input)`) with mouse codes printed in the shell.
+- `require("tuse")` gives the host functions (`sh`, `read`, `write`, `edit`, `grep`, `spawn`, ...) and `env`: `require("tuse").env.TUSE_MODE` reads any variable, with Tuse's own ones (`TUSE_MODE`, `TUSE_CWD`, `TUSE_GLOBAL_CONFIG`, ...).
+- **Breaking:** `TUSE_MODE` is no longer a Lua global; use `os.getenv("TUSE_MODE")` or `require("tuse").env.TUSE_MODE`. Reading the old global raises an error that says so.
+- `require` finds more: `require("name")` loads `./name.lua` or `./name/init.lua`; `require("global")` the global config; `require("~/path")` `~/path.lua` or `~/path/init.lua`; `require("~/path/file.lua")` that file. `/reload` loads changed modules again.
+- The global config is `$TUSE_GLOBAL_CONFIG` (a file or a module path), else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. `~/.config/tuse/main.lua` still works.
+- Files, prompts and images picked into the input are drawn in `accent`; typed `#name` and `@path` stay plain until Enter picks them.
+- Lists and panels (`/models`, `/trace`, `/config`, `/usage`, `/resume`, tasks) have no title line, like `Model 3/12`.
+- Release scripts are inlined into the workflow; `release/main.lua` is no longer shipped.
 
 ## 0.7.3
 
@@ -230,5 +237,3 @@ Notes for an existing install:
 - `Record::Tool` has `title` and `diffs`; a session written by 0.4.0 still opens.
 - The theme tokens `picker_*`, `panel_*` and the two `*_max_height` of lists are renamed; use `list_fg`, `list_bg`, `list_title`, `list_selected_fg`, `list_selected_bg`,
   `list_detail`, `list_selected_prefix`, `list_pad_x`, `list_max_height`.
-
-[0.4.0 and earlier](CHANGELOG-early.md)

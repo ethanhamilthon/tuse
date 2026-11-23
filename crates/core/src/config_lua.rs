@@ -136,10 +136,27 @@ pub(crate) fn eval_file(lua: &Lua, path: &Path) -> Result<Value, String> {
     eval.map_err(error)
 }
 
+/// Makes the staged config active: retained helpers get their new code, and helpers the
+/// new config dropped are removed unless the agent has since rebound their globals.
 pub(crate) fn commit(lua: &Lua, config: &Config) -> Result<(), String> {
     let t: Table = lua
         .named_registry_value("tuse.next")
         .map_err(|e| e.to_string())?;
+    if let Ok(old) = lua.named_registry_value::<Table>("tuse.config") {
+        for name in table_keys(&old, "functions")? {
+            if config.functions.contains_key(&name) {
+                continue;
+            }
+            let Some(run) = code(&old, "functions", &name) else {
+                continue;
+            };
+            let g = lua.globals();
+            if g.raw_get::<Value>(name.as_str()).ok() == Some(Value::Function(run)) {
+                g.raw_set(name.as_str(), Value::Nil)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+    }
     lua.set_named_registry_value("tuse.config", &t)
         .map_err(|e| e.to_string())?;
     for name in config.functions.keys() {

@@ -116,5 +116,7 @@ the agent: it is left out of the system prompt and of `docs("functions")`, but i
 so other helpers, hooks and tasks can call it. Branch on `require("tuse").session().mode` to
 choose which helpers to define.
 
-`/reload` validates the config first, then runs the config file again in the same VM: helpers are
-redefined and the agent's globals stay.
+`/reload` validates the config first, then runs the config file again in the same VM. On success,
+retained helpers get their new code, helpers the config no longer defines disappear from Lua and
+`docs("functions")` (unless the agent has rebound that global itself), and the agent's other
+globals stay. A failed reload changes nothing: every existing helper keeps working.

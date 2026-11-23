@@ -24,7 +24,7 @@ fn search_is_edited_in_the_editor_and_esc_restores_the_draft() {
     let items = ["alpha beta", "gallery", "/trace +lua"]
         .map(|s| item(s, "", s))
         .to_vec();
-    app.open_modal(Picker::new(Kind::Resume, "Resume", items));
+    app.open_modal(Picker::new(Kind::Resume, items));
     assert!(app.editor.is_empty());
 
     type_text(&mut app, "alpha be");

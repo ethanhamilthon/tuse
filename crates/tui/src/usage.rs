@@ -81,7 +81,7 @@ pub fn panel(session: &Session, p: &Palette) -> Panel {
     if st.priced {
         lines.push(row("Cost", vec![span(format!("${:.4}", st.cost), ok)]));
     }
-    Panel::styled("Usage", lines)
+    Panel::styled(lines)
 }
 
 #[cfg(test)]
@@ -94,13 +94,13 @@ mod tests {
         let p = &app.palette;
         let mut pnl = panel(&app.session, p);
         let lines = pnl.lines(80, 16, p);
-        // Rule + Title + 5 rows (Session, Model, Context, Turns, Tokens)
-        assert_eq!(lines.len(), 7);
+        // Rule + 5 rows (Session, Model, Context, Turns, Tokens), no title
+        assert_eq!(lines.len(), 6);
         // Key span on Session row uses border color; Context value uses accent bold.
-        assert_eq!(lines[2][0].style.fg, p.border);
-        assert_eq!(lines[4][0].style.fg, p.border);
-        assert_eq!(lines[4][1].style.fg, p.accent);
-        assert!(lines[4][1].style.bold);
+        assert_eq!(lines[1][0].style.fg, p.border);
+        assert_eq!(lines[3][0].style.fg, p.border);
+        assert_eq!(lines[3][1].style.fg, p.accent);
+        assert!(lines[3][1].style.bold);
         crate::app::cleanup(app);
     }
 }

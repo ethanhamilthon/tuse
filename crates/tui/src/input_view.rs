@@ -33,6 +33,14 @@ pub fn block(app: &App, w: usize, rows: &[String], top: usize) -> Vec<Line> {
         };
         out.push(vec![span(prefix, Style::fg(p.accent)), span(text, style)]);
     }
+    if !dim {
+        let atoms = app.editor.atom_columns(app.input_cols);
+        for (line, ranges) in out.iter_mut().skip(1).zip(atoms.into_iter().skip(top)) {
+            for (a, b) in ranges {
+                crate::selection::highlight(line, left + a, left + b, Style::fg(p.accent));
+            }
+        }
+    }
     for (line, (a, b)) in out.iter_mut().skip(1).zip(
         app.editor
             .selected_columns(app.input_cols)
@@ -79,6 +87,27 @@ mod tests {
             assert_eq!(out[1][0].text, INPUT_PREFIX);
             assert_eq!(out[2][0].text, "  ");
         }
+        crate::app::cleanup(app);
+    }
+
+    #[test]
+    fn picked_atoms_are_accent_and_typed_tokens_are_not() {
+        let mut app = crate::app::test_app("input-atoms");
+        app.input_cols = 60;
+        app.editor.insert("#typed ");
+        app.editor.insert_atom(
+            "#review",
+            crate::editor::AtomKind::Prompt("review".into()),
+        );
+        app.editor.insert(" x");
+        let (rows, _) = app.editor.layout(60);
+        let out = block(&app, 80, &rows, 0);
+        let accent: Vec<_> = out[1][1..]
+            .iter()
+            .filter(|s| s.style.fg == app.palette.accent && s.style.fg.is_some())
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(accent, ["#review"]);
         crate::app::cleanup(app);
     }
 }

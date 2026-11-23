@@ -37,6 +37,26 @@ impl Editor {
             .collect()
     }
 
+    /// Column ranges of the atoms on each row, to draw them in their own color.
+    pub fn atom_columns(&self, cols: usize) -> Vec<Vec<(usize, usize)>> {
+        self.placed(cols)
+            .0
+            .iter()
+            .map(|r| {
+                let mut col = 0;
+                let mut out = vec![];
+                for i in r.start..r.end.min(self.buf.len()) {
+                    let w = self.unit(i, cols).1;
+                    if self.atom(self.buf[i]).is_some() {
+                        out.push((col, col + w));
+                    }
+                    col += w;
+                }
+                out
+            })
+            .collect()
+    }
+
     /// Moves the cursor one visual row up or down, keeping the column; false at the edge.
     pub fn vertical(&mut self, up: bool, cols: usize) -> bool {
         let cols = cols.max(1);

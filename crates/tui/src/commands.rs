@@ -21,7 +21,7 @@ impl App {
     pub fn run_command(&mut self, name: &str) {
         match name {
             "config" => {
-                self.panel = Some(Panel::new("Config", self.session.config().to_json()));
+                self.panel = Some(Panel::new(self.session.config().to_json()));
             }
             "new" => self.switch(None),
             "quit" => self.quit = true,
@@ -67,7 +67,7 @@ impl App {
             self.flash("No other sessions in this folder.");
             return;
         }
-        self.open_modal(Picker::new(Kind::Resume, "Resume", items));
+        self.open_modal(Picker::new(Kind::Resume, items));
     }
 
     fn open_trace(&mut self) {
@@ -76,7 +76,7 @@ impl App {
             use std::fmt::Write;
             let _ = writeln!(text, "--- {} ---\n{}\n", item.role, item.text);
         }
-        let mut panel = Panel::new("Trace", text);
+        let mut panel = Panel::new(text);
         panel.scroll = usize::MAX;
         self.panel = Some(panel);
     }
@@ -99,7 +99,7 @@ impl App {
             .as_ref()
             .and_then(|p| p.current())
             .map(|i| i.value.clone());
-        let p = Picker::new(Kind::Task, "Tasks (enter: output, ctrl+x: stop)", items);
+        let p = Picker::new(Kind::Task, items);
         let p = self.open_modal(p);
         if let Some(v) = selected {
             p.select(&v);
@@ -140,7 +140,7 @@ impl App {
             (Kind::Model, Some(v)) => {
                 let (_, effort) = self.session.model();
                 let items = EFFORTS.iter().map(|e| item(*e, "", *e)).collect();
-                let ep = Picker::new(Kind::Effort(v.clone()), format!("Effort for {v}"), items);
+                let ep = Picker::new(Kind::Effort(v.clone()), items);
                 self.open_modal(ep).select(&effort);
             }
             (Kind::Effort(model), Some(v)) => {
@@ -156,8 +156,7 @@ impl App {
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.tasks.get(&v) {
                     let out = tuse_core::tail(&t.log, 200);
-                    let title = format!("Task {} {} [{}]", t.id, t.name, t.status);
-                    self.panel = Some(Panel::new(title, out));
+                    self.panel = Some(Panel::new(out));
                 }
             }
             _ => {}

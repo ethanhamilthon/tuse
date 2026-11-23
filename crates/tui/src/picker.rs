@@ -34,7 +34,6 @@ pub fn item(label: impl Into<String>, detail: impl Into<String>, value: impl Int
 
 pub struct Picker {
     pub kind: Kind,
-    pub title: String,
     pub items: Vec<Item>,
     pub shown: Vec<usize>,
     pub selected: usize,
@@ -42,11 +41,10 @@ pub struct Picker {
 }
 
 impl Picker {
-    pub fn new(kind: Kind, title: impl Into<String>, items: Vec<Item>) -> Self {
+    pub fn new(kind: Kind, items: Vec<Item>) -> Self {
         let shown = (0..items.len()).collect();
         Picker {
             kind,
-            title: title.into(),
             items,
             shown,
             selected: 0,
@@ -108,7 +106,7 @@ mod tests {
     #[test]
     fn filters_by_case_insensitive_substring_in_list_order() {
         let items = ["Mars One", "Gallery", "mars Two"].map(|s| item(s, "", s));
-        let mut picker = Picker::new(Kind::File, "", items.into());
+        let mut picker = Picker::new(Kind::File, items.into());
         picker.filter("mArS");
         assert_eq!(picker.shown, [0, 2]);
         picker.filter("m One");

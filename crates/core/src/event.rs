@@ -27,7 +27,7 @@ pub enum Event {
         timeout: u64,
         id: String,
         tool: String,
-        /// The code of `python`.
+        /// The code of the `lua` call.
         input: String,
     },
     ToolEnd {

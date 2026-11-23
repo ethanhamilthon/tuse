@@ -41,11 +41,6 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
     }
     empty_tables_as_maps(&mut value);
     let config: Config = serde_json::from_value(value).map_err(|e| format!("{name}: {e}"))?;
-    config
-        .settings
-        .ui
-        .check()
-        .map_err(|e| format!("{name}: settings.ui: {e}"))?;
     crate::functions::validate(&config).map_err(|e| format!("{name}: {e}"))?;
     Ok(config)
 }
@@ -96,7 +91,8 @@ mod tests {
         assert_eq!((c.settings.ui.tool_line, c.compact_at("p/a")), (7, 600));
         assert_eq!(c.hooks["h"].events, ["user_message"]);
         let e = from_value(json!({"settings": {"ui": {"input_design": "round"}}}), "t");
-        assert!(e.unwrap_err().contains("input_design"));
+        let e = e.unwrap_err();
+        assert!(e.contains("`round`") && e.contains("`fill`"), "{e}");
         assert!(from_value(json!("x"), "t").is_err());
         let s = crate::Settings::default();
         assert_eq!(s.retries, 5);

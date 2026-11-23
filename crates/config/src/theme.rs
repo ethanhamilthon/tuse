@@ -39,8 +39,7 @@ impl Default for Theme {
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct UiSettings {
-    /// `lines`, `box`, `fill` or `bar`.
-    pub input_design: String,
+    pub input_design: InputDesign,
     /// `true` folds multiline Lua long strings (`[[...]]`) in chat tool calls.
     pub fold_strings: bool,
     /// Lines shown per block: `0` hides it, `-1` removes the limit.
@@ -59,7 +58,7 @@ pub struct UiSettings {
 impl Default for UiSettings {
     fn default() -> Self {
         Self {
-            input_design: "lines".into(),
+            input_design: InputDesign::Lines,
             fold_strings: true,
             tool_line: -1,
             diff_line: 12,
@@ -74,16 +73,18 @@ impl Default for UiSettings {
     }
 }
 
-impl UiSettings {
-    pub fn check(&self) -> Result<(), String> {
-        if !matches!(self.input_design.as_str(), "lines" | "box" | "fill" | "bar") {
-            return Err(format!(
-                "input_design `{}` is not lines, box, fill or bar",
-                self.input_design
-            ));
-        }
-        Ok(())
-    }
+/// How the input is drawn (`settings.ui.input_design`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InputDesign {
+    /// A rule above and below.
+    Lines,
+    /// A rounded frame.
+    Box,
+    /// A `surface` block.
+    Fill,
+    /// An `accent` bar on the left.
+    Bar,
 }
 
 /// How many of `len` lines a `*_line` setting shows.

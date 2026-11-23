@@ -12,9 +12,9 @@ A theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`
 - `surface` (`#1A1A1A`): elevated background (user messages, filled input); lists and panels do not use it.
 - `fg` (`#EDEDED`): primary text and code blocks.
 - `dim` (`#A0A0A0`): secondary text (tool output, quotes, list details, notices).
-- `muted` (`#676767`): subtle text (reasoning, syntax comments, inactive list items, motion gradient start).
+- `muted` (`#676767`): subtle text (reasoning, syntax comments, inactive list items).
 - `border` (`#2E2E2E`): horizontal rules, box frames, separators, `/usage` keys.
-- `accent` (`#EDEDED`): primary highlight (status, bar, list title, selected list item, motion gradient end).
+- `accent` (`#EDEDED`): primary highlight (status, bar, list title, selected list item).
 - `ok` (`#00AC3A`): additions and success (`diff` `+`, inline `code`, strings, `/usage` cost).
 - `err` (`#F32E40`): errors and deletions (`diff` `-`, failed calls, keywords).
 - `info` (`#52A8FF`): tools, headings, links, functions.
@@ -31,8 +31,6 @@ return {
 UI behavior and layout live under `settings.ui` so switching `/theme` keeps them intact:
 
 - `input_design`: `lines` (default), `box`, `fill` or `bar`.
-- `motion`: `true` (default) or `false`. While the agent works, a gradient from `muted` to `accent`
-  runs along the rules, frame borders, filled edges or bar.
 - `fold_strings`: `true` (default) or `false`. Folds multiline Lua long strings (`[[...]]`) in chat
   tool calls to a single line (`[[first line…]]`). `/trace` always shows the full code.
 - Lines shown in the chat (`0` hides the block, `-1` removes the limit): `tool_line` (`-1`),

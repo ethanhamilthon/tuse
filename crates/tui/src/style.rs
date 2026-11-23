@@ -4,8 +4,6 @@ use tuse_config::{Config, Theme, UiSettings};
 pub const FRAME_MS: u64 = 33;
 /// The least time an action stays in the working indicator.
 pub const STATUS_MIN_MS: u64 = 100;
-pub const MOTION_PERIOD: u16 = 24;
-pub const MOTION_MS: u64 = 60;
 pub const FILE_PICKER_MAX: usize = 20_000;
 pub const LIST_INDENT: usize = 2;
 pub const CODE_INDENT: usize = 2;

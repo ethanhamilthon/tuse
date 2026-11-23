@@ -20,7 +20,6 @@ mod markdown;
 mod maxsize;
 mod md_stream;
 mod modal;
-mod motion;
 mod mouse;
 mod panel;
 mod panel_keys;

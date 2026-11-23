@@ -179,7 +179,7 @@ pub fn highlight(screen: &mut [Line], hover: Option<u32>, color: Option<crosster
 
 pub(crate) fn resolve_path(raw: &str, cwd: &Path) -> Option<PathBuf> {
     if let Some(rest) = raw.strip_prefix("~/") {
-        let home = tuse_config::home();
+        let home = std::env::home_dir().unwrap_or_default();
         return (!home.as_os_str().is_empty()).then(|| home.join(rest));
     }
     let p = Path::new(raw);

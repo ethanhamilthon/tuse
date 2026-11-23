@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS state (
 
 /// Runs `f` on the database of the current `~/.tuse`; errors become strings.
 pub fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, String> {
-    let home = crate::store::tuse_home();
+    let home = tuse_config::tuse_home();
     let mut all = DB.get_or_init(Mutex::default).lock().unwrap();
     if !all.iter().any(|(h, _)| *h == home) {
         std::fs::create_dir_all(&home).map_err(|e| format!("{}: {e}", home.display()))?;

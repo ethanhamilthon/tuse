@@ -104,9 +104,9 @@ pub fn model_line(
     if let Some((used, window)) = context {
         text.push_str(LABEL_SEP);
         line.push(span(std::mem::take(&mut text), muted));
-        line.push(span(short(used), Style::fg(p.accent)));
+        line.push(span(tuse_core::tokens(used), Style::fg(p.accent)));
         let max = if window > 0 {
-            short(window)
+            tuse_core::tokens(window)
         } else {
             "?".into()
         };
@@ -117,17 +117,6 @@ pub fn model_line(
     }
     line.push(span(text, muted));
     line
-}
-
-/// `5200` -> `5.2k`, `1_000_000` -> `1m`: one compact form for both sides of `used/max`.
-pub fn short(n: u64) -> String {
-    let (v, unit) = match n {
-        n if n >= 1_000_000 => (n as f64 / 1e6, "m"),
-        n if n >= 1000 => (n as f64 / 1e3, "k"),
-        n => return n.to_string(),
-    };
-    let s = format!("{v:.1}");
-    format!("{}{unit}", s.strip_suffix(".0").unwrap_or(&s))
 }
 
 #[cfg(test)]
@@ -167,9 +156,9 @@ mod tests {
 
     #[test]
     fn sizes_format() {
-        assert_eq!(short(5200), "5.2k");
-        assert_eq!(short(1_000_000), "1m");
-        assert_eq!(short(200_000), "200k");
-        assert_eq!(short(999), "999");
+        assert_eq!(tuse_core::tokens(5200), "5.2k");
+        assert_eq!(tuse_core::tokens(1_000_000), "1m");
+        assert_eq!(tuse_core::tokens(200_000), "200k");
+        assert_eq!(tuse_core::tokens(999), "999");
     }
 }

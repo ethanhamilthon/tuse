@@ -52,22 +52,15 @@ pub fn update() -> Result<(), String> {
 }
 
 fn install(tmp: &Path, asset: &str, tarball: &[u8], sums: &[u8]) -> Result<PathBuf, String> {
-    let archive = tmp.join(asset);
-    write(&archive, tarball)?;
     let want = String::from_utf8_lossy(sums)
         .lines()
         .find(|l| l.ends_with(&format!(" {asset}")))
         .and_then(|l| l.split_whitespace().next().map(String::from))
         .ok_or("checksums.txt has no entry for this platform")?;
-    if sha256(&archive)? != want {
+    if sha256(tarball) != want {
         return Err(format!("checksum mismatch for {asset}"));
     }
-    run(Command::new("tar")
-        .arg("-xzf")
-        .arg(&archive)
-        .arg("-C")
-        .arg(tmp)
-        .arg("tuse"))?;
+    write(&tmp.join("tuse"), &unpack(tarball, "tuse")?)?;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let staged = exe.with_extension("new");
     std::fs::copy(tmp.join("tuse"), &staged).map_err(|e| format!("{}: {e}", staged.display()))?;
@@ -88,13 +81,29 @@ fn run(cmd: &mut Command) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-fn sha256(path: &Path) -> Result<String, String> {
-    let out = run(Command::new("sha256sum").arg(path))
-        .or_else(|_| run(Command::new("shasum").args(["-a", "256"]).arg(path)))?;
-    out.split_whitespace()
-        .next()
-        .map(String::from)
-        .ok_or_else(|| "no checksum tool output".into())
+fn sha256(data: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(data)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The file `name` of a `.tar.gz`.
+fn unpack(tarball: &[u8], name: &str) -> Result<Vec<u8>, String> {
+    let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(tarball));
+    for entry in archive.entries().map_err(|e| format!("archive: {e}"))? {
+        let mut entry = entry.map_err(|e| format!("archive: {e}"))?;
+        let path = entry.path().map_err(|e| format!("archive: {e}"))?;
+        if path.as_os_str() == name {
+            let mut out = vec![];
+            entry
+                .read_to_end(&mut out)
+                .map_err(|e| format!("archive: {e}"))?;
+            return Ok(out);
+        }
+    }
+    Err(format!("archive has no `{name}`"))
 }
 
 fn os() -> Result<&'static str, String> {
@@ -110,5 +119,33 @@ fn arch() -> Result<&'static str, String> {
         "aarch64" => Ok("arm64"),
         "x86_64" => Ok("amd64"),
         other => Err(format!("unsupported CPU {other}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn checks_and_unpacks_a_release() {
+        assert_eq!(
+            super::sha256(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        let mut tar = tar::Builder::new(vec![]);
+        let mut h = tar::Header::new_gnu();
+        h.set_size(3);
+        h.set_mode(0o755);
+        h.set_cksum();
+        tar.append_data(&mut h, "tuse", &b"bin"[..]).unwrap();
+        let gz = flate2::write::GzEncoder::new(vec![], flate2::Compression::fast());
+        let mut gz = gz;
+        std::io::Write::write_all(&mut gz, &tar.into_inner().unwrap()).unwrap();
+        let data = gz.finish().unwrap();
+        assert_eq!(super::unpack(&data, "tuse").unwrap(), b"bin");
+        assert!(super::unpack(&data, "other").is_err());
+        let tmp = std::env::temp_dir().join(format!("tuse-unpack-{}", std::process::id()));
+        let sums = format!("{}  x.tar.gz\n", super::sha256(b"nope"));
+        let err = super::install(&tmp, "x.tar.gz", &data, sums.as_bytes()).unwrap_err();
+        assert!(err.contains("checksum mismatch"), "{err}");
+        std::fs::remove_dir_all(tmp).ok();
     }
 }

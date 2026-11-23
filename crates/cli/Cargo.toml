@@ -18,3 +18,6 @@ tuse-tui.workspace = true
 tuse-rpc.workspace = true
 ureq.workspace = true
 signal-hook = "0.3"
+sha2 = "0.10"
+flate2 = "1"
+tar = { version = "0.4", default-features = false }

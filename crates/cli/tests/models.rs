@@ -34,7 +34,7 @@ fn models_lists_effective_lua_metadata_without_creating_a_session() {
         String::from_utf8_lossy(&out.stderr)
     );
     let text = String::from_utf8(out.stdout).unwrap();
-    assert!(text.contains("p/m\t200.0k ctx · $2/$10"), "{text}");
+    assert!(text.contains("p/m\t200k ctx · $2/$10"), "{text}");
     assert!(!run(&["import"]).status.success());
     assert!(!run(&["list"]).status.success());
     assert!(

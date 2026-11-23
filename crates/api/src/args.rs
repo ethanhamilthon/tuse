@@ -117,19 +117,40 @@ impl ArgStream {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn code(chunks: &[&str]) -> String {
+        let mut a = ArgStream::default();
+        chunks.iter().map(|c| a.feed(c)).collect()
+    }
+
     #[test]
     fn every_split_matches_complete_json() {
         for s in [
             r#"{"note":"\u00e9","n":3,"code":"print(\"a\\nb\")\n\ud83d\ude03"}"#,
             r#"{"extra":[{"code":"ignore"}],"code":"abc","note":"Run"}"#,
+            r#"{"code":"\u0041\u00e9\u4e2d\ud83d\ude03\t\/\b\f\r"}"#,
         ] {
             let parsed: serde_json::Value = serde_json::from_str(s).unwrap();
             for i in 0..=s.len() {
-                let mut a = ArgStream::default();
-                let mut c = a.feed(&s[..i]);
-                c.push_str(&a.feed(&s[i..]));
-                assert_eq!(c, parsed["code"]);
+                let (l, r) = s.split_at(i);
+                assert_eq!(code(&[l, r]), parsed["code"], "split at {i}");
             }
+            let one: Vec<String> = s.chars().map(String::from).collect();
+            let one: Vec<&str> = one.iter().map(String::as_str).collect();
+            assert_eq!(code(&one), parsed["code"], "char by char");
         }
+    }
+
+    #[test]
+    fn broken_escapes_drop_only_themselves() {
+        assert_eq!(code(&[r#"{"code":"a\qb"}"#]), "ab");
+        assert_eq!(code(&[r#"{"code":"a\u00zzb"}"#]), "azb");
+        assert_eq!(code(&[r#"{"code":"a\ud83db"}"#]), "ab");
+        assert_eq!(code(&[r#"{"code":"\ude03x"}"#]), "x");
+        assert_eq!(code(&[r#"{"code":"x\ud83d\u0041y"}"#]), "xy");
+        assert_eq!(
+            code(&[r#"{"code":"a\"#, r#"u0042\"#, r#"ud83d"#, r#"\ude03"}"#]),
+            "aB😃"
+        );
     }
 }

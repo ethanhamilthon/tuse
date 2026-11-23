@@ -2,12 +2,6 @@ use crate::types::Config;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-pub fn home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
-}
-
 /// `--config PATH`, else `./tuse.lua`, else the global config.
 pub fn find(explicit: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
     find_in(explicit, cwd, crate::global_path())
@@ -61,7 +55,7 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
 
 pub fn resolve_path(p: &str, dir: &Path) -> PathBuf {
     if let Some(rest) = p.strip_prefix("~/") {
-        return home().join(rest);
+        return std::env::home_dir().unwrap_or_default().join(rest);
     }
     let p = Path::new(p);
     if p.is_absolute() {

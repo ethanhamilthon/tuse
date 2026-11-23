@@ -26,12 +26,15 @@ pub struct Stats {
     pub calls: usize,
 }
 
+/// A token count for people: `999`, `5.2k`, `200k`, `1.5m`.
 pub fn tokens(n: u64) -> String {
-    match n {
-        n if n >= 1_000_000 => format!("{:.2}M", n as f64 / 1e6),
-        n if n >= 1000 => format!("{:.1}k", n as f64 / 1e3),
-        n => n.to_string(),
-    }
+    let (v, unit) = match n {
+        n if n >= 1_000_000 => (n as f64 / 1e6, "m"),
+        n if n >= 1000 => (n as f64 / 1e3, "k"),
+        n => return n.to_string(),
+    };
+    let s = format!("{v:.1}");
+    format!("{}{unit}", s.strip_suffix(".0").unwrap_or(&s))
 }
 
 fn find_model<'a>(models: &'a [ModelDef], full: &str) -> Option<&'a ModelDef> {

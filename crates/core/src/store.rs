@@ -5,13 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::fs::{File, TryLockError};
 use std::path::{Path, PathBuf};
 
-pub fn tuse_home() -> PathBuf {
-    tuse_config::tuse_home()
-}
-
 /// `~/.tuse/<id>/`: the lock, `tasks/` logs and pasted `images/`.
 pub fn session_path(id: &str) -> PathBuf {
-    tuse_home().join(id)
+    tuse_config::tuse_home().join(id)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

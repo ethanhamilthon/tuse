@@ -79,14 +79,14 @@ mod tests {
         let plain = model_item(Some(&opus), "c/opus", true);
         assert_eq!(
             (plain.label.as_str(), plain.detail.as_str()),
-            ("c/opus", "200.0k ctx")
+            ("c/opus", "200k ctx")
         );
         let named = model_item(Some(&sonnet), "c/sonnet", true);
-        assert_eq!(named.detail, "c/sonnet · 200.0k ctx");
+        assert_eq!(named.detail, "c/sonnet · 200k ctx");
         assert_eq!(model_item(None, "c/other", true).detail, "");
         assert_eq!(
             model_item(Some(&opus), "c/opus", false).detail,
-            "unavailable · 200.0k ctx"
+            "unavailable · 200k ctx"
         );
     }
 }

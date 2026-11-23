@@ -1,6 +1,5 @@
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
-#[allow(dead_code)]
 mod support;
 
 use common::Reply;

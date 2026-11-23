@@ -14,7 +14,7 @@ The theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name 
 - `dim` (`#BDBDBD`): secondary text (quotes, list details, notices, the scroll mark).
 - `muted` (`#929292`): subtle text (tool output, reasoning, syntax comments, inactive list items, status bars).
 - `border` (`#333333`): horizontal rules, box frames, separators, `/usage` keys, cut marks (`…`, `… N more lines`).
-- `accent` (`#BDDEAB`): primary highlight (spinner and time, used context, flash notices, bar, list title, selected list item).
+- `accent` (`#BDDEAB`): primary highlight (spinner and time, used context, flash notices, bar, picked `#`/`@`/image tokens in the input, selected list item).
 - `ok` (`#94B979`): additions and success (`diff` `+`, inline `code`, strings, `/usage` cost).
 - `err` (`#E27373`): errors and deletions (`diff` `-`, failed calls, keywords).
 - `info` (`#97BEDC`): tools, headings, links, functions.

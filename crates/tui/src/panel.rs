@@ -10,7 +10,6 @@ enum Body {
 /// Read-only text over the bottom of the chat (`/usage`, a task's output, an opened
 /// `/trace` item). It is not part of the conversation; Esc closes it.
 pub struct Panel {
-    pub title: String,
     body: Body,
     /// First visible content line.
     pub scroll: usize,
@@ -18,19 +17,18 @@ pub struct Panel {
 }
 
 impl Panel {
-    fn with_body(title: impl Into<String>, body: Body) -> Self {
+    fn with_body(body: Body) -> Self {
         Self {
-            title: title.into(),
             body,
             scroll: 0,
             cache: None,
         }
     }
-    pub fn new(title: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::with_body(title, Body::Text(value.into()))
+    pub fn new(value: impl Into<String>) -> Self {
+        Self::with_body(Body::Text(value.into()))
     }
-    pub fn styled(title: impl Into<String>, value: Vec<Line>) -> Self {
-        Self::with_body(title, Body::Styled(value))
+    pub fn styled(value: Vec<Line>) -> Self {
+        Self::with_body(Body::Styled(value))
     }
     pub fn invalidate(&mut self) {
         self.cache = None;
@@ -55,17 +53,12 @@ impl Panel {
     /// The panel as screen lines, at most `max_rows` of them, each `width` wide.
     pub fn lines(&mut self, width: usize, max_rows: usize, p: &Palette) -> Vec<Line> {
         let inner = width.max(1);
-        let body = max_rows.min(p.ui.list_max_height).max(3) - 2;
+        let body = max_rows.min(p.ui.list_max_height).max(2) - 1;
         let all = self.wrapped(inner, p).to_vec();
         let body = body.min(all.len());
         self.scroll = self.scroll.min(all.len().saturating_sub(body));
-        let more = if all.len() > body {
-            format!(" {}/{}", self.scroll + body, all.len())
-        } else {
-            String::new()
-        };
         let rows = all.into_iter().skip(self.scroll).take(body).collect();
-        crate::list::framed(&format!("{}{more}", self.title), rows, width, p)
+        crate::list::framed(rows, width, p)
     }
 
     pub fn scroll_by(&mut self, delta: isize) {
@@ -82,7 +75,6 @@ mod tests {
     fn panel_scrolls_within_its_text_and_fits_the_rows() {
         let p = Palette::new(&Theme::default(), &UiSettings::default());
         let mut panel = Panel::new(
-            "T",
             (0..30)
                 .map(|i| i.to_string())
                 .collect::<Vec<_>>()
@@ -92,9 +84,9 @@ mod tests {
         assert_eq!(lines.len(), 8);
         panel.scroll_by(1000);
         let last = panel.lines(20, 8, &p);
-        assert_eq!(panel.scroll, 30 - 6);
+        assert_eq!(panel.scroll, 30 - 7);
         assert_eq!(last.len(), 8);
-        let short = Panel::new("T", "one").lines(20, 8, &p);
-        assert_eq!(short.len(), 3);
+        let short = Panel::new("one").lines(20, 8, &p);
+        assert_eq!(short.len(), 2);
     }
 }

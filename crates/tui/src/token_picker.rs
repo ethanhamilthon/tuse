@@ -45,7 +45,7 @@ impl App {
         if stale || self.picker.as_ref().is_none_or(|p| p.kind != kind) {
             self.file_dir = dir;
             let items = self.token_items(&kind);
-            self.picker = Some(Picker::new(kind, "", items));
+            self.picker = Some(Picker::new(kind, items));
         }
         if let Some(p) = &mut self.picker {
             p.filter(&query);

@@ -24,7 +24,7 @@ impl App {
             .and_then(|p| p.current())
             .map_or(current, |i| i.value.clone());
         // A refresh keeps the search typed in the editor and re-applies it.
-        self.open_modal(Picker::new(Kind::Model, "Model", items))
+        self.open_modal(Picker::new(Kind::Model, items))
             .select(&selected);
     }
 }

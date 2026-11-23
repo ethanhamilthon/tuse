@@ -30,13 +30,26 @@ impl App {
             return;
         }
         self.selection = Default::default();
+        let page_delta = match k.code {
+            KeyCode::PageUp => -(page as isize),
+            KeyCode::PageDown => page as isize,
+            _ => 0,
+        };
+        if page_delta != 0 {
+            if shift && let Some(panel) = self.visible_panel_mut() {
+                panel.scroll_by(page_delta);
+            } else {
+                self.scroll_history(-page_delta);
+            }
+            return;
+        }
         if self.picker.is_some() && self.picker_key(k, ctrl, shift) {
             return;
         }
-        if self.question_key(k.code, shift || alt, page) {
+        if self.question_key(k.code, shift || alt) {
             return;
         }
-        if self.panel_key(k.code, page) {
+        if self.panel_key(k.code) {
             return;
         }
         let before = self.steering.map(|_| self.editor.buf.clone());
@@ -133,7 +146,7 @@ impl App {
             Err(e) => self.error(e),
         }
     }
-    fn question_key(&mut self, code: KeyCode, modified: bool, page: usize) -> bool {
+    fn question_key(&mut self, code: KeyCode, modified: bool) -> bool {
         let Some(q) = &mut self.question else {
             return false;
         };
@@ -150,8 +163,6 @@ impl App {
                 self.restore_draft();
                 let _ = self.session.ui_reply(id, Some(answer));
             }
-            KeyCode::PageUp => q.panel.scroll_by(-(page as isize)),
-            KeyCode::PageDown => q.panel.scroll_by(page as isize),
             KeyCode::Up if self.editor.is_empty() => q.panel.scroll_by(-step),
             KeyCode::Down if self.editor.is_empty() => q.panel.scroll_by(step),
             _ => return false,

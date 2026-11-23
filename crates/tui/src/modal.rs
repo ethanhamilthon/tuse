@@ -20,6 +20,16 @@ impl App {
         self.question.is_some()
     }
 
+    pub(crate) fn visible_panel_mut(&mut self) -> Option<&mut Panel> {
+        if self.picker.is_some() {
+            return None;
+        }
+        self.question
+            .as_mut()
+            .map(|q| &mut q.panel)
+            .or(self.panel.as_mut())
+    }
+
     /// Opens a modal picker, saving the input draft once.
     pub(crate) fn open_modal(&mut self, mut p: Picker) -> &mut Picker {
         let same = self.picker.as_ref().is_some_and(|q| q.kind == p.kind);

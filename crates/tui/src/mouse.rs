@@ -14,11 +14,11 @@ impl App {
         });
         match m.kind {
             MouseEventKind::ScrollUp => {
-                self.wheel(-1);
+                self.wheel(-1, point.0);
                 true
             }
             MouseEventKind::ScrollDown => {
-                self.wheel(1);
+                self.wheel(1, point.0);
                 true
             }
             MouseEventKind::Moved => {
@@ -71,24 +71,24 @@ impl App {
     }
 
     /// `dir` is `-1` for up, `1` for down.
-    fn wheel(&mut self, dir: isize) {
+    fn wheel(&mut self, dir: isize, row: usize) {
         self.selection = Default::default();
         let step = self.palette.ui.scroll_step as isize;
-        if let Some(p) = &mut self.picker {
-            let n = p.shown.len() as isize;
-            if n > 0 {
-                p.selected = (p.selected as isize + dir).clamp(0, n - 1) as usize;
-                p.follow(self.list_rows);
+        if self.overlay_rows.contains(&row) {
+            if let Some(p) = &mut self.picker {
+                let n = p.shown.len() as isize;
+                if n > 0 {
+                    p.selected = (p.selected as isize + dir).clamp(0, n - 1) as usize;
+                    p.follow(self.list_rows);
+                }
+                return;
             }
-        } else if let Some(q) = &mut self.question {
-            q.panel.scroll_by(dir * step);
-        } else if let Some(panel) = &mut self.panel {
-            panel.scroll_by(dir * step);
-        } else if dir < 0 {
-            self.scroll += step as usize;
-        } else {
-            self.scroll = self.scroll.saturating_sub(step as usize);
+            if let Some(panel) = self.visible_panel_mut() {
+                panel.scroll_by(dir * step);
+                return;
+            }
         }
+        self.scroll_history(-dir * step);
     }
 
     fn click(&mut self, x: usize, y: usize) {
@@ -138,6 +138,43 @@ mod tests {
         );
         assert!(app.mouse(event(MouseEventKind::Moved, 9, 2)));
         assert_eq!(app.hover, None);
+        crate::app::cleanup(app);
+    }
+
+    #[test]
+    fn wheel_and_page_keys_scroll_history_while_a_question_is_open() {
+        use crossterm::event::{KeyCode, KeyEvent};
+
+        let mut app = crate::app::test_app("mouse-question");
+        app.notice("previous message");
+        app.notice("latest message");
+        app.open_question(1, "question\n\n".repeat(25));
+        app.paste("draft answer");
+        let mut renderer = crate::draw::Renderer::default();
+        let mut screen = Vec::new();
+        renderer.draw(&mut app, &mut screen, 80, 20).unwrap();
+        assert!(String::from_utf8_lossy(&screen).contains("latest message"));
+        let border = app.overlay_rows.start as u16;
+        assert!(border > 0 && !app.overlay_rows.is_empty());
+        let step = app.palette.ui.scroll_step as usize;
+        app.mouse(event(MouseEventKind::ScrollDown, 0, border));
+        assert_eq!(app.question.as_ref().unwrap().panel.scroll, step);
+        assert_eq!(app.scroll, 0);
+        app.mouse(event(MouseEventKind::ScrollUp, 0, border - 1));
+        assert_eq!(app.scroll, step);
+        assert_eq!(app.question.as_ref().unwrap().panel.scroll, step);
+        renderer
+            .draw(&mut app, &mut std::io::sink(), 80, 20)
+            .unwrap();
+        assert!(app.scroll > 0);
+        app.key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE), 18);
+        assert_eq!(app.scroll, 0);
+        app.key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE), 18);
+        assert_eq!(app.scroll, 18);
+        app.key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::SHIFT), 18);
+        assert_eq!(app.question.as_ref().unwrap().panel.scroll, 0);
+        assert_eq!(app.scroll, 18);
+        assert_eq!(app.editor.text(), "draft answer");
         crate::app::cleanup(app);
     }
 

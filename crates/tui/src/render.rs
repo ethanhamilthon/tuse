@@ -1,6 +1,7 @@
 use crate::chat::Entry;
 use crate::style::{
     ERROR_PREFIX, INPUT_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style,
+    UI_MARKDOWN_PREFIX, UI_RESULT_PREFIX,
 };
 use crate::text::{Line, line_width, span, wrap};
 use std::time::Duration;
@@ -103,39 +104,100 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
                 parts.push(format!("{model}/{effort}"));
             }
             let text = parts.join(LABEL_SEP);
-            plain(&text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad)
+            plain(&text, width, Style::fg(p.muted), NOTICE_PREFIX, &pad)
         }
-        Entry::Markdown { text, .. } => crate::markdown::render(text, width, p),
+        Entry::Markdown { text, .. } => ui_markdown(text, width, p),
         Entry::UiResult {
             is_picker,
             prompt,
             value,
-        } => {
+        } => marked(UI_RESULT_PREFIX, width, p, |room| {
             let mut out = if *is_picker {
-                plain(prompt, width, Style::fg(p.dim), "", "")
+                plain(prompt, room, Style::fg(p.dim), "", "")
             } else {
-                crate::markdown::render(prompt, width, p)
+                crate::markdown::render(prompt, room, p)
             };
-            let indent = " ".repeat(crate::text::width(INPUT_PREFIX));
-            let first = vec![span(INPUT_PREFIX, Style::fg(p.accent))];
-            let rest = vec![span(indent, Style::fg(p.accent))];
-            let st = Style::fg(p.fg);
-            for (i, l) in clean(value).split('\n').enumerate() {
-                out.extend(wrap(
-                    &vec![span(l, st)],
-                    width,
-                    if i == 0 { &first } else { &rest },
-                    &rest,
-                ));
+            if out.is_empty() {
+                out.push(vec![]);
             }
+            let answer = marked(INPUT_PREFIX, room, p, |room| {
+                plain(value, room, Style::fg(p.fg), "", "")
+            });
+            out.extend(answer);
             out
+        }),
+    }
+}
+
+pub fn ui_markdown(text: &str, width: usize, p: &Palette) -> Vec<Line> {
+    marked(UI_MARKDOWN_PREFIX, width, p, |room| {
+        crate::markdown::render(text, room, p)
+    })
+}
+
+fn marked(
+    marker: &str,
+    width: usize,
+    p: &Palette,
+    render: impl FnOnce(usize) -> Vec<Line>,
+) -> Vec<Line> {
+    let marker = crate::text::clip(marker, width.saturating_sub(1), "");
+    let indent = crate::text::width(&marker);
+    let mut lines = render(width.saturating_sub(indent));
+    if !marker.is_empty() {
+        for (i, line) in lines.iter_mut().enumerate() {
+            if i == 0 {
+                line.insert(0, span(marker.clone(), Style::fg(p.accent)));
+            } else if !line.is_empty() {
+                line.insert(0, span(" ".repeat(indent), Style::default()));
+            }
         }
     }
+    lines
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ui_entries_use_accent_markers_and_keep_wrapped_content_aligned() {
+        let p = Palette::new(&Default::default(), &Default::default());
+        for (is_picker, prompt) in [(true, "Picker"), (false, "**Question**")] {
+            let entry = Entry::UiResult {
+                is_picker,
+                prompt: prompt.into(),
+                value: "answer".into(),
+            };
+            let lines = render(&entry, 20, &p);
+            assert_eq!(lines[0][0], span("? ", Style::fg(p.accent)));
+            assert_eq!(lines[1][0].text, "  ");
+            assert_eq!(lines[1][1], span("› ", Style::fg(p.accent)));
+        }
+        let lines = ui_markdown("**one two three**", 9, &p);
+        assert_eq!(lines[0][0], span("◆ ", Style::fg(p.accent)));
+        assert!(lines[0].iter().any(|s| s.text == "one two" && s.style.bold));
+        assert_eq!(lines[1][0].text, "  ");
+        assert!(lines.iter().all(|line| line_width(line) <= 9));
+    }
+
+    #[test]
+    fn the_turn_summary_is_muted() {
+        let p = Palette::new(&Default::default(), &Default::default());
+        let entry = Entry::TurnEnd {
+            elapsed: Duration::from_secs(70),
+            model: "provider/model".into(),
+            effort: "medium".into(),
+            cancelled: false,
+        };
+        assert_eq!(
+            render(&entry, 80, &p),
+            vec![vec![span(
+                "✓ 1m10s · provider/model/medium",
+                Style::fg(p.muted)
+            )]],
+        );
+    }
 
     #[test]
     fn a_user_message_is_a_surface_block_without_a_prefix() {

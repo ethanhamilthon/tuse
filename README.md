@@ -92,7 +92,9 @@ The VM lives as long as the process. A call is stopped after 120 seconds.
 | Enter | send |
 | Shift+Enter, Alt+Enter, Ctrl+J | new line |
 | Esc | close the picker, or stop the running turn |
-| mouse wheel | scroll the chat (or the open list) |
+| mouse wheel | scroll the chat, panel or picker under the pointer |
+| PageUp / PageDown | scroll chat history, even with a panel open |
+| Shift+PageUp / Shift+PageDown | scroll the open panel |
 | Up / Down, Left / Right, Home / End | move in the input |
 | click in the input | put the cursor there |
 | hover / click a link | highlight it / open it in the browser |

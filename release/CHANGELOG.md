@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1
+
+- The mouse wheel scrolls the chat, panel, or picker under the pointer. PageUp/PageDown scroll chat history even when a panel is open; hold Shift to page through the panel.
+- Lua question and picker results start with an accent-colored `?`. Pinned and unpinned `show_markdown` blocks start with `◆`.
+- End-of-turn timing and model summaries use the `muted` theme color.
+
 ## 0.8.0
 
 - **Lua UI:** Added `show_markdown(name, text, pin)`, `show_picker(options)`, and `show_question(text)`.

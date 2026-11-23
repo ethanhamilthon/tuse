@@ -191,7 +191,7 @@ impl Chat {
             }
             let (_, text, cache) = &mut self.pinned[i];
             if cache.as_ref().is_none_or(|(w, _)| *w != width) {
-                *cache = Some((width, crate::markdown::render(text, width, p)));
+                *cache = Some((width, crate::render::ui_markdown(text, width, p)));
             }
             push_rev(&mut rev, &cache.as_ref().unwrap().1, need, gap);
         }

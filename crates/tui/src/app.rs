@@ -46,6 +46,8 @@ pub struct App {
     /// Rows the open list shows (set while drawing); the keys keep the selection in view.
     pub list_rows: usize,
     pub input_area: Option<InputArea>,
+    /// Screen rows occupied by the picker or panel at the last draw.
+    pub overlay_rows: std::ops::Range<usize>,
     /// The token whose picker was dismissed with Esc; it stays closed until the token changes.
     pub dismissed: Option<String>,
     /// The input draft set aside while a modal picker uses the editor as its search box.
@@ -95,6 +97,7 @@ impl App {
             trace_back: None,
             list_rows: 8,
             input_area: None,
+            overlay_rows: 0..0,
             dismissed: None,
             saved_editor: None,
             file_dir: String::new(),
@@ -111,6 +114,10 @@ impl App {
             steering: None,
             quit: false,
         }
+    }
+
+    pub fn scroll_history(&mut self, delta: isize) {
+        self.scroll = self.scroll.saturating_add_signed(delta);
     }
 
     pub fn flash(&mut self, text: impl AsRef<str>) {

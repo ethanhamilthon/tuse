@@ -117,10 +117,9 @@ fn lua_picker_disables_editor_question_uses_separate_input_and_pinned_stays_last
         .map(|l| l.iter().map(|s| s.text.as_str()).collect::<String>())
         .filter(|s| !s.trim().is_empty())
         .collect();
-    assert_eq!(rendered.last().unwrap().trim(), "PINNED", "{rendered:?}");
+    assert_eq!(rendered.last().unwrap(), "◆ PINNED", "{rendered:?}");
     assert!(
-        rendered.iter().any(|l| l.contains("UNPIN2"))
-            && !rendered.iter().any(|l| l.contains("UNPIN1"))
+        rendered.iter().any(|l| l == "◆ UNPIN2") && !rendered.iter().any(|l| l.contains("UNPIN1"))
     );
 
     // Lua picker disables typing & paste and restores draft on Esc.

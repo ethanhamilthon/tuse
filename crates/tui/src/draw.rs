@@ -53,27 +53,31 @@ impl Renderer {
         let chat_h = h.saturating_sub(fixed);
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
-        let (mut view, clamped) = app.chat.window(inner, &app.palette, app.scroll, chat_h);
-        app.scroll = clamped;
+        // Leave at least one row for history when both history and the overlay fit.
+        let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.list_max_height);
+        let mut overlay = if app.picker.is_some() {
+            crate::list::picker(app, inner, cap)
+        } else if let Some(panel) = app
+            .question
+            .as_mut()
+            .map(|q| &mut q.panel)
+            .or(app.panel.as_mut())
+        {
+            panel.lines(inner, cap, p)
+        } else {
+            vec![]
+        };
+        overlay.truncate(cap);
+        let history_h = chat_h - overlay.len();
+        app.overlay_rows = history_h..chat_h;
         let p = &app.palette;
-        while view.len() < chat_h {
-            view.insert(0, vec![]);
+        if history_h > 0 {
+            let (view, clamped) = app.chat.window(inner, p, app.scroll, history_h);
+            app.scroll = clamped;
+            screen.resize_with(history_h - view.len(), Vec::new);
+            screen.extend(view);
         }
-        let cap = chat_h.min(p.ui.list_max_height);
-        if let Some(q) = &mut app.question {
-            let lines = q.panel.lines(inner, cap, p);
-            view.truncate(chat_h.saturating_sub(lines.len()));
-            view.extend(lines);
-        } else if let Some(panel) = &mut app.panel {
-            let lines = panel.lines(inner, cap, p);
-            view.truncate(chat_h.saturating_sub(lines.len()));
-            view.extend(lines);
-        }
-        let lines = crate::list::picker(app, inner, cap);
-        let p = &app.palette;
-        view.truncate(chat_h.saturating_sub(lines.len()));
-        view.extend(lines);
-        screen.extend(view);
+        screen.extend(overlay);
         let mut rows = rows;
         rows.resize_with(rows.len().max(input_h), String::new);
         let shown = &rows[input_top..input_top + input_h];

@@ -69,7 +69,6 @@ mod tests {
                 input: "ls".into(),
                 images: vec![],
                 diffs: vec![],
-                title: String::new(),
                 output: format!("first\n{big}"),
                 code: Some(0),
                 at: String::new(),

@@ -7,7 +7,7 @@ use tuse_core::{Event, Options, Record, Session, UserInput};
 #[test]
 fn a_session_records_its_parent_and_hands_its_own_id_to_subprocesses() {
     let code = r#"print("got=" .. sh("echo $TUSE_PARENT").out:gsub("%s+$", ""))"#;
-    let args = json!({"code": code, "title": "env"}).to_string();
+    let args = json!({"code": code}).to_string();
     let addr = common::provider(vec![Reply::Call("lua", args), Reply::Text("done")]);
     let (dir, cfg) = common::setup("parent", &addr, "");
     // SAFETY: this file holds one test, so nothing else reads the environment meanwhile.

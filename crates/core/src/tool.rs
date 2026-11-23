@@ -10,6 +10,9 @@ use tuse_api::ToolCall;
 /// The only tool.
 pub const TOOL: &str = "lua";
 
+/// Seconds a `lua` call gets before it is stopped.
+pub const TIMEOUT_SECS: u64 = 120;
+
 /// The result of one call.
 struct Outcome {
     text: String,
@@ -31,6 +34,7 @@ impl Outcome {
 }
 
 impl Session {
+    #[allow(dead_code)] // used again by the action status
     pub(crate) fn set_status(&self, text: String) {
         let mut st = self.state.lock().unwrap();
         if st.status == text {
@@ -47,24 +51,17 @@ impl Session {
         generation: u64,
         cancel: &Arc<AtomicBool>,
         call: &ToolCall,
-        config: &tuse_config::Config,
     ) -> bool {
         let parsed = serde_json::from_str::<serde_json::Value>(&call.arguments);
         let args = parsed.as_ref().cloned().unwrap_or_default();
         let input = args["code"]
             .as_str()
             .map_or_else(|| call.arguments.clone(), String::from);
-        let title = args["title"].as_str().unwrap_or("").trim().to_string();
-        if !title.is_empty() {
-            self.set_status(title.clone());
-        }
-        let secs = timeout_of(&args, config);
         self.emit(Event::ToolStart {
-            timeout: secs,
+            timeout: TIMEOUT_SECS,
             id: call.id.clone(),
             tool: call.name.clone(),
             input: input.clone(),
-            title: title.clone(),
         });
         let out = if parsed.is_err() {
             Outcome::err(format!(
@@ -72,7 +69,7 @@ impl Session {
                 call.arguments
             ))
         } else if call.name == TOOL {
-            self.lua_call(&args, cancel, secs)
+            self.lua_call(&args, cancel)
         } else {
             Outcome::err(format!(
                 "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `sh` inside its `code`",
@@ -87,7 +84,6 @@ impl Session {
         let r = Record::Tool {
             id: call.id.clone(),
             tool: call.name.clone(),
-            title: title.clone(),
             input: input.clone(),
             output: text.clone(),
             code: out.code,
@@ -107,18 +103,13 @@ impl Session {
     }
 
     /// Runs `code` as a job of the session's VM.
-    fn lua_call(
-        self: &Arc<Self>,
-        args: &serde_json::Value,
-        cancel: &Arc<AtomicBool>,
-        secs: u64,
-    ) -> Outcome {
+    fn lua_call(self: &Arc<Self>, args: &serde_json::Value, cancel: &Arc<AtomicBool>) -> Outcome {
         let Some(code) = args["code"].as_str() else {
             return Outcome::err("missing argument `code` (a string)");
         };
         let stop = tuse_lua::Stop::new(
             cancel.clone(),
-            Some(Instant::now() + Duration::from_secs(secs)),
+            Some(Instant::now() + Duration::from_secs(TIMEOUT_SECS)),
         );
         let d = self.vm.run(code, "lua", stop);
         Outcome {
@@ -136,13 +127,4 @@ impl Session {
                 .collect(),
         }
     }
-}
-
-/// `timeout` of the call (seconds, no upper limit), else `settings.tool_timeout`.
-fn timeout_of(args: &serde_json::Value, config: &tuse_config::Config) -> u64 {
-    let own = args["timeout"]
-        .as_f64()
-        .filter(|t| *t > 0.0)
-        .map(|t| t.ceil() as u64);
-    own.unwrap_or(config.settings.tool_timeout).max(1)
 }

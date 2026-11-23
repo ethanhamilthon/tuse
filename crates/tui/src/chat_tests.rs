@@ -24,55 +24,24 @@ fn notifications_are_not_chat_entries() {
 }
 
 #[test]
-fn titles_follow_the_existing_tool_entry() {
+fn tool_deltas_fill_the_existing_tool_entry() {
     use tuse_core::Event;
-    let mut app = crate::app::test_app("title-chat");
+    let mut app = crate::app::test_app("tool-chat");
     let n = app.chat.len();
-    for (code, title) in [("1", None), ("", Some("delta"))] {
-        app.handle_event(Event::ToolDelta {
-            index: 0,
-            id: "id".into(),
-            name: "lua".into(),
-            code: code.into(),
-            title: title.map(String::from),
-        });
-    }
-    let check = |chat: &Chat, n: usize, want: &str| {
-        assert_eq!(chat.len(), n + 1);
-        assert!(
-            matches!(&chat.entries[n].0, Entry::Tool {title,input,..} if title==want && input=="1")
-        );
-    };
-    check(&app.chat, n, "delta");
+    app.handle_event(Event::ToolDelta {
+        index: 0,
+        id: "id".into(),
+        name: "lua".into(),
+        code: "1".into(),
+    });
     app.handle_event(Event::ToolStart {
-        timeout: 150,
+        timeout: 120,
         id: "id".into(),
         tool: "lua".into(),
         input: "1".into(),
-        title: "final".into(),
     });
-    check(&app.chat, n, "final");
-    let p = Palette::new(&Default::default(), &Default::default());
-    let lines = crate::render::render(&app.chat.entries[n].0, 80, &p);
-    let row = &lines[0];
-    assert!(row.last().unwrap().text.ends_with("/2m30s"));
-    assert_eq!(row.last().unwrap().style.fg, p.accent);
-    assert_eq!(row[0].style.fg, p.dim);
-    let restored = Chat::from_records(
-        &[Record::Tool {
-            id: "id".into(),
-            tool: "lua".into(),
-            input: "1".into(),
-            title: "saved".into(),
-            output: String::new(),
-            code: Some(0),
-            images: vec![],
-            diffs: vec![],
-            at: String::new(),
-        }],
-        &str::to_owned,
-    );
-    check(&restored, 0, "saved");
+    assert_eq!(app.chat.len(), n + 1);
+    assert!(matches!(&app.chat.entries[n].0, Entry::Tool { input, .. } if input == "1"));
     crate::app::cleanup(app);
 }
 

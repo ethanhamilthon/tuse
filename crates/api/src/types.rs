@@ -49,7 +49,6 @@ pub enum Delta<'a> {
         id: &'a str,
         name: &'a str,
         code: &'a str,
-        title: Option<&'a str>,
     },
     Text(&'a str),
     Reasoning(&'a str),

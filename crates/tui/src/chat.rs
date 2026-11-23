@@ -13,9 +13,7 @@ pub enum Entry {
     Assistant(String),
     Reasoning(String),
     Tool {
-        timer: Option<(std::time::Instant, Duration, Option<Duration>)>,
         id: String,
-        title: String,
         input: String,
         output: Option<String>,
         code: Option<i32>,
@@ -65,16 +63,13 @@ impl Chat {
                 }
                 Record::Tool {
                     id,
-                    title,
                     input,
                     output,
                     code,
                     diffs,
                     ..
                 } => Entry::Tool {
-                    timer: None,
                     id: id.clone(),
-                    title: title.clone(),
                     input: input.clone(),
                     output: Some(output.clone()),
                     code: *code,
@@ -147,14 +142,7 @@ impl Chat {
 
     pub(crate) fn lines(&mut self, i: usize, width: usize, p: &Palette) -> &[Line] {
         let (e, cache) = &mut self.entries[i];
-        if matches!(
-            e,
-            Entry::Tool {
-                timer: Some((_, _, None)),
-                ..
-            }
-        ) || cache.as_ref().is_none_or(|(w, _)| *w != width)
-        {
+        if cache.as_ref().is_none_or(|(w, _)| *w != width) {
             let lines = match e {
                 Entry::Assistant(t) if self.hot == Some(i) => {
                     crate::md_stream::render(&mut self.stream, i, t, width, p)

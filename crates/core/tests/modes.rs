@@ -27,7 +27,7 @@ print("docs_has_hl=" .. tostring(docs("functions"):find("`f_hl(", 1, true) ~= ni
 print("docs_has_tui=" .. tostring(docs("functions"):find("`f_tui(", 1, true) ~= nil))
 "#;
     let addr = common::provider(vec![
-        Reply::Call("lua", json!({"code": code, "title": "t"}).to_string()),
+        Reply::Call("lua", json!({"code": code}).to_string()),
         Reply::Text("done"),
         Reply::Text("tui ok"),
     ]);

@@ -17,7 +17,7 @@ local secrets = require("secrets")   -- secrets.lua next to this file
 return {
   model = "c/claude-opus-5-5",
   effort = "medium",
-  settings = { tool_timeout = 60, ui = { input_design = "box" } },
+  settings = { retries = 3, ui = { input_design = "box" } },
   systems = { "Answer in Russian." },
   prompts = { review = "Review the diff for bugs." },
   hooks = {
@@ -35,7 +35,6 @@ return {
 | `effort` | `default` (sends no `reasoning_effort`), `low`, `medium`, `high`, `xhigh`, `max`. |
 | `models` | List of `{name = "provider/model", display, window, compact_at, prices}`. `prices` are dollars per 1M tokens: `["in"]`, `out`, `cache` (cached reads) and `cache_write`. |
 | `settings.compact_at` | Context size that triggers compaction (0 turns it off). Unset: 60% of the model's `window` (off when the window is unknown). A model's `compact_at` wins. |
-| `settings.tool_timeout` | Seconds a `lua` call gets when the agent passes no `timeout`. Default 10. |
 | `settings.hook_timeout` | Seconds a hook run gets. Default 30. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
 | `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |

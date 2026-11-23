@@ -18,7 +18,7 @@ fn agent_message_lists_only_running_tasks_and_children() {
     let code = "spawn(function() while true do sleep(0.1) end end, 'loop')";
     let addr = common::provider(vec![
         Reply::Text("one"),
-        Reply::Call("lua", json!({"code": code, "title": "t"}).to_string()),
+        Reply::Call("lua", json!({"code": code}).to_string()),
         Reply::Text("two"),
         Reply::Stall("partial"),
     ]);

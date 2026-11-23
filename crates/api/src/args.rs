@@ -17,12 +17,10 @@ enum Target {
     Skip,
     Key,
     Code,
-    Title,
 }
 impl ArgStream {
-    pub fn feed(&mut self, chunk: &str) -> (String, Option<String>) {
+    pub fn feed(&mut self, chunk: &str) -> String {
         let mut code = String::new();
-        let mut title = None;
         for c in chunk.chars() {
             if !self.string {
                 match c {
@@ -44,7 +42,6 @@ impl ArgStream {
                         } else {
                             match self.key.as_str() {
                                 "code" => Target::Code,
-                                "title" => Target::Title,
                                 _ => Target::Skip,
                             }
                         };
@@ -97,13 +94,9 @@ impl ArgStream {
                     '"' => {
                         self.string = false;
                         self.high = None;
-                        match self.target {
-                            Target::Key => {
-                                self.key = std::mem::take(&mut self.value);
-                                self.expect_key = false;
-                            }
-                            Target::Title => title = Some(std::mem::take(&mut self.value)),
-                            _ => {}
+                        if self.target == Target::Key {
+                            self.key = std::mem::take(&mut self.value);
+                            self.expect_key = false;
                         }
                         continue;
                     }
@@ -113,12 +106,12 @@ impl ArgStream {
             if let Some(c) = decoded {
                 match self.target {
                     Target::Code => code.push(c),
-                    Target::Key | Target::Title => self.value.push(c),
+                    Target::Key => self.value.push(c),
                     Target::Skip => {}
                 }
             }
         }
-        (code, title)
+        code
     }
 }
 #[cfg(test)]
@@ -127,17 +120,15 @@ mod tests {
     #[test]
     fn every_split_matches_complete_json() {
         for s in [
-            r#"{"title":"\u00e9","timeout":3,"code":"print(\"a\\nb\")\n\ud83d\ude03"}"#,
-            r#"{"extra":[{"code":"ignore"}],"code":"abc","title":"Run"}"#,
+            r#"{"note":"\u00e9","n":3,"code":"print(\"a\\nb\")\n\ud83d\ude03"}"#,
+            r#"{"extra":[{"code":"ignore"}],"code":"abc","note":"Run"}"#,
         ] {
             let parsed: serde_json::Value = serde_json::from_str(s).unwrap();
             for i in 0..=s.len() {
                 let mut a = ArgStream::default();
-                let (mut c, t) = a.feed(&s[..i]);
-                let (rest, t2) = a.feed(&s[i..]);
-                c.push_str(&rest);
+                let mut c = a.feed(&s[..i]);
+                c.push_str(&a.feed(&s[i..]));
                 assert_eq!(c, parsed["code"]);
-                assert_eq!(t2.or(t).unwrap(), parsed["title"]);
             }
         }
     }

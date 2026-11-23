@@ -156,7 +156,6 @@ fn streamed_text_is_not_repeated_after_a_tool_delta() {
         id: "c1".into(),
         name: "lua".into(),
         code: "1".into(),
-        title: None,
     });
     app.handle_event(Event::Assistant {
         text: "Let me check.".into(),

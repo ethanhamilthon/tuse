@@ -1,17 +1,13 @@
 # The `lua` tool
 
-You have one tool, `lua(code, title, timeout)`: Lua 5.4 code run in the session's VM. Globals
+You have one tool, `lua(code)`: Lua 5.4 code run in the session's VM. Globals
 stay between calls (use `local` for scratch values). You get the output of `print()` and
 `io.write()`, then the values the code returns (a lone expression such as `x + 1` returns
 itself; a table is shown with `inspect`; a `sh` result as its output and exit code), or the
 error with its traceback. An error does not end the VM; a timeout or a cancel does not either.
 The VM lives until Tuse exits and starts empty after `/resume`.
 
-`title` is a few words about what the call does, in the user's language (`Running the tests`). The
-user sees it in the working indicator; it stays until the next call sets a new `title`.
-
-`timeout` is in seconds; without it a call gets `settings.tool_timeout` (default 10). There is no
-upper limit. Nothing is cut: not the output of a call, not `sh().out`, not a task log, so keep
+A call is stopped after 120 seconds; start a long job in the background with `spawn`. Nothing is cut: not the output of a call, not `sh().out`, not a task log, so keep
 big outputs short yourself (`out:sub(1, 2000)`, `grep` with a `limit`).
 
 The whole standard library is there: `string`, `table`, `math`, `utf8`, `io`, `os` (but not

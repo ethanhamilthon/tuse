@@ -25,7 +25,7 @@ return string.rep("y", 10000)
 
 #[test]
 fn a_turn_runs_lua_tasks_and_records_everything() {
-    let args = json!({"code": CODE, "title": "Testing the flow"}).to_string();
+    let args = json!({"code": CODE}).to_string();
     let addr = common::provider(vec![
         Reply::Call("lua", args),
         Reply::Call("grep", json!({"pattern": "x"}).to_string()),
@@ -61,17 +61,15 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         .filter_map(|r| match r {
             Record::Tool {
                 output,
-                title,
                 diffs,
                 code,
                 ..
-            } => Some((output, title, diffs, code)),
+            } => Some((output, diffs, code)),
             _ => None,
         })
         .collect();
-    let (output, title, diffs, code) = tools[0];
+    let (output, diffs, code) = tools[0];
     assert_eq!(*code, Some(0), "{}", &output[..600.min(output.len())]);
-    assert_eq!(title, "Testing the flow");
     let head: String = output.chars().take(600).collect();
     assert!(output.contains("2\t2"), "{head}");
     assert!(output.contains("a.txt:2: 2"), "grep: {head}");
@@ -99,7 +97,6 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         "{}",
         tools[1].0
     );
-    assert_eq!(statuses, ["Testing the flow"]);
     let names: Vec<_> = s
         .tasks
         .list()

@@ -145,8 +145,8 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         "config.set" => {
             let key = str_param(p, "key")?;
             let value = str_param(p, "value")?;
-            if !matches!(key.as_str(), "model" | "effort" | "theme") {
-                return Err(Fail::params("`key` must be `model`, `effort` or `theme`"));
+            if !matches!(key.as_str(), "model" | "effort") {
+                return Err(Fail::params("`key` must be `model` or `effort`"));
             }
             s.save_choice(&key, &value)
                 .map(|_| Value::Null)

@@ -2,10 +2,10 @@
 
 ## Theme
 
-Themes live under `themes`, one key per theme. `extend = "other"` starts from another
-theme (or `default`, the built-in Vercel Dark palette) and overrides only the colors you write.
+The config has one theme, `theme`; it is not selectable in the UI. It starts from the built-in
+Vercel Dark palette and overrides only the colors you write.
 
-A theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`red`,
+The theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`red`,
 `dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default:
 
 - `bg` (`#0A0A0A`): main background, including lists and panels.
@@ -21,14 +21,13 @@ A theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`
 
 ```lua
 return {
-  settings = { theme = "warm" },
-  themes = { warm = { extend = "default", accent = "#FFB86C", info = "bright_blue" } },
+  theme = { accent = "#FFB86C", info = "bright_blue" },
 }
 ```
 
 ## UI settings (`settings.ui`)
 
-UI behavior and layout live under `settings.ui` so switching `/theme` keeps them intact:
+UI behavior and layout live under `settings.ui`, apart from the colors:
 
 - `input_design`: `lines` (default), `box`, `fill` or `bar`.
 - `fold_strings`: `true` (default) or `false`. Folds multiline Lua long strings (`[[...]]`) in chat

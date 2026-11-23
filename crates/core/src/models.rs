@@ -96,7 +96,7 @@ impl Session {
         }
     }
 
-    /// Remembers a choice of the UI (`model`, `effort` or `theme`) in the database and
+    /// Remembers a choice of the UI (`model` or `effort`) in the database and
     /// applies it to the config at once; new sessions start with it.
     pub fn save_choice(&self, key: &str, value: &str) -> Result<(), String> {
         crate::db::set_state(key, value)?;

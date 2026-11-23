@@ -110,7 +110,7 @@ fn define_functions(lua: &Lua, config: &Config, mode: Mode) -> Result<(), String
     Ok(())
 }
 
-/// The active theme of the config for `cwd`, read in a VM of its own (for `tuse connect`).
+/// The theme of the config for `cwd`, read in a VM of its own (for `tuse connect`).
 pub fn theme(cwd: &Path) -> tuse_config::Theme {
     let path = tuse_config::find(None, cwd);
     let vm = tuse_lua::Vm::new(
@@ -118,6 +118,6 @@ pub fn theme(cwd: &Path) -> tuse_config::Theme {
         |_| {},
     );
     vm.call(move |lua| load(lua, path.as_deref(), Mode::Tui))
-        .map(|c| c.active_theme())
+        .map(|c| c.theme)
         .unwrap_or_default()
 }

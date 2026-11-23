@@ -14,7 +14,8 @@ pub struct Config {
     #[serde(skip)]
     pub connect: Vec<Connect>,
     pub settings: Settings,
-    pub themes: BTreeMap<String, Theme>,
+    /// The 10 colors of the UI.
+    pub theme: Theme,
     pub models: Vec<ModelDef>,
     pub systems: Vec<ModeEntry>,
     pub prompts: BTreeMap<String, ModeEntry>,
@@ -40,8 +41,6 @@ pub struct Settings {
     pub compact_at: Option<u64>,
     pub max_image_bytes: usize,
     pub retries: usize,
-    /// Name of the active theme; `default` or empty is the built-in one.
-    pub theme: String,
     pub ui: UiSettings,
 }
 
@@ -51,7 +50,6 @@ impl Default for Settings {
             compact_at: None,
             max_image_bytes: 5 * 1024 * 1024,
             retries: 5,
-            theme: String::new(),
             ui: UiSettings::default(),
         }
     }
@@ -120,21 +118,7 @@ pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "ma
 impl Config {
     /// The effective config as pretty JSON (without providers).
     pub fn to_json(&self) -> String {
-        let mut effective = self.clone();
-        effective.themes.entry("default".into()).or_default();
-        serde_json::to_string_pretty(&effective).unwrap_or_default()
-    }
-
-    pub fn theme_name(&self) -> &str {
-        &self.settings.theme
-    }
-
-    /// The active theme.
-    pub fn active_theme(&self) -> Theme {
-        self.themes
-            .get(self.theme_name())
-            .cloned()
-            .unwrap_or_default()
+        serde_json::to_string_pretty(self).unwrap_or_default()
     }
 
     /// The full `provider/model` name of the configured default model.

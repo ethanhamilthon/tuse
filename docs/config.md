@@ -41,9 +41,8 @@ return {
 | `prompts` | `name = text` or `name = {text, modes}`. `#name` picked in the input sends the text along ([prompts.md](prompts.md)). |
 | `functions` | Named Lua helpers with `run` (a function), `description`, optional `args` and `modes`, see `docs("functions")`. |
 | `hooks` | `name = {events = {...}, run = function(e) ... end, modes?}`, see `docs("hooks")`. |
-| `settings.theme` | Name of the active theme (empty or `default`: the built-in one). `/theme` remembers a pick in the database, and it wins over this key. |
 | `settings.ui` | UI behavior and layout preferences, see `docs("theme")`. |
-| `themes` | `name = {extend = base, bg = ..., ...}`, 10 base colors, see `docs("theme")`. |
+| `theme` | `{bg = ..., ...}`: the 10 base colors, see `docs("theme")`. |
 
 ## Providers
 
@@ -67,7 +66,7 @@ only user and assistant text.
 ## Files
 
 `~/.tuse/tuse.db` (or `$TUSE_HOME/tuse.db`, SQLite) holds the sessions and their records, the
-providers and the last picked model, effort and theme. `~/.tuse/<id>/` holds the session's `lock`,
+providers and the last picked model and effort. `~/.tuse/<id>/` holds the session's `lock`,
 `tasks/<id>.log` and pasted `images/`. A session can be open in one process only, and a process
 holds one session. Sessions of older versions (`session.jsonl` and `meta.json`) move into the
 database on the first start.

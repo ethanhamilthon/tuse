@@ -5,12 +5,11 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-pub const COMMANDS: [(&str, &str); 12] = [
+pub const COMMANDS: [(&str, &str); 11] = [
     ("config", "show the resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
     ("models", "switch model and effort"),
-    ("theme", "switch the theme"),
     ("tasks", "background tasks"),
     ("childrens", "child sessions of this one"),
     ("usage", "context, tokens and cost"),
@@ -34,7 +33,6 @@ impl App {
             "quit" => self.quit = true,
             "resume" => self.open_resume(),
             "models" => self.open_models(),
-            "theme" => self.open_themes(),
             "tasks" => self.open_tasks(),
             "childrens" => self.open_children(None),
             "usage" => {
@@ -160,7 +158,6 @@ impl App {
                 self.editor.insert(" ");
             }
             (Kind::Resume, Some(v)) => self.switch(Some(v)),
-            (Kind::Theme, Some(v)) => self.set_theme(&v),
             (Kind::Model, Some(v)) if !v.is_empty() && !self.session.model_available(&v) => {
                 self.restore_draft();
                 self.error(format!("Model `{v}` is unavailable in this mode"));

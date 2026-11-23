@@ -147,7 +147,7 @@ impl Palette {
     }
 
     pub fn from_config(cfg: &Config) -> Self {
-        Self::new(&cfg.active_theme(), &cfg.settings.ui)
+        Self::new(&cfg.theme, &cfg.settings.ui)
     }
 }
 

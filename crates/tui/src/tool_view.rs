@@ -1,5 +1,5 @@
 use crate::style::{MORE, Palette, Style, TOOL_PREFIX};
-use crate::text::{Line, clip, clip_line, span, width};
+use crate::text::{Line, clip, span, width};
 use tuse_core::FileDiff;
 
 /// A `lua` call in the chat: its code (colored), then its output, then the
@@ -30,9 +30,7 @@ pub fn tool(
     let st = Style::fg(p.muted);
     let room = width.saturating_sub(pad.len());
     for l in all.iter().take(shown) {
-        let mut row = vec![span(pad.clone(), st)];
-        row.extend(clip_line(&crate::links::spans(l, st, p), room, MORE));
-        lines.push(row);
+        lines.push(vec![span(pad.clone(), st), span(clip(l, room, MORE), st)]);
     }
     if shown > 0 && shown < all.len() {
         let more = format!("{pad}{MORE} {} more lines", all.len() - shown);
@@ -62,10 +60,7 @@ fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<
     colored
         .into_iter()
         .enumerate()
-        .flat_map(|(i, l)| {
-            let l = crate::links::linkify_line(l, p);
-            crate::text::wrap(&l, w, if i == 0 { &first } else { &rest }, &rest)
-        })
+        .flat_map(|(i, l)| crate::text::wrap(&l, w, if i == 0 { &first } else { &rest }, &rest))
         .collect()
 }
 
@@ -73,7 +68,10 @@ fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<
 fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
     let room = w.saturating_sub(pad.len());
     let all: Vec<&str> = d.diff.lines().collect();
-    let hdr = crate::links::path_span(clip(&d.path, room, MORE), &d.path, Style::fg(p.border), p);
+    let hdr = span(
+        clip(&crate::render::clean(&d.path), room, MORE),
+        Style::fg(p.border),
+    );
     let mut out = vec![vec![span(pad.to_string(), Style::fg(p.border)), hdr]];
     let shown = tuse_config::limit(p.ui.diff_line, all.len());
     let pairs = pair_windows(&all[..shown], room, MORE);

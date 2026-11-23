@@ -38,7 +38,11 @@ impl Renderer<'_> {
             } else {
                 vec![span(line, st)]
             };
-            let content = crate::links::linkify_line(content, self.p);
+            let content = if self.links && !lua {
+                crate::links::linkify_line(content, self.p)
+            } else {
+                content
+            };
             self.out.extend(wrap(&content, self.width, &first, &rest));
         }
     }

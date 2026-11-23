@@ -68,7 +68,7 @@ impl App {
         }
         self.question = Some(QuestionPrompt {
             id,
-            panel: Panel::markdown(text),
+            panel: Panel::markdown_unlinked(text),
         });
     }
 

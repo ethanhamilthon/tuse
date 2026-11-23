@@ -133,37 +133,50 @@ fn wrapped_links_and_views_share_link_id_and_hit_testing() {
             .all(|s| s.style.bold && s.style.fg == p.accent)
     );
 
-    // Custom markdown block, tool output, diff path, and trace/details panel all linkify.
-    let md_block = crate::render::ui_markdown("See [doc](deep/folder/name/example.md)", 60, &p);
+    let path = "deep/folder/name/example.md";
+    let text = format!("[doc]({path}) https://example.com");
+    let md_block = crate::render::ui_markdown(&text, 60, &p);
     assert!(!scan(&md_block, 0).is_empty());
+    let agent = crate::chat::Entry::Assistant(text.clone());
+    assert!(!scan(&crate::render::render(&agent, 60, &p), 0).is_empty());
+    let user = crate::chat::Entry::User {
+        text: text.clone(),
+        images: 0,
+    };
+    assert!(scan(&crate::render::render(&user, 60, &p), 0).is_empty());
 
+    let lua = format!("read('{path}')");
     let tool_lines = crate::tool_view::tool(
-        "read('deep/folder/name/example.md')",
-        Some("deep/folder/name/example.md:1"),
+        &lua,
+        Some(&format!("{path}:1 https://example.com")),
         Some(0),
         &[tuse_core::FileDiff {
-            path: "deep/folder/name/example.md".into(),
-            diff: "+ hi".into(),
+            path: path.into(),
+            diff: format!("+ {path}"),
         }],
         60,
         &p,
     );
-    let tool_boxes = scan(&tool_lines, 0);
-    assert!(
-        tool_boxes
-            .iter()
-            .filter(|b| target(b.id) == Some(LinkTarget::Path(canon.clone())))
-            .count()
-            >= 2,
-        "expected links in tool output & diff header: {tool_boxes:?}"
-    );
+    assert!(scan(&tool_lines, 0).is_empty());
+    let fenced_lua = crate::markdown::render(&format!("```lua\n{lua}\n```"), 60, &p);
+    assert!(scan(&fenced_lua, 0).is_empty());
 
-    let mut trace_panel = Panel::new("opened deep/folder/name/example.md");
-    let panel_lines = trace_panel.lines(60, 10, &p);
-    assert!(
-        scan(&panel_lines, 0)
-            .iter()
-            .any(|b| target(b.id) == Some(LinkTarget::Path(canon.clone())))
-    );
+    for mut panel in [
+        Panel::new(&text),
+        Panel::lua(lua),
+        Panel::markdown_unlinked(&text),
+    ] {
+        assert!(scan(&panel.lines(60, 10, &p), 0).is_empty());
+    }
+    for mut panel in [
+        Panel::markdown(&text),
+        Panel::styled(vec![vec![crate::text::span(path, Default::default())]]),
+    ] {
+        assert!(
+            scan(&panel.lines(60, 10, &p), 0)
+                .iter()
+                .any(|b| matches!(target(b.id), Some(LinkTarget::Path(path)) if path.canonicalize().ok().as_ref() == Some(&canon)))
+        );
+    }
     std::fs::remove_dir_all(dir).ok();
 }

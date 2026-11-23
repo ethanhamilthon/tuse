@@ -4,7 +4,12 @@ use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 /// Renders Markdown into wrapped lines.
 pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
+    render_with_links(text, width, p, true)
+}
+
+pub fn render_with_links(text: &str, width: usize, p: &Palette, links: bool) -> Vec<Line> {
     let mut r = Renderer {
+        links,
         p,
         width,
         out: vec![],
@@ -30,6 +35,7 @@ pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
 }
 
 pub(crate) struct Renderer<'a> {
+    pub(crate) links: bool,
     pub(crate) p: &'a Palette,
     pub(crate) width: usize,
     pub(crate) out: Vec<Line>,
@@ -101,7 +107,7 @@ impl Renderer<'_> {
     }
 
     fn push_text(&mut self, t: &str, st: Style) {
-        if st.link.is_some() {
+        if !self.links || st.link.is_some() {
             self.cur.push(span(t, st));
         } else {
             self.cur.extend(crate::links::spans(t, st, self.p));
@@ -150,7 +156,14 @@ impl Renderer<'_> {
             Tag::Strong => self.push_style(|s| s.bold()),
             Tag::Strikethrough => self.push_style(|s| Style { dim: true, ..s }),
             Tag::Link { dest_url, .. } => {
-                self.push_style(|s| crate::links::styled(&dest_url, s, self.p));
+                let (links, p) = (self.links, self.p);
+                self.push_style(|s| {
+                    if links {
+                        crate::links::styled(&dest_url, s, p)
+                    } else {
+                        s
+                    }
+                });
             }
             Tag::BlockQuote(_) => {
                 self.flush();

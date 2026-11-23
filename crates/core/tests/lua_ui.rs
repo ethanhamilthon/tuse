@@ -14,7 +14,13 @@ fn next_req(rx: &std::sync::mpsc::Receiver<Event>) -> UiRequest {
 
 #[test]
 fn lua_ui_queue_reload_close_and_custom_commands() {
-    let addr = common::provider(vec![common::Reply::Text("ok")]);
+    let addr = common::provider(vec![
+        common::Reply::Call(
+            "lua",
+            serde_json::json!({"code": "ran = 0; spawn(function() sleep(0.05); ran = 1 end, 'bg'); local p = show_picker({'yes'}); return tostring(p) .. ':' .. tostring(ran)"}).to_string(),
+        ),
+        common::Reply::Text("ok"),
+    ]);
     let extra = r###"
   commands = {
     ask_flow = function()
@@ -158,13 +164,20 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     .unwrap();
     assert!(s.reload().unwrap_err().contains("cannot override built-in"));
 
-    // Materialize session with a message, then close with a pending request: close clears it
-    // and resume does NOT restore transient markdowns or UI entries.
+    // Tool call calling show_picker yields so other Lua jobs keep running, then finishes on reply.
     s.submit(UserInput::text("persist me"));
+    let treq = next_req(&rx);
+    std::thread::sleep(Duration::from_millis(120));
+    s.ui_reply(treq.id, Some("yes".into())).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while s.busy() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));
     }
+    assert!(
+        s.records().iter().any(
+            |r| matches!(r, tuse_core::Record::Tool { output, .. } if output.contains("yes:1"))
+        )
+    );
     s.run_command("updated_cmd").unwrap();
     let pending = next_req(&rx);
     assert_eq!(

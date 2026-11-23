@@ -18,8 +18,11 @@ loads `name.lua` or `name/init.lua` relative to the calling file (or the working
 and `~/path` or a `.lua` path loads that file (see `docs("config")`).
 Paths are absolute, `~/...` or relative to the working directory.
 
-Everything runs in one VM on its own thread: the agent's calls, hooks and background tasks are
-coroutines of a scheduler. `sh`, `sleep` and waits yield, so the others keep running meanwhile.
+Everything runs in one VM on its own thread: the agent's calls, hooks, custom slash commands, and
+background tasks are coroutines of a scheduler. `sh`, `sleep`, `show_picker`, `show_question`, and
+other waits yield, so the other coroutines keep running meanwhile (interactive UI waits also pause
+the calling coroutine's timeout until replied or cancelled). Prefer `read`, `grep`, `write`,
+`edit`, `append`, and `delete` for file operations, and wrap complex shell commands in `sh([=[…]=])`.
 A loop that never waits still ends at its deadline or on Esc. `sh` also yields from inside a
 coroutine of your own (`coroutine.wrap`). Where Lua cannot yield (inside a C callback such as a
 `string.gsub` function) `sh` blocks the VM until it ends.

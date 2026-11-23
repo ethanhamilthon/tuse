@@ -43,6 +43,9 @@ impl App {
                     self.palette = Palette::from_config(&self.session.config());
                     self.palette_gen += 1;
                     self.chat = crate::chat::Chat::from_session(&self.session);
+                    self.streaming = None;
+                    self.thinking = None;
+                    self.pending_tools.clear();
                     if let Some(panel) = &mut self.panel {
                         panel.invalidate();
                     }

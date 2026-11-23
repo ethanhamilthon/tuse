@@ -21,6 +21,9 @@ pub struct Config {
     pub functions: BTreeMap<String, Function>,
     pub hooks: BTreeMap<String, Hook>,
     pub commands: Vec<String>,
+    /// The config file, empty when there is none; filled by the loader.
+    #[serde(skip_deserializing)]
+    pub path: String,
     /// The loaded plugins; filled by the loader, never read from the file.
     #[serde(skip_deserializing)]
     pub plugins: Vec<PluginInfo>,

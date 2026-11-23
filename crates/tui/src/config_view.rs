@@ -33,6 +33,12 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         None => "auto (60% window)".into(),
     };
     let ui = &cfg.settings.ui;
+    let file = if cfg.path.is_empty() {
+        "(none, defaults)".into()
+    } else {
+        cfg.path.clone()
+    };
+    sec("Config file", vec![vec![span(format!("  {file}"), fg)]]);
     let mut settings = vec![kv("model", cfg.default_model(), fg)];
     if !cfg.provider.is_empty() {
         settings.push(kv("provider", cfg.provider.clone(), fg));

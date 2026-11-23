@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.5
+
+- `/config` starts with the path of the loaded config file. JSON-RPC `config.get` returns it as `path`.
+
 ## 0.8.4
 
 - `/config` shows a **Plugins** section: each loaded plugin with its `ref`, commit (or `local`) and folder. JSON-RPC `config.get` returns them as `plugins`.

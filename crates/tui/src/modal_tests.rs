@@ -215,7 +215,7 @@ fn slash_autocomplete_includes_custom_commands_and_updates_on_reload() {
     let cfg = app.cwd.join("tuse.lua");
     std::fs::write(
         &cfg,
-        "return { commands = { hello_ui = function() show_markdown('h', 'hi', false) end } }",
+        "return { commands = { hello_ui = function() require('tuse').show_markdown('h', 'hi', false) end } }",
     )
     .unwrap();
     app.run_command("reload");

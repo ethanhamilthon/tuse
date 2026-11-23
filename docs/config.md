@@ -5,7 +5,10 @@ else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. The file returns a ta
 and system prompt are built into the binary. `tuse update` never touches your config.
 
 Configuration files execute as Lua code with your user permissions. Only load project
-configs and modules you trust. Hooks and helpers run in the session's Lua VM.
+configs and modules you trust. Host functions are globals only in the agent's `lua` tool.
+In config files, Lua modules, and callbacks defined in them, use `require("tuse")`.
+For example, `local cwd = require("tuse").sh("pwd").out` works at the top level.
+Functions that need a live session, such as `spawn` or `show_question`, belong in callbacks.
 
 ```lua
 local t = require("tuse")              -- host functions and t.env

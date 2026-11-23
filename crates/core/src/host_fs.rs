@@ -16,9 +16,17 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
 }
 
 fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
-    let s = session(lua)?;
-    action(&s, "reading", &path);
-    let p = tools::resolve(&path, &s.cwd);
+    let (cwd, max_image_bytes) = match session(lua) {
+        Ok(s) => {
+            action(&s, "reading", &path);
+            (s.cwd.clone(), s.config().settings.max_image_bytes)
+        }
+        Err(_) => (
+            tuse_lua::host(lua).cwd(),
+            tuse_config::Settings::default().max_image_bytes,
+        ),
+    };
+    let p = tools::resolve(&path, &cwd);
     let lines = match &o {
         Some(t) => t.get::<Option<bool>>("lines")?.unwrap_or(false),
         None => false,
@@ -33,14 +41,7 @@ fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
         opt("offset")?.unwrap_or(1),
         opt("limit")?.unwrap_or(tools::DEFAULT_LIMIT),
     );
-    let r = tools::read(
-        &p,
-        lines,
-        offset,
-        limit,
-        s.config().settings.max_image_bytes,
-    )
-    .map_err(err)?;
+    let r = tools::read(&p, lines, offset, limit, max_image_bytes).map_err(err)?;
     if let Some(url) = r.image {
         with_run(lua, |j| j.images.push(url));
     }

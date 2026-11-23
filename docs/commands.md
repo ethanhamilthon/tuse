@@ -28,7 +28,7 @@
   blocks and picker/question results); `/quit` exits.
 - Custom slash commands defined in `commands = { name = function() ... end }` appear in `/`
   autocomplete and run as non-blocking Lua jobs (so they can call `show_markdown`, `show_picker`,
-  and `show_question`). Built-in commands cannot be overridden.
+  and `show_question` through `require("tuse")`). Built-in commands cannot be overridden.
 
 Pickers match substrings without regard to case. When a picker uses the input as a search
 box, your draft comes back on close. A message queued during a turn stays dimmed in the

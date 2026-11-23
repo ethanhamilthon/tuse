@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.2
+
+- **Breaking:** Config files and Lua modules (including hooks, commands, and helpers defined in them) must import host functions with `require("tuse")`. Host functions remain globals in the agent's `lua` tool.
+- `require("tuse").read(...)` can read files while the startup config loads.
+
 ## 0.8.1
 
 - The mouse wheel scrolls the chat, panel, or picker under the pointer. PageUp/PageDown scroll chat history even when a panel is open; hold Shift to page through the panel.

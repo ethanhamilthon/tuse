@@ -16,13 +16,14 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
   prompts = { review = "Check edge cases." },
   commands = {
     ui_demo = function()
-      show_markdown("m1", "Hello", true)
-      show_markdown("drop", "Temp", false)
-      show_markdown("drop", "", false)
-      local p = show_picker({"a", "b"})
-      local q = show_question("Why?")
-      local c = show_picker({"x"})
-      show_markdown("done", tostring(p) .. ":" .. tostring(q) .. ":" .. tostring(c), false)
+      local t = require("tuse")
+      t.show_markdown("m1", "Hello", true)
+      t.show_markdown("drop", "Temp", false)
+      t.show_markdown("drop", "", false)
+      local p = t.show_picker({"a", "b"})
+      local q = t.show_question("Why?")
+      local c = t.show_picker({"x"})
+      t.show_markdown("done", tostring(p) .. ":" .. tostring(q) .. ":" .. tostring(c), false)
     end,
   },
 "#;

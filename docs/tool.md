@@ -15,7 +15,8 @@ The whole standard library is there: `string`, `table`, `math`, `utf8`, `io`, `o
 `inspect(value)`. Lua patterns are not regular expressions; use `grep` or `sh` for those.
 `require` works as in configs: `require("tuse")` gives the host functions and `.env`, `require("name")`
 loads `name.lua` or `name/init.lua` relative to the calling file (or the working directory for inline calls),
-and `~/path` or a `.lua` path loads that file (see `docs("config")`).
+and `~/path` or a `.lua` path loads that file (see `docs("config")`). Modules must import host
+functions even when the agent loads them.
 Paths are absolute, `~/...` or relative to the working directory.
 
 Everything runs in one VM on its own thread: the agent's calls, hooks, custom slash commands, and

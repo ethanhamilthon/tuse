@@ -3,6 +3,55 @@ use std::path::Path;
 use tuse_config::Config;
 use tuse_lua::mlua::{self, Function, Lua, Table, Value};
 
+const FILE_ENV: &str = "tuse.file_env";
+
+pub(crate) fn install_env(lua: &Lua, host: &'static [&str]) -> mlua::Result<()> {
+    let env = lua.create_table()?;
+    env.raw_set("_G", &env)?;
+    let meta = lua.create_table()?;
+    meta.set(
+        "__index",
+        lua.create_function(move |lua, (_, key): (Table, Value)| {
+            if let Value::String(s) = &key
+                && host
+                    .iter()
+                    .any(|name| s.as_bytes().as_ref() == name.as_bytes())
+            {
+                return Ok(Value::Nil);
+            }
+            lua.globals().get(key)
+        })?,
+    )?;
+    env.set_metatable(Some(meta))?;
+    // Standard Lua loaders otherwise default to the agent's globals.
+    lua.load(LOADERS)
+        .set_name("=config loaders")
+        .set_environment(env.clone())
+        .exec()?;
+    lua.set_named_registry_value(FILE_ENV, env)
+}
+
+const LOADERS: &str = r#"
+local raw_load, raw_loadfile, env = load, loadfile, _G
+function load(chunk, name, mode, ...)
+    if select('#', ...) > 0 then return raw_load(chunk, name, mode, ...) end
+    return raw_load(chunk, name, mode, env)
+end
+function loadfile(path, mode, ...)
+    if select('#', ...) > 0 then return raw_loadfile(path, mode, ...) end
+    return raw_loadfile(path, mode, env)
+end
+function dofile(path)
+    local chunk, err = raw_loadfile(path, nil, env)
+    if not chunk then error(err, 2) end
+    return chunk()
+end
+"#;
+
+pub(crate) fn file_env(lua: &Lua) -> mlua::Result<Table> {
+    lua.named_registry_value(FILE_ENV)
+}
+
 /// Builds the config and stages its Lua functions until `commit`.
 pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     crate::require::forget(lua).map_err(|e| e.to_string())?;
@@ -51,8 +100,13 @@ fn read_file(lua: &Lua, path: &Path) -> Result<Table, String> {
     let key = canonical.display().to_string();
     let text =
         std::fs::read_to_string(&canonical).map_err(|e| format!("{}: {e}", path.display()))?;
+    let env = file_env(lua).map_err(error)?;
     crate::require::set_loading(lua, &key, true).map_err(error)?;
-    let eval = lua.load(text).set_name(format!("@{key}")).eval::<Value>();
+    let eval = lua
+        .load(text)
+        .set_environment(env)
+        .set_name(format!("@{key}"))
+        .eval::<Value>();
     let _ = crate::require::set_loading(lua, &key, false);
     match eval.map_err(error)? {
         Value::Table(t) => Ok(t),

@@ -43,7 +43,9 @@ curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/in
 ```
 
 The script installs `tuse` into `~/.local/bin` without prompting or changing your config.
-`TUSE_VERSION=0.7.3` pins a release; `TUSE_BIN_DIR` changes the destination.
+`TUSE_VERSION=0.9.2` pins a release; `TUSE_BIN_DIR` changes the destination (both installer-only;
+`TUSE_RELEASE_URL` overrides the download URL for the installer and `tuse update` and wins over
+`TUSE_VERSION`, see `docs/env.md`).
 
 Add a provider explicitly; quote `$OPENAI_API_KEY` to store a reference instead of the key:
 

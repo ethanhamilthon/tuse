@@ -13,7 +13,7 @@ big outputs short yourself (`out:sub(1, 2000)`, `grep` with a `limit`).
 The whole standard library is there: `string`, `table`, `math`, `utf8`, `io`, `os` (but not
 `os.exit`), `coroutine`, `require` and `dofile`. Tuse adds `json.encode`, `json.decode` and
 `inspect(value)`. Lua patterns are not regular expressions; use `grep` or `sh` for those.
-`require` works as in configs: `require("tuse")` gives the host functions and `.env`, `require("name")`
+`require` works as in configs: `require("tuse")` gives the host functions, `require("name")`
 loads `name.lua` or `name/init.lua` relative to the calling file (or the working directory for inline calls),
 and `~/path` or a `.lua` path loads that file (see `docs("config")`). Modules must import host
 functions even when the agent loads them.

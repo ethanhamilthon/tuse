@@ -78,11 +78,17 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     let r3 = event(&out, "ui_request");
     assert!(call(&tx, &out, 6, "ui.cancel", json!({"id": r3["id"]}))["error"].is_null());
     let done = until(&out, |v| {
+        assert_ne!(
+            v["params"]["type"], "ui_clear",
+            "a successful ui.cancel emits no ui_clear"
+        );
         v["method"] == "event"
             && v["params"]["type"] == "ui_markdown"
             && v["params"]["name"] == "done"
     })["params"]
         .clone();
+    let st = call(&tx, &out, 61, "ui.state", json!({}))["result"].clone();
+    assert!(st["active"].is_null(), "{st}");
     assert_eq!(done["text"], "b:because:nil");
 
     // Reload keeps transient markdowns (with pin state) and UI entries.

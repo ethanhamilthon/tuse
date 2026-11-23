@@ -5,15 +5,25 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Theme {
+    #[serde(deserialize_with = "crate::de::color")]
     pub bg: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub surface: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub fg: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub dim: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub muted: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub border: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub accent: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub ok: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub err: String,
+    #[serde(deserialize_with = "crate::de::color")]
     pub info: String,
 }
 
@@ -80,16 +90,29 @@ pub struct UiSettings {
     /// `true` folds multiline Lua long strings (`[[...]]`) in chat tool calls.
     pub fold_strings: bool,
     /// Lines shown per block: `0` hides it, `-1` removes the limit.
+    #[serde(deserialize_with = "lines")]
     pub tool_line: i32,
+    #[serde(deserialize_with = "lines")]
     pub diff_line: i32,
+    #[serde(deserialize_with = "lines")]
     pub output_line: i32,
+    #[serde(deserialize_with = "lines")]
     pub reasoning_line: i32,
+    #[serde(deserialize_with = "crate::de::int::<_, _, 1, { u16::MAX as i64 }>")]
     pub scroll_step: u16,
+    #[serde(deserialize_with = "crate::de::int::<_, _, 0, { u16::MAX as i64 }>")]
     pub pad_x: u16,
+    #[serde(deserialize_with = "crate::de::int::<_, _, 0, { u16::MAX as i64 }>")]
     pub message_gap: u16,
+    #[serde(deserialize_with = "crate::de::int::<_, _, 1, { i32::MAX as i64 }>")]
     pub list_max_height: usize,
     /// Rows the input grows to; `-1` removes the limit.
+    #[serde(deserialize_with = "crate::de::rows")]
     pub input_max_height: i32,
+}
+
+fn lines<'de, D: serde::Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
+    crate::de::int::<D, i32, -1, { i32::MAX as i64 }>(d)
 }
 
 impl Default for UiSettings {

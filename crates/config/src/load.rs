@@ -34,29 +34,29 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
     if !value.is_object() {
         return Err(format!("{name}: the config must return a table"));
     }
-    empty_tables_as_maps(&mut value);
-    let config: Config = serde_json::from_value(value).map_err(|e| format!("{name}: {e}"))?;
-    crate::functions::validate(&config).map_err(|e| format!("{name}: {e}"))?;
-    Ok(config)
-}
-
-/// Lua has one kind of table, so `{}` comes as an empty list; maps need it as `{}`.
-fn empty_tables_as_maps(v: &mut Value) {
-    let Value::Object(m) = v else { return };
-    for (k, v) in m.iter_mut() {
-        let list = matches!(
-            k.as_str(),
-            "systems" | "models" | "events" | "commands" | "open"
-        );
-        if list && v.as_object().is_some_and(serde_json::Map::is_empty) {
-            *v = Value::Array(vec![]);
-        } else if !list && v.as_array().is_some_and(Vec::is_empty) {
-            *v = Value::Object(Default::default());
+    serde_path_to_error::deserialize(value).map_err(|e| {
+        let path = e
+            .path()
+            .iter()
+            .map(|s| match s {
+                serde_path_to_error::Segment::Seq { index } => format!("[{}]", index + 1),
+                s => format!(".{s}"),
+            })
+            .collect::<String>();
+        let path = path.strip_prefix('.').unwrap_or(&path).to_string();
+        let path = if path.is_empty() { ".".into() } else { path };
+        let msg = e.inner().to_string();
+        let msg = msg.split(" at line ").next().unwrap_or(&msg);
+        let msg = match msg.starts_with("unknown field `") {
+            true => "unknown key",
+            false => msg,
+        };
+        if path == "." {
+            format!("{name}: {msg}")
+        } else {
+            format!("{name}: {path}: {msg}")
         }
-        if !list {
-            empty_tables_as_maps(v);
-        }
-    }
+    })
 }
 
 pub fn resolve_path(p: &str, dir: &Path) -> PathBuf {
@@ -81,7 +81,7 @@ mod tests {
         let c = from_value(
             json!({"settings": {"ui": {"tool_line": 7}},
                 "theme": {"accent": "blue", "info": "green"},
-                "prompts": [], "hooks": {"h": {"events": ["user_message"]}},
+                "prompts": {}, "systems": {}, "hooks": {"h": {"events": ["user_message"]}},
                 "open": ["md"]}),
             "t",
         )

@@ -140,25 +140,27 @@ fn entry(t: &Table, idx: &str, base: &Path) -> Result<Entry, String> {
     Ok(Entry { plugin, opts })
 }
 
+/// The merged table, the plugins, and the parsed config when no merge happened.
+pub(crate) type Merged = (
+    Table,
+    Vec<tuse_config::PluginInfo>,
+    Option<tuse_config::Config>,
+);
+
 /// Validates the user config and each plugin, then merges plugins under the user's config.
-pub(crate) fn apply(
-    lua: &Lua,
-    config: Table,
-    source: &str,
-    base: &Path,
-) -> Result<(Table, Vec<tuse_config::PluginInfo>), String> {
-    crate::validate::table(&config, source, false)?;
+pub(crate) fn apply(lua: &Lua, config: Table, source: &str, base: &Path) -> Result<Merged, String> {
+    let parsed = crate::validate::table(lua, &config, source, false)?;
     let list = entries(&config, base).map_err(|e| format!("{source}: {e}"))?;
     let infos = list.iter().map(|e| e.plugin.info()).collect();
     if list.is_empty() {
         let _ = config.raw_set("plugins", Value::Nil);
-        return Ok((config, infos));
+        return Ok((config, infos, Some(parsed)));
     }
     let loaded = lua.create_table().map_err(|e| e.to_string())?;
     for e in list {
         let psrc = format!("plugin {}", e.plugin.name);
         let t = load(lua, &e).map_err(|err| format!("{psrc}: {err}"))?;
-        crate::validate::table(&t, &psrc, true)?;
+        crate::validate::table(lua, &t, &psrc, true)?;
         let item = lua.create_table().map_err(|e| e.to_string())?;
         item.set("name", e.plugin.name.as_str())
             .map_err(|e| e.to_string())?;
@@ -168,7 +170,7 @@ pub(crate) fn apply(
     lua.load(MERGE)
         .set_name("=plugins")
         .call::<Table>((loaded, config))
-        .map(|t| (t, infos))
+        .map(|t| (t, infos, None))
         .map_err(|e| format!("{source}: {}", tuse_lua::message(&e)))
 }
 

@@ -35,8 +35,6 @@ mod turn;
 mod ui;
 mod usage;
 mod validate;
-mod validate_entries;
-mod validate_models;
 
 pub use config_lua::{config_arg, configured_models};
 pub use control::InputId;

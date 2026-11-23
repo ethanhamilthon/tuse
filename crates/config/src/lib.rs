@@ -1,3 +1,4 @@
+mod de;
 mod functions;
 mod load;
 mod modules;

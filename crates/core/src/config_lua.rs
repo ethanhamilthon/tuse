@@ -1,4 +1,3 @@
-use crate::host::to_json;
 use crate::mode::{Mode, Options, Start};
 use std::path::Path;
 use std::sync::Arc;
@@ -81,18 +80,14 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
 
 fn prepare_inner(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
-    let (table, plugins) = match path {
+    let (table, plugins, parsed) = match path {
         Some(p) => read_file(lua, p)?,
-        None => (lua.create_table().map_err(|e| e.to_string())?, vec![]),
+        None => (lua.create_table().map_err(|e| e.to_string())?, vec![], None),
     };
-    let commands = table_keys(&table, "commands")?;
-    let open = table_keys(&table, "open")?;
-    let mut raw = to_json(lua, Value::Table(table.clone()));
-    if let Some(obj) = raw.as_object_mut() {
-        obj.insert("commands".into(), serde_json::json!(commands));
-        obj.insert("open".into(), serde_json::json!(open));
-    }
-    let mut config = tuse_config::from_value(raw, &name)?;
+    let mut config = match parsed {
+        Some(c) => c,
+        None => tuse_config::from_value(crate::validate::json(lua, &table), &name)?,
+    };
     config.plugins = plugins;
     config.path = path.map(|p| p.display().to_string()).unwrap_or_default();
     lua.set_named_registry_value("tuse.next", table)
@@ -101,9 +96,7 @@ fn prepare_inner(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     Ok(config)
 }
 
-type Loaded = (Table, Vec<tuse_config::PluginInfo>);
-
-fn read_file(lua: &Lua, path: &Path) -> Result<Loaded, String> {
+fn read_file(lua: &Lua, path: &Path) -> Result<crate::plugins::Merged, String> {
     let source = path.display().to_string();
     let error = |e: mlua::Error| format!("{source}: {}", tuse_lua::message(&e));
     match eval_file(lua, path)? {
@@ -111,7 +104,7 @@ fn read_file(lua: &Lua, path: &Path) -> Result<Loaded, String> {
             let base = path.parent().unwrap_or(Path::new("."));
             crate::plugins::apply(lua, t, &source, base)
         }
-        Value::Nil => Ok((lua.create_table().map_err(error)?, vec![])),
+        Value::Nil => Ok((lua.create_table().map_err(error)?, vec![], None)),
         _ => Err(format!("{source}: the config must return a table")),
     }
 }
@@ -183,7 +176,6 @@ pub(crate) fn open_of(lua: &Lua, ext: &str) -> Option<Function> {
     let t: Table = lua.named_registry_value("tuse.config").ok()?;
     t.get::<Table>("open").ok()?.get(ext).ok()
 }
-
 fn table_keys(table: &Table, key: &str) -> Result<Vec<String>, String> {
     let Value::Table(t) = table.raw_get::<Value>(key).map_err(|e| e.to_string())? else {
         return Ok(vec![]);

@@ -68,10 +68,11 @@ return g
 ## Validation
 
 Tuse validates both the user config and each plugin strictly before applying changes on startup
-and `/reload`. Unknown keys, removed keys (`include`, `model`, `provider`, `effort`,
-`*.modes`), wrong types, out-of-range settings, invalid theme colors, and malformed `hooks`,
-`commands`, or `open` handlers fail with diagnostics that include the source file or plugin and
-the full key path. If `/reload` fails, the previous working config, modules, and callbacks remain
+and `/reload`. Unknown keys, wrong types, out-of-range settings, invalid theme colors, and
+malformed `hooks`, `commands`, or `open` handlers fail with diagnostics that include the source
+file or plugin and the full key path (lists count from 1, like Lua), for example
+`tuse.lua: models[2].prices.input: expected a finite non-negative number`. A list field accepts
+`{}` as an empty list. If `/reload` fails, the previous working config, modules, and callbacks remain
 active.
 
 ## Providers, models, and history

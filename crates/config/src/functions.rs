@@ -1,5 +1,3 @@
-use crate::Config;
-
 /// Every Lua host function: globals in the agent's `lua` tool, exported by `require("tuse")`
 /// in files, and highlighted by the TUI.
 pub const HOST_FUNCTIONS: &[&str] = &[
@@ -70,28 +68,6 @@ pub fn check_open_ext(ext: &str) -> Option<&'static str> {
     }
 }
 
-pub fn validate(config: &Config) -> Result<(), String> {
-    for (name, f) in &config.functions {
-        if let Some(reason) = check_function_name(name) {
-            return Err(format!("functions.{name}: {reason}"));
-        }
-        if f.description.trim().is_empty() {
-            return Err(format!("functions.{name}: description must not be empty"));
-        }
-    }
-    for name in &config.commands {
-        if let Some(reason) = check_command_name(name) {
-            return Err(format!("commands.{name}: {reason}"));
-        }
-    }
-    for ext in &config.open {
-        if let Some(reason) = check_open_ext(ext) {
-            return Err(format!("open.{ext}: {reason}"));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,20 +81,9 @@ mod tests {
             ("session", "a"),
             ("foo", ""),
         ] {
-            let mut cfg = Config::default();
-            cfg.functions.insert(
-                name.into(),
-                crate::Function {
-                    args: String::new(),
-                    description: description.into(),
-                    ..Default::default()
-                },
-            );
-            assert!(
-                validate(&cfg)
-                    .unwrap_err()
-                    .contains(&format!("functions.{name}"))
-            );
+            let v = serde_json::json!({"functions": {name: {"description": description}}});
+            let err = crate::from_value(v, "t").unwrap_err();
+            assert!(err.starts_with("t: functions"), "{err}");
         }
         assert!(check_open_ext(".md").is_some());
         assert!(check_open_ext("md").is_none());

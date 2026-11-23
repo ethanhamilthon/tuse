@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - run: rustup show
+      - run: rustup toolchain install --no-update
       - run: sh release/check-tag.sh "$GITHUB_REF_NAME"
 
   check:
@@ -37,7 +37,7 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - run: rustup show && rustup target add "$TARGET"
+      - run: rustup toolchain install --no-update && rustup target add "$TARGET"
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           shared-key: release-${{ matrix.target }}

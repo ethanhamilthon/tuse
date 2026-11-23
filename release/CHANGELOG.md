@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.3
+
+- Simplified the TUI: one `lines` input design, a scrollable `/trace` log, substring search and normal `@dir/name` paths. Removed `/childrens` and child-session tracking.
+- Added `include = { os.getenv("TUSE_GLOBAL_CONFIG") }` for sharing Lua config across projects. `require` looks in the session's working directory. Use `TUSE_MODE` (`tui` or `json`) instead of per-entry `modes`.
+- `tuse connect` is non-interactive: `--base URL --key '$ENV' --name NAME`. The installer no longer prompts or edits your config. Removed `tuse reset`.
+- Existing SQLite history and providers still work. Use 0.7.2 to import pre-SQLite `session.jsonl` history before updating.
+- Faster CI: no duplicate release builds, pinned Rust, and native smoke tests for the four release targets. Linux archives require glibc 2.35 or newer; macOS archives target macOS 11 or newer.
+
 ## 0.7.2
 
 - New default theme colors (from the author's Ghostty palette): `bg` `#121212`, `fg` `#DEDEDE`, `accent` `#BDDEAB`, `ok` `#94B979`, `err` `#E27373`, `info` `#97BEDC`, and greys for `surface`, `dim`, `muted`, `border`.

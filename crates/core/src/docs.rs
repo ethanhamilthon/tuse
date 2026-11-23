@@ -32,7 +32,7 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "config",
-        "Config includes, keys, compaction and files",
+        "Config modules, keys, compaction and files",
         include_str!("../../../docs/config.md"),
     ),
     (

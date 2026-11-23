@@ -1,5 +1,5 @@
 use crate::host::to_json;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tuse_config::Config;
 use tuse_lua::mlua::{self, Function, Lua, Table, Value};
 
@@ -8,9 +8,14 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
     crate::require::forget(lua).map_err(|e| e.to_string())?;
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     let table = match path {
-        Some(p) => read_file(lua, p, &mut Vec::new())?,
+        Some(p) => read_file(lua, p)?,
         None => lua.create_table().map_err(|e| e.to_string())?,
     };
+    if !matches!(table.raw_get::<Value>("include"), Ok(Value::Nil)) {
+        return Err(format!(
+            "{name}: `include` was removed; use `require(...)` instead"
+        ));
+    }
     let mut config = tuse_config::from_value(to_json(lua, Value::Table(table.clone())), &name)?;
     for (key, names) in [
         ("hooks", config.hooks.keys().cloned().collect::<Vec<_>>()),
@@ -33,87 +38,25 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
     Ok(config)
 }
 
-fn read_file(lua: &Lua, path: &Path, stack: &mut Vec<PathBuf>) -> Result<Table, String> {
+fn read_file(lua: &Lua, path: &Path) -> Result<Table, String> {
     let error = |e: mlua::Error| format!("{}: {}", path.display(), tuse_lua::message(&e));
     let canonical = path
         .canonicalize()
         .map_err(|e| format!("{}: {e}", path.display()))?;
-    if stack.contains(&canonical) || stack.len() >= 32 {
-        return Err(format!(
-            "{}: cyclic config include or too many nested includes",
+    let key = canonical.display().to_string();
+    let text =
+        std::fs::read_to_string(&canonical).map_err(|e| format!("{}: {e}", path.display()))?;
+    crate::require::set_loading(lua, &key, true).map_err(error)?;
+    let eval = lua.load(text).set_name(format!("@{key}")).eval::<Value>();
+    let _ = crate::require::set_loading(lua, &key, false);
+    match eval.map_err(error)? {
+        Value::Table(t) => Ok(t),
+        Value::Nil => lua.create_table().map_err(error),
+        _ => Err(format!(
+            "{}: the config must return a table",
             path.display()
-        ));
+        )),
     }
-    stack.push(canonical);
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let source = match lua
-        .load(text)
-        .set_name(format!("@{}", path.display()))
-        .eval()
-        .map_err(error)?
-    {
-        Value::Table(t) => t,
-        Value::Nil => lua.create_table().map_err(error)?,
-        _ => {
-            return Err(format!(
-                "{}: the config must return a table",
-                path.display()
-            ));
-        }
-    };
-    let out = lua.create_table().map_err(error)?;
-    if let Some(includes) = source.raw_get::<Option<Table>>("include").map_err(error)? {
-        let bad = || format!("{}: include must be a list of paths", path.display());
-        let mut paths = Vec::new();
-        for value in includes.clone().sequence_values::<Value>() {
-            let Value::String(path) = value.map_err(error)? else {
-                return Err(bad());
-            };
-            paths.push(path.to_str().map_err(error)?.to_string());
-        }
-        if includes.pairs::<Value, Value>().count() != paths.len() {
-            return Err(bad());
-        }
-        let dir = path.parent().unwrap_or_else(|| Path::new("."));
-        for file in paths {
-            let module = read_file(lua, &tuse_config::resolve_path(&file, dir), stack)?;
-            merge(lua, &out, module, "").map_err(error)?;
-        }
-    }
-    merge(lua, &out, source, "").map_err(error)?;
-    stack.pop();
-    Ok(out)
-}
-
-/// Config sections merge by key, lists append, and named prompts, helpers and hooks replace.
-fn merge(lua: &Lua, out: &Table, source: Table, section: &str) -> mlua::Result<()> {
-    for pair in source.pairs::<String, Value>() {
-        let (key, value) = pair?;
-        match (section, key.as_str(), value) {
-            ("", "include", _) => {}
-            ("", "settings" | "theme" | "prompts" | "functions" | "hooks", Value::Table(t))
-            | ("settings", "ui", Value::Table(t)) => {
-                merge(lua, &section_table(lua, out, &key)?, t, &key)?;
-            }
-            ("", "systems" | "models", Value::Table(t)) => {
-                let list = section_table(lua, out, &key)?;
-                for value in t.sequence_values::<Value>() {
-                    list.raw_push(value?)?;
-                }
-            }
-            (_, _, value) => out.raw_set(key, value)?,
-        }
-    }
-    Ok(())
-}
-
-fn section_table(lua: &Lua, out: &Table, key: &str) -> mlua::Result<Table> {
-    if let Value::Table(t) = out.raw_get(key)? {
-        return Ok(t);
-    }
-    let t = lua.create_table()?;
-    out.raw_set(key, &t)?;
-    Ok(t)
 }
 
 pub(crate) fn commit(lua: &Lua, config: &Config) -> Result<(), String> {

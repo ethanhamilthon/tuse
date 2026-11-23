@@ -123,10 +123,9 @@ Tuse runs `--config PATH`, else `./tuse.lua`, else the global config (`$TUSE_GLO
 
 ```lua
 local t = require("tuse")              -- sh, read, edit... and t.env.TUSE_MODE
-local shared = require("shared")       -- ./shared.lua or ./shared/init.lua
+local shared = require("shared")       -- shared.lua or shared/init.lua next to this file
 
 return {
-  include = { t.env.TUSE_GLOBAL_CONFIG }, -- optional: merge the global config
   model = "x/claude-sonnet-5-5",
   effort = "high",                     -- default | low | medium | high | xhigh | max
   systems = shared.systems,

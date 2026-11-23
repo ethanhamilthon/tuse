@@ -96,7 +96,7 @@ mod tests {
     fn find_order() {
         let d = std::env::temp_dir().join(format!("tuse-find-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
-        let g = d.join("main.lua");
+        let g = d.join("init.lua");
         assert_eq!(find_in(None, &d, None), None);
         assert_eq!(find_in(None, &d, Some(g.clone())), Some(g.clone()));
         std::fs::write(d.join("tuse.lua"), "return {}").unwrap();

@@ -8,8 +8,8 @@ mod sched;
 mod sh;
 mod vm;
 
-pub use api::{host, to_lua, wrap};
-pub use job::{Done, Job, Out, Stop, stopped, with_run};
+pub use api::{host, to_lua, wrap, yield_wait};
+pub use job::{Done, ExtWait, Job, Out, Stop, add_wait, is_hook, stopped, with_run};
 pub use mlua;
 pub use sh::kill_group;
 pub use vm::Vm;

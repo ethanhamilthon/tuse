@@ -33,6 +33,9 @@ impl App {
         if self.picker.is_some() && self.picker_key(k, ctrl, shift) {
             return;
         }
+        if self.question_key(k.code, shift || alt, page) {
+            return;
+        }
         if self.panel_key(k.code, page) {
             return;
         }
@@ -130,14 +133,43 @@ impl App {
             Err(e) => self.error(e),
         }
     }
+    fn question_key(&mut self, code: KeyCode, modified: bool, page: usize) -> bool {
+        let Some(q) = &mut self.question else {
+            return false;
+        };
+        let step = self.palette.ui.scroll_step as isize;
+        match code {
+            KeyCode::Esc => {
+                let id = self.question.take().unwrap().id;
+                self.restore_draft();
+                let _ = self.session.ui_reply(id, None);
+            }
+            KeyCode::Enter if !modified => {
+                let id = self.question.take().unwrap().id;
+                let answer = self.editor.text();
+                self.restore_draft();
+                let _ = self.session.ui_reply(id, Some(answer));
+            }
+            KeyCode::PageUp => q.panel.scroll_by(-(page as isize)),
+            KeyCode::PageDown => q.panel.scroll_by(page as isize),
+            KeyCode::Up if self.editor.is_empty() => q.panel.scroll_by(-step),
+            KeyCode::Down if self.editor.is_empty() => q.panel.scroll_by(step),
+            _ => return false,
+        }
+        true
+    }
+
     pub(super) fn finish_edit(&mut self, before: Option<Vec<char>>) {
-        // The editor is a search box now: a queued message stays queued and
-        // `/`, `@`, `#` are just text.
+        // The editor is a search box or answer input: queued messages stay queued and
+        // `/`, `@`, `#` are plain text.
         if self.searching() {
             let q = self.editor.text();
             if let Some(p) = &mut self.picker {
                 p.filter(&q);
             }
+            return;
+        }
+        if self.answering() {
             return;
         }
         if before.is_some_and(|buf| buf != self.editor.buf)
@@ -150,6 +182,9 @@ impl App {
 
     pub fn paste(&mut self, s: &str) {
         self.selection = Default::default();
+        if self.input_disabled() {
+            return;
+        }
         if s.is_empty() {
             return self.paste_clipboard();
         }

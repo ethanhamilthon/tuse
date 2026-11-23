@@ -1,4 +1,4 @@
-use crate::job::{Done, Job, Stop, Wait};
+use crate::job::{ExtWait, Job, Stop, Wait};
 use crate::sh::{Proc, ShOut};
 use mlua::{IntoLuaMulti, Lua, MultiValue, Value};
 use std::collections::HashMap;
@@ -12,6 +12,8 @@ pub struct Sched {
     current: Option<Job>,
     procs: HashMap<u64, Proc>,
     next_proc: u64,
+    waits: HashMap<u64, ExtWait>,
+    next_wait: u64,
 }
 
 impl Sched {
@@ -35,6 +37,12 @@ impl Sched {
 
     pub fn take_proc(&mut self, key: u64) -> Option<Proc> {
         self.procs.remove(&key)
+    }
+
+    pub fn add_wait(&mut self, w: ExtWait) -> u64 {
+        self.next_wait += 1;
+        self.waits.insert(self.next_wait, w);
+        self.next_wait
     }
 
     pub fn is_empty(&self) -> bool {
@@ -83,6 +91,14 @@ pub fn tick(lua: &Lua) -> bool {
                     }
                     Some(Err(why.to_string()))
                 }
+                (Wait::Ext { key, .. }, Some(why)) => {
+                    if let Some(mut w) = s.waits.remove(key)
+                        && let Some(cancel) = w.on_cancel.take()
+                    {
+                        cancel();
+                    }
+                    Some(Err(why.to_string()))
+                }
                 (_, Some(why)) => Some(Err(why.to_string())),
                 (Wait::Sleep(t), None) => (Instant::now() >= *t).then_some(Ok(Value::Nil)),
                 (Wait::Sh(k), None) => {
@@ -93,8 +109,28 @@ pub fn tick(lua: &Lua) -> bool {
                         Ok(sh_value(lua, o))
                     })
                 }
+                (Wait::Ext { key, .. }, None) => {
+                    let key = *key;
+                    match s.waits.get(&key).map(|w| w.rx.try_recv()) {
+                        Some(Ok(res)) => {
+                            s.waits.remove(&key);
+                            Some(res.map(|v| crate::api::to_lua(lua, &v).unwrap_or(Value::Nil)))
+                        }
+                        Some(Err(std::sync::mpsc::TryRecvError::Empty)) => None,
+                        _ => {
+                            s.waits.remove(&key);
+                            Some(Err("cancelled".into()))
+                        }
+                    }
+                }
             };
             if let Some(r) = wake {
+                if let Wait::Ext {
+                    paused: Some(rem), ..
+                } = job.wait
+                {
+                    job.stop.deadline = Some(Instant::now() + rem);
+                }
                 job.wait = Wait::Ready(reply(lua, r));
             }
             if matches!(job.wait, Wait::Ready(_)) {
@@ -122,17 +158,17 @@ fn resume(lua: &Lua, mut job: Job) {
     let mut job = lua.app_data_mut::<Sched>().unwrap().current.take().unwrap();
     match r {
         Ok(vals) if thread.is_resumable() => {
-            job.wait = parse_wait(lua, &vals);
+            job.wait = parse_wait(lua, &vals, &mut job);
             lua.app_data_mut::<Sched>().unwrap().jobs.push(job);
         }
-        Ok(vals) => finish(lua, job, Ok(vals)),
-        Err(e) => finish(lua, job, Err(crate::message(&e))),
+        Ok(vals) => job.finish(lua, Ok(vals)),
+        Err(e) => job.finish(lua, Err(crate::message(&e))),
     }
 }
 
 /// What a coroutine waits for: `coroutine.yield(SCHED, kind, arg)` from `sleep` or `sh`.
 /// A bare `coroutine.yield()` at the top of a job only lets the others run.
-fn parse_wait(lua: &Lua, vals: &MultiValue) -> Wait {
+fn parse_wait(lua: &Lua, vals: &MultiValue, job: &mut Job) -> Wait {
     let marker: Option<mlua::Table> = lua.named_registry_value("tuse.sched").ok();
     let is_sched = matches!((vals.front(), &marker), (Some(Value::Table(t)), Some(m)) if t == m);
     if !is_sched {
@@ -152,54 +188,17 @@ fn parse_wait(lua: &Lua, vals: &MultiValue) -> Wait {
             Wait::Sleep(Instant::now() + std::time::Duration::from_secs_f64(secs.max(0.0)))
         }
         "sh" => Wait::Sh(arg.as_integer().unwrap_or(0) as u64),
+        "wait" => {
+            let key = arg.as_integer().unwrap_or(0) as u64;
+            let pause = lua
+                .app_data_ref::<Sched>()
+                .is_some_and(|s| s.waits.get(&key).is_some_and(|w| w.pause_timeout));
+            let paused = pause
+                .then(|| job.stop.deadline.take())
+                .flatten()
+                .map(|d| d.saturating_duration_since(Instant::now()));
+            Wait::Ext { key, paused }
+        }
         _ => Wait::Ready(reply(lua, Err(format!("unknown wait `{kind}`")))),
     }
-}
-
-fn finish(lua: &Lua, mut job: Job, r: Result<MultiValue, String>) {
-    let stop = job.stop.reason();
-    let ok = r.is_ok();
-    let tail = match r {
-        Ok(vals) => render(lua, vals),
-        Err(e) => match stop {
-            Some(why) if e.contains(why) => format!("[{why}]"),
-            _ => e,
-        },
-    };
-    let mut text = match std::mem::replace(&mut job.out, crate::job::Out::Buf(String::new())) {
-        crate::job::Out::Buf(b) => b,
-        crate::job::Out::File(mut f) => {
-            if !tail.is_empty() {
-                use std::io::Write;
-                let _ = writeln!(f, "{tail}");
-            }
-            String::new()
-        }
-    };
-    if !tail.is_empty() {
-        if !text.is_empty() && !text.ends_with('\n') {
-            text.push('\n');
-        }
-        text.push_str(&tail);
-    }
-    let done = Done {
-        ok: ok && stop.is_none(),
-        text,
-        stop: if ok { None } else { stop },
-        diffs: std::mem::take(&mut job.diffs),
-        images: std::mem::take(&mut job.images),
-    };
-    if let Some(f) = job.done.take() {
-        f(lua, done);
-    }
-}
-
-/// The values a job returned, as the agent reads them (`tuse.render` in the prelude).
-fn render(lua: &Lua, vals: MultiValue) -> String {
-    if vals.iter().all(Value::is_nil) {
-        return String::new();
-    }
-    let f: Option<mlua::Function> = lua.named_registry_value("tuse.render").ok();
-    f.and_then(|f| f.call::<String>(vals).ok())
-        .unwrap_or_default()
 }

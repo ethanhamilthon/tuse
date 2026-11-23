@@ -60,7 +60,11 @@ impl Renderer {
             view.insert(0, vec![]);
         }
         let cap = chat_h.min(p.ui.list_max_height);
-        if let Some(panel) = &mut app.panel {
+        if let Some(q) = &mut app.question {
+            let lines = q.panel.lines(inner, cap, p);
+            view.truncate(chat_h.saturating_sub(lines.len()));
+            view.extend(lines);
+        } else if let Some(panel) = &mut app.panel {
             let lines = panel.lines(inner, cap, p);
             view.truncate(chat_h.saturating_sub(lines.len()));
             view.extend(lines);
@@ -117,9 +121,11 @@ impl Renderer {
             top: input_top,
             cols: text_w,
         });
-        let cy = (first + crow - input_top).min(h.saturating_sub(1));
-        out.queue(MoveTo((pad + left + ccol) as u16, cy as u16))?;
-        out.queue(Show)?;
+        if !app.input_disabled() {
+            let cy = (first + crow - input_top).min(h.saturating_sub(1));
+            out.queue(MoveTo((pad + left + ccol) as u16, cy as u16))?;
+            out.queue(Show)?;
+        }
         out.queue(EndSynchronizedUpdate)?;
         out.flush()
     }

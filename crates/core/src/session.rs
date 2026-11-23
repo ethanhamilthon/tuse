@@ -29,6 +29,8 @@ pub struct Session {
     pub(crate) hooks_on: std::sync::atomic::AtomicBool,
     /// Hook runs still going: (hook, event, cancel flag).
     pub(crate) hook_runs: crate::hooks::Runs,
+    pub(crate) ui: Mutex<crate::ui::UiState>,
+    pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,
     pub(crate) http: tuse_api::HttpAgent,
 }
 
@@ -145,6 +147,8 @@ impl Session {
                 vm,
                 hooks_on: std::sync::atomic::AtomicBool::new(true),
                 hook_runs: Default::default(),
+                ui: Mutex::default(),
+                cmd_runs: Mutex::default(),
                 http: tuse_api::default_agent(),
             }
         });
@@ -164,6 +168,8 @@ impl Session {
         if self.dir.lock().unwrap().is_none() {
             return;
         }
+        self.ui_close();
+        self.stop_commands();
         self.cancel_turn();
         self.tasks.stop_all();
         self.finish_hooks(reason);
@@ -191,6 +197,7 @@ impl Session {
         self.vm
             .call(move |lua| crate::config_lua::commit(lua, &c2))?;
         self.swap_config(c);
+        self.ui_cancel_hooks(false);
         self.hooks_on
             .store(true, std::sync::atomic::Ordering::Release);
         self.hook(

@@ -7,13 +7,18 @@ pub enum Kind {
     Model,
     Effort(String),
     Task,
+    LuaPicker(u64),
 }
 
 impl Kind {
     /// Token pickers filter by the token under the input cursor; the others
-    /// are modal and take over the editor as their search box.
+    /// are modal (searchable ones use the editor as their search box).
     pub fn is_token(&self) -> bool {
         matches!(self, Kind::Command | Kind::Prompt | Kind::File)
+    }
+
+    pub fn is_searchable(&self) -> bool {
+        !self.is_token() && !matches!(self, Kind::LuaPicker(_))
     }
 }
 

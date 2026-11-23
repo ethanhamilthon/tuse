@@ -39,12 +39,12 @@ impl App {
                 Ok(()) => {
                     self.palette = Palette::from_config(&self.session.config());
                     self.palette_gen += 1;
-                    let config = self.session.config();
-                    self.chat = self.session.with_records(|r| {
-                        crate::chat::Chat::from_records(r, &|m| config.display_name(m))
-                    });
+                    self.chat = crate::chat::Chat::from_session(&self.session);
                     if let Some(panel) = &mut self.panel {
                         panel.invalidate();
+                    }
+                    if let Some(q) = &mut self.question {
+                        q.panel.invalidate();
                     }
                     for p in self.session.config().problems() {
                         self.notice(p);
@@ -53,6 +53,11 @@ impl App {
                 }
                 Err(e) => self.error(format!("Reload failed: {e}")),
             },
+            other if self.session.config().commands.iter().any(|c| c == other) => {
+                if let Err(e) = self.session.run_command(other) {
+                    self.error(e);
+                }
+            }
             other => self.error(format!("Unknown command /{other}")),
         }
     }
@@ -158,6 +163,9 @@ impl App {
                     let out = tuse_core::tail(&t.log, 200);
                     self.panel = Some(Panel::new(out));
                 }
+            }
+            (Kind::LuaPicker(id), v) => {
+                let _ = self.session.ui_reply(*id, v);
             }
             _ => {}
         }

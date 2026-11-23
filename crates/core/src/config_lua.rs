@@ -16,7 +16,12 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
             "{name}: `include` was removed; use `require(...)` instead"
         ));
     }
-    let mut config = tuse_config::from_value(to_json(lua, Value::Table(table.clone())), &name)?;
+    let commands = extract_commands(&table, &name)?;
+    let mut raw = to_json(lua, Value::Table(table.clone()));
+    if let Some(obj) = raw.as_object_mut() {
+        obj.insert("commands".into(), serde_json::json!(commands));
+    }
+    let mut config = tuse_config::from_value(raw, &name)?;
     for (key, names) in [
         ("hooks", config.hooks.keys().cloned().collect::<Vec<_>>()),
         ("functions", config.functions.keys().cloned().collect()),
@@ -78,6 +83,34 @@ pub(crate) fn commit(lua: &Lua, config: &Config) -> Result<(), String> {
 pub(crate) fn code_of(lua: &Lua, key: &str, name: &str) -> Option<Function> {
     let t: Table = lua.named_registry_value("tuse.config").ok()?;
     code(&t, key, name)
+}
+
+pub(crate) fn command_of(lua: &Lua, name: &str) -> Option<Function> {
+    let t: Table = lua.named_registry_value("tuse.config").ok()?;
+    t.get::<Table>("commands").ok()?.get(name).ok()
+}
+
+fn extract_commands(table: &Table, name: &str) -> Result<Vec<String>, String> {
+    let raw: Value = table.raw_get("commands").map_err(|e| e.to_string())?;
+    let t = match raw {
+        Value::Nil => return Ok(vec![]),
+        Value::Table(t) => t,
+        _ => return Err(format!("{name}: commands must be a table")),
+    };
+    let mut names = vec![];
+    for pair in t.pairs::<Value, Value>() {
+        let (k, v) = pair.map_err(|e| format!("{name}: {e}"))?;
+        let Value::String(s) = k else {
+            return Err(format!("{name}: commands keys must be strings"));
+        };
+        let key = s.to_str().map_err(|e| format!("{name}: {e}"))?.to_string();
+        if !matches!(v, Value::Function(_)) {
+            return Err(format!("{name}: commands.{key} must be a function"));
+        }
+        names.push(key);
+    }
+    names.sort();
+    Ok(names)
 }
 
 fn code(t: &Table, key: &str, name: &str) -> Option<Function> {

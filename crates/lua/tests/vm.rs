@@ -104,3 +104,40 @@ fn sh_has_no_controlling_terminal() {
     );
     assert_eq!(d.text, "none\n");
 }
+
+#[test]
+fn external_wait_pauses_and_resumes_timeout_budget() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let rx = Arc::new(Mutex::new(Some(rx)));
+    let vm = Vm::new(Arc::new(H::default()), move |lua| {
+        let rx = rx.clone();
+        let start = lua
+            .create_function(move |lua, ()| {
+                let rx = rx.lock().unwrap().take().unwrap();
+                let key = tuse_lua::add_wait(
+                    lua,
+                    tuse_lua::ExtWait {
+                        rx,
+                        pause_timeout: true,
+                        on_cancel: None,
+                    },
+                )?;
+                Ok(key)
+            })
+            .unwrap();
+        let f = tuse_lua::yield_wait(lua, start).unwrap();
+        lua.globals().set("pause_wait", f).unwrap();
+    });
+    // Budget is 300ms; reply arrives after 500ms (past original wall deadline),
+    // yet the job must resume with its remaining ~300ms budget and succeed.
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(500));
+        let _ = tx.send(Ok(serde_json::json!("ok")));
+    });
+    let stop = Stop::new(
+        Arc::default(),
+        Some(Instant::now() + Duration::from_millis(300)),
+    );
+    let d = vm.run("local v = pause_wait(); sleep(0.05); return v", "lua", stop);
+    assert!(d.ok && d.text == "ok", "ok={} text={}", d.ok, d.text);
+}

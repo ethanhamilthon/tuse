@@ -20,7 +20,11 @@
 - `/trace` opens the full session log in one scrollable panel, starting at the latest entries.
   Use the wheel or Page Up/Down to scroll and Esc to close.
 - `/config` shows the resolved config without providers or Lua function bodies.
-- `/reload` runs config files again; `/quit` exits.
+- `/reload` runs config files again (updating custom commands and keeping live `show_markdown`
+  blocks and picker/question results); `/quit` exits.
+- Custom slash commands defined in `commands = { name = function() ... end }` appear in `/`
+  autocomplete and run as non-blocking Lua jobs (so they can call `show_markdown`, `show_picker`,
+  and `show_question`). Built-in commands cannot be overridden.
 
 Pickers match substrings without regard to case. When a picker uses the input as a search
 box, your draft comes back on close. A message queued during a turn stays dimmed in the

@@ -15,7 +15,10 @@ impl App {
 
     /// Opens, filters or closes the `/`, `#` and `@` pickers for the token at the cursor.
     pub fn update_token_picker(&mut self) {
-        if self.steering.is_some() || self.picker.as_ref().is_some_and(|p| !p.kind.is_token()) {
+        if self.steering.is_some()
+            || self.answering()
+            || self.picker.as_ref().is_some_and(|p| !p.kind.is_token())
+        {
             return;
         }
         let (_, token) = self.editor.token();
@@ -54,10 +57,16 @@ impl App {
 
     fn token_items(&mut self, kind: &Kind) -> Vec<crate::picker::Item> {
         match kind {
-            Kind::Command => COMMANDS
-                .iter()
-                .map(|(n, d)| item(format!("/{n}"), *d, *n))
-                .collect(),
+            Kind::Command => {
+                let mut items: Vec<_> = COMMANDS
+                    .iter()
+                    .map(|(n, d)| item(format!("/{n}"), *d, *n))
+                    .collect();
+                for name in &self.session.config().commands {
+                    items.push(item(format!("/{name}"), "", name.clone()));
+                }
+                items
+            }
             Kind::Prompt => {
                 let config = self.session.config();
                 config

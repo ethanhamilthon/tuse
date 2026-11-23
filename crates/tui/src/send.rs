@@ -5,10 +5,13 @@ use tuse_core::Refs;
 impl App {
     /// Ctrl+V / Cmd+V: an image becomes an `[Image #n]` atom, text is inserted.
     pub fn paste_clipboard(&mut self) {
+        if self.input_disabled() {
+            return;
+        }
         let dir = tuse_core::tuse_home().join(&self.session.id).join("images");
         match crate::clipboard::read(&dir) {
-            // A search box takes no images.
-            Ok(Pasted::Image(_)) if self.searching() => {}
+            // A search box or question answer takes no images.
+            Ok(Pasted::Image(_)) if self.searching() || self.answering() => {}
             Ok(Pasted::Image(path)) => {
                 let before = self.steering.map(|_| self.editor.buf.clone());
                 self.editor.insert_image(path);
@@ -32,8 +35,9 @@ impl App {
         }
         if let Some(cmd) = trimmed.strip_prefix('/')
             && let name = cmd.split(' ').next().unwrap_or("")
-            && crate::commands::COMMANDS.iter().any(|(n, _)| *n == name)
             && name == cmd
+            && (crate::commands::COMMANDS.iter().any(|(n, _)| *n == name)
+                || self.session.config().commands.iter().any(|n| n == name))
         {
             self.editor.clear();
             self.run_command(cmd);

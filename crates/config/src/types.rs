@@ -20,6 +20,7 @@ pub struct Config {
     pub prompts: BTreeMap<String, String>,
     pub functions: BTreeMap<String, Function>,
     pub hooks: BTreeMap<String, Hook>,
+    pub commands: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
@@ -106,6 +107,10 @@ pub const HOOK_EVENTS: [&str; 4] = [
 ];
 
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
+
+pub const BUILTIN_COMMANDS: [&str; 9] = [
+    "config", "new", "resume", "models", "tasks", "usage", "trace", "reload", "quit",
+];
 
 impl Config {
     /// The effective config as pretty JSON (without providers).

@@ -31,7 +31,12 @@ pub fn block(app: &App, w: usize, rows: &[String], top: usize) -> Vec<Line> {
         } else {
             " ".repeat(left)
         };
-        out.push(vec![span(prefix, Style::fg(p.accent)), span(text, style)]);
+        let pfx_color = if app.input_disabled() {
+            p.border
+        } else {
+            p.accent
+        };
+        out.push(vec![span(prefix, Style::fg(pfx_color)), span(text, style)]);
     }
     if !dim {
         let atoms = app.editor.atom_columns(app.input_cols);

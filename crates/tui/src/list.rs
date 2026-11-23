@@ -70,7 +70,7 @@ pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Ve
         let (st, det_st) = if sel {
             (Style::fg(p.accent), Style::fg(p.dim))
         } else {
-            (Style::fg(p.border), Style::fg(p.border))
+            (Style::fg(p.muted), Style::fg(p.muted))
         };
         let prefix = if sel {
             LIST_SELECTED_PREFIX.to_string()

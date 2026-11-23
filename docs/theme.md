@@ -12,8 +12,8 @@ A theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`
 - `surface` (`#1A1A1A`): elevated background (user messages, filled input); lists and panels do not use it.
 - `fg` (`#EDEDED`): primary text and code blocks.
 - `dim` (`#A0A0A0`): secondary text (tool output, quotes, list details, notices).
-- `muted` (`#676767`): subtle text (reasoning, syntax comments, motion gradient start).
-- `border` (`#2E2E2E`): horizontal rules, box frames, separators, `/usage` keys, inactive list items.
+- `muted` (`#676767`): subtle text (reasoning, syntax comments, inactive list items, motion gradient start).
+- `border` (`#2E2E2E`): horizontal rules, box frames, separators, `/usage` keys.
 - `accent` (`#EDEDED`): primary highlight (status, bar, list title, selected list item, motion gradient end).
 - `ok` (`#00AC3A`): additions and success (`diff` `+`, inline `code`, strings, `/usage` cost).
 - `err` (`#F32E40`): errors and deletions (`diff` `-`, failed calls, keywords).

@@ -40,8 +40,11 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
         Some((text, _)) => vec![span(text, Style::fg(p.accent))],
         None => status::working(app),
     };
-    let model = status::model(app);
+    // Each label takes at most half the width; the scroll mark counts toward the working one.
+    let half = w / 2;
+    let model = clip_line(&status::model(app), half, MORE);
     let mark = scroll_mark(p, app.scroll);
+    let working = clip_line(&working, half.saturating_sub(line_width(&mark)), MORE);
     let marked: Line = mark.iter().chain(&working).cloned().collect();
     // A search typed into the editor is not the queued message.
     let steering = app.steering.is_some() && app.saved_editor.is_none();
@@ -194,6 +197,34 @@ mod tests {
             .filter(|s| !s.text.trim().is_empty() && s.text != RULE_CHAR)
             .map(|s| (s.text.trim().to_string(), s.style.fg))
             .collect()
+    }
+
+    #[test]
+    fn labels_take_at_most_half_the_width() {
+        let mut app = crate::app::test_app("half-labels");
+        app.flash = Some(("x".repeat(200), std::time::Instant::now()));
+        app.scroll = 3;
+        for design in ["lines", "box", "fill", "bar"] {
+            app.palette.ui.input_design = design.into();
+            let fr = frame(&app.palette.ui);
+            for w in [20, 41, 100] {
+                let out = block(&app, &fr, w, &["hi".into()], 0);
+                for line in &out {
+                    assert!(line_width(line) <= w, "{design} at {w}: {line:?}");
+                }
+                let text: String = out.iter().flatten().map(|s| s.text.as_str()).collect();
+                let xs = text.chars().filter(|c| *c == 'x').count();
+                assert!(xs + 3 <= w / 2, "{design} at {w}: working is {xs} + mark");
+                let model: usize = out
+                    .iter()
+                    .flatten()
+                    .filter(|s| s.style.fg == app.palette.muted)
+                    .map(|s| width(&s.text))
+                    .sum();
+                assert!(model <= w / 2, "{design} at {w}: model is {model}");
+            }
+        }
+        crate::app::cleanup(app);
     }
 
     #[test]

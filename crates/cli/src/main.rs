@@ -1,5 +1,7 @@
 mod args;
 mod connect;
+mod plugins;
+mod plugins_edit;
 mod update;
 
 use args::Args;
@@ -18,6 +20,8 @@ USAGE
                                            verify and save an API provider
   tuse disconnect NAME                    remove a provider
   tuse providers                          list the providers
+  tuse plugins [list|add NAME [--ref R]|remove NAME|install|update [NAME]|clean] [-c PATH]
+                                          manage plugins (see docs/plugins.md)
   tuse update                             update the binary
   tuse version | tuse help
 
@@ -46,6 +50,7 @@ fn run(raw: Vec<String>) -> Result<(), String> {
             Ok(())
         }
         "json" => json(&Args::parse(rest, &["--config", "-c", "--resume", "-r"])?),
+        "plugins" => plugins::run(rest),
         "update" => update::update(),
         "version" | "--version" | "-V" => {
             println!("tuse {}", env!("CARGO_PKG_VERSION"));

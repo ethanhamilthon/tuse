@@ -37,9 +37,16 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
     let g = lua.globals();
     let os: Table = g.get("os")?;
     let getenv: Function = os.get("getenv")?;
+    let here = cwd.to_path_buf();
     os.set(
         "getenv",
         lua.create_function(move |lua, name: String| {
+            if name == "THIS_PATH" {
+                return match caller_file(lua, &here) {
+                    Some(f) => Ok(Value::String(lua.create_string(f.display().to_string())?)),
+                    None => Ok(Value::Nil),
+                };
+            }
             match tuse_lua::host(lua)
                 .env()
                 .into_iter()
@@ -141,6 +148,14 @@ fn store_loaded(loaded: &Table, key: &str, val: Value) -> mlua::Result<Value> {
 
 /// Directory of the Lua file calling `require`, or `cwd` for inline code.
 fn caller_dir(lua: &Lua, cwd: &Path) -> PathBuf {
+    caller_file(lua, cwd)
+        .and_then(|f| f.parent().map(Path::to_path_buf))
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or_else(|| cwd.to_path_buf())
+}
+
+/// The Lua file running the innermost Lua frame, `None` for inline code.
+fn caller_file(lua: &Lua, cwd: &Path) -> Option<PathBuf> {
     for level in 0.. {
         let Some((what, source)) = lua.inspect_stack(level, |d| {
             let s = d.source();
@@ -152,21 +167,14 @@ fn caller_dir(lua: &Lua, cwd: &Path) -> PathBuf {
         if what == "C" || src == "=prelude" {
             continue;
         }
-        if let Some(path) = src.strip_prefix('@') {
-            let p = Path::new(path);
-            let full = if p.is_absolute() {
-                p.to_path_buf()
-            } else {
-                cwd.join(p)
-            };
-            return full
-                .parent()
-                .filter(|d| !d.as_os_str().is_empty())
-                .map_or_else(|| cwd.to_path_buf(), Path::to_path_buf);
-        }
-        return cwd.to_path_buf();
+        let p = Path::new(src.strip_prefix('@')?);
+        return Some(if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            cwd.join(p)
+        });
     }
-    cwd.to_path_buf()
+    None
 }
 
 fn require_module(lua: &Lua, name: String, cwd: &Path) -> mlua::Result<MultiValue> {

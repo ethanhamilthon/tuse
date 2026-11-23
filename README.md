@@ -60,6 +60,7 @@ or run `make install` from a checkout. The defaults are built in.
 ```
 tuse [-c|--config PATH] [-r|--resume ID] open the TUI
 tuse json [-c PATH] [-r ID]               JSON-RPC 2.0 over stdin/stdout (docs/json.md)
+tuse plugins [add|remove|install|update|clean]  manage plugins (docs/plugins.md)
 tuse connect --base URL --key KEY --name NAME
                                           verify and save a provider
 tuse providers | tuse disconnect NAME     list | remove providers
@@ -126,6 +127,7 @@ Files, prompts and images are one unit in the input: arrows and Backspace move o
 
 Tuse runs `--config PATH`, else `./tuse.lua`, else the global config (`$TUSE_GLOBAL_CONFIG`,
 `~/.config/tuse.lua` or `~/.config/tuse/init.lua`). See [docs/config.md](docs/config.md) for every key.
+Plugins from GitHub go in `plugins = { "owner/repo" }` ([docs/plugins.md](docs/plugins.md)).
 
 ```lua
 local t = require("tuse")              -- sh, read, edit... and t.env.TUSE_MODE

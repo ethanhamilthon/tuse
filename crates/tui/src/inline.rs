@@ -1,5 +1,5 @@
 //! Inline prompts for CLI subcommands: they print into the scrollback, no alternate screen.
-use crate::style::{ERROR_PREFIX, LABEL_SEP, MASK_CHAR, NOTICE_PREFIX, Palette, USER_PREFIX};
+use crate::style::{ASK_PREFIX, ERROR_PREFIX, LABEL_SEP, MASK_CHAR, NOTICE_PREFIX, Palette};
 use crossterm::event::{
     self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEventKind, KeyModifiers,
 };
@@ -82,7 +82,7 @@ fn shown(f: &Field, value: &str) -> String {
 fn draw(out: &mut Stdout, p: &Palette, f: &Field, value: &str, last: bool) -> Result<()> {
     out.queue(Print("\r"))?;
     out.queue(Clear(ClearType::CurrentLine))?;
-    paint(out, p.accent, USER_PREFIX)?;
+    paint(out, p.accent, ASK_PREFIX)?;
     paint(out, p.dim, &format!("{}{LABEL_SEP}", f.label))?;
     paint(out, p.fg, &shown(f, value))?;
     if last {

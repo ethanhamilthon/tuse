@@ -1,8 +1,7 @@
 use crate::app::App;
 use crate::status;
 use crate::style::{
-    BAR_CHAR, BOX_CHARS, EDGE_BOTTOM, EDGE_TOP, INPUT_PREFIX, MORE, Palette, RULE_CHAR,
-    SCROLL_MARK, Style,
+    BAR_CHAR, BOX_CHARS, FILL_PAD, INPUT_PREFIX, MORE, Palette, RULE_CHAR, SCROLL_MARK, Style,
 };
 use crate::text::{Line, Span, clip_line, line_width, span, width};
 use tuse_config::UiSettings;
@@ -21,8 +20,8 @@ pub fn frame(ui: &UiSettings) -> Frame {
     let pw = width(INPUT_PREFIX);
     let (left, right, head, foot) = match ui.input_design.as_str() {
         "box" => (width(BOX_CHARS[4]) + pw, width(BOX_CHARS[4]), 1, 1),
-        "fill" => (pw, 0, 1, 2),
-        "bar" => (width(BAR_CHAR) + 1 + pw, 0, 0, 2),
+        "fill" => (FILL_PAD, 0, 1, 2),
+        "bar" => (width(BAR_CHAR) + 1, 0, 0, 2),
         _ => (pw, 0, 1, 1),
     };
     Frame {
@@ -69,9 +68,9 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
             out.push(border(p, w, (BOX_CHARS[2], BOX_CHARS[3]), &[], &model));
         }
         "fill" => {
-            out.push(edge(p, w, EDGE_TOP));
+            out.push(edge(p, w));
             out.extend(body(&|_, _| (vec![], vec![])));
-            out.push(edge(p, w, EDGE_BOTTOM));
+            out.push(edge(p, w));
             out.push(status_row(w, &marked, &model));
         }
         "bar" => {
@@ -123,10 +122,12 @@ fn row(
     let filled = p.ui.input_design == "fill";
     let bg = if filled { p.surface } else { None };
     let mut line = left;
-    let prefix = if i == 0 {
-        INPUT_PREFIX.to_string()
-    } else {
-        " ".repeat(width(INPUT_PREFIX))
+    // `fill` and `bar` frame the input already; the others mark it with `› `.
+    let prefix = match p.ui.input_design.as_str() {
+        "fill" => " ".repeat(FILL_PAD),
+        "bar" => String::new(),
+        _ if i == 0 => INPUT_PREFIX.to_string(),
+        _ => " ".repeat(width(INPUT_PREFIX)),
     };
     line.push(span(prefix, Style::fg(p.accent)));
     let color = if pending { p.dim } else { p.fg };
@@ -171,9 +172,11 @@ fn border(p: &Palette, w: usize, corners: (&str, &str), left: &[Span], label: &[
     line
 }
 
-/// The half-block row above or below a filled input.
-fn edge(p: &Palette, w: usize, ch: &str) -> Line {
-    vec![span(ch.repeat(w), Style::fg(p.surface))]
+/// The blank row above or below a filled input: whole cells of `surface`, like the text
+/// rows, so the block has straight edges (half-block glyphs came out narrower than the
+/// cells and left notches at the corners).
+fn edge(p: &Palette, w: usize) -> Line {
+    vec![span(" ".repeat(w), Style::default().on(p.surface))]
 }
 
 /// The status row under the input: working on the left, the model on the right.
@@ -197,6 +200,48 @@ mod tests {
             .filter(|s| !s.text.trim().is_empty() && s.text != RULE_CHAR)
             .map(|s| (s.text.trim().to_string(), s.style.fg))
             .collect()
+    }
+
+    #[test]
+    fn fill_is_a_straight_block_and_fill_bar_have_no_prefix() {
+        let mut app = crate::app::test_app("fill-block");
+        let w = 30;
+        app.palette.ui.input_design = "fill".into();
+        let surface = app.palette.surface;
+        let fr = frame(&app.palette.ui);
+        assert_eq!((fr.left, fr.right), (FILL_PAD, 0));
+        let out = block(&app, &fr, w, &["hello".into(), "world".into()], 0);
+        // Edge, two text rows, edge: every cell is `surface`, every row is `w` wide.
+        for line in &out[..4] {
+            assert_eq!(line_width(line), w, "{line:?}");
+            assert!(line.iter().all(|s| s.style.bg == surface), "{line:?}");
+            assert!(line.iter().all(|s| !s.text.contains(['▄', '▀'])));
+        }
+        let text: String = out[1].iter().map(|s| s.text.as_str()).collect();
+        assert!(text.starts_with(" hello"), "{text:?}");
+        assert!(!text.contains('›'));
+
+        app.palette.ui.input_design = "bar".into();
+        let fr = frame(&app.palette.ui);
+        let out = block(&app, &fr, w, &["hello".into()], 0);
+        let text: String = out[0].iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(text, format!("{BAR_CHAR} hello"));
+        assert_eq!(
+            fr.left,
+            width(BAR_CHAR) + 1,
+            "the cursor column follows the text"
+        );
+
+        for design in ["lines", "box"] {
+            app.palette.ui.input_design = design.into();
+            let fr = frame(&app.palette.ui);
+            let out = block(&app, &fr, w, &["hello".into()], 0);
+            let text: String = out[fr.head].iter().map(|s| s.text.as_str()).collect();
+            let at = text.find("hello").unwrap();
+            assert_eq!(width(&text[..at]), fr.left, "{design}: {text:?}");
+            assert!(text.contains(INPUT_PREFIX), "{design} keeps the prefix");
+        }
+        crate::app::cleanup(app);
     }
 
     #[test]

@@ -146,7 +146,7 @@ return {
       args = "lines",
       description = "Run project checks and return the last lines.",
       run = function(lines)
-        local out = sh("make check"):lines()
+        local out = t.sh("make check"):lines()
         return table.concat(out, "\n", math.max(1, #out - (lines or 30) + 1))
       end,
     },
@@ -157,7 +157,7 @@ return {
       events = { "agent_message" },  -- process_start, process_end, user_message, agent_message
       run = function(e)
         if e.status == "finished" then
-          sh([[osascript -e 'display notification "done"']])
+          t.sh([[osascript -e 'display notification "done"']])
         end
       end,
     },

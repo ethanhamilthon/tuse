@@ -46,7 +46,8 @@ fn hooks_see_process_and_message_events_in_order() {
     std::fs::write(
         &cfg,
         format!(
-            r#"local n = 0
+            r#"local t = require("tuse")
+local n = 0
 local function append(path, line)
   local f = assert(io.open(path, "a"))
   f:write(line, "\n")
@@ -67,7 +68,7 @@ return {{
         if e.event == "user_message" then extra = e.text .. " " .. tostring(e.is_first) end
         if e.event == "agent_message" then extra = e.text .. " " .. e.status end
         append("{}", label(e) .. " " .. n .. " " .. extra)
-        if e.event == "user_message" and e.is_first then set_title("hook " .. e.text) end
+        if e.event == "user_message" and e.is_first then t.set_title("hook " .. e.text) end
       end,
     }},
     tui_only = os.getenv("TUSE_MODE") == "tui" and {{

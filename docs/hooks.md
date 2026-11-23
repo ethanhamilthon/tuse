@@ -15,20 +15,22 @@ The function gets one table `e` with the event's fields and also `event`, `hook`
 an event does not set are `nil`. A hook listening to an unknown event shows a notice.
 
 ```lua
+local t = require("tuse")
+
 return {
   hooks = {
     notify = os.getenv("TUSE_MODE") == "tui" and {
       events = {"agent_message"},
       run = function(e)
-        if e.status == "finished" then sh("say done") end
+        if e.status == "finished" then t.sh("say done") end
       end,
     } or nil,
   },
 }
 ```
 
-Hooks run as coroutines in the session's VM, so they share its globals and helpers (and the
-upvalues of the config file, which survive between events). The events of one hook run in
+Hooks run as coroutines in the session's VM and can call configured helpers. Their config
+upvalues survive between events. The events of one hook run in
 emission order; different hooks can run concurrently, and they keep running while the agent
 waits on `sh`. A run has no time limit; Esc stops the runs going on.
 An error produces a `hook NAME: ...` notice. `/reload` runs `process_end` on the old hooks, then

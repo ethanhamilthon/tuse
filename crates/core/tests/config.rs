@@ -8,7 +8,7 @@ fn file_relative_require_replaces_include() {
     let addr = common::provider(vec![
         common::Reply::Call(
             "lua",
-            r#"{"code":"print(require('util').origin .. ':' .. from_global())"}"#.into(),
+            r#"{"code":"assert(sh == require('tuse').sh and type(read) == 'function'); print(require('util').origin .. ':' .. from_global())"}"#.into(),
         ),
         common::Reply::Text("done"),
     ]);
@@ -23,11 +23,16 @@ fn file_relative_require_replaces_include() {
     // provider does not read the environment.
     unsafe { std::env::set_var("TUSE_GLOBAL_CONFIG", &global) };
 
+    fs::write(project.join("fixture.txt"), "from config").unwrap();
     fs::write(project.join("util.lua"), "return { origin = 'project' }").unwrap();
     fs::write(project.join("pkg/init.lua"), "return 'pkg init'").unwrap();
     fs::write(shared.join("util.lua"), "return { origin = 'shared' }").unwrap();
     fs::write(shared.join("rex.lua"), "return { tag = 'rex-v1' }").unwrap();
-    fs::write(shared.join("sub/leaf.lua"), "return 'leaf'").unwrap();
+    fs::write(
+        shared.join("sub/leaf.lua"),
+        "assert(sh == nil and _G.read == nil); return 'leaf'",
+    )
+    .unwrap();
     fs::write(
         shared.join("sub/mod.lua"),
         "return { leaf = require('leaf'), rex = require('../rex') }",
@@ -49,8 +54,9 @@ fn file_relative_require_replaces_include() {
         assert(sub.rex == rex, 'same canonical file shares cache')
         local mode = os.getenv('TUSE_MODE')
         assert(t.env.TUSE_MODE == mode and t.env.TUSE_CWD ~= nil)
-        assert(t.sh == sh and t.read == read and t.edit == edit and t.json == json)
+        for name in pairs(t) do assert(_G[name] == nil, name) end
         assert(t.sh('printf %s "$TUSE_MODE"').out == mode)
+        assert(t.read('fixture.txt') == 'from config')
         assert(t.env.TUSE_GLOBAL_CONFIG == os.getenv('TUSE_GLOBAL_CONFIG'))
         assert(not pcall(function() return TUSE_MODE end))
         local dir = t.env.TUSE_GLOBAL_CONFIG:match('(.*)/[^/]+$')
@@ -64,7 +70,11 @@ fn file_relative_require_replaces_include() {
             functions = {
                 from_global = {
                     description = 'Reads sibling module at runtime',
-                    run = function() return require('rex').tag end,
+                    run = function()
+                        assert(sh == nil and read == nil)
+                        assert(t.read('fixture.txt') == 'from config')
+                        return require('rex').tag
+                    end,
                 },
             },
         }
@@ -76,6 +86,8 @@ fn file_relative_require_replaces_include() {
     fs::write(
         &root,
         r#"
+        assert(sh == nil and read == nil and _G.json == nil)
+        assert(load("return sh")() == nil)
         local g = require('global')
         assert(require('util').origin == 'project')
         assert(require('pkg') == 'pkg init')

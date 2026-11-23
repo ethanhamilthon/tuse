@@ -34,8 +34,9 @@ fn cross_frontend_resume_preserves_history_and_model_but_not_transient_ui() {
     let extra = r#"
   commands = {
     ui = function()
-      show_markdown("pin", "Stay?", true)
-      show_question("Pending?")
+      local t = require("tuse")
+      t.show_markdown("pin", "Stay?", true)
+      t.show_question("Pending?")
     end,
   },
 "#;

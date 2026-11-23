@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use tuse_lua::mlua::{self, Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
-/// The host functions `require("tuse")` gives; they stay globals too.
+/// Globals in the agent's `lua` tool; file chunks import them from `tuse`.
 const HOST: &[&str] = &[
     "sh",
     "sleep",
@@ -64,6 +64,7 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
         })?,
     )?;
     g.set_metatable(Some(meta))?;
+    crate::config_lua::install_env(lua, HOST)?;
     let package: Table = g.get("package")?;
     package.set("path", "")?;
     package.set("cpath", "")?;
@@ -210,6 +211,7 @@ fn require_module(lua: &Lua, name: String, cwd: &Path) -> mlua::Result<MultiValu
         .map_err(|e| mlua::Error::runtime(format!("{key}: {e}")))?;
     let f = lua
         .load(text)
+        .set_environment(crate::config_lua::file_env(lua)?)
         .set_name(format!("@{key}"))
         .into_function()
         .map_err(|e| mlua::Error::runtime(tuse_lua::message(&e)))?;

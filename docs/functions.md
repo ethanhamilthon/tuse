@@ -1,6 +1,7 @@
 # Functions
 
-Always defined in `lua`, in hooks and in tasks. Errors are Lua errors with a plain message:
+Available as globals in the agent's `lua` tool. In config files and modules, including hooks,
+commands, and helpers, import them with `require("tuse")`. Errors are Lua errors with a plain message:
 catch them with `pcall`. Options are passed as a table, like `read(path, {lines = true, offset = 40})`.
 
 Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/`delete` for file
@@ -59,13 +60,15 @@ changes so the user sees diffs. Use `sh` for running programs and processing the
 ## Functions from the config
 
 ```lua
+local t = require("tuse")
+
 return {
   functions = {
     tail_tests = {
       args = "lines",
       description = "Run tests and return the last lines of output.",
       run = function(lines)
-        local out = sh("make check"):lines()
+        local out = t.sh("make check"):lines()
         return table.concat(out, "\n", math.max(1, #out - (lines or 30) + 1))
       end,
     },

@@ -24,19 +24,21 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     let extra = r###"
   commands = {
     ask_flow = function()
-      show_markdown("note", "## First", false)
-      show_markdown("note", "## Updated", false)
-      show_markdown("pin1", "Pinned A", true)
-      show_markdown("gone", "Temp", false)
-      show_markdown("gone", "", false)
-      local pick = show_picker({"alpha", "beta"})
-      local ans = show_question("**Name?**")
-      local skip = show_picker({"x", "y"})
-      show_markdown("summary", tostring(pick) .. "|" .. tostring(ans) .. "|" .. tostring(skip), true)
+      local t = require("tuse")
+      t.show_markdown("note", "## First", false)
+      t.show_markdown("note", "## Updated", false)
+      t.show_markdown("pin1", "Pinned A", true)
+      t.show_markdown("gone", "Temp", false)
+      t.show_markdown("gone", "", false)
+      local pick = t.show_picker({"alpha", "beta"})
+      local ans = t.show_question("**Name?**")
+      local skip = t.show_picker({"x", "y"})
+      t.show_markdown("summary", tostring(pick) .. "|" .. tostring(ans) .. "|" .. tostring(skip), true)
     end,
     second = function()
-      local v = show_question("Queued?")
-      show_markdown("q2", tostring(v), false)
+      local t = require("tuse")
+      local v = t.show_question("Queued?")
+      t.show_markdown("q2", tostring(v), false)
     end,
   },
   hooks = {
@@ -44,7 +46,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
       events = {"process_start", "process_end"},
       run = function(e)
         if e.event == "process_start" and e.reason == "reload" then return end
-        show_question("hook " .. e.event)
+        require("tuse").show_question("hook " .. e.event)
       end,
     },
   },
@@ -147,7 +149,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     // Reload keeps markdown blocks (with pin state) and UI entries, updates custom commands.
     std::fs::write(
         &cfg,
-        "return { model = 'p/m', commands = { updated_cmd = function() show_question('still open') end } }",
+        "return { model = 'p/m', commands = { updated_cmd = function() require('tuse').show_question('still open') end } }",
     )
     .unwrap();
     s.reload().unwrap();

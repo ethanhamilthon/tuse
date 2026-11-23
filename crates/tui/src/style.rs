@@ -21,8 +21,6 @@ pub const TABLE_SEP: &str = " │ ";
 pub const SCROLL_MARK: &str = "↑";
 pub const LABEL_SEP: &str = " · ";
 pub const MORE: &str = "…";
-/// Blank columns left of a user message.
-pub const FILL_PAD: usize = 1;
 pub const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
 pub const STEERING_LABEL: &str = "steering…";
 

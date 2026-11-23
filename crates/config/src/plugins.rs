@@ -1,11 +1,11 @@
 //! Plugin entries of `plugins = {...}`: where each one comes from and where it lives.
 
-use crate::load::{home, resolve_path};
+use crate::load::resolve_path;
 use std::path::{Path, PathBuf};
 
 /// `~/.tuse`.
 pub fn tuse_home() -> PathBuf {
-    home().join(".tuse")
+    std::env::home_dir().unwrap_or_default().join(".tuse")
 }
 
 /// `~/.tuse/plugins`: one clone per repository.

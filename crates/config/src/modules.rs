@@ -1,4 +1,4 @@
-use crate::load::{home, resolve_path};
+use crate::load::resolve_path;
 use std::path::{Path, PathBuf};
 
 /// The files `require(name)` tries, in order, relative to `base`:
@@ -21,7 +21,7 @@ pub fn module_candidates(name: &str, base: &Path) -> Vec<PathBuf> {
 
 /// `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`.
 pub fn global_candidates() -> Vec<PathBuf> {
-    let d = home().join(".config");
+    let d = std::env::home_dir().unwrap_or_default().join(".config");
     vec![d.join("tuse.lua"), d.join("tuse/init.lua")]
 }
 
@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn module_names_map_to_files() {
         let cwd = Path::new("/p");
-        let h = home();
+        let h = std::env::home_dir().unwrap_or_default();
         let c = |n| module_candidates(n, cwd);
         assert_eq!(c("name"), [cwd.join("name.lua"), cwd.join("name/init.lua")]);
         assert_eq!(c("a.b"), [cwd.join("a/b.lua"), cwd.join("a/b/init.lua")]);

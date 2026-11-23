@@ -134,8 +134,10 @@ impl Drop for Proc {
 }
 
 pub fn kill_group(pid: u32) {
-    let _ = Command::new("kill")
-        .args(["-KILL", "--", &format!("-{pid}")])
-        .stderr(Stdio::null())
-        .status();
+    if let Ok(pid) = libc::pid_t::try_from(pid) {
+        // SAFETY: `kill` takes plain integers; a stale group fails with ESRCH and nothing happens.
+        unsafe {
+            libc::kill(-pid, libc::SIGKILL);
+        }
+    }
 }

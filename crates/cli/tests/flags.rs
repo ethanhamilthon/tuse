@@ -39,7 +39,7 @@ fn help_comes_first_and_unknown_input_is_rejected() {
     let out = tuse(&dir, &["models", "-c", "other.lua"]);
     let text = String::from_utf8(out.stdout).unwrap();
     assert!(
-        out.status.success() && text.contains("x/y\t1.0k ctx"),
+        out.status.success() && text.contains("x/y\t1k ctx"),
         "{text}"
     );
     let out = tuse(&dir, &["models", "--config=other.lua"]);

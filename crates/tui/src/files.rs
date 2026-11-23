@@ -66,7 +66,10 @@ mod tests {
     fn picked_paths() {
         assert_eq!(path("src/a.rs"), Path::new("src/a.rs"));
         assert_eq!(path("/etc/hosts"), Path::new("/etc/hosts"));
-        assert_eq!(path("~/a"), tuse_config::home().join("a"));
+        assert_eq!(
+            path("~/a"),
+            std::env::home_dir().unwrap_or_default().join("a")
+        );
     }
 
     #[test]

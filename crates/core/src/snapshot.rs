@@ -156,7 +156,7 @@ impl Session {
             mode: self.mode.name(),
             configpath: (!config.path.is_empty()).then(|| config.path.clone()),
             cwd: self.cwd.display().to_string(),
-            home: crate::store::tuse_home().display().to_string(),
+            home: tuse_config::tuse_home().display().to_string(),
             id: Some(self.id.clone()),
             name: (!name.is_empty()).then_some(name),
             model: (!model_full.is_empty()).then_some(model_full),
@@ -187,7 +187,7 @@ pub(crate) fn lua_session(lua: &Lua) -> mlua::Result<Value> {
                 ctx.mode,
                 ctx.configpath.clone(),
                 &ctx.cwd,
-                &crate::store::tuse_home(),
+                &tuse_config::tuse_home(),
             ))
         } else {
             None
@@ -206,7 +206,7 @@ pub(crate) fn lua_session(lua: &Lua) -> mlua::Result<Value> {
                 ctx.mode,
                 ctx.configpath.clone(),
                 &ctx.cwd,
-                &crate::store::tuse_home(),
+                &tuse_config::tuse_home(),
             )
         })
         .ok_or_else(|| mlua::Error::runtime("session closed"))?;

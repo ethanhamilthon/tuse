@@ -1,6 +1,8 @@
+use crate::app::App;
 use crate::render::plain;
 use crate::style::{Palette, Style};
 use crate::text::{Line, wrap};
+use crossterm::event::KeyCode;
 
 enum Body {
     Text(String),
@@ -88,6 +90,28 @@ impl Panel {
 
     pub fn scroll_by(&mut self, delta: isize) {
         self.scroll = self.scroll.saturating_add_signed(delta);
+    }
+}
+
+impl App {
+    pub(crate) fn panel_key(&mut self, code: KeyCode) -> bool {
+        let Some(panel) = &mut self.panel else {
+            return false;
+        };
+        let step = self.palette.ui.scroll_step as isize;
+        match code {
+            KeyCode::Esc => {
+                self.panel = None;
+                if let Some((picker, search)) = self.trace_back.take() {
+                    self.picker = Some(picker);
+                    self.editor = search;
+                }
+            }
+            KeyCode::Up if self.editor.is_empty() => panel.scroll_by(-step),
+            KeyCode::Down if self.editor.is_empty() => panel.scroll_by(step),
+            _ => return false,
+        }
+        true
     }
 }
 

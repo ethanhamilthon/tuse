@@ -209,3 +209,25 @@ fn trace_picker_opens_detail_panel_and_esc_preserves_selection() {
     assert!(app.picker.is_none() && app.editor.text() == "draft");
     crate::app::cleanup(app);
 }
+
+#[test]
+fn slash_autocomplete_includes_custom_commands_and_updates_on_reload() {
+    let mut app = crate::app::test_app("modal-custom-cmd");
+    let cfg = app.cwd.join("tuse.lua");
+    std::fs::write(
+        &cfg,
+        "return { commands = { hello_ui = function() show_markdown('h', 'hi', false) end } }",
+    )
+    .unwrap();
+    app.run_command("reload");
+    type_text(&mut app, "/hello");
+    assert_eq!(labels(&app), ["/hello_ui"]);
+    press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+    app.editor.clear();
+    std::fs::write(&cfg, "return { commands = { fresh_cmd = function() end } }").unwrap();
+    app.run_command("reload");
+    type_text(&mut app, "/");
+    let all = labels(&app);
+    assert!(all.contains(&"/fresh_cmd".to_string()) && !all.contains(&"/hello_ui".to_string()));
+    crate::app::cleanup(app);
+}

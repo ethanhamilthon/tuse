@@ -37,6 +37,8 @@ impl App {
     pub(crate) fn open_lua_picker(&mut self, id: u64, options: Vec<String>) {
         self.question = None;
         self.panel = None;
+        self.trace_back = None;
+        self.trace_items.clear();
         let items = options
             .into_iter()
             .map(|s| item(s.clone(), "", s))
@@ -47,6 +49,8 @@ impl App {
     pub(crate) fn open_question(&mut self, id: u64, text: String) {
         self.picker = None;
         self.panel = None;
+        self.trace_back = None;
+        self.trace_items.clear();
         if self.saved_editor.is_none() {
             self.saved_editor = Some(std::mem::take(&mut self.editor));
         } else {

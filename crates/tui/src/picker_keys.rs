@@ -25,6 +25,11 @@ impl App {
                         self.restore_draft();
                         let _ = self.session.ui_reply(id, None);
                     }
+                    Kind::Trace => {
+                        self.trace_items.clear();
+                        self.trace_back = None;
+                        self.restore_draft();
+                    }
                     _ => self.restore_draft(),
                 }
             }

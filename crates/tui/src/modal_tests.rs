@@ -27,14 +27,14 @@ fn search_is_edited_in_the_editor_and_esc_restores_the_draft() {
     app.open_modal(Picker::new(Kind::Resume, "Resume", items));
     assert!(app.editor.is_empty());
 
-    type_text(&mut app, "al be");
-    assert_eq!(app.editor.text(), "al be");
+    type_text(&mut app, "alpha be");
+    assert_eq!(app.editor.text(), "alpha be");
     assert_eq!(labels(&app), ["alpha beta"]);
     press(&mut app, KeyCode::Char('w'), KeyModifiers::CONTROL);
-    assert_eq!(app.editor.text(), "al ");
+    assert_eq!(app.editor.text(), "alpha ");
     press(&mut app, KeyCode::Backspace, KeyModifiers::NONE);
-    press(&mut app, KeyCode::Home, KeyModifiers::NONE);
-    press(&mut app, KeyCode::Char('g'), KeyModifiers::NONE);
+    press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
+    type_text(&mut app, "gal");
     assert_eq!(app.editor.text(), "gal");
     assert_eq!(labels(&app), ["gallery"]);
 

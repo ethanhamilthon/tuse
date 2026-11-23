@@ -59,8 +59,6 @@ pub(crate) struct State {
 
 impl Session {
     pub fn open(opts: Options) -> Result<Arc<Session>, String> {
-        static MIGRATED: std::sync::Once = std::sync::Once::new();
-        MIGRATED.call_once(crate::migrate::sessions);
         let id = opts
             .resume
             .clone()
@@ -75,13 +73,12 @@ impl Session {
             dir.append(&r);
             records.push(r);
         }
-        let mut meta = crate::store::read_meta(&id).unwrap_or_else(|| Meta {
+        let meta = crate::store::read_meta(&id).unwrap_or_else(|| Meta {
             id: id.clone(),
             cwd: opts.cwd.display().to_string(),
             created: crate::id::now(),
             ..Default::default()
         });
-        crate::session_env::adopt_parent(&mut dir, &mut meta)?;
         if opts.resume.is_none() {
             let r = crate::control::initial_settings(&config, opts.mode);
             dir.append(&r);
@@ -169,7 +166,6 @@ impl Session {
         self.cancel_turn();
         self.tasks.stop_all();
         self.finish_hooks(reason);
-        self.record_close();
         self.dir.lock().unwrap().take();
     }
 

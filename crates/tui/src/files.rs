@@ -31,28 +31,14 @@ pub fn path(value: &str) -> std::path::PathBuf {
     }
 }
 
-/// `true` for `/abs/...`, `~` and `~/...`: paths outside the working directory.
-pub fn is_absolute(query: &str) -> bool {
-    query.starts_with('/') || query == "~" || query.starts_with("~/")
-}
-
-/// Splits an `@` query into the directory to list and the filter.
-/// Relative: `some/*x` is (`some/`, `x`); without `/*` the directory is empty
-/// and the whole query is the filter. Absolute (`/`, `~/`): the directory runs
-/// to the last `/`, so `/etc/ho` is (`/etc/`, `ho`).
+/// Splits an `@` query into the directory to list and its filename filter.
 pub fn split(query: &str) -> (&str, &str) {
-    if is_absolute(query) {
-        let q = query.strip_suffix('*').unwrap_or(query);
-        return match q.rfind('/') {
-            Some(i) => (&q[..=i], &q[i + 1..]),
-            // A lone `~` lists the home folder.
-            None => ("~/", ""),
-        };
+    if query == "~" {
+        return ("~/", "");
     }
-    match query.rfind("/*") {
-        Some(i) => (&query[..=i], &query[i + 2..]),
-        None => ("", query),
-    }
+    query
+        .rfind('/')
+        .map_or(("", query), |i| query.split_at(i + 1))
 }
 
 #[cfg(test)]
@@ -61,16 +47,16 @@ mod tests {
 
     #[test]
     fn split_query() {
-        assert_eq!(split("some/*"), ("some/", ""));
-        assert_eq!(split("a/b/*ma"), ("a/b/", "ma"));
-        assert_eq!(split("src/ma"), ("", "src/ma"));
+        assert_eq!(split("some/"), ("some/", ""));
+        assert_eq!(split("a/b/ma"), ("a/b/", "ma"));
+        assert_eq!(split("src/ma"), ("src/", "ma"));
     }
 
     #[test]
     fn split_absolute_query() {
         assert_eq!(split("/"), ("/", ""));
         assert_eq!(split("/etc/ho"), ("/etc/", "ho"));
-        assert_eq!(split("/etc/*"), ("/etc/", ""));
+        assert_eq!(split("/etc/"), ("/etc/", ""));
         assert_eq!(split("~"), ("~/", ""));
         assert_eq!(split("~/do"), ("~/", "do"));
         assert_eq!(split("~/a/b"), ("~/a/", "b"));

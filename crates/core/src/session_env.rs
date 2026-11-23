@@ -1,18 +1,5 @@
 use crate::record::Record;
 use crate::session::{Session, State};
-use crate::store::{Meta, SessionDir};
-
-/// Records `TUSE_PARENT` in the meta. A session with a parent creates its folder, lock
-/// and `meta.json` now, so `/childrens` of the parent sees it before its first prompt.
-pub(crate) fn adopt_parent(dir: &mut SessionDir, meta: &mut Meta) -> Result<(), String> {
-    let Some(p) = std::env::var("TUSE_PARENT").ok().filter(|p| !p.is_empty()) else {
-        return Ok(());
-    };
-    meta.parent = p;
-    dir.materialize()?;
-    dir.write_meta(meta);
-    Ok(())
-}
 
 impl Session {
     pub(crate) fn push(&self, st: &mut State, r: Record) {
@@ -33,21 +20,11 @@ impl Session {
         }
     }
 
-    /// Stamps the end of the process in `meta.json`, even when no turn ever ran.
-    pub(crate) fn record_close(&self) {
-        let mut st = self.state.lock().unwrap();
-        st.meta.closed = crate::id::now();
-        if let Some(d) = self.dir.lock().unwrap().as_mut() {
-            d.write_meta(&st.meta);
-        }
-    }
-
     /// Environment of `sh`, tasks and `os.environ`.
     pub fn env(&self) -> Vec<(String, String)> {
         let model = self.state.lock().unwrap().model.clone();
         let mut env = vec![
             ("TUSE_SESSION".into(), self.id.clone()),
-            ("TUSE_PARENT".into(), self.id.clone()),
             ("TUSE_CWD".into(), self.cwd.display().to_string()),
             ("TUSE_MODEL".into(), model),
         ];

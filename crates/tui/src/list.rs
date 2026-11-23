@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::picker::Picker;
-use crate::style::{LIST_SELECTED_PREFIX, MORE, Palette, RULE_CHAR, Style, TRACE_ROLE_WIDTH};
+use crate::style::{LIST_SELECTED_PREFIX, MORE, Palette, RULE_CHAR, Style};
 use crate::text::{Line, clip, line_width, span, width};
 
 /// The look every list and text view shares: a rule on top, a title line (when there
@@ -58,8 +58,6 @@ pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Ve
     pk.follow(rows);
     let inner = w.max(1);
     let mark = width(LIST_SELECTED_PREFIX);
-    let tag_w = pk.items.iter().map(|i| width(&i.tag)).max().unwrap_or(0);
-    let tag_w = tag_w.min(TRACE_ROLE_WIDTH);
     let mut lines: Vec<Line> = vec![];
     if pk.shown.is_empty() {
         lines.push(vec![span("no matches", Style::fg(p.dim))]);
@@ -78,9 +76,6 @@ pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Ve
             " ".repeat(mark)
         };
         let mut line = vec![span(prefix, st)];
-        if tag_w > 0 {
-            line.push(span(format!("{:<tag_w$} ", it.tag), st));
-        }
         let room = inner.saturating_sub(line_width(&line));
         let label = clip(&it.label.replace('\n', " "), room, MORE);
         line.push(span(label, st));

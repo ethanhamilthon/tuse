@@ -1,34 +1,11 @@
-use crate::Mode;
 use crate::host::to_json;
 use std::path::{Path, PathBuf};
 use tuse_config::Config;
 use tuse_lua::mlua::{self, Function, Lua, Table, Value};
 
-/// Sets up the project-only Lua module path and exposes the front end as `TUSE_MODE`.
-pub(crate) fn setup(lua: &Lua, cwd: &Path, mode: Mode) -> mlua::Result<()> {
-    let globals = lua.globals();
-    let mode = mode.name();
-    globals.set("TUSE_MODE", mode)?;
-    let os: Table = globals.get("os")?;
-    let getenv: Function = os.get("getenv")?;
-    os.set(
-        "getenv",
-        lua.create_function(move |lua, name: mlua::LuaString| {
-            if name.as_bytes().as_ref() == b"TUSE_MODE" {
-                Ok(Value::String(lua.create_string(mode)?))
-            } else {
-                getenv.call::<Value>(name)
-            }
-        })?,
-    )?;
-    let package: Table = globals.get("package")?;
-    let cwd = cwd.display();
-    package.set("path", format!("{cwd}/?.lua;{cwd}/?/init.lua"))?;
-    package.set("cpath", "")
-}
-
 /// Builds the config and stages its Lua functions until `commit`.
 pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
+    crate::require::forget(lua).map_err(|e| e.to_string())?;
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     let table = match path {
         Some(p) => read_file(lua, p, &mut Vec::new())?,
@@ -42,7 +19,7 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
         for n in names {
             if entry(&table, key, &n).is_some_and(|t| t.contains_key("modes").unwrap_or(false)) {
                 return Err(format!(
-                    "{name}: {key}.{n}.modes was removed; branch on TUSE_MODE"
+                    "{name}: {key}.{n}.modes was removed; branch on os.getenv(\"TUSE_MODE\")"
                 ));
             }
             if code(&table, key, &n).is_none() {

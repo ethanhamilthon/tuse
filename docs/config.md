@@ -1,18 +1,20 @@
 # Config
 
-Tuse runs `--config PATH`, else `./tuse.lua`, else `$TUSE_GLOBAL_CONFIG` or
-`~/.config/tuse/main.lua`. The file returns a table. The defaults and system prompt are
+Tuse runs `--config PATH`, else `./tuse.lua`, else the global config: `$TUSE_GLOBAL_CONFIG`,
+else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua` (the older `~/.config/tuse/main.lua`
+still works). The file returns a table. The defaults and system prompt are
 built into the binary. `tuse update` never touches your config.
 
 Configuration files execute as Lua code with your user permissions. Only load project
 configs and included files you trust. Hooks and helpers run in the session's Lua VM.
 
 ```lua
-local shared = require("shared")       -- ./shared.lua in the project
-local interactive = TUSE_MODE == "tui"
+local t = require("tuse")              -- host functions and t.env
+local shared = require("shared")       -- ./shared.lua or ./shared/init.lua
+local interactive = t.env.TUSE_MODE == "tui"
 
 return {
-  include = { os.getenv("TUSE_GLOBAL_CONFIG") },
+  include = { t.env.TUSE_GLOBAL_CONFIG },
   model = "c/claude-opus-5-5",
   effort = "medium",
   settings = { retries = 3 },
@@ -29,12 +31,23 @@ return {
 - Files merge in list order, then the including file wins conflicts. `systems` and `models`
   append; the last definition of a model name wins. `settings`, `settings.ui` and `theme`
   merge key by key. Named `prompts`, `functions` and `hooks` replace whole entries on conflict.
-  An unset `TUSE_GLOBAL_CONFIG` makes the example's `include` empty.
-- `require("name")` loads a regular Lua module from the project's working directory
-  (`name.lua` or `name/init.lua`). It does not search beside an external config or include.
-  Lua caches modules loaded with `require`; `/reload` runs config files and includes again.
-- Use `TUSE_MODE` or `os.getenv("TUSE_MODE")` to branch on `tui` or `json` in Lua.
-  This describes the front end; it does not select one. Per-entry `modes` are not supported.
+  Without a global config file `TUSE_GLOBAL_CONFIG` is unset and the example's `include` is empty.
+- `require` loads a Lua module and returns its value (it does not merge config tables; use
+  `include` for that):
+
+  | Call | Loads |
+  | --- | --- |
+  | `require("tuse")` | The host functions (`sh`, `sleep`, `spawn`, `read`, `write`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `json`, `inspect`) and `env`. |
+  | `require("name")` | `./name.lua`, else `./name/init.lua`, from the session's working directory (`a.b` is `a/b`). |
+  | `require("global")` | The global config: `$TUSE_GLOBAL_CONFIG`, else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. |
+  | `require("~/path")` | `~/path.lua`, else `~/path/init.lua`. An absolute `/path` works the same. |
+  | `require("~/path/file.lua")` | That file. A relative `dir/file.lua` is from the working directory. |
+
+  Lua caches modules; `/reload` forgets the ones loaded from files and runs everything again.
+- `require("tuse").env.NAME` is `os.getenv(NAME)`, with Tuse's variables (`TUSE_MODE`,
+  `TUSE_CWD`, `TUSE_GLOBAL_CONFIG`, ...; see [env](env.md)). `TUSE_MODE` is `tui` or `json`: it
+  describes the front end, it does not select one. It is no longer a Lua global. Per-entry
+  `modes` are not supported.
 
 ## Keys
 

@@ -70,11 +70,11 @@ return {{
         if e.event == "user_message" and e.is_first then set_title("hook " .. e.text) end
       end,
     }},
-    tui_only = TUSE_MODE == "tui" and {{
+    tui_only = os.getenv("TUSE_MODE") == "tui" and {{
       events = {{"process_start", "process_end", "user_message"}},
       run = function(e) append("{}", e.event) end,
     }} or nil,
-    hl_only = TUSE_MODE == "json" and {{
+    hl_only = require("tuse").env.TUSE_MODE == "json" and {{
       events = {{"process_start", "process_end"}},
       run = function(e) append("{}", e.event .. " " .. e.reason) end,
     }} or nil,

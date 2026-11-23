@@ -17,7 +17,7 @@ an event does not set are `nil`. A hook listening to an unknown event shows a no
 ```lua
 return {
   hooks = {
-    notify = TUSE_MODE == "tui" and {
+    notify = os.getenv("TUSE_MODE") == "tui" and {
       events = {"agent_message"},
       run = function(e)
         if e.status == "finished" then sh("say done") end

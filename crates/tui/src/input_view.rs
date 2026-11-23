@@ -95,10 +95,8 @@ mod tests {
         let mut app = crate::app::test_app("input-atoms");
         app.input_cols = 60;
         app.editor.insert("#typed ");
-        app.editor.insert_atom(
-            "#review",
-            crate::editor::AtomKind::Prompt("review".into()),
-        );
+        app.editor
+            .insert_atom("#review", crate::editor::AtomKind::Prompt("review".into()));
         app.editor.insert(" x");
         let (rows, _) = app.editor.layout(60);
         let out = block(&app, 80, &rows, 0);

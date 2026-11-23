@@ -22,7 +22,7 @@ USAGE
   tuse version | tuse help
 
 The config is --config, else ./tuse.lua, else $TUSE_GLOBAL_CONFIG, else
-~/.config/tuse/main.lua: a Lua file that returns a table.";
+~/.config/tuse.lua or ~/.config/tuse/init.lua: a Lua file that returns a table.";
 
 fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();

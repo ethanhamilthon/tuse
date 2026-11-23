@@ -51,8 +51,7 @@ tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name ope
 
 `tuse update` replaces the binary without touching your config. You can also build from
 source with `cargo install --locked --git https://github.com/ethanhamilthon/tuse tuse`,
-or run `make install` from a checkout. The defaults are built in; copying
-[main.lua](release/main.lua) to `~/.config/tuse/` is optional.
+or run `make install` from a checkout. The defaults are built in.
 
 ## Usage
 
@@ -65,7 +64,7 @@ tuse providers | tuse disconnect NAME     list | remove providers
 tuse update                              update the binary
 ```
 
-`--config` picks the config file (else `./tuse.lua`, else the global `main.lua`). `--resume ID`
+`--config` picks the config file (else `./tuse.lua`, else the global config). `--resume ID`
 opens a saved session: the ID is printed to stderr when Tuse exits.
 
 The agent's tool is `lua(code)`, a persistent Lua 5.4 VM with these functions:
@@ -119,14 +118,15 @@ Files, prompts and images are one unit in the input: arrows and Backspace move o
 
 ## Config
 
-Tuse runs `--config PATH`, else `./tuse.lua`, else `$TUSE_GLOBAL_CONFIG` or `~/.config/tuse/main.lua`.
-See [docs/config.md](docs/config.md) for every key.
+Tuse runs `--config PATH`, else `./tuse.lua`, else the global config (`$TUSE_GLOBAL_CONFIG`,
+`~/.config/tuse.lua` or `~/.config/tuse/init.lua`). See [docs/config.md](docs/config.md) for every key.
 
 ```lua
-local shared = require("shared")       -- shared.lua in the working directory
+local t = require("tuse")              -- sh, read, edit... and t.env.TUSE_MODE
+local shared = require("shared")       -- ./shared.lua or ./shared/init.lua
 
 return {
-  include = { os.getenv("TUSE_GLOBAL_CONFIG") }, -- optional external config
+  include = { t.env.TUSE_GLOBAL_CONFIG }, -- optional: merge the global config
   model = "x/claude-sonnet-5-5",
   effort = "high",                     -- default | low | medium | high | xhigh | max
   systems = shared.systems,

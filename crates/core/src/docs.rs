@@ -42,7 +42,7 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "plugins",
-        "Plugins from GitHub: plugins = {...}, opts, merging, tuse plugins",
+        "Plugins from GitHub: plugins = {...}, opts, merging, Git checkouts",
         include_str!("../../../docs/plugins.md"),
     ),
     (

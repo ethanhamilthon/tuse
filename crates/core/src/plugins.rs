@@ -176,7 +176,15 @@ fn load(lua: &Lua, e: &Entry) -> Result<Table, String> {
     let p = &e.plugin;
     let Some(file) = p.entry() else {
         return Err(if p.url.is_some() && !p.root.exists() {
-            "not installed; run `tuse plugins install`".into()
+            format!(
+                "not checked out; run `git clone {} {}`{}, see docs(\"plugins\")",
+                p.url.as_deref().unwrap_or_default(),
+                p.root.display(),
+                p.git_ref
+                    .as_deref()
+                    .map(|r| format!(" and `git -C {} checkout {r}`", p.root.display()))
+                    .unwrap_or_default()
+            )
         } else {
             format!("no init.lua or tuse.lua in {}", p.dir().display())
         });
@@ -197,41 +205,4 @@ fn load(lua: &Lua, e: &Entry) -> Result<Table, String> {
         Value::Nil => lua.create_table().map_err(|e| e.to_string()),
         _ => Err("a plugin returns a table or function(opts) returning one".into()),
     }
-}
-
-/// The config file the session would load and the plugins it lists (plugins are not run).
-pub fn configured(
-    cwd: &Path,
-    config: Option<&Path>,
-) -> Result<Option<(std::path::PathBuf, Vec<Plugin>)>, String> {
-    let Some(path) = tuse_config::find(config, cwd) else {
-        return Ok(None);
-    };
-    let host = crate::host::SessionHost {
-        slot: crate::host::Slot::default(),
-        cwd: cwd.to_path_buf(),
-    };
-    let vm = tuse_lua::Vm::new(std::sync::Arc::new(host), |_| {});
-    let (slot, dir, p) = (
-        crate::host::Slot::default(),
-        cwd.to_path_buf(),
-        path.clone(),
-    );
-    let list = vm.call(move |lua| {
-        crate::host::install(lua, slot).map_err(|e| tuse_lua::message(&e))?;
-        lua.set_app_data(crate::snapshot::LoadCtx {
-            mode: crate::Mode::Json,
-            cwd: dir.clone(),
-            configpath: Some(p.display().to_string()),
-            loading: true,
-        });
-        crate::require::install(lua, &dir).map_err(|e| tuse_lua::message(&e))?;
-        let Value::Table(t) = crate::config_lua::eval_file(lua, &p)? else {
-            return Ok(vec![]);
-        };
-        let base = p.parent().unwrap_or(Path::new("."));
-        let list = entries(&t, base).map_err(|e| format!("{}: {e}", p.display()))?;
-        Ok::<_, String>(list.into_iter().map(|e| e.plugin).collect())
-    })?;
-    Ok(Some((path, list)))
 }

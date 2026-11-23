@@ -1,6 +1,6 @@
 # Plugins
 
-A plugin is a Lua file in a git repository that returns a config table. Tuse validates each plugin
+A plugin is a Lua file in a git checkout that returns a config table. Tuse validates each plugin
 individually and merges plugins under your own config.
 
 ```lua
@@ -55,22 +55,22 @@ in `tuse json` returns them as `plugins`.
 
 ## Installing
 
-Clones live in `~/.tuse/plugins`, one per repository. Starting Tuse never touches the network: a
-missing clone is an error that points to `tuse plugins install`.
+Tuse never touches the network: startup reads plugins from checkouts on disk, and a missing
+checkout is an error that shows the `git clone` command to run. Manage checkouts with Git and
+declare them in `tuse.lua`.
 
-```
-tuse plugins                        list the plugins of the config and their commits
-tuse plugins add NAME [--ref REF]   clone NAME and add it to the config
-tuse plugins remove NAME            remove the entry (the clone stays until `clean`)
-tuse plugins install                clone what is missing, check out each `ref`
-tuse plugins update [NAME]          fetch and fast-forward the clones
-tuse plugins clean                  delete clones no plugin uses
+A GitHub entry `owner/repo[/path]` lives in `~/.tuse/plugins/owner/repo`; a git URL lives in
+`~/.tuse/plugins/HOST/OWNER/REPO`.
+
+```sh
+git clone https://github.com/owner/repo ~/.tuse/plugins/owner/repo   # install
+git -C ~/.tuse/plugins/owner/repo checkout v1.2.0                     # pin to the entry's ref
+git -C ~/.tuse/plugins/owner/repo pull --ff-only                      # update
+rm -rf ~/.tuse/plugins/owner/repo                                     # remove the checkout
 ```
 
-Every subcommand takes `-c/--config PATH`. Without it, the subcommand uses the config Tuse would
-load: `./tuse.lua`, then `~/.config/tuse.lua`, then `~/.config/tuse/init.lua`. `add` creates
-`~/.config/tuse/init.lua` when no config exists. When the config does not return a literal table
-(for example `return g`), `add` prints the lines to paste by hand.
+Then add (or remove) the entry in `plugins` in your `tuse.lua` and run `/reload`. For a plugin you
+develop locally, skip the clone and use `{ "name", dir = "~/code/my-plugin" }`.
 
 ## Bundled: welcome
 

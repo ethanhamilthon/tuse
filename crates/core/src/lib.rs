@@ -46,7 +46,6 @@ pub use hooks::EVENTS;
 pub use input::{FILE_LIMIT, Refs, build as build_input};
 pub use models::model_available;
 pub use open::openable_url;
-pub use plugins::configured as configured_plugins;
 pub use record::{FileDiff, Record, UserInput};
 pub use session::{Mode, Options, Session, Start};
 pub use snapshot::{ModelInfoSnapshot, PricesSnapshot, SessionSnapshot, UsageSnapshot};

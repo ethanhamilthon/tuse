@@ -10,7 +10,6 @@
 - `tuse providers` lists providers; `tuse disconnect NAME` removes one.
 - `tuse models` lists model metadata from the effective Lua config and the default model/effort from SQLite.
 - `tuse init` creates `./tuse.lua` that starts from the global config (`require("global")`).
-- `tuse plugins ...` manages [plugins](plugins.md).
 - `tuse update` updates the binary without touching your config.
 
 ## TUI

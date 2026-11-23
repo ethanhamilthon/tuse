@@ -22,8 +22,7 @@ USAGE
                                            verify and save an API provider
   tuse disconnect NAME                    remove a provider
   tuse providers                          list the providers
-  tuse models [list|use|set|remove|import]
-                                          manage default model/effort and model metadata in SQLite
+  tuse models                             list configured model metadata and the saved default
   tuse init                               create ./tuse.lua that extends the global config
   tuse plugins [list|add NAME [--ref R]|remove NAME|install|update [NAME]|clean] [-c PATH]
                                           manage plugins (see docs/plugins.md)

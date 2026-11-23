@@ -3,7 +3,6 @@ mod common;
 use common::Reply;
 use serde_json::json;
 use std::time::{Duration, Instant};
-use tuse_config::{ModelDef, Prices};
 use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
 
 fn wait_turn(rx: &std::sync::mpsc::Receiver<Event>) {
@@ -49,20 +48,6 @@ return #s2.trace
         api_key: "sk-super-secret".into(),
     })
     .unwrap();
-    tuse_core::set_model_def(&ModelDef {
-        name: "p/m".into(),
-        display: "M".into(),
-        window: 100_000,
-        compact_at: Some(60_000),
-        prices: Some(Prices {
-            input: 2.0,
-            output: 10.0,
-            cache_read: 0.2,
-            cache_write: 2.5,
-        }),
-    })
-    .unwrap();
-
     let opened_log = dir.join("opened.txt");
     let sample = dir.join("notes/README.MD");
     std::fs::create_dir_all(sample.parent().unwrap()).unwrap();
@@ -71,6 +56,8 @@ return #s2.trace
         &cfg,
         format!(
             r#"return {{
+  models = {{{{ name = "p/m", display = "M", window = 100000, compact_at = 60000,
+    prices = {{ input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 }} }}}},
   open = {{
     md = function(path)
       local f = assert(io.open("{}", "a"))
@@ -109,7 +96,7 @@ return #s2.trace
     // Resume and run turn 2 which asserts every field of `tuse.session()` in Lua.
     let s2 = Session::open(Options {
         cwd: dir.clone(),
-        config: Some(cfg),
+        config: Some(cfg.clone()),
         mode: Mode::Json,
         resume: Some(id),
         start: Start::Resume,
@@ -179,6 +166,15 @@ return #s2.trace
         "{errs:?}"
     );
 
+    let old_cost = snap.usage.unwrap().cost.unwrap();
+    let original = std::fs::read_to_string(&cfg).unwrap();
+    let doubled = original.replace(
+        "input = 2, output = 10, cache_read = 0.2, cache_write = 2.5",
+        "input = 4, output = 20, cache_read = 0.4, cache_write = 5",
+    );
+    std::fs::write(&cfg, doubled).unwrap();
+    s2.reload().unwrap();
+    assert!((s2.stats().cost - old_cost * 2.0).abs() < 1e-9);
     s2.close();
     common::cleanup(&dir);
 }

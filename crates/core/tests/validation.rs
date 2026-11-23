@@ -22,7 +22,18 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
         ("return { model = 'p/m' }", "model: was removed"),
         ("return { provider = 'p' }", "provider: was removed"),
         ("return { effort = 'high' }", "effort: was removed"),
-        ("return { models = {} }", "models: was removed"),
+        (
+            "return { models = { { name = 'm' } } }",
+            "models[1].name: expected a provider/model name",
+        ),
+        (
+            "return { models = { { name = 'p/m', windo = 1 } } }",
+            "models[1].windo: unknown key",
+        ),
+        (
+            "return { models = { { name = 'p/m', prices = { input = -1 } } } }",
+            "models[1].prices.input: expected a finite non-negative number",
+        ),
         ("return { unknown_top = 1 }", "unknown_top: unknown key"),
         (
             "return { settings = { nope = 1 } }",

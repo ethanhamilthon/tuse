@@ -51,11 +51,12 @@ return g
 
 | Key | Meaning |
 | --- | --- |
-| `settings.compact_at` | Context size (tokens) that triggers compaction. Unset: 60% of the model's `window` when known; `0` disables it. A per-model `compact_at` in SQLite wins. |
+| `settings.compact_at` | Context size (tokens) that triggers compaction. Unset: 60% of the model's `window` when known; `0` disables it. A per-model `compact_at` wins. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
 | `settings.retries` | Retries for 429, 5xx and network errors (0-100). Default 5. |
 | `settings.ui` | UI behavior; see [theme](theme.md). |
 | `theme` | The 10 base colors; see [theme](theme.md). |
+| `models` | Model metadata: a list of tables keyed by `name = "provider/model"`; see below. |
 | `systems` | List of strings appended to the built-in system prompt. |
 | `prompts` | Map of names to strings for [the `#` picker](prompts.md). |
 | `functions` | Map of named Lua helpers with `run`, `description`, optional `args` and `show_agent`. See [functions](functions.md). |
@@ -67,7 +68,7 @@ return g
 ## Validation
 
 Tuse validates both the user config and each plugin strictly before applying changes on startup
-and `/reload`. Unknown keys, removed keys (`include`, `model`, `provider`, `effort`, `models`,
+and `/reload`. Unknown keys, removed keys (`include`, `model`, `provider`, `effort`,
 `*.modes`), wrong types, out-of-range settings, invalid theme colors, and malformed `hooks`,
 `commands`, or `open` handlers fail with diagnostics that include the source file or plugin and
 the full key path. If `/reload` fails, the previous working config, modules, and callbacks remain
@@ -75,15 +76,35 @@ active.
 
 ## Providers, models, and history
 
-Providers, default model/effort selection, and model metadata live in SQLite (`~/.tuse/tuse.db`),
-not in `tuse.lua`:
+Providers and the last model/effort selection live in SQLite (`~/.tuse/tuse.db`). Use
+`tuse connect --base URL --key '$ENV' --name NAME`, `tuse providers`, and `tuse disconnect NAME`
+to manage providers. Pick the model and effort in `/models`; resumed sessions keep their own
+selection.
 
-- Providers: `tuse connect --base URL --key '$ENV' --name NAME`, `tuse providers`, `tuse disconnect NAME`.
-- Model selection and metadata: `/models` in the TUI, or `tuse models [list|use|set|remove|import]`
-  (see [commands](commands.md)).
-- Migrating an existing 0.8.x config: run `tuse models import [PATH]` to copy `model`, `provider`,
-  `effort`, and `models` from your old `tuse.lua` into SQLite, then remove those keys from
-  `tuse.lua`. Saved sessions keep their own active model/effort record and resume cleanly.
+Model metadata lives in the `models` list in your Lua config. The old 0.9.0 SQLite metadata is
+no longer read. Put the list inline or keep it in `models.lua` next to your config:
+
+```lua
+-- init.lua (or tuse.lua)
+return { models = require("models") }
+```
+
+```lua
+-- models.lua
+return {
+  {
+    name = "my-provider/my-model",
+    display = "My Model",
+    window = 200000,
+    compact_at = 120000,
+    prices = { input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 },
+  },
+}
+```
+
+Only `name` is required. `window` and `compact_at` are in tokens, and `prices` are USD per
+million tokens. Run `tuse models` to inspect the effective config or `/reload` to apply changes
+to a running session.
 
 Compaction only changes what the model receives, not the saved log. It keeps recent context
 intact, shortens older tool outputs, and keeps only the user/assistant text further back.

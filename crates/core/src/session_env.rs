@@ -66,8 +66,7 @@ impl Session {
         if let Some(d) = self.dir.lock().unwrap().as_mut() {
             d.append(&r);
         }
-        let models = st.stats.1.clone();
-        st.stats.0.add(&r, &models);
+        st.stats.0.add(&r, &st.stats.1);
         st.records.push(r);
     }
 

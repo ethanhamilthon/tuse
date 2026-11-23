@@ -141,12 +141,12 @@ impl Session {
         let (model_full, effort) = self.model();
         let name = self.title();
         let stats = self.stats();
-        let def = self.model_def(&model_full);
+        let def = config.model_def(&model_full);
         let provider = {
             let p = split_model(&model_full).0;
             (!p.is_empty()).then(|| p.to_string())
         };
-        let ctx_size = def.as_ref().filter(|d| d.window > 0).map(|d| d.window);
+        let ctx_size = def.filter(|d| d.window > 0).map(|d| d.window);
         let trace = include_trace.then(|| self.trace());
         SessionSnapshot {
             mode: self.mode.name(),
@@ -167,7 +167,7 @@ impl Session {
                 cache_write: stats.totals.cache_write,
                 cost: stats.priced.then_some(stats.cost),
             }),
-            model_info: def.as_ref().map(Into::into),
+            model_info: def.map(Into::into),
             steps: Some(stats.steps),
             turns: Some(stats.turns),
             trace,

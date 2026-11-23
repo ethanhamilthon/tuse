@@ -11,6 +11,7 @@ pub struct Config {
     pub settings: Settings,
     /// The 10 colors of the UI.
     pub theme: Theme,
+    pub models: Vec<ModelDef>,
     pub systems: Vec<String>,
     pub prompts: BTreeMap<String, String>,
     pub functions: BTreeMap<String, Function>,
@@ -68,7 +69,7 @@ impl Default for Settings {
     }
 }
 
-/// Model metadata stored in SQLite (`tuse models`).
+/// Metadata for a configured `provider/model`.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct ModelDef {
@@ -144,6 +145,11 @@ impl Config {
         self.connect.iter().find(|c| c.name == name)
     }
 
+    /// Last definition wins when a user config overrides a plugin.
+    pub fn model_def(&self, full: &str) -> Option<&ModelDef> {
+        self.models.iter().rev().find(|m| m.name == full)
+    }
+
     /// The model's `compact_at`, else `settings.compact_at`, else 60% of the model's window.
     pub fn compact_at(&self, def: Option<&ModelDef>) -> u64 {
         compact_at(def, self.settings.compact_at)
@@ -154,31 +160,13 @@ impl Config {
 pub fn compact_at(def: Option<&ModelDef>, setting: Option<u64>) -> u64 {
     def.and_then(|m| m.compact_at)
         .or(setting)
-        .unwrap_or_else(|| def.map_or(0, |m| m.window * 6 / 10))
+        .unwrap_or_else(|| def.map_or(0, |m| (u128::from(m.window) * 6 / 10) as u64))
 }
 
 pub fn display_name(def: Option<&ModelDef>, full: &str) -> String {
     match def {
         Some(m) if !m.display.is_empty() => m.display.clone(),
         _ => full.to_string(),
-    }
-}
-
-pub fn full_model_name(model: &str, provider: &str, connect: &[Connect]) -> String {
-    if let Some((p, _)) = model.split_once('/')
-        && connect.iter().any(|c| c.name == p)
-    {
-        return model.to_string();
-    }
-    let provider = if provider.is_empty() {
-        connect.first().map(|c| c.name.as_str()).unwrap_or("")
-    } else {
-        provider
-    };
-    if provider.is_empty() {
-        model.to_string()
-    } else {
-        format!("{provider}/{model}")
     }
 }
 

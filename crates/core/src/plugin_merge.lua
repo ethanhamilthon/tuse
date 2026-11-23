@@ -2,7 +2,7 @@
 local list, user = ...
 local maps = { prompts = true, functions = true, hooks = true, commands = true, open = true }
 local deep = { settings = true, theme = true }
-local lists = { systems = true }
+local lists = { systems = true, models = true }
 
 local function merge(dst, src)
     for k, v in pairs(src) do

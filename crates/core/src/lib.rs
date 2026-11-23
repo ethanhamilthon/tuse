@@ -16,7 +16,6 @@ mod id;
 mod input;
 mod mode;
 mod models;
-mod models_import;
 mod open;
 mod plugins;
 mod prompt;
@@ -36,18 +35,16 @@ mod ui;
 mod usage;
 mod validate;
 mod validate_entries;
+mod validate_models;
 
+pub use config_lua::configured_models;
 pub use control::InputId;
-pub use db::{
-    add_provider, default_effort, default_model, model_def, models, providers, remove_model_def,
-    remove_provider, set_model_def, set_state,
-};
+pub use db::{add_provider, default_effort, default_model, providers, remove_provider, set_state};
 pub use docs::docs;
 pub use event::{Event, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 pub use hooks::EVENTS;
 pub use input::{FILE_LIMIT, Refs, build as build_input};
 pub use models::model_available;
-pub use models_import::{ImportReport, import_legacy_models};
 pub use open::openable_url;
 pub use plugins::configured as configured_plugins;
 pub use record::{FileDiff, Record, UserInput};

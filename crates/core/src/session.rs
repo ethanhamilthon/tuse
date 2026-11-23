@@ -57,7 +57,7 @@ pub(crate) struct State {
     pub partial: String,
     /// Models the providers have reported.
     pub remote: Vec<String>,
-    /// Totals of `records` and the DB model defs whose prices they use.
+    /// Totals of `records` and the model defs whose prices they use.
     pub stats: (crate::usage::Stats, Vec<ModelDef>),
 }
 
@@ -84,7 +84,7 @@ impl Session {
             }
         };
         let mut dir = SessionDir::open(&id, !restored)?;
-        let (vm, weak, config) = start_vm(&opts)?;
+        let (vm, weak, config) = crate::config_lua::start_vm(&opts)?;
         let mut records = dir.records();
         for r in history::missing_results(&records) {
             dir.append(&r);
@@ -136,7 +136,7 @@ impl Session {
                 _ => {}
             }
         }
-        let models = crate::db::models();
+        let models = config.models.clone();
         st.stats = (crate::usage::Stats::of(&records, &models), models);
         st.records = records;
         let config = Arc::new(config);
@@ -213,33 +213,4 @@ impl Session {
         self.start_hook("reload", false, false);
         Ok(())
     }
-}
-
-/// The session's VM with the config loaded. The session is not built yet, so the VM
-/// gets a slot that `open` fills.
-fn start_vm(opts: &Options) -> Result<(tuse_lua::Vm, crate::host::Slot, Config), String> {
-    let slot = crate::host::Slot::default();
-    let cwd = opts.cwd.clone();
-    let mode = opts.mode;
-    let host = crate::host::SessionHost {
-        slot: slot.clone(),
-        cwd: cwd.clone(),
-    };
-    let vm = tuse_lua::Vm::new(Arc::new(host), |_| {});
-    let path = tuse_config::find(opts.config.as_deref(), &cwd);
-    let s2 = slot.clone();
-    let config = vm.call(move |lua| {
-        crate::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
-        lua.set_app_data(crate::snapshot::LoadCtx {
-            mode,
-            cwd: cwd.clone(),
-            configpath: path.as_ref().map(|p| p.display().to_string()),
-            loading: false,
-        });
-        crate::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
-        let config = crate::config_lua::prepare(lua, path.as_deref())?;
-        crate::config_lua::commit(lua, &config)?;
-        Ok::<_, String>(config)
-    })?;
-    Ok((vm, slot, config))
 }

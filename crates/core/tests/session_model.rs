@@ -14,7 +14,7 @@ fn open(cfg: &Path, cwd: &Path, resume: Option<String>) -> std::sync::Arc<Sessio
 }
 
 #[test]
-fn a_session_keeps_its_model_and_imports_legacy_settings() {
+fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     let dir = std::env::temp_dir().join(format!("tuse-model-{}", std::process::id()));
     std::fs::remove_dir_all(&dir).ok();
     let home = dir.join("home");
@@ -29,32 +29,32 @@ fn a_session_keeps_its_model_and_imports_legacy_settings() {
         api_key: "k".into(),
     })
     .unwrap();
-    // Migration path: import legacy model/effort/models from an old tuse.lua into SQLite.
-    let legacy = dir.join("old.lua");
+    let cfg = dir.join("tuse.lua");
+    let models = dir.join("models.lua");
     std::fs::write(
-        &legacy,
-        r#"return {
-            provider = "p",
-            model = "a",
-            effort = "high",
-            models = {
-                {
-                    name = "p/a",
-                    display = "Model A",
-                    window = 200000,
-                    compact_at = 120000,
-                    prices = { ["in"] = 3, out = 15, cache = 0.3, cache_write = 3.75 },
-                },
-            },
-        }"#,
+        &cfg,
+        "return { models = require('models'), settings = { retries = 0 } }",
     )
     .unwrap();
-    let report = tuse_core::import_legacy_models(&legacy).unwrap();
-    assert_eq!(report.model.as_deref(), Some("p/a"));
-    assert_eq!(report.effort.as_deref(), Some("high"));
-    assert_eq!(report.models, ["p/a"]);
+    std::fs::write(
+        &models,
+        r#"return {{
+        name = "p/a",
+        display = "Model A",
+        window = 200000,
+        compact_at = 120000,
+        prices = { ["in"] = 3, out = 15, cache = 0.3, cache_write = 3.75 },
+    }}"#,
+    )
+    .unwrap();
+    tuse_core::set_state("model", "p/a").unwrap();
+    tuse_core::set_state("effort", "high").unwrap();
+    let s = open(&cfg, &dir, None);
+    assert_eq!(s.model(), ("p/a".into(), "high".into()));
+    assert_eq!(s.available_models(), ["p/a"]);
+    assert_eq!(s.snapshot(false).ctx_size, Some(200_000));
     assert_eq!(
-        tuse_core::model_def("p/a"),
+        s.model_def("p/a"),
         Some(ModelDef {
             name: "p/a".into(),
             display: "Model A".into(),
@@ -68,11 +68,6 @@ fn a_session_keeps_its_model_and_imports_legacy_settings() {
             }),
         })
     );
-
-    let cfg = dir.join("tuse.lua");
-    std::fs::write(&cfg, "return { settings = { retries = 0 } }").unwrap();
-    let s = open(&cfg, &dir, None);
-    assert_eq!(s.model(), ("p/a".into(), "high".into()));
     let id = s.id.clone();
     // The session is stored with its first message; a turn that fails is enough.
     let events = s.subscribe();
@@ -84,8 +79,10 @@ fn a_session_keeps_its_model_and_imports_legacy_settings() {
     // Changing the DB default does not affect the live session or its resumed state.
     tuse_core::set_state("model", "p/b").unwrap();
     tuse_core::set_state("effort", "low").unwrap();
+    std::fs::write(&models, "return {{ name = 'p/a', window = 300000 }}").unwrap();
     s.reload().unwrap();
     assert_eq!(s.model(), ("p/a".into(), "high".into()));
+    assert_eq!(s.snapshot(false).ctx_size, Some(300_000));
     s.close();
     let again = open(&cfg, &dir, Some(id.clone()));
     assert_eq!(again.model(), ("p/a".into(), "high".into()));

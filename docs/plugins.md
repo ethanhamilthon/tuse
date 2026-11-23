@@ -44,11 +44,11 @@ end
 
 Plugins load and validate in list order, then your config goes on top.
 
-- `systems` is concatenated, plugins first.
+- `systems` and `models` are concatenated, plugins first. The last definition of a model wins.
 - `prompts`, `functions`, `hooks`, `commands`, and `open` merge by name. If two plugins use the
   same name, that is an error. Your config silently overrides a plugin.
 - `settings` and `theme` merge deeply, with your values winning.
-- Plugins cannot set `plugins`, unknown keys, or removed keys (`model`, `provider`, `effort`, `models`).
+- Plugins cannot set `plugins`, unknown keys, or removed keys (`model`, `provider`, `effort`).
 
 `/config` lists the loaded plugins with their `ref`, commit (or `local`) and folder; `config.get`
 in `tuse json` returns them as `plugins`.

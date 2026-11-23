@@ -34,20 +34,6 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
             getenv.call::<Value>(name)
         })?,
     )?;
-    // Point old configs that read `TUSE_MODE` as a global to `require("tuse").session().mode`.
-    let meta = lua.create_table()?;
-    meta.set(
-        "__index",
-        lua.create_function(|_, (_, k): (Value, Value)| {
-            if matches!(&k, Value::String(s) if s.as_bytes().as_ref() == b"TUSE_MODE") {
-                return Err::<Value, _>(mlua::Error::runtime(
-                    "TUSE_MODE was removed; use require(\"tuse\").session().mode",
-                ));
-            }
-            Ok(Value::Nil)
-        })?,
-    )?;
-    g.set_metatable(Some(meta))?;
     crate::config_lua::install_env(lua, HOST)?;
     let package: Table = g.get("package")?;
     package.set("path", "")?;

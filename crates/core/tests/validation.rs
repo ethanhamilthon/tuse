@@ -18,10 +18,8 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
     };
 
     let bad_cases = [
-        ("return { include = { 'x.lua' } }", "include: was removed"),
-        ("return { model = 'p/m' }", "model: was removed"),
-        ("return { provider = 'p' }", "provider: was removed"),
-        ("return { effort = 'high' }", "effort: was removed"),
+        ("return { include = { 'x.lua' } }", "include: unknown key"),
+        ("return { model = 'p/m' }", "model: unknown key"),
         (
             "return { models = { { name = 'm' } } }",
             "models[1].name: expected a provider/model name",
@@ -41,7 +39,7 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
         ),
         (
             "return { settings = { retries = 'x' } }",
-            "settings.retries: expected integer",
+            "settings.retries: invalid type: string \"x\", expected i64",
         ),
         (
             "return { settings = { ui = { scroll_step = 0 } } }",
@@ -57,20 +55,15 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
         ),
         (
             "return { theme = { bogus = 'red' } }",
-            "theme.bogus: unknown color token",
-        ),
-        ("return { systems = { a = 'x' } }", "systems: expected list"),
-        (
-            "return { hooks = { h = { events = {'process_start'}, run = function() end } } }",
-            "hooks.h.events[1]: event `process_start` was renamed to `start`",
+            "theme.bogus: unknown key",
         ),
         (
-            "return { hooks = { h = { events = {'process_end'}, run = function() end } } }",
-            "hooks.h.events[1]: event `process_end` was renamed to `close`",
+            "return { systems = { a = 'x' } }",
+            "systems: expected a list",
         ),
         (
             "return { hooks = { h = { events = {'bogus'}, run = function() end } } }",
-            "hooks.h.events[1]: unknown event `bogus`",
+            "hooks.h.events: unknown event `bogus`",
         ),
         (
             "return { hooks = { h = { events = {}, run = function() end } } }",
@@ -82,11 +75,11 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
         ),
         (
             "return { functions = { f = { description = 'ok', modes = {'tui'}, run = function() end } } }",
-            "functions.f.modes: was removed",
+            "functions.f.modes: unknown key",
         ),
         (
             "return { commands = { session = function() end } }",
-            "commands.session: cannot override built-in",
+            "commands: `session`: cannot override built-in",
         ),
         (
             "return { commands = { bad = 1 } }",
@@ -94,7 +87,7 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
         ),
         (
             "return { open = { ['.md'] = function() end } }",
-            "open..md: extension must not start with `.`",
+            "open: `.md`: extension must not start with `.`",
         ),
         (
             "return { open = { md = 'nope' } }",

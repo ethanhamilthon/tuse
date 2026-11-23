@@ -43,7 +43,7 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
         display = "Model A",
         window = 200000,
         compact_at = 120000,
-        prices = { ["in"] = 3, out = 15, cache = 0.3, cache_write = 3.75 },
+        prices = { input = 3, output = 15, cache_read = 0.3, cache_write = 3.75 },
     }}"#,
     )
     .unwrap();

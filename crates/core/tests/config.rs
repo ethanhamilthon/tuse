@@ -60,7 +60,7 @@ fn require_session_validation_and_reload_rollback() {
         local util = require('util')
         local sub = require('sub.mod')
         assert(util.origin == 'shared' and sub.leaf == 'leaf' and sub.rex == rex)
-        assert(t.env == nil, 'tuse.env was removed')
+        assert(t.env == nil)
         assert(os.getenv('TUSE_MODE') == nil and os.getenv('TUSE_SESSION') == nil)
         assert(os.getenv('CUSTOM_USER_VAR') == 'kept_val')
         local s = t.session()
@@ -71,7 +71,7 @@ fn require_session_validation_and_reload_rollback() {
         local sh_out = t.sh('printf "%s|%s|%s" "${TUSE_MODE:-none}" "${TUSE_SESSION:-none}" "$CUSTOM_USER_VAR"').out
         assert(sh_out == 'none|none|kept_val', 'sh env: ' .. sh_out)
         assert(t.read('fixture.txt') == 'from config')
-        assert(not pcall(function() return TUSE_MODE end))
+        assert(TUSE_MODE == nil)
         local dir = os.getenv('THIS_PATH'):match('(.*)/[^/]+$')
         assert(require(dir .. '/lib') == 'lib.lua wins')
         assert(require(dir .. '/lib/file.lua') == 'lib file')

@@ -11,13 +11,18 @@ pub struct Config {
     pub settings: Settings,
     /// The 10 colors of the UI.
     pub theme: Theme,
+    #[serde(deserialize_with = "crate::de::list")]
     pub models: Vec<ModelDef>,
+    #[serde(deserialize_with = "crate::de::list")]
     pub systems: Vec<String>,
     pub prompts: BTreeMap<String, String>,
+    #[serde(deserialize_with = "crate::de::functions")]
     pub functions: BTreeMap<String, Function>,
     pub hooks: BTreeMap<String, Hook>,
+    #[serde(deserialize_with = "crate::de::commands")]
     pub commands: Vec<String>,
     /// File extensions (without leading dot) handled by `open` callbacks.
+    #[serde(deserialize_with = "crate::de::open")]
     pub open: Vec<String>,
     /// The config file, empty when there is none; filled by the loader.
     #[serde(skip_deserializing)]
@@ -51,9 +56,14 @@ pub struct Connect {
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
     /// Unset: 60% of the model's `window` when it is known; `0` turns compaction off.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::de::opt_u64"
+    )]
     pub compact_at: Option<u64>,
+    #[serde(deserialize_with = "crate::de::int::<_, _, 1, { i64::MAX }>")]
     pub max_image_bytes: usize,
+    #[serde(deserialize_with = "crate::de::int::<_, _, 0, 100>")]
     pub retries: usize,
     pub ui: UiSettings,
 }
@@ -71,34 +81,43 @@ impl Default for Settings {
 
 /// Metadata for a configured `provider/model`.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
-#[serde(default)]
+#[serde(deny_unknown_fields)]
 pub struct ModelDef {
+    #[serde(deserialize_with = "crate::de::model_name")]
     pub name: String,
+    #[serde(default)]
     pub display: String,
+    #[serde(default)]
     pub window: u64,
+    #[serde(default)]
     pub prices: Option<Prices>,
+    #[serde(default)]
     pub compact_at: Option<u64>,
 }
 
 /// Prices in dollars per 1M tokens.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Prices {
-    #[serde(alias = "in")]
+    #[serde(deserialize_with = "crate::de::price")]
     pub input: f64,
-    #[serde(alias = "out")]
+    #[serde(deserialize_with = "crate::de::price")]
     pub output: f64,
-    #[serde(alias = "cache")]
+    #[serde(deserialize_with = "crate::de::price")]
     pub cache_read: f64,
+    #[serde(deserialize_with = "crate::de::price")]
     pub cache_write: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct Function {
+    #[serde(default)]
     pub args: String,
+    #[serde(deserialize_with = "crate::de::non_empty")]
     pub description: String,
     /// `false` keeps the function out of the agent's prompt and docs; code can still call it.
+    #[serde(default = "yes")]
     pub show_agent: bool,
 }
 
@@ -112,9 +131,14 @@ impl Default for Function {
     }
 }
 
+fn yes() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct Hook {
+    #[serde(deserialize_with = "crate::de::events")]
     pub events: Vec<String>,
 }
 

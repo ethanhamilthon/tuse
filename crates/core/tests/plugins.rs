@@ -101,11 +101,6 @@ fn plugins_load_with_opts_and_merge_under_the_user() {
         r#"{ "dev", dir = "local" }, { "dev2", dir = "local" }"#,
         "both define prompts.dev",
     );
-    fs::write(local.join("tuse.lua"), "return { model = 'x' }").unwrap();
-    fails(
-        r#"{ "dev", dir = "local" }"#,
-        "plugin dev: model: was removed",
-    );
     fs::write(local.join("tuse.lua"), "return { typo_key = 1 }").unwrap();
     fails(
         r#"{ "dev", dir = "local" }"#,

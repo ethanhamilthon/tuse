@@ -112,11 +112,7 @@ fn grep(lua: &Lua, (pattern, o): (String, Option<Table>)) -> mlua::Result<String
 }
 
 fn grep_paths(o: &Table) -> mlua::Result<Vec<String>> {
-    let raw = match o.get::<Value>("path")? {
-        Value::Nil => o.get::<Value>("paths")?,
-        v => v,
-    };
-    match raw {
+    match o.get::<Value>("path")? {
         Value::Nil => Ok(vec![]),
         Value::String(s) => Ok(vec![s.to_str()?.to_string()]),
         Value::Table(t) => {

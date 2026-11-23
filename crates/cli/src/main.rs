@@ -2,8 +2,6 @@ mod args;
 mod connect;
 mod init;
 mod models;
-mod plugins;
-mod plugins_edit;
 mod update;
 
 use args::Args;
@@ -24,8 +22,6 @@ USAGE
   tuse providers                          list the providers
   tuse models                             list configured model metadata and the saved default
   tuse init                               create ./tuse.lua that extends the global config
-  tuse plugins [list|add NAME [--ref R]|remove NAME|install|update [NAME]|clean] [-c PATH]
-                                          manage plugins (see docs/plugins.md)
   tuse update                             update the binary
   tuse version | tuse help
 
@@ -56,7 +52,6 @@ fn run(raw: Vec<String>) -> Result<(), String> {
         "models" => models::run(rest),
         "json" => json(&Args::parse(rest, &["--config", "-c", "--resume", "-r"])?),
         "init" => init::run(rest),
-        "plugins" => plugins::run(rest),
         "update" => update::update(),
         "version" | "--version" | "-V" => {
             println!("tuse {}", env!("CARGO_PKG_VERSION"));

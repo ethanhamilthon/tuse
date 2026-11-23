@@ -92,7 +92,10 @@ fn plugins_load_with_opts_and_merge_under_the_user() {
         let err = open(&dir, &cfg).err().unwrap();
         assert!(err.contains(want), "{err}");
     };
-    fails(r#""me/missing""#, "plugin me/missing: not installed");
+    fails(
+        r#""me/missing""#,
+        "plugin me/missing: not checked out; run `git clone https://github.com/me/missing.git",
+    );
     fails(r#"{ "me/kit", opt = {} }"#, "plugins[1].opt: unknown key");
     fails(
         r#"{ "dev", dir = "local" }, { "dev2", dir = "local" }"#,

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 - The agent's tool is `lua(code, title, timeout)`: Lua 5.4 (mlua) instead of Python (Monty). The model picks the timeout of each call, with no upper limit; `settings.tool_timeout` is the default.
 - Nothing is cut: tool output, `sh().out` and task logs are kept whole. `settings.max_output` is gone.

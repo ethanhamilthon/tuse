@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.2
+
+- **Breaking:** Removed `tuse plugins`. Manage plugin checkouts with Git in `~/.tuse/plugins` and declare them in `tuse.lua`; a missing checkout prints the `git clone` to run. Startup stays offline.
+- **Breaking:** Renamed `show_markdown`, `show_picker`, and `show_question` to `show`, `pick`, and `ask`.
+- **Breaking:** Dropped pre-0.9.0 migrations: `include`, `model`, `provider`, `effort`, `*.modes`, `process_start`/`process_end`, `TUSE_MODE`, price aliases `in`/`out`/`cache`, and grep `paths` now fail as unknown keys or are ignored.
+- New Lua functions: `reload()` (same reload as `/reload`; deferred until a hook returns when called from one) and `llm(prompt, model, effort)` for tool-less requests. `llm()` cost is tracked as `$llm`; `session().usage.cost` is `$main + $llm` and `/session` shows both.
+- `/new` and `/resume` are transactional: an invalid config or a locked session fails before the current session closes.
+- A successful reload removes config helpers the new config dropped and updates the rest; agent globals stay. A failed reload changes nothing.
+- CLI: every command handles `-h`/`--help` first and rejects unknown flags and extra arguments; `tuse models` accepts `-c/--config`.
+- JSON-RPC: `initialize` rejects unsupported `protocolVersion` (omitted means 1); `config.set` is validated like `model.set` and deprecated; `model.list {cached: true}` reads without fetching; new `reloaded` event. Docs add a capability table and the `ui.cancel` contract.
+- Config validation runs once through serde with full key paths (`models[2].prices.input: ...`); `{}` is an empty list on any list field.
+- Token counts use one compact format (`200k`, `1.5m`) everywhere.
+- `tuse update` verifies and unpacks releases in-process (no `sha256sum`/`tar`).
+
 ## 0.9.1
 
 - Restored the Lua `models` list for model display names, context windows, prices, and compaction thresholds. Model metadata from the 0.9.0 database is no longer used; put it in the config. SQLite still remembers the selected model and effort.

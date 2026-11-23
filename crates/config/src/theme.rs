@@ -41,8 +41,6 @@ impl Default for Theme {
 pub struct UiSettings {
     /// `lines`, `box`, `fill` or `bar`.
     pub input_design: String,
-    /// `false` turns the working gradient animation off.
-    pub motion: bool,
     /// `true` folds multiline Lua long strings (`[[...]]`) in chat tool calls.
     pub fold_strings: bool,
     /// Lines shown per block: `0` hides it, `-1` removes the limit.
@@ -62,7 +60,6 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             input_design: "lines".into(),
-            motion: true,
             fold_strings: true,
             tool_line: -1,
             diff_line: 12,

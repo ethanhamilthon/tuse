@@ -1,5 +1,4 @@
 use crate::app::App;
-use crate::motion::Motion;
 use crate::status;
 use crate::style::{
     BAR_CHAR, BOX_CHARS, EDGE_BOTTOM, EDGE_TOP, INPUT_PREFIX, MORE, Palette, RULE_CHAR,
@@ -43,11 +42,6 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
         .map(|(text, _)| text.clone())
         .unwrap_or_else(|| status::working(app));
     let model = status::model(app);
-    let motion = app
-        .session
-        .turn_info()
-        .and_then(|(elapsed, _)| Motion::new(p, true, elapsed));
-    let m = motion.as_ref();
     let mark = scroll_mark(app.scroll);
     // A search typed into the editor is not the queued message.
     let steering = app.steering.is_some() && app.saved_editor.is_none();
@@ -61,14 +55,7 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
     let mut out = vec![];
     match p.ui.input_design.as_str() {
         "box" => {
-            out.push(border(
-                p,
-                w,
-                (BOX_CHARS[0], BOX_CHARS[1]),
-                &mark,
-                &working,
-                m,
-            ));
+            out.push(border(p, w, (BOX_CHARS[0], BOX_CHARS[1]), &mark, &working));
             let side = Style::fg(p.border);
             out.extend(body(&|_, _| {
                 (
@@ -76,34 +63,28 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
                     vec![span(BOX_CHARS[4], side)],
                 )
             }));
-            out.push(border(p, w, (BOX_CHARS[2], BOX_CHARS[3]), "", &model, m));
+            out.push(border(p, w, (BOX_CHARS[2], BOX_CHARS[3]), "", &model));
         }
         "fill" => {
-            out.push(edge(p, w, EDGE_TOP, m));
+            out.push(edge(p, w, EDGE_TOP));
             out.extend(body(&|_, _| (vec![], vec![])));
-            out.push(edge(p, w, EDGE_BOTTOM, m));
+            out.push(edge(p, w, EDGE_BOTTOM));
             out.push(status_row(p, w, 0, &join(&mark, &working), &model));
         }
         "bar" => {
-            let n = rows.len().max(1);
-            let bar = |i: usize| {
-                let color = m
-                    .and_then(|m| m.along((i as f32 + 0.5) / n as f32))
-                    .or(p.accent);
-                span(format!("{BAR_CHAR} "), Style::fg(color))
-            };
+            let bar = || span(format!("{BAR_CHAR} "), Style::fg(p.accent));
             out.extend(
                 rows.iter()
                     .enumerate()
-                    .map(|(i, r)| row(p, fr, w, i, r, steering, (vec![bar(i)], vec![]))),
+                    .map(|(i, r)| row(p, fr, w, i, r, steering, (vec![bar()], vec![]))),
             );
             out.push(vec![]);
             out.push(status_row(p, w, 0, &join(&mark, &working), &model));
         }
         _ => {
-            out.push(border(p, w, ("", ""), &mark, &working, m));
+            out.push(border(p, w, ("", ""), &mark, &working));
             out.extend(body(&|_, _| (vec![], vec![])));
-            out.push(border(p, w, ("", ""), "", &model, m));
+            out.push(border(p, w, ("", ""), "", &model));
         }
     }
     for (line, (a, b)) in out.iter_mut().skip(fr.head).zip(
@@ -164,14 +145,7 @@ fn row(
 }
 
 /// A rule with corners; `left` and `label` sit at its two ends.
-fn border(
-    p: &Palette,
-    w: usize,
-    corners: (&str, &str),
-    left: &str,
-    label: &str,
-    m: Option<&Motion>,
-) -> Line {
+fn border(p: &Palette, w: usize, corners: (&str, &str), left: &str, label: &str) -> Line {
     let inner = w.saturating_sub(width(corners.0) + width(corners.1));
     // A framed border keeps a space between the label and the corner.
     let tail = if corners.1.is_empty() { "" } else { " " };
@@ -187,11 +161,8 @@ fn border(
         span(left, Style::fg(p.dim)),
     ];
     let rw = width(RULE_CHAR).max(1);
-    let mut x = width(corners.0) + width(left);
     for _ in 0..fill / rw {
-        let color = m.and_then(|m| m.at(x)).or(p.border);
-        line.push(span(RULE_CHAR, Style::fg(color)));
-        x += rw;
+        line.push(span(RULE_CHAR, Style::fg(p.border)));
     }
     line.push(span(label, Style::fg(p.accent)));
     line.push(span(corners.1, Style::fg(p.border)));
@@ -199,13 +170,8 @@ fn border(
 }
 
 /// The half-block row above or below a filled input.
-fn edge(p: &Palette, w: usize, ch: &str, m: Option<&Motion>) -> Line {
-    (0..w)
-        .map(|x| {
-            let color = m.and_then(|m| m.at(x)).or(p.surface);
-            span(ch, Style::fg(color))
-        })
-        .collect()
+fn edge(p: &Palette, w: usize, ch: &str) -> Line {
+    vec![span(ch.repeat(w), Style::fg(p.surface))]
 }
 
 /// The status row under the input: working on the left, the model on the right.

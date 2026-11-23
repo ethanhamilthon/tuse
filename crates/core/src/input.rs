@@ -3,26 +3,17 @@ use base64::Engine;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-/// Text files longer than this are cut when attached.
 pub const FILE_LIMIT: usize = 1024;
 
-/// What a message refers to besides its text.
 #[derive(Debug, Default)]
 pub struct Refs {
-    /// Prompts as `(name, body)`; repeats of a name are dropped.
     pub prompts: Vec<(String, String)>,
-    /// `[Image #N]` placeholders as `(N, path)`.
     pub images: Vec<(usize, PathBuf)>,
-    /// Files; images among them are attached like pictures.
     pub files: Vec<PathBuf>,
-    /// Fail on unreadable files instead of skipping them.
     pub strict: bool,
-    /// Relative paths are read from here; they are shown as given.
     pub cwd: PathBuf,
 }
 
-/// Builds a message: `text` stays as typed, the prompts, images and files go
-/// to `context` as XML blocks, and the pictures to `images` as `data:` URLs.
 pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
     let mut input = UserInput::text(text);
     let mut blocks: Vec<String> = vec![];
@@ -97,7 +88,6 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
     Ok(input)
 }
 
-/// A folder's entries, sorted, folders with a trailing `/`, cut at `FILE_LIMIT` bytes.
 fn list_dir(path: &Path) -> std::io::Result<String> {
     let mut names: Vec<String> = std::fs::read_dir(path)?
         .flatten()
@@ -124,7 +114,6 @@ fn list_dir(path: &Path) -> std::io::Result<String> {
     Ok(esc(&out))
 }
 
-/// The first `FILE_LIMIT` bytes as text (`None` for a binary file) and the file size.
 fn read_head(path: &Path) -> std::io::Result<(Option<String>, u64)> {
     let file = std::fs::File::open(path)?;
     let meta = file.metadata()?;
@@ -137,7 +126,6 @@ fn read_head(path: &Path) -> std::io::Result<(Option<String>, u64)> {
     let cut = size as usize > buf.len();
     let text = match std::str::from_utf8(&buf) {
         Ok(s) => Some(s.to_string()),
-        // An unfinished character at the cut is not an error.
         Err(e) if cut && e.error_len().is_none() => {
             Some(String::from_utf8_lossy(&buf[..e.valid_up_to()]).into_owned())
         }
@@ -220,7 +208,6 @@ mod tests {
     fn text_files_are_cut_on_a_utf8_boundary() {
         let small = tmp("s.txt", b"hi\n");
         let exact = tmp("e.txt", "x".repeat(FILE_LIMIT).as_bytes());
-        // 1023 ASCII bytes then a 2-byte char straddling the limit.
         let big = tmp(
             "b.txt",
             format!("{}é tail", "x".repeat(FILE_LIMIT - 1)).as_bytes(),

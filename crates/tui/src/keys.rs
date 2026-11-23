@@ -171,8 +171,6 @@ impl App {
     }
 
     pub(super) fn finish_edit(&mut self, before: Option<Vec<char>>) {
-        // The editor is a search box or answer input: queued messages stay queued and
-        // `/`, `@`, `#` are plain text.
         if self.searching() {
             let q = self.editor.text();
             if let Some(p) = &mut self.picker {
@@ -275,7 +273,6 @@ mod tests {
     #[test]
     fn editing_withdraws_only_the_waiting_tui_message() {
         crate::app::test_home();
-        // Hold the first request open so the worker cannot take the steering messages.
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let dir = std::env::temp_dir().join(format!("tuse-steering-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -339,7 +336,6 @@ mod tests {
         assert_ne!(edited, waiting);
         assert!(session.withdraw_input(edited));
 
-        // An edit after the queue no longer contains the ID must survive a late User event.
         app.paste("?");
         app.handle_event(Event::User {
             id: edited,
@@ -410,7 +406,6 @@ mod tests {
             .filter(|&i| matches!(app.chat.get_mut(i), Some(crate::chat::Entry::Assistant(_))))
             .count();
         assert_eq!(texts, 1);
-        // Without streaming the final text still shows up once.
         app.handle_event(Event::Assistant {
             text: "Done.".into(),
         });

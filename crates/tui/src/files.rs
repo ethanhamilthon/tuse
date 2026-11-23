@@ -1,8 +1,5 @@
 use std::path::Path;
 
-/// Entries of `root/dir` as paths relative to `root` (folders end with `/`),
-/// skipping `.git`. `dir` is empty or ends with `/`; an absolute or `~/` `dir`
-/// is listed as is, and the entries keep it as their prefix.
 pub fn list(root: &Path, dir: &str, max: usize) -> Vec<String> {
     let Ok(rd) = std::fs::read_dir(tuse_config::resolve_path(dir, root)) else {
         return vec![];
@@ -21,8 +18,6 @@ pub fn list(root: &Path, dir: &str, max: usize) -> Vec<String> {
         .collect()
 }
 
-/// The file a picked `@` value points at: `~/x` is put under the home folder,
-/// other values stay as they are (relative ones are read from the working directory).
 pub fn path(value: &str) -> std::path::PathBuf {
     if value.starts_with("~/") {
         tuse_config::resolve_path(value, Path::new(""))
@@ -31,7 +26,6 @@ pub fn path(value: &str) -> std::path::PathBuf {
     }
 }
 
-/// Splits an `@` query into the directory to list and its filename filter.
 pub fn split(query: &str) -> (&str, &str) {
     if query == "~" {
         return ("~/", "");

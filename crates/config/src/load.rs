@@ -2,7 +2,6 @@ use crate::types::Config;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-/// `--config PATH`, else `./tuse.lua`, else the global config.
 pub fn find(explicit: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
     find_in(explicit, cwd, crate::global_path())
 }
@@ -19,8 +18,6 @@ pub(crate) fn find_in(
     if local.is_file() { Some(local) } else { global }
 }
 
-/// Builds the config from the table a config file returned (as JSON, functions left out).
-/// `name` labels the errors.
 pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
     if value.as_array().is_some_and(Vec::is_empty) || value.is_null() {
         value = Value::Object(Default::default());

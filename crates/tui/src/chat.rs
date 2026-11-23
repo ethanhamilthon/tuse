@@ -39,16 +39,12 @@ pub enum Entry {
     },
 }
 
-/// Wrapped lines of an entry and the width they were wrapped to.
 type Cache = Option<(usize, Vec<Line>)>;
 
-/// Chat entries with their wrapped lines cached per width.
 #[derive(Default)]
 pub struct Chat {
     pub(crate) entries: Vec<(Entry, Cache)>,
-    /// Pinned `show` blocks rendered together at the end of the chat.
     pub(crate) pinned: Vec<(String, String, Cache)>,
-    /// The reply that is changing (streaming) and its rendered finished blocks.
     hot: Option<usize>,
     stream: Option<crate::md_stream::Prefix>,
 }
@@ -172,9 +168,6 @@ impl Chat {
         &cache.as_ref().unwrap().1
     }
 
-    /// Returns only the visible `height` lines ending `scroll` lines above the bottom,
-    /// plus the clamped `scroll`. Entries are rendered from the bottom up until the
-    /// screen is full, so older ones stay unrendered after a resize or a theme change.
     pub fn window(
         &mut self,
         width: usize,
@@ -184,7 +177,6 @@ impl Chat {
     ) -> (Vec<Line>, usize) {
         let gap = p.ui.message_gap as usize;
         let need = scroll + height;
-        // Lines from the bottom: pinned blocks last in chat (so first here), then entries.
         let mut rev: Vec<Line> = Vec::with_capacity(need);
         for i in (0..self.pinned.len()).rev() {
             if rev.len() >= need {
@@ -269,7 +261,6 @@ enum Transient {
 }
 
 impl Chat {
-    /// Builds chat history plus live transient UI items (kept across `/reload`, not resume).
     pub fn from_session(session: &Session) -> Chat {
         let snap = session.ui_snapshot();
         let mut transient: Vec<(usize, u64, Transient)> = vec![];
@@ -335,8 +326,6 @@ impl Chat {
         chat
     }
 
-    /// Creates, updates, moves (pin/unpin), or removes a named Markdown block.
-    /// Returns the removed index in `entries` when an unpinned entry is removed.
     pub fn set_markdown(
         &mut self,
         name: String,
@@ -444,7 +433,6 @@ mod tests {
         assert_eq!(rows.len(), 2);
         c.invalidate();
         assert!(c.entries.iter().all(|(_, cache)| cache.is_none()));
-        // Bottom-up rendering gives the same rows as slicing the whole chat.
         c.push(Entry::Assistant("a\n\nb\n\nc".into()));
         c.push(Entry::Reasoning(String::new()));
         c.push(Entry::Error("e".into()));
@@ -470,7 +458,6 @@ mod tests {
                 "scroll {scroll}"
             );
         }
-        // Older entries stay unrendered when the screen is full.
         c.invalidate();
         c.window(40, &p, 0, 1);
         assert!(c.entries[0].1.is_none());

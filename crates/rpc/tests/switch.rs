@@ -1,4 +1,3 @@
-//! A failed `session.new` keeps the current session working.
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 use common::Reply;

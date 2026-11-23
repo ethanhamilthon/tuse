@@ -78,7 +78,6 @@ return #s2.trace
     )
     .unwrap();
 
-    // First session: complete turn 1 with a long message so trace truncation would show up.
     let s1 = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg.clone()),
@@ -93,7 +92,6 @@ return #s2.trace
     let id = s1.id.clone();
     s1.close();
 
-    // Resume and run turn 2 which asserts every field of `tuse.session()` in Lua.
     let s2 = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg.clone()),
@@ -106,7 +104,6 @@ return #s2.trace
     s2.submit(UserInput::text("verify"));
     wait_turn(&rx2);
 
-    // Full untruncated trace includes resumed history and full 400-char hook/user entries.
     let snap = s2.snapshot(true);
     assert_eq!(snap.turns, Some(2));
     assert_eq!(snap.steps, Some(3));
@@ -128,7 +125,6 @@ return #s2.trace
             .any(|t| t.role == "agent" && t.text == "second reply")
     );
 
-    // `open` callback matches case-insensitively and receives resolved local path.
     s2.open_path(std::path::Path::new("notes/README.MD"));
     let dl = Instant::now() + Duration::from_secs(3);
     while Instant::now() < dl && !opened_log.exists() {
@@ -139,7 +135,6 @@ return #s2.trace
         sample.canonicalize().unwrap().display().to_string()
     );
 
-    // Missing file and crashing opener report errors in the UI (`Event::Error`).
     s2.open_path(std::path::Path::new("notes/missing.md"));
     let bad_file = dir.join("x.bad");
     std::fs::write(&bad_file, "x").unwrap();

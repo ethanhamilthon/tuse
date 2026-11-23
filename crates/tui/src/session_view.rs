@@ -1,5 +1,3 @@
-//! Styled `/session` panel showing every field from `tuse.session()` except `trace`.
-
 use crate::panel::Panel;
 use crate::style::{Palette, Style};
 use crate::text::{Line, span};

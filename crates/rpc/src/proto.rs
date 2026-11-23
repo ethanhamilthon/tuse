@@ -1,13 +1,10 @@
-//! JSON-RPC 2.0 framing: one message per line.
 use serde_json::{Value, json};
 
 pub const PARSE: i64 = -32700;
 pub const INVALID: i64 = -32600;
 pub const NO_METHOD: i64 = -32601;
 pub const PARAMS: i64 = -32602;
-/// Errors that come from the session ("busy", "no task t3", ...).
 pub const SESSION: i64 = -32000;
-/// A method before `initialize`.
 pub const NOT_READY: i64 = -32002;
 
 pub struct Fail(pub i64, pub String);
@@ -24,13 +21,11 @@ impl Fail {
 pub type Reply = Result<Value, Fail>;
 
 pub struct Request {
-    /// `None` for a notification, which gets no answer.
     pub id: Option<Value>,
     pub method: String,
     pub params: Value,
 }
 
-/// A line from the client, or the error to answer with (and the id, when known).
 pub fn parse(line: &str) -> Result<Request, (Value, Fail)> {
     let v: Value = serde_json::from_str(line)
         .map_err(|e| (Value::Null, Fail(PARSE, format!("parse error: {e}"))))?;

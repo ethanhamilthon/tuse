@@ -1,5 +1,3 @@
-//! Typed helpers that emit each hook event with its event-only payload.
-
 use crate::session::Session;
 use serde_json::{Value, json};
 use std::sync::Arc;

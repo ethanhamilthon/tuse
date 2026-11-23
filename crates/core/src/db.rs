@@ -1,8 +1,6 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::{Mutex, OnceLock};
 
-/// `~/.tuse/tuse.db`: sessions, their records, providers and the last choices.
-/// One connection per process and per tuse home, opened on first use.
 static DB: OnceLock<Mutex<Vec<(std::path::PathBuf, Connection)>>> = OnceLock::new();
 
 const SCHEMA: &str = "
@@ -30,7 +28,6 @@ CREATE TABLE IF NOT EXISTS state (
 );
 ";
 
-/// Runs `f` on the database of the current `~/.tuse`; errors become strings.
 pub fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, String> {
     let home = tuse_config::tuse_home();
     let mut all = DB.get_or_init(Mutex::default).lock().unwrap();
@@ -79,7 +76,6 @@ pub fn default_effort() -> String {
     }
 }
 
-/// Providers saved by `tuse connect`.
 pub fn providers() -> Vec<tuse_config::Connect> {
     with(|c| {
         let mut q = c.prepare("SELECT name, base_url, api_key FROM providers ORDER BY rowid")?;

@@ -4,8 +4,6 @@ use mlua::{IntoLuaMulti, Lua, MultiValue, Value};
 use std::collections::HashMap;
 use std::time::Instant;
 
-/// The coroutines of a VM. It lives in the VM's app data, and no borrow of it
-/// is held while Lua code runs, so host functions can reach the running job.
 #[derive(Default)]
 pub struct Sched {
     jobs: Vec<Job>,
@@ -50,7 +48,6 @@ impl Sched {
     }
 }
 
-/// `(true, value)` resumes a waiting coroutine with a result, `(false, msg)` with an error.
 fn reply(lua: &Lua, r: Result<Value, String>) -> MultiValue {
     match r {
         Ok(v) => (true, v).into_lua_multi(lua),
@@ -73,7 +70,6 @@ pub fn sh_value(lua: &Lua, o: ShOut) -> Value {
     t().unwrap_or(Value::Nil)
 }
 
-/// Resumes every job whose wait is over. Returns false when nothing was ready.
 pub fn tick(lua: &Lua) -> bool {
     let ready = {
         let Some(mut s) = lua.app_data_mut::<Sched>() else {
@@ -166,8 +162,6 @@ fn resume(lua: &Lua, mut job: Job) {
     }
 }
 
-/// What a coroutine waits for: `coroutine.yield(SCHED, kind, arg)` from `sleep` or `sh`.
-/// A bare `coroutine.yield()` at the top of a job only lets the others run.
 fn parse_wait(lua: &Lua, vals: &MultiValue, job: &mut Job) -> Wait {
     let marker: Option<mlua::Table> = lua.named_registry_value("tuse.sched").ok();
     let is_sched = matches!((vals.front(), &marker), (Some(Value::Table(t)), Some(m)) if t == m);

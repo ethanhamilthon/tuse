@@ -1,7 +1,3 @@
-//! The Lua 5.4 runtime of a session: one VM on its own thread and a scheduler of
-//! coroutines (the agent's calls, hooks and tasks). `sh` and `sleep` yield, so the
-//! other coroutines keep running while one waits.
-
 mod api;
 mod job;
 mod sched;
@@ -18,25 +14,19 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-/// A task started by `spawn`: its ID, its log and the flag that stops it.
 pub struct TaskStart {
     pub id: String,
     pub log: PathBuf,
     pub cancel: Arc<AtomicBool>,
 }
 
-/// What the VM needs from its owner.
 pub trait Host: Send + Sync + 'static {
-    /// The working directory of `sh`.
     fn cwd(&self) -> PathBuf;
-    /// A command `sh` starts, for the working indicator.
     fn action(&self, _what: &str) {}
     fn task_start(&self, name: &str, from_lua_hook: bool) -> Result<TaskStart, String>;
-    /// Runs on the VM thread when a task ends.
     fn task_end(&self, id: &str, done: Done);
 }
 
-/// A Lua error as the agent reads it: the message, then the traceback.
 pub fn message(e: &mlua::Error) -> String {
     match e {
         mlua::Error::CallbackError { traceback, cause } => {

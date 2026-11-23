@@ -1,7 +1,6 @@
 use serde::de::{Deserialize, Deserializer, Error};
 use std::collections::BTreeMap;
 
-/// A list field: Lua's `{}` arrives as an empty map, so that is an empty list too.
 pub fn list<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Vec<T>, D::Error> {
     struct V<T>(std::marker::PhantomData<T>);
     impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for V<T> {
@@ -26,7 +25,6 @@ pub fn list<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Vec<
     d.deserialize_any(V(std::marker::PhantomData))
 }
 
-/// An integer in `MIN..=MAX`.
 pub fn int<'de, D, T, const MIN: i64, const MAX: i64>(d: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
@@ -45,7 +43,6 @@ pub fn opt_u64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error>
     int::<D, u64, 0, { i64::MAX }>(d).map(Some)
 }
 
-/// `-1` (no limit) or at least `1`.
 pub fn rows<'de, D: Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
     let n = int::<D, i32, -1, { i32::MAX as i64 }>(d)?;
     if n == 0 {

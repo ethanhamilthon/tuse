@@ -84,7 +84,6 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         "a task runs while sh waits: {head}"
     );
     assert!(output.contains("stopped\tstopped"), "{head}");
-    // Nothing is cut.
     assert!(
         output.contains("big\t100000") && output.ends_with(&"y".repeat(10000)),
         "{}",
@@ -103,7 +102,6 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         std::fs::read_to_string(dir.join("a.txt")).unwrap(),
         "one\n2\n3[lit]\n"
     );
-    // A function called as a tool of its own is refused with a hint.
     assert!(
         tools[1].0.contains("the only tool is `lua`"),
         "{}",
@@ -136,7 +134,6 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
             ("long".into(), "stopped".into())
         ]
     );
-    // The task that finished told the agent.
     let told = |r: &Record| matches!(r, Record::Notification { text } if text.contains("Task t1 (bg) finished"));
     assert!(all.iter().any(told), "{all:?}");
     s.close();

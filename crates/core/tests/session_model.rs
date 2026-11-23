@@ -19,7 +19,6 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     std::fs::remove_dir_all(&dir).ok();
     let home = dir.join("home");
     std::fs::create_dir_all(&home).unwrap();
-    // SAFETY: this file holds one test, so nothing else reads the environment meanwhile.
     unsafe {
         std::env::set_var("HOME", &home);
     }
@@ -69,14 +68,12 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
         })
     );
     let id = s.id.clone();
-    // The session is stored with its first message; a turn that fails is enough.
     let events = s.subscribe();
     s.submit(tuse_core::UserInput::text("hi"));
     while !matches!(
         events.recv_timeout(std::time::Duration::from_secs(10)),
         Ok(tuse_core::Event::TurnEnd { .. }) | Err(_)
     ) {}
-    // Changing the DB default does not affect the live session or its resumed state.
     tuse_core::set_state("model", "p/b").unwrap();
     tuse_core::set_state("effort", "low").unwrap();
     std::fs::write(&models, "return {{ name = 'p/a', window = 300000 }}").unwrap();
@@ -90,7 +87,6 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     let fresh = open(&cfg, &dir, None);
     assert_eq!(fresh.model(), ("p/b".into(), "low".into()));
     fresh.close();
-    // A session closed before its first message leaves nothing.
     assert!(!home.join(".tuse").join(&fresh.id).exists());
     assert!(
         tuse_core::list_sessions(&dir)

@@ -12,8 +12,6 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 use tuse_config::{Config, ModelDef};
 
-/// One conversation. A process holds at most one open session, and a session
-/// can be open in one process only (`SessionDir` holds a file lock).
 pub struct Session {
     pub id: String,
     pub cwd: PathBuf,
@@ -24,18 +22,14 @@ pub struct Session {
     pub(crate) config_arg: Option<PathBuf>,
     pub(crate) state: Mutex<State>,
     pub(crate) subs: Mutex<Subs>,
-    /// The VM of the session: config, the agent's code, hooks and tasks.
     pub(crate) vm: tuse_lua::Vm,
-    /// Whether hooks still fire; off once the session closes.
     pub(crate) hooks_on: AtomicBool,
-    /// Hook runs still going: per-hook lane.
     pub(crate) hook_runs: crate::hooks::Runs,
     pub(crate) ui: Mutex<crate::ui::UiState>,
     pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,
     pub(crate) http: tuse_api::HttpAgent,
     pub(crate) next_lua: AtomicU64,
     pub(crate) task_lua: Mutex<HashMap<String, (String, Instant)>>,
-    /// One reload at a time; `reload()` from a hook sets `reload_after_hook`.
     pub(crate) reload_lock: Mutex<()>,
     pub(crate) reload_after_hook: AtomicBool,
 }
@@ -53,19 +47,14 @@ pub(crate) struct State {
     pub next_input: u64,
     pub turn_start: Instant,
     pub calls: usize,
-    /// What the agent is doing now; the working indicator shows it.
     pub status: String,
     pub context: u64,
     pub meta: Meta,
-    /// Assistant text streamed in the current step; `agent_message` gets it on a cancel.
     pub partial: String,
-    /// Models the providers have reported.
     pub remote: Vec<String>,
-    /// Totals of `records` and the model defs whose prices they use.
     pub stats: (crate::usage::Stats, Vec<ModelDef>),
 }
 
-/// A session whose lock, VM and config are ready; `start` cannot fail.
 pub(crate) struct Prepared {
     opts: Options,
     id: String,
@@ -221,8 +210,6 @@ impl Session {
         format!("lua-{n}")
     }
 
-    /// Stops the turn and tasks, fires `close` with `reason` (`exit`, `new`, `resume`),
-    /// waits for those hooks while keeping the session readable, and releases the lock.
     pub fn close_for(self: &Arc<Self>, reason: &'static str) {
         if self.dir.lock().unwrap().is_none() {
             return;
@@ -243,9 +230,6 @@ impl Session {
         self.config.read().unwrap().1.clone()
     }
 
-    /// Runs and validates the config file again in the same VM (agent globals stay):
-    /// if validation fails, the previous config and callbacks stay active.
-    /// Otherwise `close` runs on old hooks, then `start` (`reason = "reload"`) on new hooks.
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
         let _one = self.reload_lock.lock().unwrap();
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
@@ -271,7 +255,6 @@ impl Session {
         self.dir.lock().unwrap().is_some()
     }
 
-    /// Resolves configured prompt names into `(name, body)` pairs.
     pub fn resolve_prompts(
         &self,
         names: &[String],
@@ -289,16 +272,12 @@ impl Session {
         Ok(out)
     }
 
-    /// Stops a background task and notifies front ends.
     pub fn stop_task(&self, id: &str) -> Result<TaskInfo, String> {
         let t = self.tasks.stop(id)?;
         self.emit(Event::Tasks);
         Ok(t)
     }
 
-    /// Prepares a new (`resume: None`) or saved (`resume: Some(id)`) session, then closes this
-    /// one and starts it. Any failure (missing or locked session, invalid config) happens
-    /// before the close, so this session stays open and keeps its work.
     pub fn switch(self: &Arc<Self>, resume: Option<String>) -> Result<Arc<Session>, String> {
         if resume.as_deref() == Some(self.id.as_str()) {
             return Err(format!("session {} is already open", self.id));

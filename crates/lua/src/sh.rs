@@ -6,15 +6,12 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-/// What `sh` gives back.
 pub struct ShOut {
     pub out: String,
-    /// `None` when the process was killed.
     pub code: Option<i32>,
     pub timed_out: bool,
 }
 
-/// A running `bash -c`, stdout and stderr merged into one buffer.
 pub struct Proc {
     child: Child,
     buf: Arc<Mutex<Vec<u8>>>,
@@ -38,10 +35,6 @@ impl Proc {
             .stdin(Stdio::null())
             .stdout(writer.try_clone().map_err(fail)?)
             .stderr(writer);
-        // A new session, not just a process group: without a controlling terminal
-        // a command like `zsh -i` cannot take the foreground and stop Tuse (SIGTTIN).
-        // The group ID is still the child's PID, so `kill_group` keeps working.
-        // SAFETY: `setsid` is async-signal-safe and touches no memory.
         unsafe {
             c.pre_exec(|| {
                 if libc::setsid() == -1 {
@@ -74,7 +67,6 @@ impl Proc {
         })
     }
 
-    /// `Some` once the process has ended (or was killed at its deadline).
     pub fn poll(&mut self) -> Option<ShOut> {
         let timed_out = self.deadline.is_some_and(|d| Instant::now() >= d);
         let status = match self.child.try_wait() {
@@ -89,7 +81,6 @@ impl Proc {
         Some(self.finish(status.and_then(|s| s.code()), timed_out))
     }
 
-    /// Waits for the end, checking `stop` (a cancel or a timeout) between polls.
     pub fn wait(mut self, stop: impl Fn() -> bool) -> ShOut {
         loop {
             if stop() {
@@ -109,7 +100,6 @@ impl Proc {
     }
 
     fn finish(&mut self, code: Option<i32>, timed_out: bool) -> ShOut {
-        // Background children may keep the pipe open; take what has arrived then.
         if let Some(r) = self.reader.take() {
             let until = Instant::now() + std::time::Duration::from_millis(200);
             while !r.is_finished() && Instant::now() < until {
@@ -135,7 +125,6 @@ impl Drop for Proc {
 
 pub fn kill_group(pid: u32) {
     if let Ok(pid) = libc::pid_t::try_from(pid) {
-        // SAFETY: `kill` takes plain integers; a stale group fails with ESRCH and nothing happens.
         unsafe {
             libc::kill(-pid, libc::SIGKILL);
         }

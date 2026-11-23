@@ -1,7 +1,6 @@
 use time::OffsetDateTime;
 use time::macros::format_description;
 
-/// `20261119T004924.125476000Z-7136dd19e3fc184d`: UTC time plus 8 random bytes.
 pub fn new_session_id() -> String {
     let now = OffsetDateTime::now_utc();
     let f = format_description!("[year][month][day]T[hour][minute][second].[subsecond digits:9]Z");
@@ -11,7 +10,6 @@ pub fn new_session_id() -> String {
     format!("{}-{hex}", now.format(f).unwrap_or_default())
 }
 
-/// RFC 3339 UTC timestamp with seconds precision.
 pub fn now() -> String {
     let f = format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z");
     OffsetDateTime::now_utc().format(f).unwrap_or_default()

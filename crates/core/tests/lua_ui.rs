@@ -61,14 +61,12 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     })
     .unwrap();
     let rx = s.subscribe();
-    // Interactive process_start hook is waiting on a question: reload must NOT deadlock!
     let hreq = next_req(&rx);
     assert!(matches!(hreq.prompt, UiPrompt::Question { .. }));
     let t0 = Instant::now();
     s.reload().unwrap();
     assert!(t0.elapsed() < Duration::from_secs(3), "reload deadlocked");
 
-    // Enqueue two custom commands back-to-back: FIFO ordering, one active at a time.
     s.run_command("ask_flow").unwrap();
     let r1 = next_req(&rx);
     assert_eq!(
@@ -81,7 +79,6 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     std::thread::sleep(Duration::from_millis(50));
     assert_eq!(s.ui_snapshot().active.as_ref().map(|r| r.id), Some(r1.id));
 
-    // Answer picker, question (from second is queued behind ask_flow's picker, then ask_flow's question).
     s.ui_reply(r1.id, Some("beta".into())).unwrap();
     let r2 = next_req(&rx);
     assert_eq!(
@@ -102,9 +99,8 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     s.ui_reply(r3.id, Some("alice".into())).unwrap();
 
     let r4 = next_req(&rx);
-    s.ui_reply(r4.id, None).unwrap(); // cancelled -> nil, no UI entry
+    s.ui_reply(r4.id, None).unwrap();
 
-    // Wait for final summary markdown update.
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
         if s.ui_snapshot()
@@ -146,7 +142,6 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
         ("question", "**Name?**", "alice")
     );
 
-    // Reload keeps markdown blocks (with pin state) and UI entries, updates custom commands.
     std::fs::write(
         &cfg,
         "return { commands = { updated_cmd = function() require('tuse').ask('still open') end } }",
@@ -158,11 +153,9 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     assert_eq!(after_reload.markdowns, snap.markdowns);
     assert_eq!(after_reload.entries, snap.entries);
 
-    // Built-in commands cannot be overridden.
     std::fs::write(&cfg, "return { commands = { reload = function() end } }").unwrap();
     assert!(s.reload().unwrap_err().contains("cannot override built-in"));
 
-    // Tool call calling pick yields so other Lua jobs keep running, then finishes on reply.
     s.submit(UserInput::text("persist me"));
     let treq = next_req(&rx);
     std::thread::sleep(Duration::from_millis(120));

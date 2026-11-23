@@ -1,4 +1,3 @@
-//! The methods a client calls; each does what the TUI does with the same session call.
 use crate::proto::{Fail, Reply, str_list, str_param};
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -54,7 +53,6 @@ pub fn switched(s: &Session) -> Value {
     json!({"session": info(s), "model": model, "effort": effort})
 }
 
-/// Answers `initialize`: an omitted `protocolVersion` means v1; other versions fail.
 pub fn initialize(s: &Session, p: &Value) -> Reply {
     match &p["protocolVersion"] {
         Value::Null => {}
@@ -117,8 +115,6 @@ fn stats(s: &Session) -> Value {
     })
 }
 
-/// Validates and applies a model/effort to the active session; `persist` also saves it as
-/// the default for new sessions. `model.set` and the deprecated `config.set` both use it.
 fn set_model(s: &Arc<Session>, model: &str, effort: &str, persist: bool) -> Reply {
     if !tuse_config::EFFORTS.contains(&effort) {
         return Err(Fail::params(format!(
@@ -131,7 +127,6 @@ fn set_model(s: &Arc<Session>, model: &str, effort: &str, persist: bool) -> Repl
         .map_err(Fail::session)
 }
 
-/// Runs one method. `shutdown` is handled by the server.
 pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
     match method {
         "turn.submit" => submit(s, p),

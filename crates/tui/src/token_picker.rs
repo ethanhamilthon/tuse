@@ -13,7 +13,6 @@ impl App {
         self.editor.replace(start, end, with);
     }
 
-    /// Opens, filters or closes the `/`, `#` and `@` pickers for the token at the cursor.
     pub fn update_token_picker(&mut self) {
         if self.steering.is_some()
             || self.answering()

@@ -4,10 +4,8 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 pub const DEFAULT_LIMIT: usize = 2000;
-/// Characters of one line shown; the rest is cut.
 const LINE_CHARS: usize = 2000;
 
-/// What `read` gives back: the text, and a `data:` URL for an image.
 pub struct Read {
     pub text: String,
     pub image: Option<String>,
@@ -54,7 +52,6 @@ fn image(path: &Path, mime: &str, size: usize, max: usize) -> Result<Read, Strin
     })
 }
 
-/// Raw file text, keeping binary detection intact.
 fn raw(path: &Path) -> std::io::Result<String> {
     let bytes = std::fs::read(path)?;
     if bytes.iter().take(8192).any(|&b| b == 0) {
@@ -63,7 +60,6 @@ fn raw(path: &Path) -> std::io::Result<String> {
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
-/// Numbered lines `offset..offset + limit`.
 fn text(path: &Path, offset: usize, limit: usize) -> std::io::Result<String> {
     let mut reader = BufReader::new(std::fs::File::open(path)?);
     if reader.fill_buf()?.iter().take(8192).any(|&b| b == 0) {

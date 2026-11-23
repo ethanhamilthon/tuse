@@ -1,4 +1,3 @@
--- Merges validated plugin tables (in order) and then the user's config on top.
 local list, user = ...
 local maps = { prompts = true, functions = true, hooks = true, commands = true, open = true }
 local deep = { settings = true, theme = true }

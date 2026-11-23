@@ -1,7 +1,6 @@
 use crate::record::Record;
 use serde_json::{Value, json};
 
-/// History indices from the last compaction; see `compaction.rs`.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Bounds {
     pub prune: usize,
@@ -11,14 +10,10 @@ pub struct Bounds {
 pub const PRUNED_MARKER: &str = "\n[tool output pruned]";
 pub const PRUNED_LINE_LIMIT: usize = 200;
 
-/// Builds Chat Completions messages from records, applying compaction bounds.
-/// Images of tool results cannot ride in a `tool` message, so they follow the
-/// results of that step as one `user` message.
 pub fn messages(records: &[Record], b: Bounds, system: &str) -> Vec<Value> {
     let mut out = vec![json!({"role": "system", "content": system})];
     let mut images: Vec<(&str, &[String])> = vec![];
     for (i, r) in records.iter().enumerate() {
-        // Records that are not messages (notices, usage, hooks) do not end a step.
         if matches!(
             r,
             Record::User { .. } | Record::Assistant { .. } | Record::Notification { .. }
@@ -106,7 +101,6 @@ fn full(r: &Record, prune: bool) -> Option<Value> {
     }
 }
 
-/// The text and its hidden context as one message body.
 pub(crate) fn join_context(text: &str, context: &str) -> String {
     match (text.is_empty(), context.is_empty()) {
         (_, true) => text.to_string(),
@@ -140,8 +134,6 @@ pub fn prune_output(output: &str) -> String {
     }
 }
 
-/// Tool calls without a result (an interrupted step) get a placeholder result,
-/// so every request stays valid. Returns the records to append.
 pub fn missing_results(records: &[Record]) -> Vec<Record> {
     let Some(pos) = records
         .iter()
@@ -175,7 +167,6 @@ pub fn missing_results(records: &[Record]) -> Vec<Record> {
         .collect()
 }
 
-/// Tokens an image counts for in the estimate, whatever its size.
 const IMAGE_TOKENS: u64 = 1000;
 
 pub fn estimate_tokens(v: &[Value]) -> u64 {
@@ -247,7 +238,6 @@ mod tests {
         }
     }
 
-    /// Every `tool_call` is answered right after its message, before any `user` message.
     fn valid(msgs: &[Value]) -> bool {
         let mut open: Vec<String> = vec![];
         for m in msgs {
@@ -288,7 +278,6 @@ mod tests {
                 assert!(valid(&msgs), "drop {drop} prune {prune}: {msgs:#?}");
             }
         }
-        // The tool's image follows its result as a user message, before the next user text.
         let msgs = messages(&records, Bounds::default(), "s");
         let roles: Vec<_> = msgs.iter().map(|m| m["role"].as_str().unwrap()).collect();
         assert_eq!(

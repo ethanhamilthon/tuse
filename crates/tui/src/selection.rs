@@ -3,7 +3,6 @@ use crate::text::{Line, char_width, span};
 
 #[derive(Default)]
 pub struct Selection {
-    // Row first, so points sort in reading order.
     pub drag: Option<((usize, usize), (usize, usize))>,
     pub input: Option<usize>,
     pub text: String,

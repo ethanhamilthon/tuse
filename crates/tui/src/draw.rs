@@ -53,7 +53,6 @@ impl Renderer {
         let chat_h = h.saturating_sub(fixed);
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
-        // Leave at least one row for history when both history and the overlay fit.
         let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.list_max_height);
         let mut overlay = if app.picker.is_some() {
             crate::list::picker(app, inner, cap)

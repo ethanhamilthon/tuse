@@ -12,7 +12,6 @@ pub fn host(lua: &Lua) -> Arc<dyn Host> {
     lua.app_data_ref::<Arc<dyn Host>>().unwrap().clone()
 }
 
-/// The globals every VM has: `print`, `sh`, `sleep`, `spawn`, `json`, `inspect`.
 pub fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     let tuse = lua.create_table()?;
@@ -35,7 +34,6 @@ pub fn install(lua: &Lua) -> mlua::Result<()> {
     let j: Table = g.get("json")?;
     wrap(lua, &j, &["encode", "decode"])?;
     lua.set_named_registry_value("tuse.sh", tuse.get::<Table>("sh_mt")?)?;
-    // A loop that never calls the host still ends at its deadline or on a cancel.
     lua.set_global_hook(
         HookTriggers::new().every_nth_instruction(1000),
         |lua, _| match stopped(lua) {
@@ -46,7 +44,6 @@ pub fn install(lua: &Lua) -> mlua::Result<()> {
     Ok(())
 }
 
-/// Replaces the Rust functions `names` of `t` with wrappers that raise plain string errors.
 pub fn wrap(lua: &Lua, t: &Table, names: &[&str]) -> mlua::Result<()> {
     let w: Function = lua.named_registry_value("tuse.wrap")?;
     for n in names {
@@ -56,7 +53,6 @@ pub fn wrap(lua: &Lua, t: &Table, names: &[&str]) -> mlua::Result<()> {
     Ok(())
 }
 
-/// Wraps a Rust wait-starter function so calling it yields to the scheduler on the returned key.
 pub fn yield_wait(lua: &Lua, start: Function) -> mlua::Result<Function> {
     let w: Function = lua.named_registry_value("tuse.yield_wait")?;
     w.call(start)
@@ -93,7 +89,6 @@ fn write(lua: &Lua, args: MultiValue) -> mlua::Result<()> {
     Ok(())
 }
 
-/// Starts `bash -c cmd`; returns the key the coroutine then waits on.
 fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64> {
     let h = host(lua);
     h.action(&cmd);
@@ -118,7 +113,6 @@ fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64
     Ok(lua.app_data_mut::<Sched>().unwrap().add_proc(p))
 }
 
-/// The blocking form of a wait, where the code cannot yield.
 fn block(lua: &Lua, (kind, arg): (String, Value)) -> mlua::Result<(bool, Value)> {
     let stop = with_run(lua, |j| j.stop.clone()).unwrap_or_default();
     match kind.as_str() {
@@ -143,7 +137,6 @@ fn block(lua: &Lua, (kind, arg): (String, Value)) -> mlua::Result<(bool, Value)>
     }
 }
 
-/// `spawn(fn, name)`: runs `fn` as a background task in this VM; returns the task ID.
 fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<String> {
     let h = host(lua);
     let name = name.unwrap_or_default();
@@ -168,7 +161,6 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
     Ok(id)
 }
 
-/// JSON as Lua: `null` becomes `nil`.
 pub fn to_lua(lua: &Lua, v: &serde_json::Value) -> mlua::Result<Value> {
     let o = mlua::serde::SerializeOptions::new()
         .serialize_none_to_null(false)

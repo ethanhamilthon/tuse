@@ -1,4 +1,3 @@
-/// Incremental decoder for the top-level string fields of tool arguments.
 #[derive(Default)]
 pub struct ArgStream {
     depth: usize,

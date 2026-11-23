@@ -3,14 +3,12 @@ use crate::clipboard::Pasted;
 use tuse_core::Refs;
 
 impl App {
-    /// Ctrl+V / Cmd+V: an image becomes an `[Image #n]` atom, text is inserted.
     pub fn paste_clipboard(&mut self) {
         if self.input_disabled() {
             return;
         }
         let dir = tuse_core::tuse_home().join(&self.session.id).join("images");
         match crate::clipboard::read(&dir) {
-            // A search box or question answer takes no images.
             Ok(Pasted::Image(_)) if self.searching() || self.answering() => {}
             Ok(Pasted::Image(path)) => {
                 let before = self.steering.map(|_| self.editor.buf.clone());
@@ -58,7 +56,6 @@ impl App {
         }
     }
 
-    /// The prompts, files and images picked into the input.
     pub(crate) fn refs(&self) -> Refs {
         Refs {
             prompts: self

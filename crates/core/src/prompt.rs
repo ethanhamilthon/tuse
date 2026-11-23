@@ -36,7 +36,6 @@ pub fn tools() -> Vec<Value> {
     )]
 }
 
-/// The functions the agent is told about; `show_agent: false` ones stay callable but unlisted.
 pub fn listing(config: &Config, full: bool) -> String {
     let shown: Vec<_> = config
         .functions

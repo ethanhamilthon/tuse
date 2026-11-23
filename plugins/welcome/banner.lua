@@ -1,4 +1,3 @@
--- Pixel font with left shadow: each pixel is "██", a "░" goes left of every run.
 local U = {
     A = { ".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#" },
     B = { "####.", "#...#", "#...#", "####.", "#...#", "#...#", "####." },
@@ -83,7 +82,6 @@ local function glyph(ch)
     return g, w
 end
 
--- Render text as a list of lines (no trailing blank rows).
 local function render(text)
     local rows = {}
     for r = 1, ROWS do rows[r] = {} end
@@ -91,7 +89,7 @@ local function render(text)
     for ch in text:gmatch(".") do
         local g, w = glyph(ch)
         for r = 1, ROWS do
-            if not first then table.insert(rows[r], false) end -- 1-pixel gap
+            if not first then table.insert(rows[r], false) end
             local line = g[r] or ""
             for c = 1, w do table.insert(rows[r], line:sub(c, c) == "#") end
         end

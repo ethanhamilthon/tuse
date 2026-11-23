@@ -1,5 +1,3 @@
-//! Opening URLs and local file paths: `open.<ext>` Lua callbacks and OS default opener.
-
 use crate::event::Event;
 use crate::session::Session;
 use std::path::{Path, PathBuf};
@@ -10,7 +8,6 @@ use std::time::Instant;
 use tuse_lua::mlua::{self, Lua, MultiValue, Value};
 use tuse_lua::{Done, Job, Out, Stop};
 
-/// Only these schemes are opened as URLs.
 pub fn openable_url(url: &str) -> bool {
     let u = url.to_ascii_lowercase();
     url.len() < 2000
@@ -20,7 +17,6 @@ pub fn openable_url(url: &str) -> bool {
 }
 
 impl Session {
-    /// Opens an `http(s)://` or `mailto:` URL with the OS default handler (never `open` callbacks).
     pub fn open_url(self: &Arc<Self>, url: &str) {
         if !openable_url(url) {
             self.emit(Event::Error(format!("cannot open URL `{url}`")));
@@ -29,8 +25,6 @@ impl Session {
         self.spawn_os_open(url.to_string());
     }
 
-    /// Resolves `path` against `self.cwd`, runs a matching `open.<ext>` callback if configured,
-    /// otherwise opens it with the OS default handler. Errors are reported via `Event::Error`.
     pub fn open_path(self: &Arc<Self>, path: &Path) {
         let resolved = resolve_local(path, &self.cwd);
         if !resolved.exists() {

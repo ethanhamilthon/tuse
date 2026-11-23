@@ -1,4 +1,3 @@
-//! Interactive links and local file paths: interned targets, styling, hit testing and hover.
 use crate::style::{Palette, Style};
 use crate::text::{Line, Span, span, width};
 use std::collections::HashMap;
@@ -49,7 +48,6 @@ pub fn openable_url(url: &str) -> bool {
     tuse_core::openable_url(url)
 }
 
-/// Resolves a Markdown link destination into a URL or local path target.
 pub fn resolve_markdown_target(dest: &str, cwd: &Path) -> Option<LinkTarget> {
     let dest = dest.trim();
     if dest.is_empty() || dest.starts_with('#') {
@@ -77,7 +75,6 @@ pub fn resolve_markdown_target(dest: &str, cwd: &Path) -> Option<LinkTarget> {
     Some(LinkTarget::Path(resolved))
 }
 
-/// `st` for a Markdown link to `dest`; unsupported schemes are colored without a click target.
 pub fn styled(dest: &str, st: Style, p: &Palette) -> Style {
     Style {
         fg: p.info,
@@ -87,7 +84,6 @@ pub fn styled(dest: &str, st: Style, p: &Palette) -> Style {
     }
 }
 
-/// A single span pointing directly at a local path (even if the path has spaces or is clipped).
 pub fn path_span(label: impl Into<String>, path: &str, st: Style, p: &Palette) -> Span {
     let resolved = resolve_path(path, &p.cwd).filter(|rp| rp.exists());
     match resolved {
@@ -104,8 +100,6 @@ pub fn path_span(label: impl Into<String>, path: &str, st: Style, p: &Palette) -
     }
 }
 
-/// `text` as spans of `st`, with bare URLs and existing file paths underlined, colored `info`
-/// and clickable.
 pub fn spans(text: &str, st: Style, p: &Palette) -> Vec<Span> {
     split(text, &p.cwd)
         .into_iter()
@@ -124,7 +118,6 @@ pub fn spans(text: &str, st: Style, p: &Palette) -> Vec<Span> {
         .collect()
 }
 
-/// Applies URL/path detection to every non-link span of `line`.
 pub fn linkify_line(line: Line, p: &Palette) -> Line {
     let mut out = Vec::with_capacity(line.len());
     for s in line {
@@ -137,7 +130,6 @@ pub fn linkify_line(line: Line, p: &Palette) -> Line {
     out
 }
 
-/// Where a link is on the screen (`end` exclusive), in screen columns.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinkBox {
     pub row: usize,
@@ -166,7 +158,6 @@ pub fn scan(screen: &[Line], pad: usize) -> Vec<LinkBox> {
     out
 }
 
-/// Marks every span of the hovered link.
 pub fn highlight(screen: &mut [Line], hover: Option<u32>, color: Option<crossterm::style::Color>) {
     let Some(id) = hover else { return };
     for s in screen.iter_mut().flatten() {
@@ -229,7 +220,6 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Splits `text` into pieces; pieces with `Some(id)` are clickable URLs or local file paths.
 pub fn split(text: &str, cwd: &Path) -> Vec<(String, Option<u32>)> {
     let mut raw = vec![];
     for (piece, url_id) in split_urls(text) {
@@ -339,8 +329,6 @@ fn trim_trailing(mut s: &str) -> &str {
     s
 }
 
-/// Checks whether `token` (optionally with `:line` or `:line:col`) looks like a file path
-/// and resolves to an existing path on disk.
 fn existing_path(token: &str, cwd: &Path) -> Option<PathBuf> {
     if token.is_empty() || matches!(token, "/" | "." | ".." | "./" | "../" | "~/") {
         return None;
@@ -374,7 +362,6 @@ fn looks_like_path(s: &str) -> bool {
     false
 }
 
-/// Strips trailing `:line` or `:line:col` suffix when all parts after `:` are ASCII digits.
 fn strip_line_col(s: &str) -> &str {
     let mut cur = s;
     for _ in 0..2 {
@@ -502,7 +489,6 @@ mod tests {
         let mut p = Palette::new(&Default::default(), &Default::default());
         p.cwd = dir.clone();
 
-        // Wrapped relative path across narrow width keeps one link ID on every wrapped line.
         let mut wrapped = crate::markdown::render(
             "Check deep/folder/name/example.md and https://example.com/very/long/url/path",
             20,

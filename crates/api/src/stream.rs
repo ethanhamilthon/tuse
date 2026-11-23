@@ -1,7 +1,6 @@
 use crate::types::{Delta, Reply, ToolCall, Usage};
 use serde_json::Value;
 
-/// Folds Chat Completions stream chunks into a `Reply`.
 #[derive(Default)]
 pub struct Accumulator {
     pub reply: Reply,

@@ -40,7 +40,6 @@ fn llm_answers_without_tools_and_is_priced_apart() {
     );
     let st = s.stats();
     assert_eq!((st.requests, st.llm_requests), (2, 1));
-    // Each request uses 10 input + 3 output tokens.
     assert!((st.llm_cost - 1.3).abs() < 1e-9, "{}", st.llm_cost);
     assert!(
         (st.cost - st.llm_cost - 2.0 * 13e-6).abs() < 1e-9,

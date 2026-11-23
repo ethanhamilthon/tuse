@@ -3,19 +3,16 @@ use crate::panel::Panel;
 use crate::picker::{Kind, Picker, item};
 
 impl App {
-    /// True while the editor is the search box of a modal picker.
     pub(crate) fn searching(&self) -> bool {
         self.picker.as_ref().is_some_and(|p| p.kind.is_searchable())
     }
 
-    /// True while a Lua `pick` disables the input editor completely.
     pub(crate) fn input_disabled(&self) -> bool {
         self.picker
             .as_ref()
             .is_some_and(|p| matches!(p.kind, Kind::LuaPicker(_)))
     }
 
-    /// True while a Lua `ask` uses the input editor for the answer.
     pub(crate) fn answering(&self) -> bool {
         self.question.is_some()
     }
@@ -30,7 +27,6 @@ impl App {
             .or(self.panel.as_mut())
     }
 
-    /// Opens a modal picker, saving the input draft once.
     pub(crate) fn open_modal(&mut self, mut p: Picker) -> &mut Picker {
         let same = self.picker.as_ref().is_some_and(|q| q.kind == p.kind);
         if self.saved_editor.is_none() {
@@ -72,7 +68,6 @@ impl App {
         });
     }
 
-    /// Closes the picker and gives the draft back to the editor.
     pub(crate) fn close_modal(&mut self) {
         self.picker = None;
         self.restore_draft();
@@ -127,7 +122,6 @@ mod tests {
         assert_eq!(app.editor.text(), "gal");
         assert_eq!(labels(&app), ["gallery"]);
 
-        // One line only; `/` does not open the command picker; Ctrl+C neither quits nor cancels.
         press(&mut app, KeyCode::Enter, KeyModifiers::SHIFT);
         press(&mut app, KeyCode::End, KeyModifiers::NONE);
         press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
@@ -180,7 +174,6 @@ mod tests {
         let mut app = crate::app::test_app("modal-lua-ui");
         app.paste("keep draft");
 
-        // show: pinned stays at end even after later messages; update avoids duplicates.
         app.handle_event(tuse_core::Event::UiMarkdown {
             name: "p".into(),
             text: "PINNED".into(),
@@ -212,7 +205,6 @@ mod tests {
                 && !rendered.iter().any(|l| l.contains("UNPIN1"))
         );
 
-        // Lua picker disables typing & paste and restores draft on Esc.
         app.open_lua_picker(1, vec!["one".into(), "two".into()]);
         assert!(app.input_disabled() && app.editor.is_empty());
         type_text(&mut app, "two");
@@ -223,7 +215,6 @@ mod tests {
         press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
         assert!(app.picker.is_none() && app.editor.text() == "keep draft");
 
-        // Lua question uses editor separately, does not submit to model, restores draft on Enter.
         app.open_question(2, "## Pick a name".into());
         assert!(app.answering() && app.editor.is_empty());
         type_text(&mut app, "my answer");
@@ -275,7 +266,6 @@ mod tests {
         assert_eq!(app.picker.as_ref().unwrap().selected, 1);
         press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
         assert!(app.picker.is_none() && app.panel.is_some());
-        // Lua trace detail shows full syntax-highlighted source without chat fold/line limits.
         let panel_lines = app.panel.as_mut().unwrap().lines(60, 16, &app.palette);
         let body: String = panel_lines
             .iter()
@@ -291,7 +281,6 @@ mod tests {
             "lua keyword should be syntax highlighted"
         );
 
-        // Esc returns to the list with selection still at index 1; second Esc restores draft.
         press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
         assert!(app.panel.is_none() && app.picker.as_ref().unwrap().selected == 1);
         press(&mut app, KeyCode::Esc, KeyModifiers::NONE);

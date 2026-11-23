@@ -1,34 +1,25 @@
-//! Plugin entries of `plugins = {...}`: where each one comes from and where it lives.
-
 use crate::load::resolve_path;
 use std::path::{Path, PathBuf};
 
-/// `~/.tuse`.
 pub fn tuse_home() -> PathBuf {
     std::env::home_dir().unwrap_or_default().join(".tuse")
 }
 
-/// `~/.tuse/plugins`: one clone per repository.
 pub fn plugins_root() -> PathBuf {
     tuse_home().join("plugins")
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plugin {
-    /// The entry as written: `owner/repo[/sub/path]`, a git URL or a local name.
     pub name: String,
-    /// The git URL, `None` for a local `dir`.
     pub url: Option<String>,
-    /// The clone (or the local folder).
     pub root: PathBuf,
-    /// The plugin's folder inside `root`.
     pub sub: String,
     pub git_ref: Option<String>,
     pub enabled: bool,
 }
 
 impl Plugin {
-    /// `dir` is resolved against `base` (the config file's folder).
     pub fn new(
         name: &str,
         dir: Option<&str>,
@@ -105,7 +96,6 @@ impl Plugin {
         }
     }
 
-    /// The clone's HEAD commit (short), read from `.git` without running git.
     pub fn commit(&self) -> Option<String> {
         let git = self.root.join(".git");
         let head = std::fs::read_to_string(git.join("HEAD")).ok()?;
@@ -123,7 +113,6 @@ impl Plugin {
         Some(full.get(..7)?.to_string())
     }
 
-    /// `init.lua`, else `tuse.lua`, in the plugin's folder.
     pub fn entry(&self) -> Option<PathBuf> {
         let d = self.dir();
         [d.join("init.lua"), d.join("tuse.lua")]

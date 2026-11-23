@@ -5,7 +5,6 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-/// The built-in slash commands; `docs/commands.md` lists each one.
 pub const COMMANDS: [(&str, &str); 9] = [
     ("config", "show the resolved config"),
     ("new", "start a new session"),
@@ -19,7 +18,6 @@ pub const COMMANDS: [(&str, &str); 9] = [
 ];
 
 impl App {
-    /// Applies a reloaded config's theme to the screen; safe mid-turn (Lua `reload()`).
     pub(crate) fn restyle(&mut self) {
         self.palette = Palette::for_session(&self.session.config(), &self.cwd);
         self.palette_gen += 1;
@@ -126,10 +124,8 @@ impl App {
         }
     }
 
-    /// Enter on a picker item.
     pub fn choose(&mut self) {
         let Some(p) = self.picker.take() else { return };
-        // Effort follows Model and Trace detail returns to Trace list; both keep the draft aside.
         let keep_draft = matches!(p.kind, Kind::Model | Kind::Trace) && p.current().is_some();
         if !keep_draft {
             self.restore_draft();
@@ -198,7 +194,6 @@ impl App {
 }
 
 impl App {
-    /// Enter in the `@` picker: the highlighted entry (a folder too) becomes a token.
     pub fn pick_file(&mut self) {
         let Some(p) = self.picker.take() else { return };
         match p.current().map(|i| i.value.clone()) {

@@ -1,5 +1,3 @@
-//! `plugins = {...}`: loads each plugin from its clone, validates it, and merges under user config.
-
 use std::path::Path;
 use tuse_config::Plugin;
 use tuse_lua::mlua::{Lua, Table, Value};
@@ -7,7 +5,6 @@ use tuse_lua::mlua::{Lua, Table, Value};
 const MERGE: &str = include_str!("plugin_merge.lua");
 const KEYS: &[&str] = &["opts", "ref", "dir", "path", "enabled"];
 
-/// One entry of `plugins`, with the `opts` table it passes to the plugin.
 pub(crate) struct Entry {
     pub plugin: Plugin,
     pub opts: Option<Table>,
@@ -24,7 +21,6 @@ fn text(t: &Table, key: &str, path: &str) -> Result<Option<String>, String> {
     }
 }
 
-/// Parses `plugins`; `base` is the config file's folder (for `dir`).
 pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String> {
     let list = match config
         .raw_get::<Value>("plugins")
@@ -140,14 +136,12 @@ fn entry(t: &Table, idx: &str, base: &Path) -> Result<Entry, String> {
     Ok(Entry { plugin, opts })
 }
 
-/// The merged table, the plugins, and the parsed config when no merge happened.
 pub(crate) type Merged = (
     Table,
     Vec<tuse_config::PluginInfo>,
     Option<tuse_config::Config>,
 );
 
-/// Validates the user config and each plugin, then merges plugins under the user's config.
 pub(crate) fn apply(lua: &Lua, config: Table, source: &str, base: &Path) -> Result<Merged, String> {
     let parsed = crate::validate::table(lua, &config, source, false)?;
     let list = entries(&config, base).map_err(|e| format!("{source}: {e}"))?;

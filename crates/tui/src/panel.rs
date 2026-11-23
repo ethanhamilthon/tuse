@@ -11,11 +11,8 @@ enum Body {
     Styled(Vec<Line>),
 }
 
-/// Read-only text over the bottom of the chat (`/usage`, a task's output, an opened
-/// `/trace` item). It is not part of the conversation; Esc closes it.
 pub struct Panel {
     body: Body,
-    /// First visible content line.
     pub scroll: usize,
     cache: Option<(usize, Vec<Line>)>,
 }
@@ -47,7 +44,6 @@ impl Panel {
         self.cache = None;
     }
 
-    /// The content wrapped to `width`.
     fn wrapped(&mut self, width: usize, p: &Palette) -> &[Line] {
         if self.cache.as_ref().is_none_or(|(w, _)| *w != width) {
             let empty = vec![];
@@ -77,7 +73,6 @@ impl Panel {
         &self.cache.as_ref().unwrap().1
     }
 
-    /// The panel as screen lines, at most `max_rows` of them, each `width` wide.
     pub fn lines(&mut self, width: usize, max_rows: usize, p: &Palette) -> Vec<Line> {
         let inner = width.max(1);
         let body = max_rows.min(p.ui.list_max_height).max(2) - 1;

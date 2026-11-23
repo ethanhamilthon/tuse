@@ -16,8 +16,6 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// Token pickers filter by the token under the input cursor; the others
-    /// are modal (searchable ones use the editor as their search box).
     pub fn is_token(&self) -> bool {
         matches!(self, Kind::Command | Kind::Prompt | Kind::File)
     }
@@ -89,7 +87,6 @@ impl Picker {
         }
     }
 
-    /// Scrolls so that the selected row is among the `height` visible ones.
     pub fn follow(&mut self, height: usize) {
         if self.selected < self.scroll {
             self.scroll = self.selected;
@@ -110,8 +107,6 @@ impl Picker {
 }
 
 impl App {
-    /// Returns true when the picker consumed the key. While a modal picker
-    /// searches, text editing keys go on to the editor, which is its search box.
     pub(crate) fn picker_key(&mut self, k: KeyEvent, ctrl: bool, shift: bool) -> bool {
         let rows = self.picker_rows();
         let Some(p) = &mut self.picker else {
@@ -158,8 +153,6 @@ impl App {
     }
 }
 
-/// The keys that edit a one-line search: everything else (Shift+Enter, Ctrl+C,
-/// Ctrl+D...) is swallowed so it neither adds a line nor reaches the session.
 fn edits_text(k: KeyEvent) -> bool {
     let primary = k
         .modifiers
@@ -177,8 +170,6 @@ fn edits_text(k: KeyEvent) -> bool {
 }
 
 impl App {
-    /// Every available model providers reported plus configured models.
-    /// The current model stays visible even when its provider has been removed.
     pub fn open_models(&mut self) {
         let config = self.session.config();
         let (current, _) = self.session.model();
@@ -200,7 +191,6 @@ impl App {
             .filter(|p| p.kind == Kind::Model)
             .and_then(|p| p.current())
             .map_or(current, |i| i.value.clone());
-        // A refresh keeps the search typed in the editor and re-applies it.
         self.open_modal(Picker::new(Kind::Model, items))
             .select(&selected);
     }

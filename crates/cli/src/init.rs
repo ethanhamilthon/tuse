@@ -1,5 +1,3 @@
-//! `tuse init`: a `./tuse.lua` that extends the global config.
-
 const TEMPLATE: &str = r#"-- Project config: starts from the global one and changes what this project needs.
 local ok, g = pcall(require, "global")
 g = ok and g or {}

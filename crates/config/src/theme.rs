@@ -1,7 +1,5 @@
 use serde::Deserialize;
 
-/// The 10 base colors of a theme. Values are `#rrggbb`, `#rgb`, an ANSI number
-/// (`0`-`255`), a name (`red`, `dark_grey`, ...), `accent`, or `none`.
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Theme {
@@ -45,7 +43,6 @@ impl Default for Theme {
     }
 }
 
-/// Whether `s` is a valid theme color token (`#rrggbb`, `#rgb`, `0`-`255`, named color, `accent`, `none`).
 pub fn valid_color(s: &str) -> bool {
     let s = s.trim().to_ascii_lowercase();
     if matches!(
@@ -83,13 +80,10 @@ pub fn valid_color(s: &str) -> bool {
     false
 }
 
-/// User-facing UI behavior and layout preferences (`settings.ui`), independent of the color theme.
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct UiSettings {
-    /// `true` folds multiline Lua long strings (`[[...]]`) in chat tool calls.
     pub fold_strings: bool,
-    /// Lines shown per block: `0` hides it, `-1` removes the limit.
     #[serde(deserialize_with = "lines")]
     pub tool_line: i32,
     #[serde(deserialize_with = "lines")]
@@ -106,7 +100,6 @@ pub struct UiSettings {
     pub message_gap: u16,
     #[serde(deserialize_with = "crate::de::int::<_, _, 1, { i32::MAX as i64 }>")]
     pub list_max_height: usize,
-    /// Rows the input grows to; `-1` removes the limit.
     #[serde(deserialize_with = "crate::de::rows")]
     pub input_max_height: i32,
 }
@@ -132,7 +125,6 @@ impl Default for UiSettings {
     }
 }
 
-/// How many of `len` lines a `*_line` setting shows.
 pub fn limit(setting: i32, len: usize) -> usize {
     usize::try_from(setting).map_or(len, |n| n.min(len))
 }

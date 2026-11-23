@@ -1,4 +1,3 @@
-//! JSON-RPC parity: Lua UI, custom commands, prompt refs, model persistence, session new/resume.
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 #[allow(dead_code)]
@@ -47,7 +46,6 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
         json!(["ui_demo"])
     );
 
-    // Custom command driving show, pick, ask.
     assert!(call(&tx, &out, 3, "commands.run", json!({"name": "ui_demo"}))["error"].is_null());
     let r1 = event(&out, "ui_request");
     assert_eq!(r1["kind"], "picker");
@@ -91,7 +89,6 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     assert!(st["active"].is_null(), "{st}");
     assert_eq!(done["text"], "b:because:nil");
 
-    // Reload keeps transient markdowns (with pin state) and UI entries.
     assert!(call(&tx, &out, 7, "config.reload", json!({}))["error"].is_null());
     let st = call(&tx, &out, 8, "ui.state", json!({}))["result"].clone();
     assert_eq!(st["entries"].as_array().unwrap().len(), 2);
@@ -110,7 +107,6 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
             .all(|m| m["name"] != "drop")
     );
 
-    // Prompt references + single-call model/effort selection & persistence.
     assert_eq!(
         call(
             &tx,
@@ -161,7 +157,6 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
                 .contains("<prompt name=\"review\">Check edge cases.</prompt>")
     }));
 
-    // In-process session.new inherits persisted model/effort; bad session.resume keeps S2 alive; valid resume returns to S1 without transient UI.
     let s2 = call(&tx, &out, 14, "session.new", json!({}))["result"].clone();
     assert_ne!(s2["session"]["id"], s1_id);
     assert_eq!(

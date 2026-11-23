@@ -5,11 +5,9 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    /// Providers come from the database (`tuse connect`), never from the file.
     #[serde(skip)]
     pub connect: Vec<Connect>,
     pub settings: Settings,
-    /// The 10 colors of the UI.
     pub theme: Theme,
     #[serde(deserialize_with = "crate::de::list")]
     pub models: Vec<ModelDef>,
@@ -21,13 +19,10 @@ pub struct Config {
     pub hooks: BTreeMap<String, Hook>,
     #[serde(deserialize_with = "crate::de::commands")]
     pub commands: Vec<String>,
-    /// File extensions (without leading dot) handled by `open` callbacks.
     #[serde(deserialize_with = "crate::de::open")]
     pub open: Vec<String>,
-    /// The config file, empty when there is none; filled by the loader.
     #[serde(skip_deserializing)]
     pub path: String,
-    /// The loaded plugins; filled by the loader, never read from the file.
     #[serde(skip_deserializing)]
     pub plugins: Vec<PluginInfo>,
 }
@@ -35,11 +30,9 @@ pub struct Config {
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct PluginInfo {
     pub name: String,
-    /// The plugin's folder.
     pub dir: String,
     #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
     pub git_ref: Option<String>,
-    /// Short commit of the clone, `None` for a local folder.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
 }
@@ -55,7 +48,6 @@ pub struct Connect {
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
-    /// Unset: 60% of the model's `window` when it is known; `0` turns compaction off.
     #[serde(
         skip_serializing_if = "Option::is_none",
         deserialize_with = "crate::de::opt_u64"
@@ -79,7 +71,6 @@ impl Default for Settings {
     }
 }
 
-/// Metadata for a configured `provider/model`.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelDef {
@@ -95,7 +86,6 @@ pub struct ModelDef {
     pub compact_at: Option<u64>,
 }
 
-/// Prices in dollars per 1M tokens.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Prices {
@@ -116,7 +106,6 @@ pub struct Function {
     pub args: String,
     #[serde(deserialize_with = "crate::de::non_empty")]
     pub description: String,
-    /// `false` keeps the function out of the agent's prompt and docs; code can still call it.
     #[serde(default = "yes")]
     pub show_agent: bool,
 }
@@ -160,7 +149,6 @@ pub const BUILTIN_COMMANDS: [&str; 9] = [
 ];
 
 impl Config {
-    /// The effective config as pretty JSON (without providers).
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).unwrap_or_default()
     }
@@ -169,18 +157,15 @@ impl Config {
         self.connect.iter().find(|c| c.name == name)
     }
 
-    /// Last definition wins when a user config overrides a plugin.
     pub fn model_def(&self, full: &str) -> Option<&ModelDef> {
         self.models.iter().rev().find(|m| m.name == full)
     }
 
-    /// The model's `compact_at`, else `settings.compact_at`, else 60% of the model's window.
     pub fn compact_at(&self, def: Option<&ModelDef>) -> u64 {
         compact_at(def, self.settings.compact_at)
     }
 }
 
-/// Effective compaction threshold: model override, else `settings.compact_at`, else 60% of window.
 pub fn compact_at(def: Option<&ModelDef>, setting: Option<u64>) -> u64 {
     def.and_then(|m| m.compact_at)
         .or(setting)
@@ -194,12 +179,10 @@ pub fn display_name(def: Option<&ModelDef>, full: &str) -> String {
     }
 }
 
-/// Splits `provider/model` into its parts.
 pub fn split_model(full: &str) -> (&str, &str) {
     full.split_once('/').unwrap_or(("", full))
 }
 
-/// `$VAR` or `${VAR}` as the whole value reads the environment; anything else is literal.
 pub fn env_value(v: &str) -> String {
     let name = v
         .strip_prefix("${")

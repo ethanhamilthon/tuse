@@ -4,10 +4,8 @@ mod selection;
 
 pub use atoms::{Atom, AtomKind};
 
-/// First code point of the private-use range that stands in for atoms.
 const ATOM_BASE: u32 = 0xF0000;
 
-/// A multi-line input buffer with a cursor.
 #[derive(Default)]
 pub struct Editor {
     pub buf: Vec<char>,
@@ -21,7 +19,6 @@ fn atom_index(c: char) -> Option<usize> {
 }
 
 impl Editor {
-    /// The text with every atom written out as its label.
     pub fn text(&self) -> String {
         self.range_text(0, self.buf.len())
     }
@@ -147,8 +144,6 @@ impl Editor {
         self.buf.drain(self.cursor..end);
     }
 
-    /// The token under the cursor (from the last whitespace to the cursor) and its start.
-    /// Atoms end a token like whitespace does.
     pub fn token(&self) -> (usize, String) {
         let start = self.buf[..self.cursor]
             .iter()

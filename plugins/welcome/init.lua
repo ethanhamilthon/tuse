@@ -86,7 +86,6 @@ local function hook(opts)
     }
 end
 
--- opts.title: banner text (default: the project folder); opts.block: show name.
 return function(opts)
     if t.session().mode ~= "tui" then return {} end
     return { hooks = { welcome = hook(opts) } }

@@ -5,11 +5,9 @@ pub struct Request {
     pub model: String,
     pub messages: Vec<Value>,
     pub tools: Vec<Value>,
-    /// `None` sends no `reasoning_effort` at all.
     pub effort: Option<String>,
 }
 
-/// Token counts of one request. `input` includes cached and cache-write tokens.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 pub struct Usage {
     pub input: u64,

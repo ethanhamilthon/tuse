@@ -8,12 +8,10 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 
-/// Identifies a submission within its session, even when two messages have the same text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InputId(pub(crate) u64);
 
 impl InputId {
-    /// The number a client sees (`tuse json`).
     pub fn number(self) -> u64 {
         self.0
     }
@@ -22,8 +20,6 @@ impl InputId {
     }
 }
 
-/// Event subscribers. Events before the first `subscribe()` (startup hooks) are kept
-/// and handed to the first subscriber.
 pub(crate) enum Subs {
     Pending(Vec<Event>),
     Live(Vec<Sender<Event>>),
@@ -64,8 +60,6 @@ impl Session {
         rx
     }
 
-    /// Queues a message; it starts a turn when idle, or joins the running turn
-    /// after its current step. Returns its ID and whether a turn was already running.
     pub fn submit(self: &Arc<Self>, input: UserInput) -> (InputId, bool) {
         let mut st = self.state.lock().unwrap();
         st.next_input += 1;
@@ -87,7 +81,6 @@ impl Session {
         (id, false)
     }
 
-    /// Withdraws just this message, if the turn has not taken it yet.
     pub fn withdraw_input(&self, id: InputId) -> bool {
         let mut st = self.state.lock().unwrap();
         let Some(i) = st.queue.iter().position(|(queued, _)| *queued == id) else {
@@ -97,7 +90,6 @@ impl Session {
         true
     }
 
-    /// Stops the running turn right away; its thread finds itself stale and exits.
     pub fn cancel(self: &Arc<Self>) {
         self.stop_commands();
         self.stop_hook_runs();
@@ -146,12 +138,10 @@ impl Session {
         self.state.lock().unwrap().records.clone()
     }
 
-    /// Runs `f` on the history without copying it (it can hold large images).
     pub fn with_records<T>(&self, f: impl FnOnce(&[Record]) -> T) -> T {
         f(&self.state.lock().unwrap().records)
     }
 
-    /// `(provider/model, effort)`.
     pub fn model(&self) -> (String, String) {
         let st = self.state.lock().unwrap();
         (st.model.clone(), st.effort.clone())
@@ -180,14 +170,12 @@ impl Session {
         self.state.lock().unwrap().busy
     }
 
-    /// Elapsed time and the status of the running turn.
     pub fn turn_info(&self) -> Option<(Duration, String)> {
         let st = self.state.lock().unwrap();
         st.busy
             .then(|| (st.turn_start.elapsed(), st.status.clone()))
     }
 
-    /// Totals of the session at the configured model prices.
     pub fn stats(&self) -> Stats {
         let st = self.state.lock().unwrap();
         let mut out = st.stats.0.clone();
@@ -202,7 +190,6 @@ impl Session {
         self.state.lock().unwrap().meta.title.clone()
     }
 
-    /// Updates the session name/title and emits `name_change` after the change takes effect.
     pub fn set_name(self: &Arc<Self>, text: &str) -> Result<(), String> {
         let text: String = text
             .trim()
@@ -226,7 +213,6 @@ impl Session {
     }
 }
 
-/// Sessions without a `Settings` record fall back to their saved metadata.
 pub(crate) fn or_default(saved: &str, default: String) -> String {
     if saved.is_empty() {
         default

@@ -2,7 +2,6 @@ use crossterm::style::Color;
 use tuse_config::{Config, Theme, UiSettings};
 
 pub const FRAME_MS: u64 = 33;
-/// The least time an action stays in the working indicator.
 pub const STATUS_MIN_MS: u64 = 100;
 pub const FILE_PICKER_MAX: usize = 20_000;
 pub const LIST_INDENT: usize = 2;
@@ -25,7 +24,6 @@ pub const LABEL_SEP: &str = " · ";
 pub const MORE: &str = "…";
 pub const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
 pub const STEERING_LABEL: &str = "steering…";
-/// A dot bouncing across 5 cells before `STEERING_LABEL`.
 pub const STEERING_FRAMES: [&str; 8] = [
     "●····",
     "·●···",
@@ -45,7 +43,6 @@ pub struct Style {
     pub italic: bool,
     pub dim: bool,
     pub underline: bool,
-    /// A clickable URL, interned by `links::intern`.
     pub link: Option<u32>,
 }
 
@@ -70,7 +67,6 @@ impl Style {
     }
 }
 
-/// Parses a theme color: `#rrggbb`, `#rgb`, `0`-`255`, a name, or `none`.
 pub fn color(s: &str) -> Option<Color> {
     let s = s.trim().to_ascii_lowercase();
     if let Some(hex) = s.strip_prefix('#') {
@@ -113,7 +109,6 @@ pub fn color(s: &str) -> Option<Color> {
     })
 }
 
-/// The 10 theme colors parsed once per (re)load, plus `settings.ui` and session `cwd`.
 pub struct Palette {
     pub ui: UiSettings,
     pub cwd: std::path::PathBuf,

@@ -69,7 +69,6 @@ fn deadlines_stop_loops_and_commands_but_not_others() {
     let d = vm.run("print('a'); sh('sleep 30')", "lua", stop(1));
     assert!(!d.ok && d.text.starts_with("a\n"), "{}", d.text);
     assert!(started.elapsed() < Duration::from_secs(5));
-    // A task keeps running while a call sleeps, in the same VM.
     let d = vm.run(
         "n = 0\nspawn(function() for i = 1, 3 do n = n + 1; sleep(0.05) end print('done', n) end, 't')\nsleep(0.5)\nreturn n",
         "lua",
@@ -78,7 +77,6 @@ fn deadlines_stop_loops_and_commands_but_not_others() {
     assert_eq!(d.text, "3");
     std::thread::sleep(Duration::from_millis(100));
     assert_eq!(h.ended.lock().unwrap().len(), 1);
-    // `sh` inside a user coroutine still yields to the scheduler.
     let d = vm.run(
         "local co = coroutine.wrap(function() local r = sh('echo in'); coroutine.yield(r.out); return 'end' end)\nreturn co(), co()",
         "lua",
@@ -96,7 +94,6 @@ fn deadlines_stop_loops_and_commands_but_not_others() {
 
 #[test]
 fn sh_has_no_controlling_terminal() {
-    // Otherwise `zsh -i` or `bash -i` could take the terminal from Tuse.
     let vm = Vm::new(Arc::new(H::default()), |_| {});
     let d = vm.run(
         "sh('(exec 3<>/dev/tty) 2>/dev/null && echo tty || echo none').out",
@@ -129,8 +126,6 @@ fn external_wait_pauses_and_resumes_timeout_budget() {
         let f = tuse_lua::yield_wait(lua, start).unwrap();
         lua.globals().set("pause_wait", f).unwrap();
     });
-    // Budget is 300ms; reply arrives after 500ms (past original wall deadline),
-    // yet the job must resume with its remaining ~300ms budget and succeed.
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(500));
         let _ = tx.send(Ok(serde_json::json!("ok")));

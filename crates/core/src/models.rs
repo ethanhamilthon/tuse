@@ -4,14 +4,12 @@ use std::sync::Arc;
 use tuse_api::Client;
 use tuse_config::ModelDef;
 
-/// Whether `full` (`provider/model`) has an active `connect` entry.
 pub fn model_available(config: &tuse_config::Config, full: &str) -> bool {
     let (provider, _) = tuse_config::split_model(full);
     !provider.is_empty() && config.connect(provider).is_some()
 }
 
 impl Session {
-    /// Configured metadata for `full` (`provider/model`).
     pub fn model_def(&self, full: &str) -> Option<ModelDef> {
         self.config().model_def(full).cloned()
     }
@@ -20,12 +18,10 @@ impl Session {
         tuse_config::display_name(self.model_def(full).as_ref(), full)
     }
 
-    /// Whether `full` (`provider/model`) can be used in this session.
     pub fn model_available(&self, full: &str) -> bool {
         model_available(&self.config(), full)
     }
 
-    /// Models (`provider/model`) active providers have reported so far.
     pub fn remote_models(&self) -> Vec<String> {
         let config = self.config();
         self.state
@@ -38,7 +34,6 @@ impl Session {
             .collect()
     }
 
-    /// Configured and reported models whose provider is active in this session.
     pub fn available_models(&self) -> Vec<String> {
         let config = self.config();
         let mut names: Vec<String> = config
@@ -57,7 +52,6 @@ impl Session {
         names
     }
 
-    /// Replaces the active config, bumps its generation, and clears cached remote models.
     pub(crate) fn swap_config(&self, c: Arc<tuse_config::Config>) {
         let mut cfg = self.config.write().unwrap();
         cfg.0 += 1;
@@ -72,8 +66,6 @@ impl Session {
         cfg.1 = c;
     }
 
-    /// Asks every `connect` provider for its models in the background.
-    /// Each answer updates the cache and emits `Event::Models`; stale generations are discarded.
     pub fn fetch_models(self: &Arc<Self>) {
         let (config_gen, connect) = {
             let cfg = self.config.read().unwrap();
@@ -106,7 +98,6 @@ impl Session {
         }
     }
 
-    /// Validates and sets the session's model and effort, optionally persisting both as defaults.
     pub fn select_model(
         self: &Arc<Self>,
         model: &str,
@@ -130,7 +121,6 @@ impl Session {
         Ok(())
     }
 
-    /// Remembers a default choice (`model` or `effort`) in SQLite; new sessions start with it.
     pub fn save_choice(&self, key: &str, value: &str) -> Result<(), String> {
         crate::db::set_state(key, value)
     }

@@ -3,7 +3,6 @@ use std::io::Write;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
-/// Collects what the server writes, line by line.
 pub struct Lines(pub mpsc::Sender<Value>, pub Vec<u8>);
 
 impl Write for Lines {
@@ -21,7 +20,6 @@ impl Write for Lines {
     }
 }
 
-/// The reader side of a pipe the test writes requests into.
 pub struct Pipe(pub Arc<Mutex<mpsc::Receiver<String>>>, pub Vec<u8>);
 
 impl std::io::Read for Pipe {
@@ -39,7 +37,6 @@ impl std::io::Read for Pipe {
     }
 }
 
-/// Waits for the message matching `f`, skipping the others.
 pub fn until(rx: &mpsc::Receiver<Value>, f: impl Fn(&Value) -> bool) -> Value {
     loop {
         let v = rx.recv_timeout(Duration::from_secs(30)).expect("timed out");

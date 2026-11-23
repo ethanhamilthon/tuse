@@ -1,7 +1,6 @@
 use super::{diff, fail, fs, io_fail};
 use std::path::Path;
 
-/// Replaces `old` with `new`; returns the confirmation and the diff.
 pub fn run(path: &Path, old: &str, new: &str, all: bool) -> Result<(String, String), String> {
     if old.is_empty() {
         return Err(fail("`old` is empty; use write() to create or fill a file"));
@@ -13,7 +12,6 @@ pub fn run(path: &Path, old: &str, new: &str, all: bool) -> Result<(String, Stri
     let Ok(text) = String::from_utf8(bytes) else {
         return Err(fail(format!("{} is not UTF-8 text", path.display())));
     };
-    // A CRLF file matches `\n` in `old` and keeps its CRLF.
     let crlf = text.contains("\r\n") && !old.contains('\r');
     let (old, new) = if crlf {
         (old.replace('\n', "\r\n"), new.replace('\n', "\r\n"))

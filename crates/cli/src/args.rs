@@ -1,12 +1,9 @@
-/// A tiny flag parser: `--name value`, `--flag`, `-s value` and positionals;
-/// everything after `--` is positional.
 pub struct Args {
     pub positional: Vec<String>,
     flags: Vec<(String, Option<String>)>,
 }
 
 impl Args {
-    /// `valued` lists flags that take a value.
     pub fn parse(raw: &[String], valued: &[&str]) -> Result<Args, String> {
         let mut a = Args {
             positional: vec![],

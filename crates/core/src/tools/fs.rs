@@ -1,13 +1,10 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// Absolute paths stay, `~/` is the home folder, the rest is relative to `cwd`.
 pub fn resolve(p: &str, cwd: &Path) -> PathBuf {
     tuse_config::resolve_path(p, cwd)
 }
 
-/// Writes `data` next to `path` and renames it over, so a crash never leaves a
-/// half-written file. Keeps the permissions of an existing file and follows a symlink.
 pub fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
     let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     if let Some(dir) = target.parent() {

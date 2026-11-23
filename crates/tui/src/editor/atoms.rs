@@ -1,14 +1,11 @@
 use super::{ATOM_BASE, Editor};
 use std::path::PathBuf;
 
-/// A file, prompt or image in the input. The buffer holds one placeholder
-/// char for it, so deleting and the arrows treat it as a single letter.
 pub struct Atom {
     pub label: String,
     pub kind: AtomKind,
 }
 
-/// What an atom stands for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AtomKind {
     Prompt(String),
@@ -17,7 +14,6 @@ pub enum AtomKind {
 }
 
 impl Editor {
-    /// Inserts `[Image #N]`; `N` never repeats within one input.
     pub fn insert_image(&mut self, path: PathBuf) {
         let id = 1 + self
             .atoms
@@ -38,14 +34,12 @@ impl Editor {
         self.cursor += 1;
     }
 
-    /// The atoms still in the buffer, in order of appearance.
     fn active(&self) -> impl Iterator<Item = &AtomKind> {
         self.buf
             .iter()
             .filter_map(|c| self.atom(*c).map(|a| &a.kind))
     }
 
-    /// Names of the prompts picked with `#`.
     pub fn prompts(&self) -> Vec<String> {
         self.active()
             .filter_map(|k| match k {
@@ -55,7 +49,6 @@ impl Editor {
             .collect()
     }
 
-    /// Files picked with `@`.
     pub fn files(&self) -> Vec<PathBuf> {
         self.active()
             .filter_map(|k| match k {
@@ -65,7 +58,6 @@ impl Editor {
             .collect()
     }
 
-    /// Pasted images as `(N, path)`.
     pub fn images(&self) -> Vec<(usize, PathBuf)> {
         self.active()
             .filter_map(|k| match k {

@@ -4,7 +4,6 @@ use crate::text::{Line, span};
 use tuse_config::Config;
 use tuse_core::tokens;
 
-/// Styled `/config` panel using only the 10-token `Palette` (no secrets or Lua bodies).
 pub fn panel(cfg: &Config, p: &Palette) -> Panel {
     let (head, key, fg, dim, info) = (
         Style::fg(p.accent).bold(),

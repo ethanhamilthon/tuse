@@ -6,8 +6,6 @@ use crate::style::{
 use crate::text::{Line, span};
 use std::time::{Duration, Instant};
 
-/// The action shown in the working indicator. A new action replaces the shown one, but
-/// every shown action stays for at least `STATUS_MIN_MS`; the newest one wins.
 pub struct Hold {
     shown: String,
     since: Instant,
@@ -33,7 +31,6 @@ impl Hold {
         *self = Self::default();
     }
 
-    /// Moves to the newest action when the shown one is old enough; true when it changed.
     pub fn tick(&mut self) -> bool {
         let old = self.since.elapsed() >= Duration::from_millis(STATUS_MIN_MS);
         if self.shown == self.latest || !(old || self.shown.is_empty()) {
@@ -45,8 +42,6 @@ impl Hold {
     }
 }
 
-/// The working indicator: spinner and time in `accent`, the current action in `muted`;
-/// empty when idle.
 pub fn working(app: &App) -> Line {
     let p = &app.palette;
     let Some((elapsed, _)) = app.session.turn_info() else {
@@ -73,7 +68,6 @@ pub fn working(app: &App) -> Line {
     line
 }
 
-/// The model indicator: model, effort, context use and cost.
 pub fn model(app: &App) -> Line {
     let (model, effort) = app.session.model();
     let def = app.session.model_def(&model);
@@ -90,7 +84,6 @@ pub fn model(app: &App) -> Line {
     )
 }
 
-/// All `muted` but the used context (`x` of `x/y`, `accent`); `y` is `?` while unknown.
 pub fn model_line(
     p: &Palette,
     name: &str,

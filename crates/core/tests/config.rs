@@ -19,7 +19,6 @@ fn require_session_validation_and_reload_rollback() {
     fs::create_dir_all(shared.join("sub")).unwrap();
     fs::create_dir_all(shared.join("lib")).unwrap();
     let global = shared.join("init.lua");
-    // SAFETY: single test in this binary; clear any inherited vars from an outer Tuse process.
     unsafe {
         for v in [
             "TUSE_MODE",
@@ -141,11 +140,9 @@ fn require_session_validation_and_reload_rollback() {
             assert!(s.records().iter().any(
                 |r| matches!(r, Record::Tool { output, .. } if output.trim_end() == "project:rex-v1")
             ));
-            // Reload succeeds and sees the same pre-session semantics (`s.id == nil`).
             fs::write(shared.join("rex.lua"), "return { tag = 'rex-v2' }").unwrap();
             s.reload().unwrap();
             assert_eq!(s.config().prompts["rex"], "rex-v2");
-            // Failed reload keeps previous working config, modules, and callbacks active!
             let saved_root = fs::read_to_string(&root).unwrap();
             fs::write(&root, "return { unknown_typo = 123 }").unwrap();
             let err = s.reload().unwrap_err();
@@ -169,7 +166,6 @@ fn require_session_validation_and_reload_rollback() {
         s.close();
     }
 
-    // Cyclic require checks.
     fs::write(project.join("a.lua"), "return require('b')").unwrap();
     fs::write(project.join("b.lua"), "return require('a')").unwrap();
     fs::write(&root, "return require('a')").unwrap();

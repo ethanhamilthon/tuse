@@ -1,4 +1,3 @@
-/// Built-in documentation topics read via `docs(topic=None)`.
 const TOPICS: &[(&str, &str, &str)] = &[
     (
         "README.md",
@@ -66,8 +65,6 @@ fn topic_list() -> String {
     out
 }
 
-/// Returns the topic index when `topic` is `None`/empty, the topic markdown when found,
-/// or an error message listing available topics when unknown.
 pub fn docs(topic: Option<&str>) -> String {
     let Some(raw) = topic.map(str::trim).filter(|s| !s.is_empty()) else {
         return topic_list();

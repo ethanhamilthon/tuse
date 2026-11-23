@@ -2,7 +2,6 @@ use crate::style::{BULLET, LIST_INDENT, Palette, QUOTE_PREFIX, RULE_CHAR, Style}
 use crate::text::{Line, span, wrap};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
-/// Renders Markdown into wrapped lines.
 pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
     render_with_links(text, width, p, true)
 }
@@ -44,9 +43,7 @@ pub(crate) struct Renderer<'a> {
     lists: Vec<Option<u64>>,
     quote: usize,
     pub(crate) code: bool,
-    /// The language of the open fenced block.
     pub(crate) lang: String,
-    /// A long string or comment left open by the line before (Lua blocks).
     pub(crate) open: String,
     item_first: Option<String>,
     table: Option<crate::table::Table>,

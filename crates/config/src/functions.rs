@@ -1,5 +1,3 @@
-/// Every Lua host function: globals in the agent's `lua` tool, exported by `require("tuse")`
-/// in files, and highlighted by the TUI.
 pub const HOST_FUNCTIONS: &[&str] = &[
     "sh",
     "sleep",

@@ -115,7 +115,6 @@ fn plugins_load_with_opts_and_merge_under_the_user() {
         r#"{ "me/kit", ref = "a" }, { "me/kit/plugins/greet", ref = "b" }"#,
         "conflicting ref",
     );
-    // Bundled welcome plugin validates, activates only in TUI, and renders on `start` (`is_new`).
     let welcome =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/welcome");
     fs::write(

@@ -30,8 +30,6 @@ USAGE
 -c|--config picks the config file, else ./tuse.lua, else ~/.config/tuse.lua or
 ~/.config/tuse/init.lua: a Lua file that returns a table.";
 
-/// A subcommand: its usage line, flags that take a value, flags that don't, and how many
-/// positional arguments it takes.
 struct Cmd {
     usage: &'static str,
     valued: &'static [&'static str],
@@ -153,7 +151,6 @@ fn start(a: &Args, cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> 
     Ok(())
 }
 
-/// `tuse json`: stdout carries only the protocol; errors go to stderr.
 fn json(a: &Args, cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
     let session = Session::open(Options {
         cwd,

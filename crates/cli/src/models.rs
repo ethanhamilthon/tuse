@@ -1,5 +1,3 @@
-//! Lists the model metadata declared in the effective Lua config.
-
 use std::path::PathBuf;
 
 pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {

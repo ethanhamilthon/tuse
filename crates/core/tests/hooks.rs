@@ -7,7 +7,6 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
 
-/// `setup` points `HOME` at a folder per test, so the tests of this file take turns.
 static ENV: Mutex<()> = Mutex::new(());
 
 fn wait_turn(events: &std::sync::mpsc::Receiver<Event>) {

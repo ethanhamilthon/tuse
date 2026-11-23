@@ -103,7 +103,6 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
         );
     }
 
-    // Plugin conflicts & invalid plugin config fail reload without disturbing active config/callbacks.
     let p1 = dir.join("p1");
     let p2 = dir.join("p2");
     fs::create_dir_all(&p1).unwrap();

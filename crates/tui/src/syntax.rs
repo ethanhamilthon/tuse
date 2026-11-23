@@ -1,5 +1,3 @@
-//! A small Lua tokenizer for coloring code. It never fails: broken or
-//! half-written code (a call is shown while it streams) is colored as far as it goes.
 use crate::style::{Palette, Style};
 use crate::text::{Line, span};
 
@@ -20,9 +18,6 @@ const KEYWORDS: &[&str] = &[
 
 type Runs = Vec<(Kind, String)>;
 
-/// Splits one line into runs. `open` is the closer of a long string or comment left
-/// open by the line before (`]]`, `]=]`, ...; empty when none); it is updated for the next line.
-/// A long comment's closer starts with `-`, so the next line knows to color it as a comment.
 pub fn tokens(line: &str, open: &mut String) -> Runs {
     let c: Vec<char> = line.chars().collect();
     let mut out: Runs = vec![];
@@ -98,7 +93,6 @@ pub fn tokens(line: &str, open: &mut String) -> Runs {
     out
 }
 
-/// `[[`, `[=[`, ... at `at`: the matching closer.
 fn long_open(c: &[char], at: usize) -> Option<Vec<char>> {
     if c.get(at) != Some(&'[') {
         return None;
@@ -112,7 +106,6 @@ fn long_open(c: &[char], at: usize) -> Option<Vec<char>> {
     })
 }
 
-/// The end of `close` searched from `from` (just past it), or the end of the line.
 fn find(c: &[char], from: usize, close: &[char]) -> (usize, bool) {
     let mut i = from;
     while i < c.len() {
@@ -132,7 +125,6 @@ fn scan(c: &[char], from: usize, keep: impl Fn(char) -> bool) -> usize {
     j
 }
 
-/// The end of a quoted string that opens at `at` (or the end of the line).
 fn quoted(c: &[char], at: usize) -> usize {
     let q = c[at];
     let mut i = at + 1;
@@ -149,7 +141,6 @@ fn quoted(c: &[char], at: usize) -> usize {
     c.len()
 }
 
-/// The colored lines of `code`, one per source line, on top of `base`.
 pub fn highlight(code: &str, base: Style, p: &Palette) -> Vec<Line> {
     let mut open = String::new();
     code.split('\n')
@@ -204,7 +195,6 @@ mod tests {
         let want: Vec<(Kind, String)> = want.iter().map(|(k, s)| (*k, s.to_string())).collect();
         assert_eq!(got, want);
         assert_eq!(colored("x = 'abc"), [(Kind::Str, "'abc".to_string())]);
-        // Long strings and comments run over lines.
         let mut open = String::new();
         tokens("s = [==[first", &mut open);
         assert_eq!(open, "]==]");

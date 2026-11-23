@@ -64,8 +64,6 @@ pub struct App {
     /// The queued message whose text is still shown in the input.
     pub steering: Option<InputId>,
     pub quit: bool,
-    /// `/maxsize` override of the model's context window.
-    pub max_size: Option<u64>,
 }
 
 impl App {
@@ -111,7 +109,6 @@ impl App {
             input_cols: 80,
             steering: None,
             quit: false,
-            max_size: None,
         }
     }
 

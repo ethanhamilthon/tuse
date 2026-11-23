@@ -5,7 +5,7 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-pub const COMMANDS: [(&str, &str); 11] = [
+pub const COMMANDS: [(&str, &str); 10] = [
     ("config", "show the resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
@@ -13,7 +13,6 @@ pub const COMMANDS: [(&str, &str); 11] = [
     ("tasks", "background tasks"),
     ("childrens", "child sessions of this one"),
     ("usage", "context, tokens and cost"),
-    ("maxsize", "set the max context size, e.g. /maxsize 1m"),
     ("trace", "everything in this session"),
     ("reload", "run the config file again"),
     ("quit", "exit"),
@@ -21,10 +20,8 @@ pub const COMMANDS: [(&str, &str); 11] = [
 
 impl App {
     pub fn run_command(&mut self, name: &str) {
-        let (name, arg) = name.split_once(' ').unwrap_or((name, ""));
         self.children_view = None;
         match name {
-            "maxsize" => self.set_maxsize(arg),
             "config" => {
                 self.trace_item = None;
                 self.panel = Some(Panel::new("Config", self.session.config().to_json()));

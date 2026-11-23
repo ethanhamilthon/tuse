@@ -67,9 +67,7 @@ pub fn model(app: &App) -> String {
     let (model, effort) = app.session.model();
     let mut parts = vec![config.display_name(&model), effort];
     let stats = app.session.stats();
-    let window = app
-        .max_size
-        .unwrap_or_else(|| config.model_def(&model).map_or(0, |d| d.window));
+    let window = config.model_def(&model).map_or(0, |d| d.window);
     if window > 0 || stats.context > 0 {
         parts.push(crate::maxsize::usage(stats.context, window));
     }

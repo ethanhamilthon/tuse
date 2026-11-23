@@ -4,7 +4,7 @@ use crate::text::{Line, wrap};
 
 enum Body {
     Text(String),
-    Markdown(String),
+    Markdown(String, bool),
     Lua(String),
     Styled(Vec<Line>),
 }
@@ -30,7 +30,10 @@ impl Panel {
         Self::with_body(Body::Text(value.into()))
     }
     pub fn markdown(value: impl Into<String>) -> Self {
-        Self::with_body(Body::Markdown(value.into()))
+        Self::with_body(Body::Markdown(value.into(), true))
+    }
+    pub fn markdown_unlinked(value: impl Into<String>) -> Self {
+        Self::with_body(Body::Markdown(value.into(), false))
     }
     pub fn lua(value: impl Into<String>) -> Self {
         Self::with_body(Body::Lua(value.into()))
@@ -47,16 +50,16 @@ impl Panel {
         if self.cache.as_ref().is_none_or(|(w, _)| *w != width) {
             let empty = vec![];
             let lines = match &self.body {
-                Body::Text(text) => plain(text, width, Style::fg(p.fg), "", "", p),
-                Body::Markdown(text) => crate::markdown::render(text, width, p),
+                Body::Text(text) => plain(text, width, Style::fg(p.fg), "", ""),
+                Body::Markdown(text, true) => crate::markdown::render(text, width, p),
+                Body::Markdown(text, false) => {
+                    crate::markdown::render_with_links(text, width, p, false)
+                }
                 Body::Lua(code) => {
                     let clean = crate::render::clean(code);
                     crate::syntax::highlight(&clean, Style::fg(p.fg), p)
                         .into_iter()
-                        .flat_map(|r| {
-                            let r = crate::links::linkify_line(r, p);
-                            wrap(&r, width, &empty, &empty)
-                        })
+                        .flat_map(|r| wrap(&r, width, &empty, &empty))
                         .collect()
                 }
                 Body::Styled(rows) => rows

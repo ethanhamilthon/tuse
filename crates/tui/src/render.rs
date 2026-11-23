@@ -30,21 +30,14 @@ pub(crate) fn clean(text: &str) -> String {
         .collect()
 }
 
-pub fn plain(
-    text: &str,
-    width: usize,
-    style: Style,
-    first: &str,
-    rest: &str,
-    p: &Palette,
-) -> Vec<Line> {
+pub fn plain(text: &str, width: usize, style: Style, first: &str, rest: &str) -> Vec<Line> {
     let text = &clean(text);
     let (f, r) = (vec![span(first, style)], vec![span(rest, style)]);
     text.split('\n')
         .enumerate()
         .flat_map(|(i, l)| {
             wrap(
-                &crate::links::spans(l, style, p),
+                &vec![span(l, style)],
                 width,
                 if i == 0 { &f } else { &r },
                 &r,
@@ -63,7 +56,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
                 text.push_str(&format!("\n[{images} image(s)]"));
             }
             // No prefix: the `surface` block marks the message.
-            let mut lines = plain(&text, width, st, "", "", p);
+            let mut lines = plain(&text, width, st, "", "");
             for l in &mut lines {
                 let fill = width.saturating_sub(line_width(l));
                 l.push(span(" ".repeat(fill), st));
@@ -83,7 +76,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
                 Some((i, _)) => (&text[i + 1..], pad.as_str()),
                 None => (text, REASONING_PREFIX),
             };
-            let all = plain(text, width, st, first, &pad, p);
+            let all = plain(text, width, st, first, &pad);
             let n = tuse_config::limit(p.ui.reasoning_line, all.len());
             all[all.len() - n..].to_vec()
         }
@@ -94,8 +87,8 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             diffs,
             ..
         } => crate::tool_view::tool(input, output.as_deref(), *code, diffs, width, p),
-        Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad, p),
-        Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad, p),
+        Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad),
+        Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad),
         Entry::TurnEnd {
             elapsed,
             model,
@@ -111,7 +104,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
                 parts.push(format!("{model}/{effort}"));
             }
             let text = parts.join(LABEL_SEP);
-            plain(&text, width, Style::fg(p.muted), NOTICE_PREFIX, &pad, p)
+            plain(&text, width, Style::fg(p.muted), NOTICE_PREFIX, &pad)
         }
         Entry::Markdown { text, .. } => ui_markdown(text, width, p),
         Entry::UiResult {
@@ -120,15 +113,15 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             value,
         } => marked(UI_RESULT_PREFIX, width, p, |room| {
             let mut out = if *is_picker {
-                plain(prompt, room, Style::fg(p.dim), "", "", p)
+                plain(prompt, room, Style::fg(p.dim), "", "")
             } else {
-                crate::markdown::render(prompt, room, p)
+                crate::markdown::render_with_links(prompt, room, p, false)
             };
             if out.is_empty() {
                 out.push(vec![]);
             }
             let answer = marked(INPUT_PREFIX, room, p, |room| {
-                plain(value, room, Style::fg(p.fg), "", "", p)
+                plain(value, room, Style::fg(p.fg), "", "")
             });
             out.extend(answer);
             out

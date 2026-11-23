@@ -94,8 +94,7 @@ impl Session {
             lane.cancel = Arc::default();
             (lane.queue.remove(0), lane.cancel.clone())
         };
-        let secs = self.config().settings.hook_timeout.max(1);
-        let stop = Stop::new(cancel, Some(Instant::now() + Duration::from_secs(secs)));
+        let stop = Stop::new(cancel, None);
         let weak = Arc::downgrade(self);
         let started = Instant::now();
         self.vm.post(move |lua| {
@@ -154,8 +153,8 @@ impl Session {
         self.next_hook(name.to_string());
     }
 
-    /// Fires `process_end` and waits up to `hook_timeout` for every hook run to end;
-    /// the runs still going then are stopped. No hook fires after this.
+    /// Fires `process_end` and waits for every hook run to end, with no time limit.
+    /// No hook fires after this.
     pub(crate) fn finish_hooks(self: &Arc<Self>, reason: &'static str) {
         self.hook(
             "process_end",
@@ -165,18 +164,8 @@ impl Session {
             },
         );
         self.hooks_on.store(false, Ordering::Release);
-        let secs = self.config().settings.hook_timeout.max(1);
-        let deadline = Instant::now() + Duration::from_secs(secs);
-        loop {
-            let busy = self.hook_runs.lock().unwrap().values().any(|l| l.busy);
-            if !busy || Instant::now() >= deadline {
-                break;
-            }
+        while self.hook_runs.lock().unwrap().values().any(|l| l.busy) {
             std::thread::sleep(Duration::from_millis(10));
-        }
-        for lane in self.hook_runs.lock().unwrap().values_mut() {
-            lane.queue.clear();
-            lane.cancel.store(true, Ordering::Relaxed);
         }
     }
 

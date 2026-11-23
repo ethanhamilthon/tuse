@@ -1,7 +1,7 @@
 # Hooks
 
 A hook is a Lua function called on an event; Tuse does not wait for it, except for
-`process_end`, which gets up to `hook_timeout` before Tuse goes on. There are four events:
+`process_end`, which Tuse waits for until it ends. There are four events:
 
 | Event | When | Fields |
 | --- | --- | --- |
@@ -31,6 +31,6 @@ return {
 Hooks run as coroutines in the session's VM, so they share its globals and helpers (and the
 upvalues of the config file, which survive between events). The events of one hook run in
 emission order; different hooks can run concurrently, and they keep running while the agent
-waits on `sh`. Each run has `hook_timeout` seconds (default 30); Esc stops the runs going on.
+waits on `sh`. A run has no time limit; Esc stops the runs going on.
 An error produces a `hook NAME: ...` notice. `/reload` runs `process_end` on the old hooks, then
 `process_start` on the new ones. Every run is listed in `/trace` with its fields and time.

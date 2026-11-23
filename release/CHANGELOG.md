@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.5
+
+- **Breaking:** Removed config `include`. Use `require(...)` directly (for example `require("global")` in a project `tuse.lua`); configs that still return an `include` key fail with a clear error.
+- `require` now resolves relative module names against the file that calls `require` (falling back to the working directory for inline code in the `lua` tool). File modules are cached by canonical path, and cyclic `require` calls raise an error.
+- **Breaking:** Global config lookup now checks only `$TUSE_GLOBAL_CONFIG`, `~/.config/tuse.lua`, and `~/.config/tuse/init.lua` (`~/.config/tuse/main.lua` is no longer read as an entry; only `./tuse.lua` is looked up in the working directory).
+- Removed the default 1-column left padding on user messages in the TUI.
+
 ## 0.7.4
 
 - Tuse no longer keeps running at 100% CPU after its terminal is closed. If the UI does not stop within 2 seconds of a hangup, or after the terminal goes away, Tuse closes the session (with `process_end` hooks) and exits.

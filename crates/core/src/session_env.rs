@@ -20,11 +20,12 @@ impl Session {
         }
     }
 
-    /// Environment of `sh`, tasks and `os.environ`.
+    /// Environment of `sh` and tasks.
     pub fn env(&self) -> Vec<(String, String)> {
         let model = self.state.lock().unwrap().model.clone();
         let mut env = vec![
             ("TUSE_SESSION".into(), self.id.clone()),
+            ("TUSE_MODE".into(), self.mode.name().into()),
             ("TUSE_CWD".into(), self.cwd.display().to_string()),
             ("TUSE_MODEL".into(), model),
         ];

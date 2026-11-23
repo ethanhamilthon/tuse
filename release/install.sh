@@ -1,8 +1,7 @@
 #!/bin/sh
-# Installs the tuse binary; on a first install also sets up the config (`tuse reset`) and runs `tuse connect`.
+# Installs the tuse binary without prompting or changing the configuration.
 #   curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 # TUSE_VERSION=0.3.0 picks a version, TUSE_BIN_DIR changes the binary folder (default ~/.local/bin).
-# TUSE_GLOBAL_CONFIG points to the global config file (default ~/.config/tuse/main.lua).
 set -eu
 
 repo="ethanhamilthon/tuse"
@@ -55,15 +54,3 @@ case ":$PATH:" in
   *":$bin_dir:"*) ;;
   *) echo "Add $bin_dir to your PATH." ;;
 esac
-
-# A first install: no TUSE_GLOBAL_CONFIG and no ~/.config/tuse yet.
-if [ -z "${TUSE_GLOBAL_CONFIG:-}" ] && [ ! -d "$HOME/.config/tuse" ]; then
-  TUSE_RELEASE_URL="$base" "$bin_dir/tuse" reset
-fi
-
-# The installer is piped from curl, so the prompts read the terminal.
-if (: < /dev/tty) 2>/dev/null; then
-  "$bin_dir/tuse" connect < /dev/tty || true
-else
-  echo "Next: tuse connect"
-fi

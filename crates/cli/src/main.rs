@@ -14,12 +14,10 @@ USAGE
                                            to stderr on exit, see /resume)
   tuse json [-c PATH] [-r ID]              a JSON-RPC 2.0 session over stdin/stdout, one
                                            message per line (see docs/json.md)
-  tuse connect                            add a provider: asks base url, api key and name,
-                                           fetches its models and saves it in ~/.tuse/tuse.db
+  tuse connect --base URL --key '$ENV' --name NAME
+                                           verify and save an API provider
   tuse disconnect NAME                    remove a provider
   tuse providers                          list the providers
-  tuse reset [--yes]                      replace the global config folder with the latest
-                                           main.lua
   tuse update                             update the binary
   tuse version | tuse help
 
@@ -38,9 +36,7 @@ fn run(raw: Vec<String>) -> Result<(), String> {
     let sub = raw.first().map(String::as_str).unwrap_or("");
     let rest = raw.get(1..).unwrap_or_default();
     match sub {
-        "connect" => connect::run(tuse_core::theme(
-            &std::env::current_dir().unwrap_or_default(),
-        )),
+        "connect" => connect::run(rest),
         "disconnect" => match rest {
             [name] => connect::remove(name),
             _ => Err(format!("usage: tuse disconnect NAME\n\n{USAGE}")),
@@ -50,7 +46,6 @@ fn run(raw: Vec<String>) -> Result<(), String> {
             Ok(())
         }
         "json" => json(&Args::parse(rest, &["--config", "-c", "--resume", "-r"])?),
-        "reset" => update::reset(Args::parse(rest, &[])?.has(&["--yes", "-y"])),
         "update" => update::update(),
         "version" | "--version" | "-V" => {
             println!("tuse {}", env!("CARGO_PKG_VERSION"));
@@ -74,13 +69,13 @@ fn start(a: &Args) -> Result<(), String> {
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let config = a.value(&["--config", "-c"]).map(|p| cwd.join(p));
     let session = Session::open(Options {
-        cwd: cwd.clone(),
+        cwd,
         config: config.clone(),
         mode: tuse_core::Mode::Tui,
         resume: a.value(&["--resume", "-r"]),
         start: tuse_core::Start::Launch,
     })?;
-    let id = tuse_tui::run(session, cwd, config).map_err(|e| e.to_string())?;
+    let id = tuse_tui::run(session, config).map_err(|e| e.to_string())?;
     eprintln!("tuse: session {id}");
     Ok(())
 }

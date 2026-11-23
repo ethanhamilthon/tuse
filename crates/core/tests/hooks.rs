@@ -70,16 +70,14 @@ return {{
         if e.event == "user_message" and e.is_first then set_title("hook " .. e.text) end
       end,
     }},
-    tui_only = {{
-      modes = {{"tui"}},
+    tui_only = TUSE_MODE == "tui" and {{
       events = {{"process_start", "process_end", "user_message"}},
       run = function(e) append("{}", e.event) end,
-    }},
-    hl_only = {{
-      modes = {{"json"}},
+    }} or nil,
+    hl_only = TUSE_MODE == "json" and {{
       events = {{"process_start", "process_end"}},
       run = function(e) append("{}", e.event .. " " .. e.reason) end,
-    }},
+    }} or nil,
   }},
 }}
 "#,

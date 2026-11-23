@@ -9,8 +9,6 @@ pub const LIST_INDENT: usize = 2;
 pub const CODE_INDENT: usize = 2;
 
 pub const INPUT_PREFIX: &str = "› ";
-/// Before each question of `tuse connect` and other inline prompts.
-pub const ASK_PREFIX: &str = "› ";
 pub const TOOL_PREFIX: &str = "* ";
 pub const REASONING_PREFIX: &str = "∴ ";
 pub const NOTICE_PREFIX: &str = "✓ ";
@@ -23,7 +21,6 @@ pub const TABLE_SEP: &str = " │ ";
 pub const SCROLL_MARK: &str = "↑";
 pub const LABEL_SEP: &str = " · ";
 pub const MORE: &str = "…";
-pub const MASK_CHAR: &str = "•";
 /// Blank columns left of a user message.
 pub const FILL_PAD: usize = 1;
 pub const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];

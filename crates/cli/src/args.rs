@@ -26,7 +26,12 @@ impl Args {
                 let value = if valued.contains(&name.as_str()) {
                     match inline {
                         Some(v) => Some(v),
-                        None => Some(it.next().cloned().ok_or(format!("{name} needs a value"))?),
+                        None => Some(
+                            it.next()
+                                .filter(|v| !v.starts_with('-'))
+                                .cloned()
+                                .ok_or(format!("{name} needs a value"))?,
+                        ),
                     }
                 } else {
                     inline
@@ -37,10 +42,6 @@ impl Args {
             }
         }
         Ok(a)
-    }
-
-    pub fn has(&self, names: &[&str]) -> bool {
-        self.flags.iter().any(|(n, _)| names.contains(&n.as_str()))
     }
 
     pub fn value(&self, names: &[&str]) -> Option<String> {

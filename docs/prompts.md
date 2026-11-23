@@ -15,18 +15,16 @@ fix this #review @src/main.rs [Image #1]
 
 - Only what is picked in the input counts: a prompt chosen with the `#` picker, a file chosen
   with `@`, an image pasted with Ctrl+V. A `#name` or `@path` typed by hand is plain text.
-- `@` lists the current folder (`@dir/*` goes into `dir`). A path starting with `/` or `~/` lists
+- `@` lists the current folder (`@dir/name` searches inside `dir`). A path starting with `/` or `~/` lists
   that folder outside the project: `@/etc/ho` shows the entries of `/etc/` matching `ho`. `~/` is
   sent as the full home path.
 - A prompt is sent once, however often it appears.
-- In config, each `prompts` entry is a plain string or `{text, modes: [tui]}` (no `modes` or
-  empty means all modes; entries excluded by the active mode are hidden from `#` and ignored).
+- In config, `prompts` maps names to strings.
 - Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) are attached as pictures. A pasted image keeps
   its number `N`; one picked with `@` gets the next free one.
 - A text file sends its first 1 KB; a longer one is marked `truncated="true" size="BYTES"`.
   A binary file is only named: `<file path="..." binary="true" size="BYTES"/>`.
   Missing files and folders are skipped.
 
-`/trace` shows the text with its context. After compaction, the dropped messages are summarized
-from their text only. `tuse json` builds the context from
+`/trace` shows the text with its context. After compaction, older messages keep only their conversation text in the model context. `tuse json` builds the context from
 `files` and `images` in `turn.submit` ([json.md](json.md)).

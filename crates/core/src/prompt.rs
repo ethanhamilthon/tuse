@@ -3,17 +3,10 @@ use tuse_config::Config;
 
 const SYSTEM: &str = include_str!("../prompts/system.md");
 
-pub fn system_prompt(config: &Config, compacted: bool, mode: crate::Mode) -> String {
+pub fn system_prompt(config: &Config, compacted: bool) -> String {
     let mut parts = vec![SYSTEM.trim_end().to_string()];
-    parts[0].push_str(&crate::helpers::listing(config, mode, false));
-    let cfg_mode = mode.into();
-    parts.extend(
-        config
-            .systems
-            .iter()
-            .filter(|s| s.matches(cfg_mode))
-            .map(|s| s.text().trim_end().to_string()),
-    );
+    parts[0].push_str(&crate::helpers::listing(config, false));
+    parts.extend(config.systems.iter().map(|s| s.trim_end().to_string()));
     let mut out = parts.join("\n\n");
     if compacted {
         out.push_str("\n\nEarlier parts of this conversation were compacted to save context: old tool calls and their outputs were removed and some later outputs were cut to their first line.");

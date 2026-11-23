@@ -8,11 +8,11 @@ pub enum Mode {
     Json,
 }
 
-impl From<Mode> for tuse_config::Mode {
-    fn from(m: Mode) -> Self {
-        match m {
-            Mode::Tui => Self::Tui,
-            Mode::Json => Self::Json,
+impl Mode {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Tui => "tui",
+            Self::Json => "json",
         }
     }
 }

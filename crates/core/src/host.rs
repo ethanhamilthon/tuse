@@ -9,22 +9,28 @@ use tuse_lua::{Done, Host, TaskStart, with_run};
 pub(crate) type Slot = Arc<Mutex<Weak<Session>>>;
 
 /// What the VM reaches in its session. Holds the session weakly: the session owns the VM.
-pub(crate) struct SessionHost(pub Slot);
+pub(crate) struct SessionHost {
+    pub slot: Slot,
+    pub cwd: PathBuf,
+    pub mode: crate::Mode,
+}
 
 impl SessionHost {
     fn get(&self) -> Option<Arc<Session>> {
-        self.0.lock().unwrap().upgrade()
+        self.slot.lock().unwrap().upgrade()
     }
 }
 
 impl Host for SessionHost {
     fn cwd(&self) -> PathBuf {
-        self.get()
-            .map_or_else(|| PathBuf::from("/"), |s| s.cwd.clone())
+        self.cwd.clone()
     }
 
     fn env(&self) -> Vec<(String, String)> {
-        self.get().map(|s| s.env()).unwrap_or_default()
+        self.get().map_or_else(
+            || vec![("TUSE_MODE".into(), self.mode.name().into())],
+            |s| s.env(),
+        )
     }
 
     fn action(&self, what: &str) {
@@ -102,7 +108,7 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
             let mut text = crate::docs::docs(topic.as_deref());
             let t = topic.unwrap_or_default().trim().to_ascii_lowercase();
             if t == "functions" || t == "functions.md" {
-                text.push_str(&crate::helpers::listing(&s.config(), s.mode, true));
+                text.push_str(&crate::helpers::listing(&s.config(), true));
             }
             Ok(text)
         })?,

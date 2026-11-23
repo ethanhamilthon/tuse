@@ -5,7 +5,7 @@ Chat Completions compatible API, one tool: `lua`.
 
 - Full-screen TUI with Markdown rendering and pickers for `/` commands, `#` prompts and `@` files.
 - The agent works in a persistent Lua 5.4 VM with `read()`, `write()`, `edit()`, `grep()`,
-  `sh()`, `sleep()` and `spawn()`. The model picks the timeout of each call; nothing is cut.
+  `sh()`, `sleep()` and `spawn()`. Each call has a 120-second deadline; output is not capped.
 - One VM per session runs the config, the agent's code, hooks and background tasks as
   coroutines: while one waits on `sh`, the others go on.
 - `read()` shows images to the model; files changed by `write()` and `edit()` are shown as a
@@ -40,28 +40,29 @@ Cost is an estimate at Haiku-class prices. One model, one setup.
 curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 ```
 
-The script puts `tuse` into `~/.local/bin`. On a first install (no `TUSE_GLOBAL_CONFIG` and
-no `~/.config/tuse`) it runs `tuse reset`, which installs `main.lua`, and then `tuse connect`.
-The system prompt and the default settings are built into the binary.
-`TUSE_VERSION=0.3.0` picks a version, `TUSE_BIN_DIR` the folder.
+The script installs `tuse` into `~/.local/bin` without prompting or changing your config.
+`TUSE_VERSION=0.7.3` pins a release; `TUSE_BIN_DIR` changes the destination.
 
-`tuse update` updates the binary; your `main.lua` is not touched.
-`tuse reset` deletes the config folder and installs a fresh `main.lua`.
+Add a provider explicitly; quote `$OPENAI_API_KEY` to store a reference instead of the key:
 
-Or build it: `cargo install --git https://github.com/ethanhamilthon/tuse tuse`, then copy
-[main.lua](release/main.lua) to `~/.config/tuse/`.
+```sh
+tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai
+```
 
-From a checkout, `make install` builds the release binary into `~/.local/bin` (`BIN_DIR`) and
-creates `main.lua` in `~/.config/tuse` (`CONFIG_DIR`) when it is missing.
+`tuse update` replaces the binary without touching your config. You can also build from
+source with `cargo install --locked --git https://github.com/ethanhamilthon/tuse tuse`,
+or run `make install` from a checkout. The defaults are built in; copying
+[main.lua](release/main.lua) to `~/.config/tuse/` is optional.
 
 ## Usage
 
 ```
 tuse [-c|--config PATH] [-r|--resume ID] open the TUI
 tuse json [-c PATH] [-r ID]               JSON-RPC 2.0 over stdin/stdout (docs/json.md)
-tuse connect                              add a provider (base url, api key, name)
+tuse connect --base URL --key KEY --name NAME
+                                          verify and save a provider
 tuse providers | tuse disconnect NAME     list | remove providers
-tuse reset [--yes] | tuse update          reset the config folder | update the binary
+tuse update                              update the binary
 ```
 
 `--config` picks the config file (else `./tuse.lua`, else the global `main.lua`). `--resume ID`
@@ -79,8 +80,7 @@ The agent's tool is `lua(code)`, a persistent Lua 5.4 VM with these functions:
 
 The VM lives as long as the process. A call is stopped after 120 seconds.
 
-`tuse connect` asks for the base url, the API key (`$ENV` works too) and a name, fetches
-the provider's models, says how many it got and saves the provider in `~/.tuse/tuse.db`.
+`tuse connect` verifies the provider by fetching its models, then saves it in `~/.tuse/tuse.db`.
 
 ### TUI
 
@@ -106,16 +106,12 @@ A message sent while the agent is working stays dimmed in the input until the ag
 Editing it withdraws it from the queue without interrupting the turn. Press Enter to send
 the edited draft. Esc still stops the turn.
 
-Commands: `/new`, `/resume` (sessions started in this folder), `/models` (every model the
-providers report, then effort), `/tasks` (Enter shows output, Ctrl+X stops), `/childrens` (tree of child tuse sessions started with `TUSE_PARENT`, with tokens and spend), `/usage`,
-`/trace` (a list of the system prompt, messages, thinking, tool calls, outputs and hook runs;
-Enter opens an item in full; `+lua`, `-hook` filter by type), `/reload`, `/quit`.
-Every list looks the same and is drawn over the bottom of the chat; typing in the input filters it, and the draft comes back on close. `/usage`
-and a task's output open as text in the same frame; Esc closes it. Drag to select text in the chat, panels or input.
-A session keeps its own model: `/models` also remembers it for new sessions.
+Commands: `/new`, `/resume`, `/models`, `/tasks`, `/usage`, `/trace`, `/config`, `/reload`,
+`/quit`. `/trace` opens a scrollable log of the conversation, tool calls and hooks. Pickers
+filter by substring; the input becomes the search box and restores your draft on close.
 
 `#name` inserts a prompt from the config; `@` picks a file or folder from the current folder
-(`@dir/*` lists what is inside `dir`), or by absolute path: `@/etc/` and `@~/` list those
+(`@dir/name` filters the entries inside `dir`), or by absolute path: `@/etc/` and `@~/` list those
 folders as you type. The message keeps `#name` and `@path` as typed; the prompt
 text and the file go to the model in a hidden block ([docs/prompts.md](docs/prompts.md)).
 Files, prompts and images are one unit in the input: arrows and Backspace move over them whole.
@@ -123,13 +119,14 @@ Files, prompts and images are one unit in the input: arrows and Backspace move o
 
 ## Config
 
-Tuse runs `--config PATH`, else `./tuse.lua`, else `~/.config/tuse/main.lua`.
+Tuse runs `--config PATH`, else `./tuse.lua`, else `$TUSE_GLOBAL_CONFIG` or `~/.config/tuse/main.lua`.
 See [docs/config.md](docs/config.md) for every key.
 
 ```lua
-local shared = require("shared")       -- shared.lua next to this file
+local shared = require("shared")       -- shared.lua in the working directory
 
 return {
+  include = { os.getenv("TUSE_GLOBAL_CONFIG") }, -- optional external config
   model = "x/claude-sonnet-5-5",
   effort = "high",                     -- default | low | medium | high | xhigh | max
   systems = shared.systems,
@@ -166,7 +163,9 @@ return {
 ## Development
 
 The workspace is split into crates: `config`, `api`, `lua`, `core`, `tui`, `rpc` and
-`cli`. See [AGENTS.md](AGENTS.md) for the rules. Run `make check` before committing.
+`cli`. The Rust toolchain is pinned in `rust-toolchain.toml`. See [AGENTS.md](AGENTS.md)
+for the rules and run `make check` before committing. Release builds target macOS 11+
+and Linux with glibc 2.35 or newer.
 
 ## License
 

@@ -13,7 +13,7 @@ big outputs short yourself (`out:sub(1, 2000)`, `grep` with a `limit`).
 The whole standard library is there: `string`, `table`, `math`, `utf8`, `io`, `os` (but not
 `os.exit`), `coroutine`, `require` and `dofile`. Tuse adds `json.encode`, `json.decode` and
 `inspect(value)`. Lua patterns are not regular expressions; use `grep` or `sh` for those. A
-`.lua` file next to the config can be loaded with `require("name")`. Paths are absolute, `~/...`
+`.lua` module in the session working directory can be loaded with `require("name")`. Paths are absolute, `~/...`
 or relative to the working directory.
 
 Everything runs in one VM on its own thread: the agent's calls, hooks and background tasks are

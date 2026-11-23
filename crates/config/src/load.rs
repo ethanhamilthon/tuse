@@ -49,8 +49,10 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
 fn empty_tables_as_maps(v: &mut Value) {
     let Value::Object(m) = v else { return };
     for (k, v) in m.iter_mut() {
-        let list = matches!(k.as_str(), "systems" | "models");
-        if !list && v.as_array().is_some_and(Vec::is_empty) {
+        let list = matches!(k.as_str(), "systems" | "models" | "events");
+        if list && v.as_object().is_some_and(serde_json::Map::is_empty) {
+            *v = Value::Array(vec![]);
+        } else if !list && v.as_array().is_some_and(Vec::is_empty) {
             *v = Value::Object(Default::default());
         }
         if !list {

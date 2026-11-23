@@ -20,7 +20,7 @@ catch them with `pcall`. Options are passed as a table, like `read(path, {offset
 - `sh(cmd, {timeout=nil, cwd=nil, env={}})`: `bash -c cmd`, stdout and stderr merged. Returns a
   table with `.out`, `.code` (`nil` when killed), `.ok` (`code == 0`), `.timed_out` and
   `:lines()`; `tostring(r)` is the output plus an exit note. `TUSE_SESSION`, `TUSE_CWD`,
-  `TUSE_MODEL` and `TUSE_CURRENT_CONFIG` are set. At its own timeout or the deadline of the call
+  `TUSE_MODEL`, `TUSE_MODE` and `TUSE_CURRENT_CONFIG` are set. At its own timeout or the deadline of the call
   the process group is killed; Esc kills it too. While it runs, hooks and tasks go on.
 - `sleep(seconds)`: waits without holding up the other coroutines.
 - `spawn(fn, name)`: runs `fn` as a background task in the same VM, so it sees your globals and
@@ -55,8 +55,7 @@ return {
 Each `run` becomes a global of the VM under the function's name. `args` is only the text shown
 to the agent between the parentheses. `show_agent = false` (default `true`) hides a helper from
 the agent: it is left out of the system prompt and of `docs("functions")`, but it stays defined,
-so other helpers, hooks and tasks can call it. Set `modes = {"tui"}` (`tui` or `json`) to define a
-helper only in those run modes; omitted or empty defines it in all modes.
+so other helpers, hooks and tasks can call it. Use `TUSE_MODE` to choose which helpers to define.
 
 `/reload` runs the config file again in the same VM: helpers are redefined and the agent's
 globals stay. A deleted helper remains defined until exit.

@@ -1,25 +1,16 @@
 # Environment & Config Lookup
 
-## Environment
-
 | Variable | Meaning |
 | --- | --- |
-| `TUSE_SESSION` | The current session ID (set in `sh` and tasks). |
-| `TUSE_PARENT` | In: the ID of the parent session; a session started with it records `parent` in its meta. Out: every tuse process sets it to its own session ID in `sh` and tasks (replacing an inherited value), so nested runs form a tree for `/childrens`. |
-| `TUSE_GLOBAL_CONFIG` | Path of the global config file. Default `~/.config/tuse/main.lua`. |
-| `TUSE_HOME` | Where sessions live. Default `~/.tuse`. |
-| `TUSE_RELEASE_URL` | Where `tuse reset` and `tuse update` download from. Default: the latest GitHub release. |
-| `TUSE_CURRENT_CONFIG` | Path of the config file in use (`--config`, `./tuse.lua` or the global one); not set without a file. Tuse does not read it. |
-| `TUSE_CWD`, `TUSE_MODEL` | The working directory and the model of the session. |
+| `TUSE_MODE` | The current front end: `tui` or `json`. Set by Tuse in Lua (`TUSE_MODE` and `os.getenv("TUSE_MODE")`) and in `sh`/tasks. |
+| `TUSE_SESSION` | The current session ID, set in `sh` and tasks after session startup. |
+| `TUSE_GLOBAL_CONFIG` | Global config file path. Default `~/.config/tuse/main.lua`. |
+| `TUSE_HOME` | Where session data and providers live. Default `~/.tuse`. |
+| `TUSE_RELEASE_URL` | Release download base for the installer and `tuse update`. Default: GitHub releases. |
+| `TUSE_CURRENT_CONFIG` | Path of the selected config, when there is one; set in `sh` and tasks. |
+| `TUSE_CWD`, `TUSE_MODEL` | The working directory and model of the session; set in `sh` and tasks. |
 
-## Config lookup
-
-Tuse reads one config file:
-
-1. `--config PATH`, if given.
-2. `./tuse.lua` in the working directory.
-3. `$TUSE_GLOBAL_CONFIG`, else `~/.config/tuse/main.lua`.
-
-The system prompt (this tool and its functions) and the default
-settings are built into the binary; the `systems` of the config come after them. Put your own
-settings in `main.lua`. `/reload` runs the config again after an edit.
+Tuse chooses `--config PATH` first, then `./tuse.lua`, then the global config. Use
+`include = { os.getenv("TUSE_GLOBAL_CONFIG") }` inside a project config to load an external
+config explicitly. `require` searches the session's working directory for Lua modules.
+See [config](config.md) for the merge rules.

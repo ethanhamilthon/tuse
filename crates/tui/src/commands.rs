@@ -26,7 +26,10 @@ impl App {
             "new" => self.switch(None),
             "quit" => self.quit = true,
             "resume" => self.open_resume(),
-            "models" => self.open_models(),
+            "models" => {
+                self.open_models();
+                self.session.fetch_models();
+            }
             "tasks" => self.open_tasks(),
             "usage" => {
                 self.panel = Some(crate::usage::panel(&self.session, &self.palette));
@@ -132,7 +135,7 @@ impl App {
             (Kind::Resume, Some(v)) => self.switch(Some(v)),
             (Kind::Model, Some(v)) if !v.is_empty() && !self.session.model_available(&v) => {
                 self.restore_draft();
-                self.error(format!("Model `{v}` is unavailable in this mode"));
+                self.error(format!("Model `{v}` is unavailable"));
             }
             (Kind::Model, Some(v)) => {
                 let (_, effort) = self.session.model();

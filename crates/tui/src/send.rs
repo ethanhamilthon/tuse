@@ -57,16 +57,9 @@ impl App {
     /// The prompts, files and images picked into the input.
     pub(crate) fn refs(&self) -> Refs {
         let config = self.session.config();
-        let mode = self.session.mode.into();
         Refs {
             prompts: (self.editor.prompts().into_iter())
-                .filter_map(|n| {
-                    config
-                        .prompts
-                        .get(&n)
-                        .filter(|p| p.matches(mode))
-                        .map(|p| (n, p.text().to_string()))
-                })
+                .filter_map(|n| config.prompts.get(&n).map(|p| (n, p.clone())))
                 .collect(),
             images: self.editor.images(),
             files: self.editor.files(),

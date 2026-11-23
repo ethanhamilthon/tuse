@@ -1,4 +1,4 @@
-//! `model.list` filtering by mode, reload cache reset, and stale in-flight fetch discard.
+//! `model.list` reload cache reset and stale in-flight fetch discard.
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 #[allow(dead_code)]
@@ -89,22 +89,15 @@ fn spawn_rpc(
     (req_tx, out, server)
 }
 
-/// Replaces the providers: `(name, base url, mode or "")`.
-fn providers(list: &[(&str, String, &str)]) {
+fn providers(list: &[(&str, String)]) {
     for p in tuse_core::providers() {
         tuse_core::remove_provider(&p.name).unwrap();
     }
-    for (name, url, mode) in list {
-        let modes = match *mode {
-            "tui" => vec![tuse_config::Mode::Tui],
-            "json" => vec![tuse_config::Mode::Json],
-            _ => vec![],
-        };
+    for (name, url) in list {
         tuse_core::add_provider(&tuse_config::Connect {
             name: name.to_string(),
             base_url: url.clone(),
             api_key: "k".into(),
-            modes,
         })
         .unwrap();
     }
@@ -142,38 +135,28 @@ fn wait_models_event(out: &mpsc::Receiver<Value>) {
 }
 
 #[test]
-fn model_list_filters_by_mode_and_discards_stale_fetches_on_reload() {
+fn model_list_discards_stale_fetches_on_reload() {
     let (old_addr, old_req) = gated_models(Some("old_only"));
     let (new_addr, new_req) = gated_models(Some("new_only"));
     let (fresh_addr, fresh_req) = gated_models(Some("fresh"));
     let (err_addr, err_req) = gated_models(None);
-    let (tui_addr, tui_req) = gated_models(Some("tui_remote"));
     let (dir, _) = common::setup("rpc-models", &old_addr, "");
     let cfg = dir.join("main.lua");
 
     // 1. Json mode: hold in-flight fetches for old `p` and `broken`, then reload before releasing.
     providers(&[
-        ("tui_p", format!("http://{tui_addr}"), "tui"),
-        ("p", format!("http://{old_addr}"), ""),
-        ("broken", format!("http://{err_addr}"), ""),
+        ("p", format!("http://{old_addr}")),
+        ("broken", format!("http://{err_addr}")),
     ]);
-    std::fs::write(
-        &cfg,
-        "return { models = { {name = 'tui_p/cfg'}, {name = 'p/cfg'} } }",
-    )
-    .unwrap();
+    std::fs::write(&cfg, "return { models = { {name = 'p/cfg'} } }").unwrap();
     let (tx, out, server) = spawn_rpc(&dir, &cfg, Mode::Json);
     rpc_call(&tx, &out, 1, "initialize");
     assert_eq!(rpc_call(&tx, &out, 2, "model.list"), json!(["p/cfg"]));
     let (rel_old, done_old) = old_req.recv_timeout(Duration::from_secs(5)).unwrap();
     let (rel_err, done_err) = err_req.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert!(tui_req.try_recv().is_err(), "tui_p queried in json mode");
 
-    // Reload: old `p` and `broken` become tui-only; a new json `p` takes over the same name.
-    providers(&[
-        ("p", format!("http://{new_addr}"), ""),
-        ("broken", format!("http://{err_addr}"), "tui"),
-    ]);
+    // Reload switches `p` to a different endpoint and removes `broken`.
+    providers(&[("p", format!("http://{new_addr}"))]);
     std::fs::write(&cfg, "return { models = { {name = 'p/cfg'} } }").unwrap();
     rpc_call(&tx, &out, 3, "config.reload");
     assert_eq!(rpc_call(&tx, &out, 4, "model.list"), json!(["p/cfg"]));
@@ -190,11 +173,8 @@ fn model_list_filters_by_mode_and_discards_stale_fetches_on_reload() {
         json!(["p/cfg", "p/new_only"])
     );
 
-    // Reload drops cached `p/new_only` when `p` leaves json mode; fresh fetch is gated.
-    providers(&[
-        ("p", format!("http://{new_addr}"), "tui"),
-        ("all_p", format!("http://{fresh_addr}"), ""),
-    ]);
+    // Reload drops cached `p/new_only` when `p` is removed; fresh fetch is gated.
+    providers(&[("all_p", format!("http://{fresh_addr}"))]);
     std::fs::write(
         &cfg,
         "return { models = { {name = 'p/cfg'}, {name = 'all_p/cfg'} } }",
@@ -210,31 +190,6 @@ fn model_list_filters_by_mode_and_discards_stale_fetches_on_reload() {
         json!(["all_p/cfg", "all_p/fresh"])
     );
     rpc_call(&tx, &out, 9, "shutdown");
-    server.join().unwrap();
-
-    // 2. Tui mode sees tui_p only (never json_p).
-    let (json_only_addr, json_only_req) = gated_models(Some("json_remote"));
-    providers(&[
-        ("tui_p", format!("http://{tui_addr}"), "tui"),
-        ("json_p", format!("http://{json_only_addr}"), "json"),
-    ]);
-    std::fs::write(
-        &cfg,
-        "return { models = { {name = 'tui_p/cfg'}, {name = 'json_p/cfg'} } }",
-    )
-    .unwrap();
-    let (tx, out, server) = spawn_rpc(&dir, &cfg, Mode::Tui);
-    rpc_call(&tx, &out, 1, "initialize");
-    assert_eq!(rpc_call(&tx, &out, 2, "model.list"), json!(["tui_p/cfg"]));
-    let (rel_tui, _) = tui_req.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert!(json_only_req.try_recv().is_err(), "json_p queried in tui");
-    rel_tui.send(()).unwrap();
-    wait_models_event(&out);
-    assert_eq!(
-        rpc_call(&tx, &out, 3, "model.list"),
-        json!(["tui_p/cfg", "tui_p/tui_remote"])
-    );
-    rpc_call(&tx, &out, 4, "shutdown");
     server.join().unwrap();
 
     common::cleanup(&dir);

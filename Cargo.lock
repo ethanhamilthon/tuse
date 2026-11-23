@@ -1150,7 +1150,6 @@ dependencies = [
 name = "tuse"
 version = "0.7.2"
 dependencies = [
- "serde_json",
  "signal-hook",
  "tuse-api",
  "tuse-config",

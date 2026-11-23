@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1
+
+- The `lua` tool is `lua(code)`: `title` and `timeout` are gone. A call is stopped after 120 seconds; `settings.tool_timeout` is removed.
+- The working indicator shows what the agent is doing (`reading PATH...`, `writing PATH...`, `editing PATH...`, `searching PATTERN...`, `running CMD...`) instead of a title. Each action stays at least 100 ms.
+- Inactive list items use `muted` instead of `border`.
+- The working animation and `settings.ui.motion` are removed.
+- Hooks have no time limit: `settings.hook_timeout` is removed. Tuse still waits for `process_end` until its runs end.
+- The config has one theme, `theme = {...}`, and the UI cannot switch it: `/theme`, `settings.theme`, `themes` and `extend` are removed. `/models` still remembers the model and effort in the database (`config.set` takes `model` or `effort`).
+- `/maxsize` is removed: the maximum context shown in the status is the model's `window`.
+
 ## 0.7.0
 
 - The agent's tool is `lua(code, title, timeout)`: Lua 5.4 (mlua) instead of Python (Monty). The model picks the timeout of each call, with no upper limit; `settings.tool_timeout` is the default.

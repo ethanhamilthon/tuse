@@ -18,6 +18,17 @@ pub const COMMANDS: [(&str, &str); 9] = [
 ];
 
 impl App {
+    /// Applies a reloaded config's theme to the screen; safe mid-turn (Lua `reload()`).
+    pub(crate) fn restyle(&mut self) {
+        self.palette = Palette::for_session(&self.session.config(), &self.cwd);
+        self.palette_gen += 1;
+        if let Some(panel) = &mut self.panel {
+            panel.invalidate();
+        }
+        if let Some(q) = &mut self.question {
+            q.panel.invalidate();
+        }
+    }
     pub fn run_command(&mut self, name: &str) {
         match name {
             "config" => {
@@ -40,18 +51,11 @@ impl App {
             "trace" => self.open_trace(),
             "reload" => match self.session.reload() {
                 Ok(()) => {
-                    self.palette = Palette::for_session(&self.session.config(), &self.cwd);
-                    self.palette_gen += 1;
+                    self.restyle();
                     self.chat = crate::chat::Chat::from_session(&self.session);
                     self.streaming = None;
                     self.thinking = None;
                     self.pending_tools.clear();
-                    if let Some(panel) = &mut self.panel {
-                        panel.invalidate();
-                    }
-                    if let Some(q) = &mut self.question {
-                        q.panel.invalidate();
-                    }
                     self.flash("Config reloaded.");
                 }
                 Err(e) => self.error(format!("Reload failed: {e}")),

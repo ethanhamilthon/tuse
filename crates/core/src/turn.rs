@@ -163,6 +163,7 @@ impl Session {
                 Record::Usage {
                     model: model.clone(),
                     usage: u,
+                    llm: false,
                 },
             );
         }

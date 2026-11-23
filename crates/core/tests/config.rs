@@ -89,7 +89,7 @@ fn require_session_validation_and_reload_rollback() {
                     end,
                 },
             },
-            commands = { ping = function() require('tuse').show_markdown('p', require('rex').tag, false) end },
+            commands = { ping = function() require('tuse').show('p', require('rex').tag, false) end },
         }
     "#,
     )

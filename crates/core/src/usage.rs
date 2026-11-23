@@ -13,7 +13,11 @@ pub fn cost(u: &Usage, p: &Prices) -> f64 {
 #[derive(Debug, Clone, Default)]
 pub struct Stats {
     pub totals: Usage,
+    /// `$main + $llm`: the whole session.
     pub cost: f64,
+    /// What `llm()` requests cost (their tokens are in `totals` too).
+    pub llm_cost: f64,
+    pub llm_requests: usize,
     pub priced: bool,
     pub requests: usize,
     pub steps: usize,
@@ -39,11 +43,23 @@ impl Stats {
     pub(crate) fn add(&mut self, r: &crate::record::Record, models: &[ModelDef]) {
         use crate::record::Record;
         match r {
-            Record::Usage { model, usage: u } => {
+            Record::Usage {
+                model,
+                usage: u,
+                llm,
+            } => {
                 self.totals.add(u);
-                self.requests += 1;
+                if *llm {
+                    self.llm_requests += 1;
+                } else {
+                    self.requests += 1;
+                }
                 if let Some(p) = find_model(models, model).and_then(|d| d.prices.as_ref()) {
-                    self.cost += cost(u, p);
+                    let c = cost(u, p);
+                    self.cost += c;
+                    if *llm {
+                        self.llm_cost += c;
+                    }
                     self.priced = true;
                 }
             }

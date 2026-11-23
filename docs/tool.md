@@ -20,7 +20,7 @@ functions even when the agent loads them.
 Paths are absolute, `~/...` or relative to the working directory.
 
 Everything runs in one VM on its own thread: the agent's calls, hooks, custom slash commands, and
-background tasks are coroutines of a scheduler. `sh`, `sleep`, `show_picker`, `show_question`, and
+background tasks are coroutines of a scheduler. `sh`, `sleep`, `pick`, `ask`, and
 other waits yield, so the other coroutines keep running meanwhile (interactive UI waits also pause
 the calling coroutine's timeout until replied or cancelled). Prefer `read`, `grep`, `write`,
 `edit`, `append`, and `delete` for file operations, and wrap complex shell commands in `sh([=[…]=])`.

@@ -98,6 +98,8 @@ pub enum Event {
     Usage,
     /// A provider's model list arrived.
     Models,
+    /// A reload committed a new config (from `/reload`, `config.reload` or Lua `reload()`).
+    Reloaded,
     /// A named Markdown block was created, updated, or removed (`removed = text.is_empty() && !pin`).
     UiMarkdown {
         name: String,

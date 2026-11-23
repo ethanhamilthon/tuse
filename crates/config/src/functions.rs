@@ -1,6 +1,33 @@
 use crate::Config;
 
-const RESERVED: &str = "and break do else elseif end false for function goto if in local nil not or repeat return then true until while read write append delete edit grep sh sleep spawn task_get task_stop task_list docs set_title session show_markdown show_picker show_question print json inspect";
+/// Every Lua host function: globals in the agent's `lua` tool, exported by `require("tuse")`
+/// in files, and highlighted by the TUI.
+pub const HOST_FUNCTIONS: &[&str] = &[
+    "sh",
+    "sleep",
+    "spawn",
+    "read",
+    "write",
+    "append",
+    "delete",
+    "edit",
+    "grep",
+    "docs",
+    "set_title",
+    "session",
+    "task_get",
+    "task_list",
+    "task_stop",
+    "show",
+    "pick",
+    "ask",
+    "reload",
+    "llm",
+    "json",
+    "inspect",
+];
+
+const KEYWORDS: &str = "and break do else elseif end false for function goto if in local nil not or repeat return then true until while print";
 
 pub fn check_function_name(name: &str) -> Option<&'static str> {
     let mut chars = name.chars();
@@ -8,7 +35,7 @@ pub fn check_function_name(name: &str) -> Option<&'static str> {
         || !chars.all(|c| c == '_' || c.is_alphanumeric())
     {
         Some("invalid Lua name")
-    } else if RESERVED.split_whitespace().any(|r| r == name) {
+    } else if KEYWORDS.split_whitespace().any(|r| r == name) || HOST_FUNCTIONS.contains(&name) {
         Some("reserved name")
     } else {
         None

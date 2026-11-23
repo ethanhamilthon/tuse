@@ -45,7 +45,7 @@ type Cache = Option<(usize, Vec<Line>)>;
 #[derive(Default)]
 pub struct Chat {
     pub(crate) entries: Vec<(Entry, Cache)>,
-    /// Pinned `show_markdown` blocks rendered together at the end of the chat.
+    /// Pinned `show` blocks rendered together at the end of the chat.
     pub(crate) pinned: Vec<(String, String, Cache)>,
     /// The reply that is changing (streaming) and its rendered finished blocks.
     hot: Option<usize>,

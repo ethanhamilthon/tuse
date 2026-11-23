@@ -5,29 +5,7 @@
 use std::path::{Path, PathBuf};
 use tuse_lua::mlua::{self, Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
-/// Globals in the agent's `lua` tool; file chunks import them from `tuse`.
-const HOST: &[&str] = &[
-    "sh",
-    "sleep",
-    "spawn",
-    "read",
-    "write",
-    "append",
-    "delete",
-    "edit",
-    "grep",
-    "docs",
-    "set_title",
-    "session",
-    "task_get",
-    "task_list",
-    "task_stop",
-    "show_markdown",
-    "show_picker",
-    "show_question",
-    "json",
-    "inspect",
-];
+use tuse_config::HOST_FUNCTIONS as HOST;
 
 /// Modules loaded from files, forgotten on `/reload` so changed files load again.
 const FILES: &str = "tuse.modules";

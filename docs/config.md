@@ -7,7 +7,7 @@ in the binary. `tuse update` never touches your config.
 Configuration files execute as Lua code with your user permissions. Only load project configs and
 modules you trust. Host functions are globals only in the agent's `lua` tool. In config files,
 Lua modules, and callbacks defined in them, use `require("tuse")`. Functions that need a live
-session, such as `spawn` or `show_question`, belong in callbacks.
+session, such as `spawn` or `ask`, belong in callbacks.
 
 ```lua
 local t = require("tuse")              -- host functions and t.session()
@@ -36,7 +36,7 @@ return g
 
   | Call | Loads |
   | --- | --- |
-  | `require("tuse")` | Host functions (`session`, `sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `show_markdown`, `show_picker`, `show_question`, `json`, `inspect`). |
+  | `require("tuse")` | Host functions (`session`, `sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`). |
   | `require("name")` | `name.lua`, else `name/init.lua`, relative to the calling file (`a.b` is `a/b`). |
   | `require("./name")` | `./name.lua`, else `./name/init.lua`, relative to the calling file (`../name` works too). |
   | `require("global")` | The global config: `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. |

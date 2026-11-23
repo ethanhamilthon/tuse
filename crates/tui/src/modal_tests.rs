@@ -91,7 +91,7 @@ fn lua_picker_disables_editor_question_uses_separate_input_and_pinned_stays_last
     let mut app = crate::app::test_app("modal-lua-ui");
     app.paste("keep draft");
 
-    // show_markdown: pinned stays at end even after later messages; update avoids duplicates.
+    // show: pinned stays at end even after later messages; update avoids duplicates.
     app.handle_event(tuse_core::Event::UiMarkdown {
         name: "p".into(),
         text: "PINNED".into(),
@@ -215,7 +215,7 @@ fn slash_autocomplete_includes_custom_commands_and_updates_on_reload() {
     let cfg = app.cwd.join("tuse.lua");
     std::fs::write(
         &cfg,
-        "return { commands = { hello_ui = function() require('tuse').show_markdown('h', 'hi', false) end } }",
+        "return { commands = { hello_ui = function() require('tuse').show('h', 'hi', false) end } }",
     )
     .unwrap();
     app.run_command("reload");

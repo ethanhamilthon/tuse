@@ -18,29 +18,6 @@ const KEYWORDS: &[&str] = &[
     "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
 ];
 
-/// The host functions of the `lua` tool.
-const FUNCTIONS: &[&str] = &[
-    "sh",
-    "read",
-    "write",
-    "append",
-    "delete",
-    "edit",
-    "grep",
-    "sleep",
-    "spawn",
-    "task_get",
-    "task_stop",
-    "task_list",
-    "docs",
-    "set_title",
-    "show_markdown",
-    "show_picker",
-    "show_question",
-    "print",
-    "inspect",
-];
-
 type Runs = Vec<(Kind, String)>;
 
 /// Splits one line into runs. `open` is the closer of a long string or comment left
@@ -101,7 +78,9 @@ pub fn tokens(line: &str, open: &mut String) -> Runs {
             let after = c[i..].iter().find(|x| !x.is_whitespace());
             if KEYWORDS.contains(&word.as_str()) {
                 Kind::Keyword
-            } else if FUNCTIONS.contains(&word.as_str()) || matches!(after, Some('(' | '{' | '"')) {
+            } else if (word == "print" || tuse_core::HOST_FUNCTIONS.contains(&word.as_str()))
+                || matches!(after, Some('(' | '{' | '"'))
+            {
                 Kind::Function
             } else {
                 Kind::Plain

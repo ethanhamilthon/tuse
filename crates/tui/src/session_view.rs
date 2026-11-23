@@ -126,7 +126,13 @@ pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, compact: u64, p: &Palette
         lines.push(row(
             "Cost",
             match u.cost {
-                Some(c) => vec![span(format!("${c:.4}"), ok)],
+                Some(c) => {
+                    let llm = u.llm_cost.unwrap_or(0.0);
+                    vec![
+                        span(format!("${c:.4}"), ok),
+                        span(format!(" (${:.4} + ${llm:.4} llm)", c - llm), dim),
+                    ]
+                }
                 None => vec![span("(unknown)", dim)],
             },
         ));

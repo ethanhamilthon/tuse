@@ -5,28 +5,73 @@ mod models;
 mod update;
 
 use args::Args;
+use std::path::PathBuf;
 
 use tuse_core::{Options, Session};
 
 const USAGE: &str = "tuse - minimal AI coding agent
 
 USAGE
-  tuse [-c|--config PATH] [-r|--resume ID] open the TUI; -c picks the config file,
-                                           -r ID opens a saved session (its ID is printed
-                                           to stderr on exit, see /resume)
-  tuse json [-c PATH] [-r ID]              a JSON-RPC 2.0 session over stdin/stdout, one
-                                           message per line (see docs/json.md)
+  tuse [-c|--config PATH] [-r|--resume ID]       open the TUI; -r ID opens a saved session
+                                                 (its ID is printed to stderr on exit)
+  tuse json [-c|--config PATH] [-r|--resume ID]  a JSON-RPC 2.0 session over stdin/stdout,
+                                                 one message per line (see docs/json.md)
   tuse connect --base URL --key '$ENV' --name NAME
-                                           verify and save an API provider
-  tuse disconnect NAME                    remove a provider
-  tuse providers                          list the providers
-  tuse models                             list configured model metadata and the saved default
-  tuse init                               create ./tuse.lua that extends the global config
-  tuse update                             update the binary
-  tuse version | tuse help
+                                                 verify and save an API provider
+  tuse disconnect NAME                           remove a provider
+  tuse providers                                 list the providers
+  tuse models [-c|--config PATH]                 list configured model metadata and the
+                                                 saved default
+  tuse init                                      create ./tuse.lua that extends the global config
+  tuse update                                    update the binary
+  tuse version | -V|--version                    print the version
+  tuse help | -h|--help                          this help; `tuse COMMAND -h` shows one command
 
-The config is --config, else ./tuse.lua, else ~/.config/tuse.lua or
+-c|--config picks the config file, else ./tuse.lua, else ~/.config/tuse.lua or
 ~/.config/tuse/init.lua: a Lua file that returns a table.";
+
+/// A subcommand: its usage line, flags that take a value, flags that don't, and how many
+/// positional arguments it takes.
+struct Cmd {
+    usage: &'static str,
+    valued: &'static [&'static str],
+    plain: &'static [&'static str],
+    args: usize,
+}
+
+const CONFIG: &[&str] = &["--config", "-c"];
+const SESSION: &[&str] = &["--config", "-c", "--resume", "-r"];
+
+fn spec(sub: &str) -> Option<Cmd> {
+    let cmd = |usage, valued, args| Cmd {
+        usage,
+        valued,
+        plain: &[],
+        args,
+    };
+    Some(match sub {
+        "" => cmd("tuse [-c|--config PATH] [-r|--resume ID]", SESSION, 0),
+        "json" => cmd("tuse json [-c|--config PATH] [-r|--resume ID]", SESSION, 0),
+        "connect" => cmd(
+            "tuse connect --base URL --key '$ENV' --name NAME",
+            &["--base", "--key", "--name"],
+            0,
+        ),
+        "disconnect" => cmd("tuse disconnect NAME", &[], 1),
+        "providers" => cmd("tuse providers", &[], 0),
+        "models" => cmd("tuse models [-c|--config PATH]", CONFIG, 0),
+        "init" => cmd("tuse init", &[], 0),
+        "update" => cmd("tuse update", &[], 0),
+        "version" => Cmd {
+            usage: "tuse version",
+            valued: &[],
+            plain: &["--version", "-V"],
+            args: 0,
+        },
+        "help" => cmd("tuse help", &[], 0),
+        _ => return None,
+    })
+}
 
 fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -37,43 +82,65 @@ fn main() {
 }
 
 fn run(raw: Vec<String>) -> Result<(), String> {
-    let sub = raw.first().map(String::as_str).unwrap_or("");
-    let rest = raw.get(1..).unwrap_or_default();
+    let first = raw.first().map(String::as_str).unwrap_or("");
+    let (sub, rest) = match first {
+        "--version" | "-V" => ("version", &raw[..]),
+        "--help" | "-h" => ("help", &raw[1..]),
+        s if s.starts_with('-') => ("", &raw[..]),
+        s => (s, raw.get(1..).unwrap_or_default()),
+    };
+    let Some(cmd) = spec(sub) else {
+        return Err(format!("unknown command `{sub}`\n\n{USAGE}"));
+    };
+    let help = rest
+        .iter()
+        .take_while(|s| *s != "--")
+        .any(|s| s == "-h" || s == "--help");
+    if help || sub == "help" {
+        println!(
+            "{}",
+            if matches!(sub, "" | "help") {
+                USAGE
+            } else {
+                cmd.usage
+            }
+        );
+        return Ok(());
+    }
+    let a = Args::parse(rest, cmd.valued)?;
+    let known: Vec<&str> = cmd.valued.iter().chain(cmd.plain).copied().collect();
+    if let Some(f) = a.unknown(&known) {
+        return Err(format!("unknown flag {f}\nusage: {}", cmd.usage));
+    }
+    if a.positional.len() != cmd.args {
+        let msg = match a.positional.get(cmd.args) {
+            Some(p) => format!("unexpected argument `{p}`"),
+            None => "missing argument".into(),
+        };
+        return Err(format!("{msg}\nusage: {}", cmd.usage));
+    }
+    let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+    let config = tuse_core::config_arg(&cwd, a.value(CONFIG).as_deref());
     match sub {
-        "connect" => connect::run(rest),
-        "disconnect" => match rest {
-            [name] => connect::remove(name),
-            _ => Err(format!("usage: tuse disconnect NAME\n\n{USAGE}")),
-        },
+        "connect" => connect::run(&a),
+        "disconnect" => connect::remove(&a.positional[0]),
         "providers" => {
             connect::list();
             Ok(())
         }
-        "models" => models::run(rest),
-        "json" => json(&Args::parse(rest, &["--config", "-c", "--resume", "-r"])?),
-        "init" => init::run(rest),
+        "models" => models::run(cwd, config),
+        "json" => json(&a, cwd, config),
+        "init" => init::run(&cwd),
         "update" => update::update(),
-        "version" | "--version" | "-V" => {
+        "version" => {
             println!("tuse {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        "help" | "--help" | "-h" => {
-            println!("{USAGE}");
-            Ok(())
-        }
-        _ => start(&Args::parse(&raw, &["--config", "-c", "--resume", "-r"])?),
+        _ => start(&a, cwd, config),
     }
 }
 
-fn start(a: &Args) -> Result<(), String> {
-    if let Some(f) = a.unknown(&["--config", "-c", "--resume", "-r"]) {
-        return Err(format!("unknown flag {f}\n\n{USAGE}"));
-    }
-    if let Some(p) = a.positional.first() {
-        return Err(format!("unknown command `{p}`\n\n{USAGE}"));
-    }
-    let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
-    let config = a.value(&["--config", "-c"]).map(|p| cwd.join(p));
+fn start(a: &Args, cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
     let session = Session::open(Options {
         cwd,
         config: config.clone(),
@@ -87,17 +154,10 @@ fn start(a: &Args) -> Result<(), String> {
 }
 
 /// `tuse json`: stdout carries only the protocol; errors go to stderr.
-fn json(a: &Args) -> Result<(), String> {
-    if let Some(f) = a.unknown(&["--config", "-c", "--resume", "-r"]) {
-        return Err(format!("unknown flag {f}\n\n{USAGE}"));
-    }
-    if let Some(p) = a.positional.first() {
-        return Err(format!("unexpected argument `{p}`\n\n{USAGE}"));
-    }
-    let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+fn json(a: &Args, cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
     let session = Session::open(Options {
-        cwd: cwd.clone(),
-        config: a.value(&["--config", "-c"]).map(|p| cwd.join(p)),
+        cwd,
+        config,
         mode: tuse_core::Mode::Json,
         resume: a.value(&["--resume", "-r"]),
         start: tuse_core::Start::Launch,

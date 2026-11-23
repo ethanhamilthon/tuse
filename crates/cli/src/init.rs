@@ -10,13 +10,8 @@ g = ok and g or {}
 return g
 "#;
 
-pub fn run(rest: &[String]) -> Result<(), String> {
-    if let Some(a) = rest.first() {
-        return Err(format!("unexpected argument `{a}`\nusage: tuse init"));
-    }
-    let path = std::env::current_dir()
-        .map_err(|e| e.to_string())?
-        .join("tuse.lua");
+pub fn run(cwd: &std::path::Path) -> Result<(), String> {
+    let path = cwd.join("tuse.lua");
     if path.exists() {
         return Err(format!("{} already exists", path.display()));
     }

@@ -1,16 +1,9 @@
 //! Lists the model metadata declared in the effective Lua config.
 
-pub fn run(raw: &[String]) -> Result<(), String> {
-    match raw {
-        [flag] if matches!(flag.as_str(), "--help" | "-h") => {
-            println!("tuse models");
-            return Ok(());
-        }
-        [] => {}
-        _ => return Err("usage: tuse models".into()),
-    }
-    let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
-    let defs = tuse_core::configured_models(cwd)?;
+use std::path::PathBuf;
+
+pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
+    let defs = tuse_core::configured_models(cwd, config)?;
     let model = tuse_core::default_model();
     let effort = tuse_core::default_effort();
     println!(

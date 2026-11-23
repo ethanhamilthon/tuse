@@ -37,7 +37,7 @@ mod validate;
 mod validate_entries;
 mod validate_models;
 
-pub use config_lua::configured_models;
+pub use config_lua::{config_arg, configured_models};
 pub use control::InputId;
 pub use db::{add_provider, default_effort, default_model, providers, remove_provider, set_state};
 pub use docs::docs;

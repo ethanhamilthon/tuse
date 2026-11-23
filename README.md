@@ -58,18 +58,19 @@ or run `make install` from a checkout. The defaults are built in.
 ## Usage
 
 ```
-tuse [-c|--config PATH] [-r|--resume ID] open the TUI
-tuse json [-c PATH] [-r ID]               JSON-RPC 2.0 over stdin/stdout (docs/json.md)
-tuse init                                 ./tuse.lua that extends the global config
+tuse [--config PATH] [--resume ID]       open the TUI
+tuse json [--config PATH] [--resume ID]  JSON-RPC 2.0 over stdin/stdout (docs/json.md)
+tuse init                                ./tuse.lua that extends the global config
 tuse connect --base URL --key KEY --name NAME
-                                          verify and save a provider
-tuse providers | tuse disconnect NAME     list | remove providers
-tuse models                         list configured model metadata and the saved default
+                                         verify and save a provider
+tuse providers | tuse disconnect NAME    list | remove providers
+tuse models [--config PATH]              configured model metadata and the saved default
 tuse update                              update the binary
+tuse COMMAND --help                      help for one command
 ```
 
-`--config` picks the config file (else `./tuse.lua`, else the global config). `--resume ID`
-opens a saved session: the ID is printed to stderr when Tuse exits.
+`--config` (`-c`) picks the config file (else `./tuse.lua`, else the global config).
+`--resume ID` (`-r`) opens a saved session: the ID is printed to stderr when Tuse exits.
 
 The agent's tool is `lua(code)`, a persistent Lua 5.4 VM with these functions:
 

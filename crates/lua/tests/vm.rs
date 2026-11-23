@@ -92,3 +92,15 @@ fn deadlines_stop_loops_and_commands_but_not_others() {
         d.text
     );
 }
+
+#[test]
+fn sh_has_no_controlling_terminal() {
+    // Otherwise `zsh -i` or `bash -i` could take the terminal from Tuse.
+    let vm = Vm::new(Arc::new(H::default()), |_| {});
+    let d = vm.run(
+        "sh('(exec 3<>/dev/tty) 2>/dev/null && echo tty || echo none').out",
+        "lua",
+        stop(5),
+    );
+    assert_eq!(d.text, "none\n");
+}

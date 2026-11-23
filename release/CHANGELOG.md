@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0
+
+- **Lua UI:** Added `show_markdown(name, text, pin)`, `show_picker(options)`, and `show_question(text)`.
+  - `show_markdown` renders/updates named Markdown blocks (`pin = true` keeps them together at the end of the chat after new messages; `show_markdown(name, "", false)` removes a block).
+  - `show_picker` reuses the `/models` picker layout with the input editor disabled (including search) and restores the previous draft on Enter/Esc.
+  - `show_question` renders a Markdown panel in the picker slot and uses the editor separately from the previous draft without submitting to the model.
+  - Submitted choices/answers leave UI-only chat entries (cancelled prompts leave none); all live UI entries and `show_markdown` blocks survive `/reload` (with pin state) and are excluded from model history and session resume.
+  - Picker and question requests share one FIFO queue, pause the calling Lua coroutine's timeout while waiting, keep both front ends and other Lua jobs responsive, never deadlock `/reload` on interactive hooks, and clear pending requests on session close.
+- **Custom slash commands:** Added `commands = { name = function() ... end }` in Lua config. Custom `/name` commands appear in `/` autocomplete, update on `/reload`, run as non-blocking Lua jobs, and cannot override built-in commands.
+- **Breaking (Lua file helpers):** `read(path)` now returns raw text by default (without line numbers or pagination notes); use `read(path, {lines = true, offset = 1, limit = 2000})` for numbered, paginated lines. Added `append(path, text)` and `delete(path)` (single file only) with diff reporting, extended `grep` for multiple paths and `literal = true` search, and updated the `lua` tool description to prefer file helpers and `sh([=[…]=])`.
+- **Trace and config views:** `/trace` now opens a selectable list (`index  role  first line`) whose Enter detail panel renders `system`/`user`/`agent` as Markdown, `lua` as full syntax-highlighted source without preview limits, and other roles as plain text, with Esc returning to the selected row. `/config` now shows a styled, scrollable sectioned view without provider secrets or Lua function bodies while JSON-RPC `config.get` stays structured.
+- **TUI and JSON-RPC feature parity:** Added `session.new`, `session.resume`, `commands.list`, `commands.run`, `ui.state`, `ui.reply`, and `ui.cancel` methods, `prompts` support on `turn.submit`, single-call `model.set` validation and persistence, and `ui_markdown`/`ui_request`/`ui_clear`/`ui_result` events. Verified cross-front-end session resume in both directions (JSON-RPC ↔ TUI) sharing the same store and lock.
+
 ## 0.7.5
 
 - **Breaking:** Removed config `include`. Use `require(...)` directly (for example `require("global")` in a project `tuse.lua`); configs that still return an `include` key fail with a clear error.

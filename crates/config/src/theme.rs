@@ -21,16 +21,16 @@ impl Default for Theme {
     fn default() -> Self {
         let s = |v: &str| v.to_string();
         Self {
-            bg: s("#0A0A0A"),
-            surface: s("#1A1A1A"),
-            fg: s("#EDEDED"),
-            dim: s("#A0A0A0"),
-            muted: s("#676767"),
-            border: s("#2E2E2E"),
-            accent: s("#EDEDED"),
-            ok: s("#00AC3A"),
-            err: s("#F32E40"),
-            info: s("#52A8FF"),
+            bg: s("#121212"),
+            surface: s("#1E1E1E"),
+            fg: s("#DEDEDE"),
+            dim: s("#BDBDBD"),
+            muted: s("#929292"),
+            border: s("#333333"),
+            accent: s("#BDDEAB"),
+            ok: s("#94B979"),
+            err: s("#E27373"),
+            info: s("#97BEDC"),
         }
     }
 }

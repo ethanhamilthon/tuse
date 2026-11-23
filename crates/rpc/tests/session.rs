@@ -2,13 +2,10 @@
 mod common;
 use common::Reply;
 use serde_json::{Value, json};
-use std::io::BufReader;
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, mpsc};
 use tuse_core::{Mode, Options, Session, Start};
 
 mod support;
-use support::{Lines, Pipe, event, reply, until};
+use support::{event, spawn, until};
 
 #[test]
 fn a_client_drives_a_session() {
@@ -31,43 +28,31 @@ fn a_client_drives_a_session() {
         start: Start::Launch,
     })
     .unwrap();
-    let (req_tx, req_rx) = mpsc::channel::<String>();
-    let (out_tx, out) = mpsc::channel();
-    let input = BufReader::new(Pipe(Arc::new(Mutex::new(req_rx)), vec![]));
-    let server = std::thread::spawn(move || {
-        tuse_rpc::serve(
-            session,
-            input,
-            tuse_rpc::Out::new(Lines(out_tx, vec![])),
-            Arc::new(AtomicBool::new(false)),
-        )
-    });
-    let send = |v: Value| req_tx.send(format!("{v}\n")).unwrap();
-    let call = |id: u64, method: &str, params: Value| {
-        send(json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}))
-    };
+    let (req_tx, out, server) = spawn(session);
+    let call =
+        |id: u64, method: &str, params: Value| support::call(&req_tx, &out, id, method, params);
 
-    call(1, "session.info", json!({}));
-    assert_eq!(reply(&out, 1)["error"]["code"], -32002);
+    assert_eq!(call(1, "session.info", json!({}))["error"]["code"], -32002);
     req_tx.send("{not json\n".into()).unwrap();
     assert_eq!(
         until(&out, |v| v.get("error").is_some())["error"]["code"],
         -32700
     );
-    call(
+    let init = call(
         2,
         "initialize",
         json!({"protocolVersion": 1, "client": {"name": "t"}}),
-    );
-    let init = reply(&out, 2)["result"].clone();
+    )["result"]
+        .clone();
     assert_eq!(init["protocolVersion"], 1);
     assert_eq!(init["model"], "p/m");
     assert!(init["capabilities"]["methods"].as_array().unwrap().len() > 10);
-    call(3, "nope", json!({}));
-    assert_eq!(reply(&out, 3)["error"]["code"], -32601);
+    assert_eq!(call(3, "nope", json!({}))["error"]["code"], -32601);
 
-    call(4, "turn.submit", json!({"text": "deploy it"}));
-    assert_eq!(reply(&out, 4)["result"]["queued"], false);
+    assert_eq!(
+        call(4, "turn.submit", json!({"text": "deploy it"}))["result"]["queued"],
+        false
+    );
     assert_eq!(event(&out, "user")["text"], "deploy it");
     let end = event(&out, "tool_end");
     assert!(
@@ -77,14 +62,12 @@ fn a_client_drives_a_session() {
     assert_eq!(event(&out, "assistant")["text"], "deployed");
     assert_eq!(event(&out, "turn_end")["cancelled"], false);
 
-    call(6, "session.stats", json!({}));
-    let stats = reply(&out, 6)["result"].clone();
+    let stats = call(6, "session.stats", json!({}))["result"].clone();
     assert_eq!(
         (stats["requests"].clone(), stats["turns"].clone()),
         (json!(2), json!(1))
     );
-    call(61, "session.snapshot", json!({}));
-    let snap = reply(&out, 61)["result"].clone();
+    let snap = call(61, "session.snapshot", json!({}))["result"].clone();
     assert_eq!(
         (
             snap["mode"].clone(),
@@ -97,15 +80,17 @@ fn a_client_drives_a_session() {
     );
     assert!(snap["trace"].as_array().unwrap().len() >= 4);
     assert_eq!(snap["ctx_size"], 50000);
-    call(62, "config.get", json!({}));
-    assert_eq!(reply(&out, 62)["result"]["models"][0]["display"], "M");
-    call(7, "session.records", json!({}));
-    let records = reply(&out, 7)["result"].clone();
+    assert_eq!(
+        call(62, "config.get", json!({}))["result"]["models"][0]["display"],
+        "M"
+    );
+    let records = call(7, "session.records", json!({}))["result"].clone();
     assert!(records.as_array().unwrap().iter().any(|r| r["t"] == "tool"));
-    call(8, "tasks.get", json!({"id": "t9"}));
-    assert_eq!(reply(&out, 8)["error"]["code"], -32000);
-    call(9, "shutdown", json!({}));
-    assert_eq!(reply(&out, 9)["result"], Value::Null);
+    assert_eq!(
+        call(8, "tasks.get", json!({"id": "t9"}))["error"]["code"],
+        -32000
+    );
+    assert_eq!(call(9, "shutdown", json!({}))["result"], Value::Null);
     server.join().unwrap();
     common::cleanup(&dir);
 }

@@ -50,11 +50,6 @@ pub fn event(rx: &mpsc::Receiver<Value>, ty: &str) -> Value {
     until(rx, |v| v["method"] == "event" && v["params"]["type"] == ty)["params"].clone()
 }
 
-pub fn reply(rx: &mpsc::Receiver<Value>, id: u64) -> Value {
-    until(rx, |v| v["id"] == id)
-}
-
-#[allow(dead_code)]
 pub fn spawn(
     session: Arc<tuse_core::Session>,
 ) -> (
@@ -76,7 +71,6 @@ pub fn spawn(
     (req_tx, out, server)
 }
 
-#[allow(dead_code)]
 pub fn call(
     tx: &mpsc::Sender<String>,
     out: &mpsc::Receiver<Value>,
@@ -86,5 +80,5 @@ pub fn call(
 ) -> Value {
     let msg = serde_json::json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
     tx.send(format!("{msg}\n")).unwrap();
-    reply(out, id)
+    until(out, |v| v["id"] == id)
 }

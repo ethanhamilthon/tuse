@@ -1,16 +1,13 @@
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
-#[allow(dead_code)]
 mod support;
 
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::mpsc;
 use std::time::Duration;
-use support::{Lines, Pipe};
 use tuse_core::{Mode, Options, Session, Start};
 
 type GateReq = (mpsc::Sender<()>, mpsc::Receiver<()>);
@@ -71,18 +68,7 @@ fn spawn_rpc(
         start: Start::Launch,
     })
     .unwrap();
-    let (req_tx, req_rx) = mpsc::channel::<String>();
-    let (out_tx, out) = mpsc::channel();
-    let input = BufReader::new(Pipe(Arc::new(Mutex::new(req_rx)), vec![]));
-    let server = std::thread::spawn(move || {
-        tuse_rpc::serve(
-            session,
-            input,
-            tuse_rpc::Out::new(Lines(out_tx, vec![])),
-            Arc::new(AtomicBool::new(false)),
-        )
-    });
-    (req_tx, out, server)
+    support::spawn(session)
 }
 
 fn providers(list: &[(&str, String)]) {
@@ -99,33 +85,24 @@ fn providers(list: &[(&str, String)]) {
     }
 }
 
-fn next_until(out: &mpsc::Receiver<Value>, f: impl Fn(&Value) -> bool) -> Value {
-    loop {
-        let v = out
-            .recv_timeout(Duration::from_secs(10))
-            .expect("timed out");
-        if v["method"] == "event" && v["params"]["type"] == "error" {
-            panic!("unexpected error event: {v}");
-        }
-        if f(&v) {
-            return v;
-        }
-    }
-}
-
 fn rpc_call(
     tx: &mpsc::Sender<String>,
     out: &mpsc::Receiver<Value>,
     id: u64,
     method: &str,
 ) -> Value {
-    let msg = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": {}});
+    let msg = json!({"jsonrpc": "2.0", "id": id, "method": method});
     tx.send(format!("{msg}\n")).unwrap();
-    next_until(out, |v| v["id"] == id)["result"].clone()
+    support::until(out, |v| {
+        assert_ne!(v["params"]["type"], "error", "unexpected error event: {v}");
+        v["id"] == id
+    })["result"]
+        .clone()
 }
 
 fn wait_models_event(out: &mpsc::Receiver<Value>) {
-    next_until(out, |v| {
+    support::until(out, |v| {
+        assert_ne!(v["params"]["type"], "error", "unexpected error event: {v}");
         v["method"] == "event" && v["params"]["type"] == "models"
     });
 }
@@ -152,6 +129,7 @@ fn model_list_discards_stale_fetches_on_reload() {
 
     providers(&[("p", format!("http://{new_addr}"))]);
     rpc_call(&tx, &out, 3, "config.reload");
+    support::event(&out, "reloaded");
     assert_eq!(rpc_call(&tx, &out, 4, "model.list"), json!(["p/cfg"]));
     let (rel_new, _) = new_req.recv_timeout(Duration::from_secs(5)).unwrap();
     rel_new.send(()).unwrap();
@@ -176,7 +154,7 @@ fn model_list_discards_stale_fetches_on_reload() {
         rpc_call(&tx, &out, 8, "model.list"),
         json!(["all_p/cfg", "all_p/fresh"])
     );
-    rpc_call(&tx, &out, 9, "shutdown");
+    support::call(&tx, &out, 9, "shutdown", json!({}));
     server.join().unwrap();
 
     common::cleanup(&dir);

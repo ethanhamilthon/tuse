@@ -1,14 +1,11 @@
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
-use serde_json::{Value, json};
-use std::io::BufReader;
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, mpsc};
+use serde_json::json;
 use std::time::Duration;
 use tuse_core::{Mode, Options, Session, Start};
 
 mod support;
-use support::{Lines, Pipe, event, reply};
+use support::{call, event, spawn};
 
 #[test]
 fn startup_errors_arrive_after_the_initialize_answer() {
@@ -24,20 +21,10 @@ fn startup_errors_arrive_after_the_initialize_answer() {
         start: Start::Launch,
     })
     .unwrap();
-    let (req_tx, req_rx) = mpsc::channel::<String>();
-    let (out_tx, out) = mpsc::channel();
-    let input = BufReader::new(Pipe(Arc::new(Mutex::new(req_rx)), vec![]));
-    let server = std::thread::spawn(move || {
-        tuse_rpc::serve(
-            session,
-            input,
-            tuse_rpc::Out::new(Lines(out_tx, vec![])),
-            Arc::new(AtomicBool::new(false)),
-        )
-    });
+    let (tx, out, server) = spawn(session);
     std::thread::sleep(Duration::from_millis(300));
-    let send = |v: Value| req_tx.send(format!("{v}\n")).unwrap();
-    send(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}));
+    tx.send(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize"}).to_string() + "\n")
+        .unwrap();
     let first = out.recv_timeout(Duration::from_secs(30)).unwrap();
     assert_eq!(first["id"], 1, "{first}");
     let notice = event(&out, "notice");
@@ -45,8 +32,7 @@ fn startup_errors_arrive_after_the_initialize_answer() {
         notice["text"].as_str().unwrap().contains("boom"),
         "{notice}"
     );
-    send(json!({"jsonrpc": "2.0", "id": 2, "method": "shutdown", "params": {}}));
-    reply(&out, 2);
+    call(&tx, &out, 2, "shutdown", json!({}));
     server.join().unwrap();
     common::cleanup(&dir);
 }

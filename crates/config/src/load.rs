@@ -105,7 +105,7 @@ mod tests {
         assert!(e.unwrap_err().contains("input_design"));
         assert!(from_value(json!("x"), "t").is_err());
         let s = crate::Settings::default();
-        assert_eq!((s.hook_timeout, s.retries), (30, 5));
+        assert_eq!(s.retries, 5);
     }
 
     #[test]

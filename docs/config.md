@@ -35,7 +35,6 @@ return {
 | `effort` | `default` (sends no `reasoning_effort`), `low`, `medium`, `high`, `xhigh`, `max`. |
 | `models` | List of `{name = "provider/model", display, window, compact_at, prices}`. `prices` are dollars per 1M tokens: `["in"]`, `out`, `cache` (cached reads) and `cache_write`. |
 | `settings.compact_at` | Context size that triggers compaction (0 turns it off). Unset: 60% of the model's `window` (off when the window is unknown). A model's `compact_at` wins. |
-| `settings.hook_timeout` | Seconds a hook run gets. Default 30. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
 | `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |
 | `systems` | Texts appended to the built-in system prompt; each item is a string or `{text, modes}`. |

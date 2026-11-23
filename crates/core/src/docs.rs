@@ -47,7 +47,7 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "theme",
-        "10-color themes and settings.ui",
+        "The 10-color theme and settings.ui",
         include_str!("../../../docs/theme.md"),
     ),
 ];

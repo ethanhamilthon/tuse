@@ -4,7 +4,7 @@ use crate::style::{
     BAR_CHAR, BOX_CHARS, FILL_PAD, INPUT_PREFIX, MORE, Palette, RULE_CHAR, SCROLL_MARK, Style,
 };
 use crate::text::{Line, Span, clip_line, line_width, span, width};
-use tuse_config::UiSettings;
+use tuse_config::{InputDesign, UiSettings};
 
 /// What the input design adds around the editor text.
 pub struct Frame {
@@ -18,11 +18,11 @@ pub struct Frame {
 
 pub fn frame(ui: &UiSettings) -> Frame {
     let pw = width(INPUT_PREFIX);
-    let (left, right, head, foot) = match ui.input_design.as_str() {
-        "box" => (width(BOX_CHARS[4]) + pw, width(BOX_CHARS[4]), 1, 1),
-        "fill" => (FILL_PAD, 0, 1, 2),
-        "bar" => (width(BAR_CHAR) + 1, 0, 0, 2),
-        _ => (pw, 0, 1, 1),
+    let (left, right, head, foot) = match ui.input_design {
+        InputDesign::Box => (width(BOX_CHARS[4]) + pw, width(BOX_CHARS[4]), 1, 1),
+        InputDesign::Fill => (FILL_PAD, 0, 1, 2),
+        InputDesign::Bar => (width(BAR_CHAR) + 1, 0, 0, 2),
+        InputDesign::Lines => (pw, 0, 1, 1),
     };
     Frame {
         left,
@@ -55,8 +55,8 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
                 .collect::<Vec<_>>()
         };
     let mut out = vec![];
-    match p.ui.input_design.as_str() {
-        "box" => {
+    match p.ui.input_design {
+        InputDesign::Box => {
             out.push(border(p, w, (BOX_CHARS[0], BOX_CHARS[1]), &mark, &working));
             let side = Style::fg(p.border);
             out.extend(body(&|_, _| {
@@ -67,13 +67,13 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
             }));
             out.push(border(p, w, (BOX_CHARS[2], BOX_CHARS[3]), &[], &model));
         }
-        "fill" => {
+        InputDesign::Fill => {
             out.push(edge(p, w));
             out.extend(body(&|_, _| (vec![], vec![])));
             out.push(edge(p, w));
             out.push(status_row(w, &marked, &model));
         }
-        "bar" => {
+        InputDesign::Bar => {
             let bar = || span(format!("{BAR_CHAR} "), Style::fg(p.accent));
             out.extend(
                 rows.iter()
@@ -83,7 +83,7 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
             out.push(vec![]);
             out.push(status_row(w, &marked, &model));
         }
-        _ => {
+        InputDesign::Lines => {
             out.push(border(p, w, ("", ""), &mark, &working));
             out.extend(body(&|_, _| (vec![], vec![])));
             out.push(border(p, w, ("", ""), &[], &model));
@@ -119,20 +119,21 @@ fn row(
     pending: bool,
     (left, right): (Vec<crate::text::Span>, Vec<crate::text::Span>),
 ) -> Line {
-    let filled = p.ui.input_design == "fill";
+    let design = p.ui.input_design;
+    let filled = design == InputDesign::Fill;
     let bg = if filled { p.surface } else { None };
     let mut line = left;
     // `fill` and `bar` frame the input already; the others mark it with `› `.
-    let prefix = match p.ui.input_design.as_str() {
-        "fill" => " ".repeat(FILL_PAD),
-        "bar" => String::new(),
+    let prefix = match design {
+        InputDesign::Fill => " ".repeat(FILL_PAD),
+        InputDesign::Bar => String::new(),
         _ if i == 0 => INPUT_PREFIX.to_string(),
         _ => " ".repeat(width(INPUT_PREFIX)),
     };
     line.push(span(prefix, Style::fg(p.accent)));
     let color = if pending { p.dim } else { p.fg };
     line.push(span(text, Style::fg(color)));
-    if filled || p.ui.input_design == "box" {
+    if filled || design == InputDesign::Box {
         let used = line_width(&line) + fr.right;
         line.push(span(" ".repeat(w.saturating_sub(used)), Style::default()));
     }
@@ -206,7 +207,7 @@ mod tests {
     fn fill_is_a_straight_block_and_fill_bar_have_no_prefix() {
         let mut app = crate::app::test_app("fill-block");
         let w = 30;
-        app.palette.ui.input_design = "fill".into();
+        app.palette.ui.input_design = InputDesign::Fill;
         let surface = app.palette.surface;
         let fr = frame(&app.palette.ui);
         assert_eq!((fr.left, fr.right), (FILL_PAD, 0));
@@ -221,7 +222,7 @@ mod tests {
         assert!(text.starts_with(" hello"), "{text:?}");
         assert!(!text.contains('›'));
 
-        app.palette.ui.input_design = "bar".into();
+        app.palette.ui.input_design = InputDesign::Bar;
         let fr = frame(&app.palette.ui);
         let out = block(&app, &fr, w, &["hello".into()], 0);
         let text: String = out[0].iter().map(|s| s.text.as_str()).collect();
@@ -232,14 +233,14 @@ mod tests {
             "the cursor column follows the text"
         );
 
-        for design in ["lines", "box"] {
-            app.palette.ui.input_design = design.into();
+        for design in [InputDesign::Lines, InputDesign::Box] {
+            app.palette.ui.input_design = design;
             let fr = frame(&app.palette.ui);
             let out = block(&app, &fr, w, &["hello".into()], 0);
             let text: String = out[fr.head].iter().map(|s| s.text.as_str()).collect();
             let at = text.find("hello").unwrap();
-            assert_eq!(width(&text[..at]), fr.left, "{design}: {text:?}");
-            assert!(text.contains(INPUT_PREFIX), "{design} keeps the prefix");
+            assert_eq!(width(&text[..at]), fr.left, "{design:?}: {text:?}");
+            assert!(text.contains(INPUT_PREFIX), "{design:?} keeps the prefix");
         }
         crate::app::cleanup(app);
     }
@@ -249,24 +250,29 @@ mod tests {
         let mut app = crate::app::test_app("half-labels");
         app.flash = Some(("x".repeat(200), std::time::Instant::now()));
         app.scroll = 3;
-        for design in ["lines", "box", "fill", "bar"] {
-            app.palette.ui.input_design = design.into();
+        for design in [
+            InputDesign::Lines,
+            InputDesign::Box,
+            InputDesign::Fill,
+            InputDesign::Bar,
+        ] {
+            app.palette.ui.input_design = design;
             let fr = frame(&app.palette.ui);
             for w in [20, 41, 100] {
                 let out = block(&app, &fr, w, &["hi".into()], 0);
                 for line in &out {
-                    assert!(line_width(line) <= w, "{design} at {w}: {line:?}");
+                    assert!(line_width(line) <= w, "{design:?} at {w}: {line:?}");
                 }
                 let text: String = out.iter().flatten().map(|s| s.text.as_str()).collect();
                 let xs = text.chars().filter(|c| *c == 'x').count();
-                assert!(xs + 3 <= w / 2, "{design} at {w}: working is {xs} + mark");
+                assert!(xs + 3 <= w / 2, "{design:?} at {w}: working is {xs} + mark");
                 let model: usize = out
                     .iter()
                     .flatten()
                     .filter(|s| s.style.fg == app.palette.muted)
                     .map(|s| width(&s.text))
                     .sum();
-                assert!(model <= w / 2, "{design} at {w}: model is {model}");
+                assert!(model <= w / 2, "{design:?} at {w}: model is {model}");
             }
         }
         crate::app::cleanup(app);

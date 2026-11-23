@@ -115,7 +115,8 @@ and a task's output open as text in the same frame; Esc closes it. Drag to selec
 A session keeps its own model: `/models` also remembers it for new sessions.
 
 `#name` inserts a prompt from the config; `@` picks a file or folder from the current folder
-(`@dir/*` lists what is inside `dir`). The message keeps `#name` and `@path` as typed; the prompt
+(`@dir/*` lists what is inside `dir`), or by absolute path: `@/etc/` and `@~/` list those
+folders as you type. The message keeps `#name` and `@path` as typed; the prompt
 text and the file go to the model in a hidden block ([docs/prompts.md](docs/prompts.md)).
 Files, prompts and images are one unit in the input: arrows and Backspace move over them whole.
 `/models` remembers your choice in the database; it wins over the config file.

@@ -15,6 +15,9 @@ fix this #review @src/main.rs [Image #1]
 
 - Only what is picked in the input counts: a prompt chosen with the `#` picker, a file chosen
   with `@`, an image pasted with Ctrl+V. A `#name` or `@path` typed by hand is plain text.
+- `@` lists the current folder (`@dir/*` goes into `dir`). A path starting with `/` or `~/` lists
+  that folder outside the project: `@/etc/ho` shows the entries of `/etc/` matching `ho`. `~/` is
+  sent as the full home path.
 - A prompt is sent once, however often it appears.
 - In config, each `prompts` entry is a plain string or `{text, modes: [tui]}` (no `modes` or
   empty means all modes; entries excluded by the active mode are hidden from `#` and ignored).

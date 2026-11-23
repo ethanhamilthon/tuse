@@ -27,6 +27,39 @@ fn only_picked_atoms_reach_the_hidden_context() {
 }
 
 #[test]
+fn at_picks_files_by_absolute_path() {
+    let mut app = crate::app::test_app("abs-at");
+    let outside = std::env::temp_dir().join(format!("tuse-abs-at-{}", std::process::id()));
+    std::fs::create_dir_all(outside.join("deep")).unwrap();
+    std::fs::write(outside.join("deep/note.txt"), "far away").unwrap();
+    let abs = outside.display().to_string();
+
+    app.editor.insert(&format!("@{abs}/"));
+    app.update_token_picker();
+    let p = app.picker.as_ref().unwrap();
+    assert_eq!(p.kind, Kind::File);
+    assert_eq!(p.current().unwrap().value, format!("{abs}/deep/"));
+
+    app.choose();
+    assert_eq!(app.editor.text(), format!("@{abs}/deep/"));
+    app.update_token_picker();
+    app.editor.insert("no");
+    app.update_token_picker();
+    assert_eq!(
+        app.picker.as_ref().unwrap().current().unwrap().value,
+        format!("{abs}/deep/note.txt")
+    );
+    app.choose();
+    let input = tuse_core::build_input(&app.editor.text(), app.refs()).unwrap();
+    assert_eq!(
+        input.context,
+        format!("<file path=\"{abs}/deep/note.txt\">far away</file>")
+    );
+    std::fs::remove_dir_all(&outside).unwrap();
+    crate::app::cleanup(app);
+}
+
+#[test]
 fn editing_withdraws_only_the_waiting_tui_message() {
     crate::app::test_home();
     // Hold the first request open so the worker cannot take the steering messages.

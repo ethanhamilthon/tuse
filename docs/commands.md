@@ -22,8 +22,8 @@ When the user sends a message in the TUI during a turn, it stays dimmed in the i
 the agent takes it. Editing the waiting message withdraws it without stopping the turn;
 Enter sends the edited draft.
 
-`/new`, `/resume`, `/models`, `/tasks`, `/childrens`, `/usage`, `/maxsize`, `/trace`, `/config`, `/reload`, `/quit`.
-The input status shows context use as `used/max`, e.g. `5.2k/1m`. `/maxsize 200k` (or `1m`) sets the maximum for this run, `/maxsize off` goes back to the model's `window`; with neither it shows `5.2k/?`.
+`/new`, `/resume`, `/models`, `/tasks`, `/childrens`, `/usage`, `/trace`, `/config`, `/reload`, `/quit`.
+The input status shows context use as `used/max`, e.g. `5.2k/1m`. The maximum is the model's `window` from the config; without it the status shows `5.2k/?`.
 A question that arrives while another list is open waits and appears when that list closes.
 Every list (`/resume`, `/models`, `/tasks`, `/childrens`, `/trace`, and the `/`, `#` and `@`
 pickers) has one look: a rule on top, a title with the position, the rows, all drawn over the

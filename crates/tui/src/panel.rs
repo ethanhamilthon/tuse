@@ -5,6 +5,7 @@ use crate::text::{Line, wrap};
 enum Body {
     Text(String),
     Markdown(String),
+    Lua(String),
     Styled(Vec<Line>),
 }
 
@@ -31,6 +32,9 @@ impl Panel {
     pub fn markdown(value: impl Into<String>) -> Self {
         Self::with_body(Body::Markdown(value.into()))
     }
+    pub fn lua(value: impl Into<String>) -> Self {
+        Self::with_body(Body::Lua(value.into()))
+    }
     pub fn styled(value: Vec<Line>) -> Self {
         Self::with_body(Body::Styled(value))
     }
@@ -45,6 +49,13 @@ impl Panel {
             let lines = match &self.body {
                 Body::Text(text) => plain(text, width, Style::fg(p.fg), "", ""),
                 Body::Markdown(text) => crate::markdown::render(text, width, p),
+                Body::Lua(code) => {
+                    let clean = crate::render::clean(code);
+                    crate::syntax::highlight(&clean, Style::fg(p.fg), p)
+                        .into_iter()
+                        .flat_map(|r| wrap(&r, width, &empty, &empty))
+                        .collect()
+                }
                 Body::Styled(rows) => rows
                     .iter()
                     .flat_map(|r| wrap(r, width, &empty, &empty))

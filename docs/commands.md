@@ -17,9 +17,13 @@
   `/reload` and `/resume` do not change an existing session's model.
 - `/tasks` lists tasks; Enter shows the log and Ctrl+X stops the selected task.
 - `/usage` shows context, tokens and spend. The model window comes from config; unknown is `?`.
-- `/trace` opens the full session log in one scrollable panel, starting at the latest entries.
-  Use the wheel or Page Up/Down to scroll and Esc to close.
-- `/config` shows the resolved config without providers or Lua function bodies.
+- `/trace` opens a selectable list of trace entries (`index  role  first line`). Press Enter to
+  view the full entry in a scrollable detail panel (`system`, `user`, and `agent` as Markdown;
+  `lua` as full syntax-highlighted source; other roles as plain text) and Esc to return to the
+  list with your selection intact.
+- `/config` shows a styled, scrollable view of the resolved config grouped into sections
+  (settings, theme, models, system prompts, prompts, functions, hooks, and commands), without
+  provider secrets or Lua function bodies.
 - `/reload` runs config files again (updating custom commands and keeping live `show_markdown`
   blocks and picker/question results); `/quit` exits.
 - Custom slash commands defined in `commands = { name = function() ... end }` appear in `/`

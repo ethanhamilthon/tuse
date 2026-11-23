@@ -5,6 +5,7 @@ mod chat_ui;
 mod clipboard;
 mod code_block;
 mod commands;
+mod config_view;
 mod draw;
 mod editor;
 mod events;

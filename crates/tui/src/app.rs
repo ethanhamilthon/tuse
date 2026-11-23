@@ -40,6 +40,9 @@ pub struct App {
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
     pub question: Option<QuestionPrompt>,
+    /// Snapshot of `/trace` items and the picker state to return to on Esc from a detail view.
+    pub trace_items: Vec<tuse_core::TraceItem>,
+    pub trace_back: Option<(Picker, Editor)>,
     /// Rows the open list shows (set while drawing); the keys keep the selection in view.
     pub list_rows: usize,
     pub input_area: Option<InputArea>,
@@ -91,6 +94,8 @@ impl App {
             picker: None,
             panel: None,
             question: None,
+            trace_items: vec![],
+            trace_back: None,
             list_rows: 8,
             input_area: None,
             dismissed: None,

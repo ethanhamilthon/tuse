@@ -7,6 +7,7 @@ pub enum Kind {
     Model,
     Effort(String),
     Task,
+    Trace,
     LuaPicker(u64),
 }
 

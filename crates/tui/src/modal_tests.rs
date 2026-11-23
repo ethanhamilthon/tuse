@@ -144,3 +144,68 @@ fn lua_picker_disables_editor_question_uses_separate_input_and_pinned_stays_last
     assert_eq!(app.editor.text(), "keep draft");
     crate::app::cleanup(app);
 }
+
+#[test]
+fn trace_picker_opens_detail_panel_and_esc_preserves_selection() {
+    let mut app = crate::app::test_app("modal-trace");
+    app.paste("draft");
+    app.trace_items = vec![
+        tuse_core::TraceItem {
+            role: "system",
+            summary: "You are Tuse".into(),
+            text: "# Heading\n\nBody".into(),
+        },
+        tuse_core::TraceItem {
+            role: "lua",
+            summary: "local x = 1".into(),
+            text: "local x = 1\nlocal s = [[\nline1\nline2\n]]\nreturn x".into(),
+        },
+        tuse_core::TraceItem {
+            role: "output",
+            summary: "exit 0".into(),
+            text: "exit 0\n\nok".into(),
+        },
+    ];
+    let rows: Vec<_> = app
+        .trace_items
+        .iter()
+        .enumerate()
+        .map(|(i, it)| {
+            item(
+                format!("{i}  {}  {}", it.role, it.summary),
+                "",
+                i.to_string(),
+            )
+        })
+        .collect();
+    app.open_modal(Picker::new(Kind::Trace, rows));
+    assert_eq!(labels(&app)[0], "0  system  You are Tuse");
+    assert_eq!(labels(&app)[1], "1  lua  local x = 1");
+
+    press(&mut app, KeyCode::Down, KeyModifiers::NONE);
+    assert_eq!(app.picker.as_ref().unwrap().selected, 1);
+    press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+    assert!(app.picker.is_none() && app.panel.is_some());
+    // Lua trace detail shows full syntax-highlighted source without chat fold/line limits.
+    let panel_lines = app.panel.as_mut().unwrap().lines(60, 16, &app.palette);
+    let body: String = panel_lines
+        .iter()
+        .flatten()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert!(body.contains("line1") && body.contains("line2"), "{body}");
+    assert!(
+        panel_lines
+            .iter()
+            .flatten()
+            .any(|s| s.text == "local" && s.style.fg == app.palette.err),
+        "lua keyword should be syntax highlighted"
+    );
+
+    // Esc returns to the list with selection still at index 1; second Esc restores draft.
+    press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+    assert!(app.panel.is_none() && app.picker.as_ref().unwrap().selected == 1);
+    press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+    assert!(app.picker.is_none() && app.editor.text() == "draft");
+    crate::app::cleanup(app);
+}

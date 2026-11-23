@@ -21,7 +21,10 @@ impl App {
     pub fn run_command(&mut self, name: &str) {
         match name {
             "config" => {
-                self.panel = Some(Panel::new(self.session.config().to_json()));
+                self.panel = Some(crate::config_view::panel(
+                    &self.session.config(),
+                    &self.palette,
+                ));
             }
             "new" => self.switch(None),
             "quit" => self.quit = true,
@@ -76,14 +79,21 @@ impl App {
     }
 
     fn open_trace(&mut self) {
-        let mut text = String::new();
-        for item in self.session.trace() {
-            use std::fmt::Write;
-            let _ = writeln!(text, "--- {} ---\n{}\n", item.role, item.text);
-        }
-        let mut panel = Panel::new(text);
-        panel.scroll = usize::MAX;
-        self.panel = Some(panel);
+        let items = self.session.trace();
+        let rows: Vec<_> = items
+            .iter()
+            .enumerate()
+            .map(|(i, it)| {
+                item(
+                    format!("{i}  {}  {}", it.role, it.summary),
+                    "",
+                    i.to_string(),
+                )
+            })
+            .collect();
+        self.trace_items = items;
+        self.trace_back = None;
+        self.open_modal(Picker::new(Kind::Trace, rows));
     }
 
     pub fn open_tasks(&mut self) {
@@ -114,8 +124,9 @@ impl App {
     /// Enter on a picker item.
     pub fn choose(&mut self) {
         let Some(p) = self.picker.take() else { return };
-        // Effort follows Model and keeps the draft aside; everything else gives it back.
-        if !(p.kind == Kind::Model && p.current().is_some()) {
+        // Effort follows Model and Trace detail returns to Trace list; both keep the draft aside.
+        let keep_draft = matches!(p.kind, Kind::Model | Kind::Trace) && p.current().is_some();
+        if !keep_draft {
             self.restore_draft();
         }
         let value = p.current().map(|i| i.value.clone());
@@ -162,6 +173,22 @@ impl App {
                 if let Some(t) = self.session.tasks.get(&v) {
                     let out = tuse_core::tail(&t.log, 200);
                     self.panel = Some(Panel::new(out));
+                }
+            }
+            (Kind::Trace, Some(v)) => {
+                if let Ok(idx) = v.parse::<usize>()
+                    && let Some(it) = self.trace_items.get(idx)
+                {
+                    let panel = match it.role {
+                        "system" | "user" | "agent" => Panel::markdown(it.text.clone()),
+                        "lua" => Panel::lua(it.text.clone()),
+                        _ => Panel::new(it.text.clone()),
+                    };
+                    let search = std::mem::take(&mut self.editor);
+                    self.trace_back = Some((p, search));
+                    self.panel = Some(panel);
+                } else {
+                    self.restore_draft();
                 }
             }
             (Kind::LuaPicker(id), v) => {

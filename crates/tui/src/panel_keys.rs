@@ -8,7 +8,13 @@ impl App {
         };
         let step = self.palette.ui.scroll_step as isize;
         match code {
-            KeyCode::Esc => self.panel = None,
+            KeyCode::Esc => {
+                self.panel = None;
+                if let Some((picker, search)) = self.trace_back.take() {
+                    self.picker = Some(picker);
+                    self.editor = search;
+                }
+            }
             KeyCode::Up if self.editor.is_empty() => panel.scroll_by(-step),
             KeyCode::Down if self.editor.is_empty() => panel.scroll_by(step),
             KeyCode::PageUp => panel.scroll_by(-(page as isize)),

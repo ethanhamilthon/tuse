@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.2
+
+- New default theme colors (from the author's Ghostty palette): `bg` `#121212`, `fg` `#DEDEDE`, `accent` `#BDDEAB`, `ok` `#94B979`, `err` `#E27373`, `info` `#97BEDC`, and greys for `surface`, `dim`, `muted`, `border`.
+- `@` takes absolute paths: `@/etc/` and `@~/` list those folders as you type, and the picked file is attached from there.
+- The status bars are colored by part: spinner, time and the used context (`x` of `x/y`) are `accent`; the action, model, effort, `/y`, cost and `steering…` are `muted`. Flash notices stay `accent`.
+- Each status label takes at most half the input width and is cut with `…`.
+- Tool output is `muted`; `…` and `… N more lines` under code, output and diffs are `border`.
+- The `fill` input is a straight `surface` block (no half-block edges and notched corners). `fill` and `bar` have no `›`, and user messages in the chat are a `surface` block without `›`.
+- A wrong `settings.ui.input_design` now names the allowed values in the error.
+
 ## 0.7.1
 
 - The `lua` tool is `lua(code)`: `title` and `timeout` are gone. A call is stopped after 120 seconds; `settings.tool_timeout` is removed.

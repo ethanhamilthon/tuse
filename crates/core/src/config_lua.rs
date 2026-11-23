@@ -56,9 +56,9 @@ pub(crate) fn file_env(lua: &Lua) -> mlua::Result<Table> {
 pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     crate::require::forget(lua).map_err(|e| e.to_string())?;
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
-    let table = match path {
+    let (table, plugins) = match path {
         Some(p) => read_file(lua, p)?,
-        None => lua.create_table().map_err(|e| e.to_string())?,
+        None => (lua.create_table().map_err(|e| e.to_string())?, vec![]),
     };
     if !matches!(table.raw_get::<Value>("include"), Ok(Value::Nil)) {
         return Err(format!(
@@ -71,6 +71,7 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
         obj.insert("commands".into(), serde_json::json!(commands));
     }
     let mut config = tuse_config::from_value(raw, &name)?;
+    config.plugins = plugins;
     for (key, names) in [
         ("hooks", config.hooks.keys().cloned().collect::<Vec<_>>()),
         ("functions", config.functions.keys().cloned().collect()),
@@ -92,14 +93,16 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
     Ok(config)
 }
 
-fn read_file(lua: &Lua, path: &Path) -> Result<Table, String> {
+type Loaded = (Table, Vec<tuse_config::PluginInfo>);
+
+fn read_file(lua: &Lua, path: &Path) -> Result<Loaded, String> {
     let error = |e: mlua::Error| format!("{}: {}", path.display(), tuse_lua::message(&e));
     match eval_file(lua, path)? {
         Value::Table(t) => {
             let base = path.parent().unwrap_or(Path::new("."));
             crate::plugins::apply(lua, t, base).map_err(|e| format!("{}: {e}", path.display()))
         }
-        Value::Nil => lua.create_table().map_err(error),
+        Value::Nil => Ok((lua.create_table().map_err(error)?, vec![])),
         _ => Err(format!(
             "{}: the config must return a table",
             path.display()

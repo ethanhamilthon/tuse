@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.4
+
+- `/config` shows a **Plugins** section: each loaded plugin with its `ref`, commit (or `local`) and folder. JSON-RPC `config.get` returns them as `plugins`.
+
 ## 0.8.3
 
 - **Plugins:** `plugins = { "owner/repo", { "owner/repo/sub/path", opts = {...}, ref = "v1" }, { "name", dir = "..." } }` loads `init.lua` (else `tuse.lua`) from GitHub clones in `~/.tuse/plugins` or local folders. A plugin returns a config table or `function(opts)`; tables merge under the user's config (lists concatenate, named entries must not collide between plugins, plugins cannot set `model`, `provider` or `effort`). Startup never touches the network.

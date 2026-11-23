@@ -21,6 +21,21 @@ pub struct Config {
     pub functions: BTreeMap<String, Function>,
     pub hooks: BTreeMap<String, Hook>,
     pub commands: Vec<String>,
+    /// The loaded plugins; filled by the loader, never read from the file.
+    #[serde(skip_deserializing)]
+    pub plugins: Vec<PluginInfo>,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct PluginInfo {
+    pub name: String,
+    /// The plugin's folder.
+    pub dir: String,
+    #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
+    pub git_ref: Option<String>,
+    /// Short commit of the clone, `None` for a local folder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]

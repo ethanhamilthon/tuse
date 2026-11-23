@@ -99,6 +99,33 @@ impl Plugin {
         }
     }
 
+    pub fn info(&self) -> crate::PluginInfo {
+        crate::PluginInfo {
+            name: self.name.clone(),
+            dir: self.dir().display().to_string(),
+            git_ref: self.git_ref.clone(),
+            commit: self.commit(),
+        }
+    }
+
+    /// The clone's HEAD commit (short), read from `.git` without running git.
+    pub fn commit(&self) -> Option<String> {
+        let git = self.root.join(".git");
+        let head = std::fs::read_to_string(git.join("HEAD")).ok()?;
+        let head = head.trim();
+        let full = match head.strip_prefix("ref: ") {
+            None => head.to_string(),
+            Some(r) => match std::fs::read_to_string(git.join(r)) {
+                Ok(s) => s.trim().to_string(),
+                Err(_) => std::fs::read_to_string(git.join("packed-refs"))
+                    .ok()?
+                    .lines()
+                    .find_map(|l| l.strip_suffix(r)?.strip_suffix(' ').map(str::to_string))?,
+            },
+        };
+        Some(full.get(..7)?.to_string())
+    }
+
     /// `init.lua`, else `tuse.lua`, in the plugin's folder.
     pub fn entry(&self) -> Option<PathBuf> {
         let d = self.dir();

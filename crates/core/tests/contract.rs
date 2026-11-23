@@ -1,4 +1,3 @@
-//! The embedded `docs()` reference covers every Lua host function the VM exports.
 mod common;
 use tuse_core::{HOST_FUNCTIONS, Mode, Options, Session, Start};
 
@@ -8,8 +7,8 @@ fn docs_cover_the_host_functions_and_the_vm_exports_them() {
     let config = tuse_core::docs(Some("config"));
     for name in HOST_FUNCTIONS {
         let documented = functions.contains(&format!("`{name}("))
-            || functions.contains(&format!("`{name}.")) // json.encode
-            || functions.contains(&format!("and `{name}(")); // inspect
+            || functions.contains(&format!("`{name}."))
+            || functions.contains(&format!("and `{name}("));
         assert!(documented, "docs(\"functions\") misses `{name}`");
         assert!(
             config.contains(&format!("`{name}`")) || name.starts_with("task_"),

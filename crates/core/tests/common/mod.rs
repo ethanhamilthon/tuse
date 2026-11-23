@@ -1,21 +1,16 @@
-//! A fake Chat Completions provider for the integration tests.
 #![allow(dead_code)]
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 
-/// What the provider answers to one request.
 #[derive(Clone)]
 pub enum Reply {
-    /// A tool call: name and JSON arguments, streamed in small pieces.
     Call(&'static str, String),
     Text(&'static str),
-    /// Streams the text, then holds the response open until the client goes away.
     Stall(&'static str),
 }
 
-/// Serves `replies` in order (the last one repeats) and returns `host:port`.
 pub fn provider(replies: Vec<Reply>) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap().to_string();
@@ -80,15 +75,11 @@ fn answer(stream: std::net::TcpStream, reply: Reply) {
     let _ = out.write_all(b"data: [DONE]\n\n");
 }
 
-/// A temporary folder with `HOME` inside it, provider `p` at `addr`, default model `p/m`
-/// in SQLite, and a `tuse.lua` whose table has `extra` (Lua fields).
-/// Each test file holds one test, so setting the environment is safe.
 pub fn setup(name: &str, addr: &str, extra: &str) -> (PathBuf, PathBuf) {
     let dir = std::env::temp_dir().join(format!("tuse-{name}-{}", std::process::id()));
     std::fs::remove_dir_all(&dir).ok();
     let home = dir.join("home");
     std::fs::create_dir_all(&home).unwrap();
-    // SAFETY: see above.
     unsafe {
         std::env::set_var("HOME", &home);
     }

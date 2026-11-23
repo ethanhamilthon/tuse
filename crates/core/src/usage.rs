@@ -13,9 +13,7 @@ pub fn cost(u: &Usage, p: &Prices) -> f64 {
 #[derive(Debug, Clone, Default)]
 pub struct Stats {
     pub totals: Usage,
-    /// `$main + $llm`: the whole session.
     pub cost: f64,
-    /// What `llm()` requests cost (their tokens are in `totals` too).
     pub llm_cost: f64,
     pub llm_requests: usize,
     pub priced: bool,
@@ -26,7 +24,6 @@ pub struct Stats {
     pub calls: usize,
 }
 
-/// A token count for people: `999`, `5.2k`, `200k`, `1.5m`.
 pub fn tokens(n: u64) -> String {
     let (v, unit) = match n {
         n if n >= 1_000_000 => (n as f64 / 1e6, "m"),
@@ -42,7 +39,6 @@ fn find_model<'a>(models: &'a [ModelDef], full: &str) -> Option<&'a ModelDef> {
 }
 
 impl Stats {
-    /// Adds one record; `Usage`, `Assistant` (steps), and `TurnEnd` count.
     pub(crate) fn add(&mut self, r: &crate::record::Record, models: &[ModelDef]) {
         use crate::record::Record;
         match r {

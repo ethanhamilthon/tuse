@@ -7,7 +7,6 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 const DEFAULT_LIMIT: usize = 100;
-/// Characters of a matching line shown.
 const LINE_CHARS: usize = 300;
 
 pub struct Opts {
@@ -19,7 +18,6 @@ pub struct Opts {
     pub limit: Option<usize>,
 }
 
-/// `grep(pattern, {path, glob, ignore_case, literal, context, limit})`; `stopped` ends a long walk.
 pub fn run(
     pattern: &str,
     o: Opts,

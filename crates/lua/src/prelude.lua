@@ -1,9 +1,7 @@
--- Loaded into every VM before the config. `tuse` holds the internals.
 local tuse, SCHED = ...
 local raw_resume, raw_yield, status = coroutine.resume, coroutine.yield, coroutine.status
 local isyieldable = coroutine.isyieldable
 
--- A coroutine of the user that calls `sh` or `sleep` passes the wait on to the scheduler.
 local function pass(co, ok, ...)
   if ok and (...) == SCHED and status(co) == "suspended" then
     return pass(co, raw_resume(co, raw_yield(...)))
@@ -24,7 +22,6 @@ function coroutine.wrap(f)
   end
 end
 
--- Waits for the scheduler; blocks the VM where Lua cannot yield (the config, a C callback).
 local function wait(kind, arg)
   local ok, v
   if isyieldable() then
@@ -71,7 +68,6 @@ local function key_order(a, b)
   return tostring(a) < tostring(b)
 end
 
--- A readable form of any value: tables nest, strings are quoted inside tables.
 function inspect(v, depth, seen)
   depth, seen = depth or 0, seen or {}
   local t = type(v)
@@ -97,7 +93,6 @@ function inspect(v, depth, seen)
   return "{" .. table.concat(parts, ", ") .. "}"
 end
 
--- What the agent sees for the values a call returns.
 function tuse.render(...)
   local out = {}
   for i = 1, select("#", ...) do
@@ -107,7 +102,6 @@ function tuse.render(...)
   return table.concat(out, "\t")
 end
 
--- A Rust function raises its error as a plain string, so `pcall` gets just the message.
 local function clean(e)
   if type(e) ~= "userdata" then return e end
   local s = tostring(e):gsub("^runtime error: ", "")

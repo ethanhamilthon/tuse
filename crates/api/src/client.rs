@@ -40,7 +40,6 @@ impl Client {
         }
     }
 
-    /// Streams a completion, retrying 429, 5xx and network errors up to `retries` times.
     pub fn complete(
         &self,
         req: &Request,

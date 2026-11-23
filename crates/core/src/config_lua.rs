@@ -24,7 +24,6 @@ pub(crate) fn install_env(lua: &Lua, host: &'static [&str]) -> mlua::Result<()> 
         })?,
     )?;
     env.set_metatable(Some(meta))?;
-    // Standard Lua loaders otherwise default to the agent's globals.
     lua.load(LOADERS)
         .set_name("=config loaders")
         .set_environment(env.clone())
@@ -53,8 +52,6 @@ pub(crate) fn file_env(lua: &Lua) -> mlua::Result<Table> {
     lua.named_registry_value(FILE_ENV)
 }
 
-/// Validates and stages the config and its Lua callbacks until `commit`.
-/// On failure, restores previously loaded file modules so active callbacks stay intact.
 pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     let saved = crate::require::forget(lua).map_err(|e| e.to_string())?;
     let prev_ctx = lua.app_data_mut::<crate::snapshot::LoadCtx>().map(|mut c| {
@@ -109,7 +106,6 @@ fn read_file(lua: &Lua, path: &Path) -> Result<crate::plugins::Merged, String> {
     }
 }
 
-/// Runs a Lua file in the config environment and returns its value.
 pub(crate) fn eval_file(lua: &Lua, path: &Path) -> Result<Value, String> {
     let error = |e: mlua::Error| format!("{}: {}", path.display(), tuse_lua::message(&e));
     let canonical = path
@@ -129,8 +125,6 @@ pub(crate) fn eval_file(lua: &Lua, path: &Path) -> Result<Value, String> {
     eval.map_err(error)
 }
 
-/// Makes the staged config active: retained helpers get their new code, and helpers the
-/// new config dropped are removed unless the agent has since rebound their globals.
 pub(crate) fn commit(lua: &Lua, config: &Config) -> Result<(), String> {
     let t: Table = lua
         .named_registry_value("tuse.next")
@@ -197,13 +191,10 @@ fn code(t: &Table, key: &str, name: &str) -> Option<Function> {
         .ok()
 }
 
-/// The `-c/--config PATH` of a command as `Options::config`: relative to `cwd`, `~/` expanded.
 pub fn config_arg(cwd: &Path, path: Option<&str>) -> Option<std::path::PathBuf> {
     path.map(|p| tuse_config::resolve_path(p, cwd))
 }
 
-/// Loads the effective model metadata without opening a session or running its hooks.
-/// `config` is resolved the way a session resolves it (see `config_arg`).
 pub fn configured_models(
     cwd: std::path::PathBuf,
     config: Option<std::path::PathBuf>,
@@ -218,8 +209,6 @@ pub fn configured_models(
     Ok(config.models)
 }
 
-/// The session's VM with the config loaded. The session is not built yet, so the VM
-/// gets a slot that `open` fills.
 pub(crate) fn start_vm(
     opts: &Options,
 ) -> Result<(tuse_lua::Vm, crate::host::Slot, Config), String> {

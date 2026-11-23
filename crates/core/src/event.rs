@@ -45,7 +45,6 @@ pub struct UiSnapshot {
     pub entries: Vec<UiEntry>,
 }
 
-/// What a session tells its front ends (TUI or JSON-RPC).
 #[derive(Debug, Clone)]
 pub enum Event {
     Notification(String),
@@ -57,7 +56,6 @@ pub enum Event {
     TurnStart,
     Text(String),
     Reasoning(String),
-    /// The partial reply was dropped before a retry.
     StreamReset,
     Assistant {
         text: String,
@@ -72,17 +70,14 @@ pub enum Event {
         timeout: u64,
         id: String,
         tool: String,
-        /// The code of the `lua` call.
         input: String,
     },
     ToolEnd {
         id: String,
         output: String,
         code: Option<i32>,
-        /// Files the call changed.
         diffs: Vec<crate::record::FileDiff>,
     },
-    /// The working indicator has a new status.
     Status(String),
     Notice(String),
     Flash(String),
@@ -96,23 +91,17 @@ pub enum Event {
     },
     Tasks,
     Usage,
-    /// A provider's model list arrived.
     Models,
-    /// A reload committed a new config (from `/reload`, `config.reload` or Lua `reload()`).
     Reloaded,
-    /// A named Markdown block was created, updated, or removed (`removed = text.is_empty() && !pin`).
     UiMarkdown {
         name: String,
         text: String,
         pin: bool,
         removed: bool,
     },
-    /// The active interactive picker or question prompt changed.
     UiRequest(UiRequest),
-    /// The active interactive prompt was cancelled externally.
     UiClear {
         id: u64,
     },
-    /// A picker or question was answered (not cancelled).
     UiResult(UiEntry),
 }

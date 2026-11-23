@@ -1,4 +1,3 @@
-//! The `initialize` handshake, model setters and the `model.list` refresh flow.
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 mod support;
@@ -10,7 +9,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use support::{call, event, spawn};
 use tuse_core::{Mode, Options, Session, Start};
 
-/// A `/models` endpoint that counts its requests.
 fn models_server(hits: Arc<AtomicUsize>) -> String {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap().to_string();

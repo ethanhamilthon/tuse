@@ -1,9 +1,6 @@
-//! While a reply streams, its finished blocks are rendered once and only the last
-//! block is parsed again on every frame.
 use crate::style::Palette;
 use crate::text::Line;
 
-/// The rendered start of the streaming reply: entry, width, bytes and lines.
 pub struct Prefix {
     pub entry: usize,
     width: usize,
@@ -11,8 +8,6 @@ pub struct Prefix {
     lines: Vec<Line>,
 }
 
-/// Where the last block starts: after a blank line outside fenced code, before a line that
-/// cannot continue the block above (not indented, not a list item). 0 when there is none.
 pub fn split(text: &str) -> usize {
     let (mut fence, mut blank, mut at, mut pos) = (false, false, 0, 0);
     for line in text.split_inclusive('\n') {
@@ -31,7 +26,6 @@ pub fn split(text: &str) -> usize {
     at
 }
 
-/// `whole`: the line is complete; an unfinished `2.` or `-` may still become a list item.
 fn starts_block(line: &str, whole: bool) -> bool {
     let Some(c) = line.chars().next() else {
         return false;
@@ -47,7 +41,6 @@ fn starts_block(line: &str, whole: bool) -> bool {
     !c.is_whitespace() && !item
 }
 
-/// Renders the streaming reply `entry`, reusing `cache` for its finished blocks.
 pub fn render(
     cache: &mut Option<Prefix>,
     entry: usize,
@@ -68,7 +61,6 @@ pub fn render(
         });
     }
     let c = cache.as_mut().unwrap();
-    // The blocks between the old and the new split point are finished now.
     if c.len < at {
         let more = crate::markdown::render(&text[c.len..at], width, p);
         join(&mut c.lines, more);

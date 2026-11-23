@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use std::fs::{File, TryLockError};
 use std::path::{Path, PathBuf};
 
-/// `~/.tuse/<id>/`: the lock, `tasks/` logs and pasted `images/`.
 pub fn session_path(id: &str) -> PathBuf {
     tuse_config::tuse_home().join(id)
 }
@@ -21,8 +20,6 @@ pub struct Meta {
     pub updated: String,
 }
 
-/// A session in the database. Holding it holds the session's lock. A new session
-/// keeps its records in memory until its first message, so empty sessions leave nothing.
 pub struct SessionDir {
     pub id: String,
     pub path: PathBuf,
@@ -33,7 +30,6 @@ pub struct SessionDir {
 }
 
 impl SessionDir {
-    /// `create`: a new session, stored later; otherwise it is locked now.
     pub fn open(id: &str, create: bool) -> Result<Self, String> {
         let seq = db::with(|c| {
             c.query_row(
@@ -165,7 +161,6 @@ fn metas(sql: &str, arg: &str) -> Vec<Meta> {
     .unwrap_or_default()
 }
 
-/// Sessions started in `cwd` that have at least one message, newest first.
 pub fn list_sessions(cwd: &Path) -> Vec<Meta> {
     let cwd = cwd.display().to_string();
     metas(
@@ -177,7 +172,6 @@ pub fn list_sessions(cwd: &Path) -> Vec<Meta> {
     .collect()
 }
 
-/// Populates runtime providers from SQLite (`tuse connect`).
 pub(crate) fn apply_providers(config: &mut tuse_config::Config) {
     config.connect = db::providers();
     for c in &mut config.connect {

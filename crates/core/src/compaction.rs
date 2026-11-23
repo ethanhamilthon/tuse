@@ -1,17 +1,6 @@
 use crate::history::{Bounds, estimate_tokens, messages};
 use crate::record::Record;
 
-/// Compaction keeps records intact and append-only; a `Compaction` record stores
-/// two indices that every later request applies (see `history::messages`):
-///
-/// - before `drop` (the oldest zone) only user and assistant text remains;
-/// - between `drop` and `prune` tool outputs are cut to their first line;
-/// - from `prune` on (the freshest zone) everything is sent unchanged.
-///
-/// Measured from the end: the latest quarter of the threshold stays fresh, the
-/// next quarter is pruned, everything older keeps only the conversation. `drop`
-/// always lands on a user message, so tool calls and results go away together.
-/// Bounds only move forward.
 pub fn bounds(records: &[Record], threshold: u64, prev: Bounds) -> Option<Bounds> {
     let (fresh, middle) = (threshold / 4, threshold / 2);
     let mut next = prev;

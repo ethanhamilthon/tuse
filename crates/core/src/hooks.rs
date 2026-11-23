@@ -11,8 +11,6 @@ use tuse_lua::{Done, Job, Out, Stop};
 
 pub use tuse_config::HOOK_EVENTS as EVENTS;
 
-/// Per hook: whether a run is going, the events waiting behind it, and the flag
-/// that stops the running one.
 #[derive(Default)]
 pub(crate) struct Lane {
     busy: bool,
@@ -54,7 +52,6 @@ impl Session {
         }
     }
 
-    /// Starts the oldest waiting event of hook `name`, if any.
     fn next_hook(self: &Arc<Self>, name: String) {
         let (vars, cancel) = {
             let mut runs = self.hook_runs.lock().unwrap();
@@ -138,8 +135,6 @@ impl Session {
         }
     }
 
-    /// Fires `close` and waits for every hook run to end, with no time limit.
-    /// No hook fires after this. The session stays readable while `close` runs.
     pub(crate) fn finish_hooks(self: &Arc<Self>, reason: &'static str) {
         self.ui_cancel_hooks(true);
         self.hook("close", json!({ "event": "close", "reason": reason }));
@@ -149,7 +144,6 @@ impl Session {
         }
     }
 
-    /// Esc stops the hook runs going now; later events still fire.
     pub(crate) fn stop_hook_runs(&self) {
         for lane in self.hook_runs.lock().unwrap().values() {
             lane.cancel.store(true, Ordering::Relaxed);

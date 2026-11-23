@@ -1,11 +1,6 @@
 use crate::load::resolve_path;
 use std::path::{Path, PathBuf};
 
-/// The files `require(name)` tries, in order, relative to `base`:
-/// - `global`: the global config (see [`global_candidates`]);
-/// - `~/path` or `/path`: `path.lua`, then `path/init.lua`;
-/// - a name ending in `.lua`: that file (`~/`, absolute or relative to `base`);
-/// - `name` or `a.b`: `base/name.lua`, then `base/name/init.lua` (dots are folders).
 pub fn module_candidates(name: &str, base: &Path) -> Vec<PathBuf> {
     if name == "global" {
         return global_candidates();
@@ -19,13 +14,11 @@ pub fn module_candidates(name: &str, base: &Path) -> Vec<PathBuf> {
     lua_files(base.join(name.replace('.', "/")))
 }
 
-/// `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`.
 pub fn global_candidates() -> Vec<PathBuf> {
     let d = std::env::home_dir().unwrap_or_default().join(".config");
     vec![d.join("tuse.lua"), d.join("tuse/init.lua")]
 }
 
-/// The global config file, when one exists.
 pub fn global_path() -> Option<PathBuf> {
     global_candidates().into_iter().find(|p| p.is_file())
 }

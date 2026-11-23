@@ -21,7 +21,6 @@ impl Renderer<'_> {
         }
     }
 
-    /// Lines of a fenced or indented block; `lua` blocks are colored like tool calls.
     pub(crate) fn code_block(&mut self, t: &str) {
         let st = Style::fg(self.p.fg);
         let pad = " ".repeat(crate::style::CODE_INDENT);

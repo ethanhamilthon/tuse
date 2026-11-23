@@ -1,4 +1,3 @@
-//! Every `core::Event` becomes one `event` notification with a `type`.
 use serde_json::{Value, json};
 use tuse_core::Event;
 

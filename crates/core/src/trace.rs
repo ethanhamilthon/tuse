@@ -2,15 +2,10 @@ use crate::prompt;
 use crate::record::Record;
 use crate::session::Session;
 
-/// One entry of `/trace` and `tuse.session().trace`.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TraceItem {
-    /// `system`, `user`, `agent`, `thinking`, `lua` (or `tool` for another name),
-    /// `output`, `notification`, `notice`, `error` or `hook`.
     pub role: &'static str,
-    /// The first meaningful line.
     pub summary: String,
-    /// The whole entry, as shown when it is opened.
     pub text: String,
 }
 
@@ -41,7 +36,6 @@ fn item(role: &'static str, text: String) -> TraceItem {
 use crate::history::join_context;
 
 impl Session {
-    /// The whole session, one item per system prompt, message, thinking, tool call and output.
     pub fn trace(&self) -> Vec<TraceItem> {
         let config = self.config();
         let st = self.state.lock().unwrap();

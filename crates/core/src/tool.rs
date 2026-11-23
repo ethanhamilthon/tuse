@@ -7,16 +7,12 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use tuse_api::ToolCall;
 
-/// The only tool.
 pub const TOOL: &str = "lua";
 
-/// Seconds a `lua` call gets before it is stopped.
 pub const TIMEOUT_SECS: u64 = 120;
 
-/// The result of one call.
 struct Outcome {
     text: String,
-    /// `0` success, `1` an error or a timeout, `None` a cancel.
     code: Option<i32>,
     images: Vec<String>,
     diffs: Vec<FileDiff>,
@@ -44,7 +40,6 @@ impl Session {
         self.emit(Event::Status(text));
     }
 
-    /// Runs one tool call and records its result. False when the turn went stale.
     pub(crate) fn tool(
         self: &Arc<Self>,
         generation: u64,
@@ -101,7 +96,6 @@ impl Session {
         true
     }
 
-    /// Runs `code` as a job of the session's VM.
     fn lua_call(self: &Arc<Self>, args: &serde_json::Value, cancel: &Arc<AtomicBool>) -> Outcome {
         let Some(code) = args["code"].as_str() else {
             return Outcome::err("missing argument `code` (a string)");

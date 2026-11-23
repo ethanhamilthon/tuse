@@ -8,7 +8,6 @@ use std::time::Duration;
 
 type Cmd = Box<dyn FnOnce(&Lua) + Send>;
 
-/// One Lua VM on its own thread. Everything touching Lua goes through `call`.
 pub struct Vm {
     tx: Sender<Cmd>,
 }
@@ -32,7 +31,6 @@ impl Vm {
         Self { tx }
     }
 
-    /// Runs `f` on the VM thread and waits for its result.
     pub fn call<R: Send + 'static>(&self, f: impl FnOnce(&Lua) -> R + Send + 'static) -> R {
         let (tx, rx) = mpsc::channel();
         let sent = self.tx.send(Box::new(move |lua: &Lua| {
@@ -42,12 +40,10 @@ impl Vm {
         rx.recv().expect("the lua thread is gone")
     }
 
-    /// Runs `f` on the VM thread without waiting.
     pub fn post(&self, f: impl FnOnce(&Lua) + Send + 'static) {
         let _ = self.tx.send(Box::new(f));
     }
 
-    /// Runs `code` as a new job and waits for it; the value of a lone expression is shown.
     pub fn run(&self, code: &str, name: &str, stop: Stop) -> Done {
         let (tx, rx) = mpsc::channel();
         let (code, name) = (code.to_string(), format!("={name}"));
@@ -92,7 +88,6 @@ fn fail(text: String) -> Done {
     }
 }
 
-/// `return <code>` when that parses (a lone expression shows its value), else the code itself.
 fn compile(lua: &Lua, code: &str, name: &str) -> mlua::Result<mlua::Function> {
     lua.load(format!("return {code}"))
         .set_name(name)

@@ -12,10 +12,8 @@ use tuse_config::split_model;
 use tuse_lua::mlua::{self, Lua, MultiValue, Table, Value};
 use tuse_lua::{Done, ExtWait, Host, Job, Out, Stop, TaskStart, with_run};
 
-/// The session of a VM, filled once the session is built (the VM comes first).
 pub(crate) type Slot = Arc<Mutex<Weak<Session>>>;
 
-/// What the VM reaches in its session. Holds the session weakly: the session owns the VM.
 pub(crate) struct SessionHost {
     pub slot: Slot,
     pub cwd: PathBuf,
@@ -92,13 +90,11 @@ pub(crate) fn err(e: String) -> mlua::Error {
     mlua::Error::runtime(e)
 }
 
-/// Shows what the agent is doing in the working indicator.
 pub(crate) fn action(s: &Session, verb: &str, what: &str) {
     let what: String = what.lines().next().unwrap_or("").chars().take(60).collect();
     s.set_status(format!("{verb} {what}..."));
 }
 
-/// The session functions of the VM: file helpers, `docs`, `set_title`, `session`, `task_*`.
 pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     lua.set_app_data(s);
     let g = lua.globals();
@@ -143,7 +139,6 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     tuse_lua::wrap(lua, &g, &names)
 }
 
-/// The line that says what failed: the one before a traceback, else the last one.
 pub(crate) fn error_line(text: &str) -> String {
     match text.find("\nstack traceback:") {
         Some(i) => last_line(&text[..i]),
@@ -160,14 +155,12 @@ pub(crate) fn last_line(text: &str) -> String {
         .to_string()
 }
 
-/// A Lua value as JSON, functions dropped.
 pub(crate) fn to_json(lua: &Lua, v: Value) -> serde_json::Value {
     use mlua::LuaSerdeExt;
     let o = mlua::serde::DeserializeOptions::new().deny_unsupported_types(false);
     lua.from_value_with(v, o).unwrap_or(serde_json::Value::Null)
 }
 
-/// File and search globals: `read`, `write`, `append`, `delete`, `edit`, `grep`.
 fn install_fs(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     g.set("read", lua.create_function(read)?)?;
@@ -304,7 +297,6 @@ fn task(lua: &Lua, t: &TaskInfo, output: Option<String>) -> mlua::Result<Table> 
     Ok(r)
 }
 
-/// `task_get(id, lines)`, `task_stop(id)` and `task_list()`; `spawn` lives in the runtime.
 fn install_tasks(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     g.set(
@@ -341,7 +333,6 @@ fn install_tasks(lua: &Lua) -> mlua::Result<()> {
     Ok(())
 }
 
-/// Installs `show`, `pick`, `ask`, and `reload`.
 fn install_ui(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     g.set(
@@ -377,9 +368,6 @@ fn start_picker(lua: &Lua, options: Table) -> mlua::Result<Value> {
 fn start_question(lua: &Lua, text: String) -> mlua::Result<Value> {
     enqueue(lua, UiPrompt::Question { text })
 }
-/// Runs the reload on its own thread so the VM keeps serving it (and its hooks) while the
-/// caller waits. A hook cannot wait for the `close` hooks of a reload, so from a hook the
-/// reload is queued and runs once the hook returns.
 fn start_reload(lua: &Lua, (): ()) -> mlua::Result<Value> {
     let s = session(lua)?;
     if tuse_lua::is_hook(lua) {
@@ -421,7 +409,6 @@ fn enqueue(lua: &Lua, prompt: UiPrompt) -> mlua::Result<Value> {
 }
 
 impl Session {
-    /// Runs a configured custom slash command as a non-blocking Lua job.
     pub fn run_command(self: &Arc<Self>, name: &str) -> Result<(), String> {
         if !self.config().commands.iter().any(|c| c == name) {
             return Err(format!("unknown command /{name}"));
@@ -492,7 +479,6 @@ impl Session {
     }
 }
 
-/// Installs `llm(prompt, model, effort)`.
 fn install_llm(lua: &Lua) -> mlua::Result<()> {
     let start = lua.create_function(start)?;
     lua.globals().set("llm", tuse_lua::yield_wait(lua, start)?)
@@ -536,7 +522,6 @@ fn start(
 }
 
 impl Session {
-    /// One request without tools or history; its usage is saved as `llm` usage.
     pub(crate) fn llm(
         &self,
         prompt: &str,

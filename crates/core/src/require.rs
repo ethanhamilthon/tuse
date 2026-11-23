@@ -1,18 +1,11 @@
-//! `require` for configs and the agent: `tuse` (the host functions), `global`,
-//! `~/path`, `path/file.lua` and modules relative to the calling file (or `cwd` for inline code);
-//! `os.getenv("THIS_PATH")` for the calling Lua file.
-
 use std::path::{Path, PathBuf};
 use tuse_lua::mlua::{self, Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use tuse_config::HOST_FUNCTIONS as HOST;
 
-/// Modules loaded from files, forgotten on `/reload` so changed files load again.
 const FILES: &str = "tuse.modules";
-/// Canonical paths currently executing, to catch cyclic `require` calls.
 const LOADING: &str = "tuse.loading";
 
-/// Saved module state so a failed `/reload` can restore all previously loaded file modules.
 pub(crate) struct SavedModules {
     files: Vec<(String, Value)>,
 }
@@ -51,7 +44,6 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
     tuse_lua::wrap(lua, &g, &["require"])
 }
 
-/// Forgets file-backed modules so `/reload` reads them again; returns a snapshot to roll back.
 pub(crate) fn forget(lua: &Lua) -> mlua::Result<SavedModules> {
     let files: Table = lua.named_registry_value(FILES)?;
     let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
@@ -67,7 +59,6 @@ pub(crate) fn forget(lua: &Lua) -> mlua::Result<SavedModules> {
     Ok(SavedModules { files: saved })
 }
 
-/// Restores file-backed modules after a failed `/reload`.
 pub(crate) fn restore(lua: &Lua, saved: SavedModules) -> mlua::Result<()> {
     let _ = forget(lua);
     let files: Table = lua.named_registry_value(FILES)?;
@@ -115,7 +106,6 @@ fn store_loaded(loaded: &Table, key: &str, val: Value) -> mlua::Result<Value> {
     }
 }
 
-/// Directory of the Lua file calling `require`, or `cwd` for inline code.
 fn caller_dir(lua: &Lua, cwd: &Path) -> PathBuf {
     caller_file(lua, cwd)
         .and_then(|f| f.parent().map(Path::to_path_buf))
@@ -123,7 +113,6 @@ fn caller_dir(lua: &Lua, cwd: &Path) -> PathBuf {
         .unwrap_or_else(|| cwd.to_path_buf())
 }
 
-/// The Lua file running the innermost Lua frame, `None` for inline code.
 fn caller_file(lua: &Lua, cwd: &Path) -> Option<PathBuf> {
     for level in 0.. {
         let Some((what, source)) = lua.inspect_stack(level, |d| {

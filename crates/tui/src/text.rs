@@ -28,7 +28,6 @@ pub fn line_width(l: &Line) -> usize {
     l.iter().map(|s| width(&s.text)).sum()
 }
 
-/// Cuts `s` to at most `max` columns, ending with `more` when cut.
 pub fn clip(s: &str, max: usize, more: &str) -> String {
     if width(s) <= max {
         return s.to_string();
@@ -46,8 +45,6 @@ pub fn clip(s: &str, max: usize, more: &str) -> String {
     out + more
 }
 
-/// Cuts a styled line to at most `max` columns, ending with `more` (in the style of
-/// the span it cuts) when cut.
 pub fn clip_line(line: &Line, max: usize, more: &str) -> Line {
     if line_width(line) <= max {
         return line.clone();
@@ -71,8 +68,6 @@ pub fn clip_line(line: &Line, max: usize, more: &str) -> Line {
     out
 }
 
-/// Word-wraps `content` to `width` columns; the first line starts with `first`,
-/// the following ones with `rest`.
 pub fn wrap(content: &Line, width: usize, first: &Line, rest: &Line) -> Vec<Line> {
     let cells: Vec<(char, Style)> = content
         .iter()

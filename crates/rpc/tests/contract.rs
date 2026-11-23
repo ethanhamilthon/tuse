@@ -1,4 +1,3 @@
-//! `docs("json")` documents every JSON-RPC method.
 #[test]
 fn docs_cover_every_method() {
     let docs = tuse_core::docs(Some("json"));

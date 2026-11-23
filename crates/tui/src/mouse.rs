@@ -2,8 +2,6 @@ use crate::app::App;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
 impl App {
-    /// The wheel scrolls the chat, the open panel or moves the selection of an open list;
-    /// a left click in the input puts the cursor there.
     pub fn mouse(&mut self, m: MouseEvent) -> bool {
         let point = (m.row as usize, m.column as usize);
         let inside = self.input_area.is_some_and(|a| {
@@ -73,7 +71,6 @@ impl App {
             .map(|l| l.id)
     }
 
-    /// `dir` is `-1` for up, `1` for down.
     fn wheel(&mut self, dir: isize, row: usize) {
         self.selection = Default::default();
         let step = self.palette.ui.scroll_step as isize;

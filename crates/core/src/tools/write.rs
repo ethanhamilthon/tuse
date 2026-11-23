@@ -1,7 +1,6 @@
 use super::{diff, fail, fs, io_fail};
 use std::path::Path;
 
-/// Writes `content`; returns the confirmation and the diff of the change.
 pub fn run(path: &Path, content: &str) -> Result<(String, String), String> {
     if path.is_dir() {
         return Err(fail(format!("{} is a directory", path.display())));
@@ -27,7 +26,6 @@ pub fn run(path: &Path, content: &str) -> Result<(String, String), String> {
     })
 }
 
-/// Appends `text` to `path` (creating it if missing); returns confirmation and diff.
 pub fn append(path: &Path, text: &str) -> Result<(String, String), String> {
     if path.is_dir() {
         return Err(fail(format!("{} is a directory", path.display())));
@@ -62,7 +60,6 @@ pub fn append(path: &Path, text: &str) -> Result<(String, String), String> {
     }
 }
 
-/// Deletes a single file (never a directory); returns confirmation and removal diff.
 pub fn delete(path: &Path) -> Result<(String, String), String> {
     let meta = std::fs::symlink_metadata(path).map_err(|e| io_fail(path, &e))?;
     if meta.is_dir() {

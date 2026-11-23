@@ -3,8 +3,6 @@ use crate::picker::Picker;
 use crate::style::{LIST_SELECTED_PREFIX, MORE, Palette, RULE_CHAR, Style};
 use crate::text::{Line, clip, line_width, span, width};
 
-/// The look every list and text view shares: a rule on top, then `rows`, all on the
-/// list background and `width` wide.
 pub fn framed(rows: Vec<Line>, w: usize, p: &Palette) -> Vec<Line> {
     let base = Style::fg(p.fg).on(p.bg);
     let mut out: Vec<Line> = vec![];
@@ -26,8 +24,6 @@ pub fn framed(rows: Vec<Line>, w: usize, p: &Palette) -> Vec<Line> {
     out
 }
 
-/// The open picker as screen lines, at most `max` of them. Stores the number of rows
-/// it shows in `app.list_rows`, which the keys use to keep the selection in view.
 pub fn picker(app: &mut App, w: usize, max: usize) -> Vec<Line> {
     let p = &app.palette;
     let Some(pk) = &mut app.picker else {

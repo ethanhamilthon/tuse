@@ -1,4 +1,3 @@
-//! `model.list` reload cache reset and stale in-flight fetch discard.
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 #[allow(dead_code)]
@@ -16,9 +15,6 @@ use tuse_core::{Mode, Options, Session, Start};
 
 type GateReq = (mpsc::Sender<()>, mpsc::Receiver<()>);
 
-/// A mock `/models` server that blocks each request until its release sender fires,
-/// then signals completion once the client finishes reading and closes the socket.
-/// `None` closes the socket without a response to trigger a fetch error.
 fn gated_models(model_id: Option<&'static str>) -> (String, mpsc::Receiver<GateReq>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap().to_string();
@@ -143,7 +139,6 @@ fn model_list_discards_stale_fetches_on_reload() {
     let (dir, _) = common::setup("rpc-models", &old_addr, "");
     let cfg = dir.join("main.lua");
 
-    // 1. Json mode: hold in-flight fetches for old `p` and `broken`, then reload before releasing.
     providers(&[
         ("p", format!("http://{old_addr}")),
         ("broken", format!("http://{err_addr}")),
@@ -155,14 +150,12 @@ fn model_list_discards_stale_fetches_on_reload() {
     let (rel_old, done_old) = old_req.recv_timeout(Duration::from_secs(5)).unwrap();
     let (rel_err, done_err) = err_req.recv_timeout(Duration::from_secs(5)).unwrap();
 
-    // Reload switches `p` to a different endpoint and removes `broken`.
     providers(&[("p", format!("http://{new_addr}"))]);
     rpc_call(&tx, &out, 3, "config.reload");
     assert_eq!(rpc_call(&tx, &out, 4, "model.list"), json!(["p/cfg"]));
     let (rel_new, _) = new_req.recv_timeout(Duration::from_secs(5)).unwrap();
     rel_new.send(()).unwrap();
     wait_models_event(&out);
-    // Release stale response and stale error AFTER new_only is cached: both must be discarded.
     rel_old.send(()).unwrap();
     rel_err.send(()).unwrap();
     done_old.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -172,7 +165,6 @@ fn model_list_discards_stale_fetches_on_reload() {
         json!(["p/cfg", "p/new_only"])
     );
 
-    // Reload drops cached `p/new_only` when `p` is removed; fresh fetch is gated.
     providers(&[("all_p", format!("http://{fresh_addr}"))]);
     std::fs::write(&cfg, "return { models = {{ name = 'all_p/cfg' }} }").unwrap();
     rpc_call(&tx, &out, 6, "config.reload");

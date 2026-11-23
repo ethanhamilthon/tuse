@@ -26,7 +26,6 @@ fn write(path: &Path, data: &[u8]) -> Result<(), String> {
     std::fs::write(path, data).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// `tuse update`: replaces this binary with the latest release.
 pub fn update() -> Result<(), String> {
     let old = env!("CARGO_PKG_VERSION");
     let asset = format!("tuse_{}_{}.tar.gz", os()?, arch()?);
@@ -89,7 +88,6 @@ fn sha256(data: &[u8]) -> String {
         .collect()
 }
 
-/// The file `name` of a `.tar.gz`.
 fn unpack(tarball: &[u8], name: &str) -> Result<Vec<u8>, String> {
     let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(tarball));
     for entry in archive.entries().map_err(|e| format!("archive: {e}"))? {

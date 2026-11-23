@@ -1,4 +1,3 @@
-//! A whole `tuse json` session against a fake provider.
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 use serde_json::{Value, json};

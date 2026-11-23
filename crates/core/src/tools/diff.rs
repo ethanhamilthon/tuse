@@ -1,6 +1,4 @@
-/// One replaced region, as whole lines.
 pub struct Hunk {
-    /// 1-based line where the region starts in the old text.
     pub start: usize,
     pub old: Vec<String>,
     pub new: Vec<String>,
@@ -10,10 +8,8 @@ pub struct Hunk {
 
 const CONTEXT: usize = 2;
 const MAX_HUNKS: usize = 5;
-/// Lines of a new file or of one changed region the diff lists.
 const MAX_LINES: usize = 200;
 
-/// Hunks for replacing the byte ranges `at` (start, old length) of `text` with `new`.
 pub fn hunks(text: &str, at: &[(usize, usize)], new: &str) -> Vec<Hunk> {
     let lines: Vec<&str> = text.split('\n').collect();
     let starts: Vec<usize> = std::iter::once(0)
@@ -49,8 +45,6 @@ pub fn hunks(text: &str, at: &[(usize, usize)], new: &str) -> Vec<Hunk> {
         .collect()
 }
 
-/// `  12 | context`, `- 13 | removed`, `+ 13 | added`; line numbers of added lines
-/// account for the earlier hunks.
 pub fn render(hunks: &[Hunk]) -> String {
     let mut out = String::new();
     let mut shift = 0isize;
@@ -82,12 +76,10 @@ pub fn render(hunks: &[Hunk]) -> String {
     out.trim_end().to_string()
 }
 
-/// The diff of a new file: every line added.
 pub fn whole(text: &str) -> String {
     all_lines(text, '+')
 }
 
-/// The diff of a deleted file: every line removed.
 pub fn removed(text: &str) -> String {
     all_lines(text, '-')
 }
@@ -106,7 +98,6 @@ fn all_lines(text: &str, sign: char) -> String {
     out.join("\n")
 }
 
-/// The diff of a rewritten file: the lines between the common head and tail.
 pub fn changed(old: &str, new: &str) -> String {
     let (a, b): (Vec<&str>, Vec<&str>) = (old.lines().collect(), new.lines().collect());
     let head = a.iter().zip(&b).take_while(|(x, y)| x == y).count();

@@ -15,8 +15,6 @@ pub fn duration(d: Duration) -> String {
     }
 }
 
-/// Tabs become spaces and control characters (ESC included) are dropped,
-/// so text from scripts cannot move the cursor or break the width.
 pub(crate) fn clean(text: &str) -> String {
     text.chars()
         .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
@@ -55,7 +53,6 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             if *images > 0 && !text.contains("[Image") {
                 text.push_str(&format!("\n[{images} image(s)]"));
             }
-            // No prefix: the `surface` block marks the message.
             let mut lines = plain(&text, width, st, "", "");
             for l in &mut lines {
                 let fill = width.saturating_sub(line_width(l));
@@ -68,7 +65,6 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         Entry::Reasoning(text) => {
             let st = Style::fg(p.muted).italic();
             let text = text.trim();
-            // Only the last lines are shown; wrapping the rest is wasted work.
             let cut = usize::try_from(p.ui.reasoning_line)
                 .ok()
                 .and_then(|n| text.rmatch_indices('\n').nth(n.saturating_sub(1)));

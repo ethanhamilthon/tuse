@@ -2,8 +2,6 @@ use crate::style::{MORE, Palette, Style, TOOL_PREFIX};
 use crate::text::{Line, clip, span, width};
 use tuse_core::FileDiff;
 
-/// A `lua` call in the chat: its code (colored), then its output, then the
-/// diff of every file it changed.
 pub fn tool(
     input: &str,
     output: Option<&str>,
@@ -42,7 +40,6 @@ pub fn tool(
     lines
 }
 
-/// The code wrapped to `width`, colored unless the call failed.
 fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<Line> {
     let cleaned = crate::render::clean(input.trim());
     let code = if p.ui.fold_strings {
@@ -64,7 +61,6 @@ fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<
         .collect()
 }
 
-/// `path` and its changed lines, colored; a long changed line shows the part around the change.
 fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
     let room = w.saturating_sub(pad.len());
     let all: Vec<&str> = d.diff.lines().collect();
@@ -91,8 +87,6 @@ fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
     out
 }
 
-/// Fits each diff line to `room` columns. A `-` line followed by a `+` line is cut
-/// around their first difference, so the change stays visible at the end of a long line.
 fn pair_windows(lines: &[&str], room: usize, more: &str) -> Vec<String> {
     let mut out: Vec<String> = lines
         .iter()
@@ -106,7 +100,6 @@ fn pair_windows(lines: &[&str], room: usize, more: &str) -> Vec<String> {
         if !(a.starts_with('-') && b.starts_with('+')) || width(&a) <= room && width(&b) <= room {
             continue;
         }
-        // The gutter (`- 12 | `) is kept; the text after it is windowed around the first difference.
         let gutter = a.find("| ").map_or(0, |g| a[..g + 2].chars().count());
         let same = a.chars().skip(gutter).zip(b.chars().skip(gutter));
         let at = gutter + same.take_while(|(x, y)| x == y).count();

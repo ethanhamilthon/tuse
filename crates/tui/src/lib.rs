@@ -46,7 +46,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tuse_core::{Event, Session};
 
-/// Runs the full-screen UI until the user quits; returns the last session ID.
 pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Result<String> {
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     for sig in [
@@ -56,7 +55,6 @@ pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Resul
     ] {
         signal_hook::flag::register(sig, stop.clone())?;
     }
-    // Created before `setup` so a half-done setup is undone too.
     let _guard = RestoreGuard;
     setup()?;
     let prev = std::panic::take_hook();
@@ -68,7 +66,6 @@ pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Resul
     main_loop(app::App::new(session, config_arg), &stop, &dog)
 }
 
-/// Restores the terminal on every way out of `run` (return, `?`, unwinding).
 struct RestoreGuard;
 
 impl Drop for RestoreGuard {
@@ -189,7 +186,6 @@ fn main_loop(
     }
     let id = app.session.id.clone();
     if !dog.claim_close() {
-        // The watchdog is closing the session and will end the process.
         loop {
             std::thread::park();
         }

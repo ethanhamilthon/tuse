@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex};
 pub struct TaskInfo {
     pub id: String,
     pub name: String,
-    /// `running`, `done` (the function returned), `failed` or `stopped`.
     pub status: String,
     pub started: String,
     pub ended: String,
@@ -23,7 +22,6 @@ impl TaskInfo {
     }
 }
 
-/// Background coroutines of one session (`spawn`); output goes to `tasks/<id>.log`.
 #[derive(Clone)]
 pub struct Tasks {
     dir: PathBuf,
@@ -40,7 +38,6 @@ impl Tasks {
         }
     }
 
-    /// A new entry, its log path and its stop flag.
     pub(crate) fn create(&self, name: &str) -> Result<tuse_lua::TaskStart, String> {
         std::fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
         let mut list = self.list.lock().unwrap();
@@ -67,7 +64,6 @@ impl Tasks {
         Ok(tuse_lua::TaskStart { id, log, cancel })
     }
 
-    /// Marks a task as ended; `None` when it was stopped (nobody needs to hear of it).
     pub(crate) fn end(&self, id: &str, ok: bool) -> Option<TaskInfo> {
         self.cancels.lock().unwrap().remove(id);
         let mut l = self.list.lock().unwrap();
@@ -80,7 +76,6 @@ impl Tasks {
         Some(t.clone())
     }
 
-    /// Stops a task: its coroutine gets a `cancelled` error at its next wait or instruction check.
     pub fn stop(&self, id: &str) -> Result<TaskInfo, String> {
         let mut l = self.list.lock().unwrap();
         let t = l
@@ -118,7 +113,6 @@ impl Tasks {
     }
 }
 
-/// The last `lines` lines of a task log (reads at most the last 256 KiB).
 pub fn tail(log: &str, lines: usize) -> String {
     let Ok(mut f) = File::open(log) else {
         return String::new();

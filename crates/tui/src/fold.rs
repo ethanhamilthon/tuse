@@ -1,7 +1,5 @@
 use crate::style::MORE;
 
-/// Collapses multiline Lua long strings (`[[...]]`, `[==[...]==]`) to one line,
-/// keeping the code, comments and quoted strings around them.
 pub fn fold_multiline_strings(code: &str) -> String {
     let c: Vec<char> = code.chars().collect();
     let mut out = String::with_capacity(code.len());
@@ -69,7 +67,6 @@ pub fn fold_multiline_strings(code: &str) -> String {
     out
 }
 
-/// The number of `=` of a long bracket opening at `at`.
 fn long(c: &[char], at: usize) -> Option<usize> {
     if c.get(at) != Some(&'[') {
         return None;

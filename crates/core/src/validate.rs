@@ -1,10 +1,6 @@
-//! Config checks: serde validates the data (see `tuse_config::from_value`); this file adds only
-//! what serde cannot see in JSON: which values must be Lua functions.
-
 use crate::host::to_json;
 use tuse_lua::mlua::{Lua, Table, Value};
 
-/// Validates one config table (the user's or a plugin's) and returns it as a `Config`.
 pub(crate) fn table(
     lua: &Lua,
     t: &Table,
@@ -50,7 +46,6 @@ fn entries(t: &Table, key: &str) -> Vec<(String, Value)> {
         .collect()
 }
 
-/// The config table as JSON: Lua functions dropped, `commands` and `open` as their names.
 pub(crate) fn json(lua: &Lua, t: &Table) -> serde_json::Value {
     let mut raw = to_json(lua, Value::Table(t.clone()));
     if let Some(obj) = raw.as_object_mut() {

@@ -45,7 +45,6 @@ impl Session {
         }
     }
 
-    /// Ends the turn unless messages arrived meanwhile. Returns false to keep going.
     fn finish(self: &Arc<Self>, generation: u64) -> bool {
         let mut st = self.state.lock().unwrap();
         if st.generation != generation {

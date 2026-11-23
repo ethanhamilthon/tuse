@@ -1,4 +1,3 @@
-//! `tuse json`: a JSON-RPC 2.0 session over stdin and stdout, one message per line.
 mod events;
 mod methods;
 mod proto;
@@ -12,7 +11,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tuse_core::Session;
 
-/// One writer for answers and notifications, so lines never interleave.
 #[derive(Clone)]
 pub struct Out(Arc<Mutex<Box<dyn Write + Send>>>);
 
@@ -28,15 +26,12 @@ impl Out {
     }
 }
 
-/// Serves `session` until the input ends, `shutdown` arrives or `stop` is set; then
-/// closes the session (tasks stop, `close` hooks run).
 pub fn serve(
     mut session: Arc<Session>,
     input: impl BufRead + Send + 'static,
     out: Out,
     stop: Arc<AtomicBool>,
 ) {
-    // Set only after `initialize` (or session switch) answers; until then events wait in the channel.
     let ready = Arc::new(AtomicBool::new(false));
     let mut events = session.subscribe();
     let done = Arc::new(AtomicBool::new(false));
@@ -153,7 +148,6 @@ pub fn serve(
         }
     }
     session.close();
-    // Events of the closing (`close` notices and the like) still reach the client.
     std::thread::sleep(Duration::from_millis(100));
     done.store(true, Ordering::Relaxed);
     let _ = pump.join();

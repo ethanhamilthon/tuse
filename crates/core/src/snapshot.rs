@@ -1,6 +1,3 @@
-//! Single runtime session snapshot shared by `require("tuse").session()`,
-//! the TUI `/session` view, and JSON-RPC.
-
 use crate::mode::Mode;
 use crate::session::Session;
 use crate::trace::TraceItem;
@@ -48,10 +45,8 @@ pub struct UsageSnapshot {
     pub output: u64,
     pub cache_read: u64,
     pub cache_write: u64,
-    /// `main + llm`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cost: Option<f64>,
-    /// The part of `cost` that `llm()` requests spent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_cost: Option<f64>,
 }
@@ -101,7 +96,6 @@ impl From<&ModelDef> for ModelInfoSnapshot {
 }
 
 impl SessionSnapshot {
-    /// Snapshot returned before a session exists (initial config load and `/reload`).
     pub fn pre_session(mode: Mode, configpath: Option<String>, cwd: &Path, home: &Path) -> Self {
         Self {
             mode: mode.name(),
@@ -129,8 +123,6 @@ impl SessionSnapshot {
     }
 }
 
-/// Stored in Lua app_data so `tuse.session()` has consistent pre-session semantics
-/// during both initial config load and `/reload`.
 pub(crate) struct LoadCtx {
     pub mode: Mode,
     pub cwd: PathBuf,
@@ -139,7 +131,6 @@ pub(crate) struct LoadCtx {
 }
 
 impl Session {
-    /// Builds a fresh runtime session snapshot (no credentials).
     pub fn snapshot(&self, include_trace: bool) -> SessionSnapshot {
         let config = self.config();
         let (model_full, effort) = self.model();

@@ -9,7 +9,6 @@ pub enum Pasted {
 
 #[cfg(not(test))]
 pub fn write(text: &str) -> Result<(), String> {
-    // On X11 the clipboard owner must stay alive to serve paste requests.
     thread_local! {static OWNER: std::cell::RefCell<Option<Clipboard>> = const { std::cell::RefCell::new(None) };}
     OWNER.with(|cell| {
         let mut owner = cell.borrow_mut();
@@ -31,7 +30,6 @@ pub fn write(text: &str) -> Result<(), String> {
 #[cfg(test)]
 thread_local! {pub static TEST_TEXT: std::cell::RefCell<String> = const {std::cell::RefCell::new(String::new())};}
 
-/// Reads the system clipboard: an image is saved as a PNG under `dir`.
 pub fn read(dir: &Path) -> Result<Pasted, String> {
     let mut cb = Clipboard::new().map_err(|e| e.to_string())?;
     if let Ok(img) = cb.get_image() {

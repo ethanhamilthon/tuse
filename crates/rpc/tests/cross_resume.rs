@@ -1,4 +1,3 @@
-//! Cross-front-end resume in both directions: JSON-RPC -> TUI and TUI -> JSON-RPC.
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 #[allow(dead_code)]
@@ -51,7 +50,6 @@ fn cross_frontend_resume_preserves_history_and_model_but_not_transient_ui() {
         })
     };
 
-    // Direction 1: start in JSON-RPC, close, resume in TUI.
     let rpc_s = open(Mode::Json, None).unwrap();
     let id1 = rpc_s.id.clone();
     let (tx, out, server) = spawn(rpc_s);
@@ -100,7 +98,6 @@ fn cross_frontend_resume_preserves_history_and_model_but_not_transient_ui() {
     );
     tui_s.close();
 
-    // Direction 2: start in TUI, close, resume in JSON-RPC.
     let tui_s2 = open(Mode::Tui, None).unwrap();
     let id2 = tui_s2.id.clone();
     tui_s2.select_model("p/m", "low", false).unwrap();

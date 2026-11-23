@@ -14,7 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: rustup toolchain install --no-update
-      - run: sh release/check-tag.sh "$GITHUB_REF_NAME"
+      - name: Check tag and changelog
+        run: |
+          set -eu
+          version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c \
+            'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "tuse"))')"
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != Cargo version v$version" >&2; exit 1; }
+          grep -Fx "## $version" release/CHANGELOG.md >/dev/null
 
   check:
     needs: preflight
@@ -42,10 +48,40 @@ jobs:
         with:
           shared-key: release-${{ matrix.target }}
       - run: cargo build --locked --release --target "$TARGET" -p tuse
-      - name: Package and smoke test
+      - name: Package
         run: |
-          sh release/package.sh "$TARGET" "$ASSET"
-          sh release/smoke.sh "$ASSET" "$GITHUB_REF_NAME"
+          set -eu
+          bin="${CARGO_TARGET_DIR:-target}/$TARGET/release/tuse"
+          case "$TARGET" in
+            aarch64-apple-darwin) format='Mach-O.*arm64' ;;
+            x86_64-apple-darwin) format='Mach-O.*x86_64' ;;
+            aarch64-unknown-linux-gnu) format='ELF.*ARM aarch64' ;;
+            x86_64-unknown-linux-gnu) format='ELF.*x86-64' ;;
+            *) echo "Unsupported target: $TARGET" >&2; exit 1 ;;
+          esac
+          file -b "$bin" | grep -E "$format"
+          tar -C "$(dirname "$bin")" -czf "$ASSET" tuse
+      - name: Smoke test
+        run: |
+          set -eu
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          test "$(tar -tzf "$ASSET")" = tuse
+          tar -xzf "$ASSET" -C "$tmp"
+          test "$("$tmp/tuse" version)" = "tuse ${GITHUB_REF_NAME#v}"
+          cd "$tmp"
+          unset TUSE_GLOBAL_CONFIG
+          export HOME="$tmp" TUSE_HOME="$tmp/state"
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' > request.jsonl
+          ./tuse json < request.jsonl > response.jsonl
+          python3 -c 'import json, sys
+          with open("response.jsonl") as f:
+              init, shutdown = map(json.loads, f)
+          assert init["id"] == 1 and init["result"]["tuse"] == sys.argv[1]
+          assert shutdown["id"] == 2 and shutdown["result"] is None
+          ' "${GITHUB_REF_NAME#v}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: tuse_${{ matrix.name }}
@@ -69,7 +105,6 @@ jobs:
       - name: Validate assets and generate checksums
         run: |
           set -eu
-          cp release/main.lua dist/
           # This placeholder is needed when updating from 0.4.0 or older.
           echo '# Defaults are built into tuse.' > dist/default.yaml
           cd dist
@@ -83,7 +118,6 @@ jobs:
             dist/tuse_linux_amd64.tar.gz
             dist/tuse_linux_arm64.tar.gz
             dist/checksums.txt
-            dist/main.lua
             dist/default.yaml
           fail_on_unmatched_files: true
           generate_release_notes: true

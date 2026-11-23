@@ -36,7 +36,7 @@ impl App {
             KeyCode::Char('x') if ctrl && p.kind == Kind::Task => {
                 if let Some(it) = p.current() {
                     let id = it.value.clone();
-                    let _ = self.session.tasks.stop(&id);
+                    let _ = self.session.stop_task(&id);
                     self.open_tasks();
                 }
             }

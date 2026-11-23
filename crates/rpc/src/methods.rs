@@ -16,6 +16,8 @@ pub const METHODS: &[&str] = &[
     "session.trace",
     "session.stats",
     "session.list",
+    "session.new",
+    "session.resume",
     "model.get",
     "model.set",
     "model.list",
@@ -25,6 +27,11 @@ pub const METHODS: &[&str] = &[
     "tasks.list",
     "tasks.get",
     "tasks.stop",
+    "commands.list",
+    "commands.run",
+    "ui.state",
+    "ui.reply",
+    "ui.cancel",
     "shutdown",
 ];
 
@@ -41,6 +48,11 @@ fn info(s: &Session) -> Value {
     })
 }
 
+pub fn switched(s: &Session) -> Value {
+    let (model, effort) = s.model();
+    json!({"session": info(s), "model": model, "effort": effort})
+}
+
 pub fn initialize(s: &Session) -> Value {
     let (model, effort) = s.model();
     json!({
@@ -55,15 +67,18 @@ pub fn initialize(s: &Session) -> Value {
 
 fn submit(s: &Arc<Session>, p: &Value) -> Reply {
     let text = str_param(p, "text")?;
+    let prompts = s
+        .resolve_prompts(&str_list(p, "prompts")?, true)
+        .map_err(Fail::session)?;
     let (urls, paths): (Vec<String>, Vec<String>) = str_list(p, "images")?
         .into_iter()
         .partition(|f| f.starts_with("data:"));
     let refs = tuse_core::Refs {
+        prompts,
         images: (1..).zip(paths.into_iter().map(Into::into)).collect(),
         files: str_list(p, "files")?.into_iter().map(Into::into).collect(),
         cwd: s.cwd.clone(),
         strict: true,
-        ..Default::default()
     };
     let mut input: UserInput = tuse_core::build_input(&text, refs).map_err(Fail::session)?;
     input.images.extend(urls);
@@ -125,14 +140,20 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         "model.set" => {
             let model = str_param(p, "model")?;
             let effort = p["effort"].as_str().unwrap_or("default");
+            let persist = match &p["persist"] {
+                Value::Null => true,
+                Value::Bool(b) => *b,
+                _ => return Err(Fail::params("`persist` must be a boolean")),
+            };
             if !tuse_config::EFFORTS.contains(&effort) {
                 return Err(Fail::params(format!(
                     "`effort` must be one of {}",
                     tuse_config::EFFORTS.join(", ")
                 )));
             }
-            s.set_model(&model, effort);
-            Ok(Value::Null)
+            s.select_model(&model, effort, persist)
+                .map(|_| Value::Null)
+                .map_err(Fail::session)
         }
         "model.list" => {
             s.fetch_models();
@@ -168,8 +189,35 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         }
         "tasks.stop" => {
             let id = str_param(p, "id")?;
-            let t = s.tasks.stop(&id).map_err(Fail::session)?;
+            let t = s.stop_task(&id).map_err(Fail::session)?;
             serde_json::to_value(t).map_err(|e| Fail::session(e.to_string()))
+        }
+        "commands.list" => Ok(json!(s.config().commands)),
+        "commands.run" => {
+            let name = str_param(p, "name")?;
+            s.run_command(&name)
+                .map(|_| Value::Null)
+                .map_err(Fail::session)
+        }
+        "ui.state" => {
+            serde_json::to_value(s.ui_snapshot()).map_err(|e| Fail::session(e.to_string()))
+        }
+        "ui.reply" => {
+            let id = p["id"]
+                .as_u64()
+                .ok_or_else(|| Fail::params("`id` must be a number"))?;
+            let value = str_param(p, "value")?;
+            s.ui_reply(id, Some(value))
+                .map(|_| Value::Null)
+                .map_err(Fail::session)
+        }
+        "ui.cancel" => {
+            let id = p["id"]
+                .as_u64()
+                .ok_or_else(|| Fail::params("`id` must be a number"))?;
+            s.ui_reply(id, None)
+                .map(|_| Value::Null)
+                .map_err(Fail::session)
         }
         _ => Err(Fail(
             crate::proto::NO_METHOD,

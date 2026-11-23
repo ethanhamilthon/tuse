@@ -89,6 +89,25 @@ impl Session {
         }
     }
 
+    /// Validates and sets the session's model and effort, optionally persisting both as defaults.
+    pub fn select_model(&self, model: &str, effort: &str, persist: bool) -> Result<(), String> {
+        if !tuse_config::EFFORTS.contains(&effort) {
+            return Err(format!(
+                "`effort` must be one of {}",
+                tuse_config::EFFORTS.join(", ")
+            ));
+        }
+        if !model.is_empty() && !self.model_available(model) {
+            return Err(format!("Model `{model}` is unavailable"));
+        }
+        self.set_model(model, effort);
+        if persist {
+            self.save_choice("model", model)?;
+            self.save_choice("effort", effort)?;
+        }
+        Ok(())
+    }
+
     /// Remembers a choice of the UI (`model` or `effort`) in the database and
     /// applies it to the config at once; new sessions start with it.
     pub fn save_choice(&self, key: &str, value: &str) -> Result<(), String> {

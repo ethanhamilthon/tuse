@@ -148,6 +148,22 @@ pub fn read_records(id: &str) -> Vec<Record> {
     .unwrap_or_default()
 }
 
+/// Fails if `id` is currently locked by another running process.
+pub(crate) fn check_unlocked(id: &str) -> Result<(), String> {
+    let lock = session_path(id).join("lock");
+    if !lock.exists() {
+        return Ok(());
+    }
+    let file = File::open(&lock).map_err(|e| e.to_string())?;
+    match file.try_lock() {
+        Ok(()) => Ok(()),
+        Err(TryLockError::WouldBlock) => {
+            Err(format!("session {id} is open in another tuse process"))
+        }
+        Err(TryLockError::Error(e)) => Err(e.to_string()),
+    }
+}
+
 pub fn read_meta(id: &str) -> Option<Meta> {
     let body: Option<String> = db::with(|c| {
         c.query_row("SELECT meta FROM sessions WHERE id = ?1", [id], |r| {

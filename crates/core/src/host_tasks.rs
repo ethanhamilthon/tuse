@@ -32,8 +32,7 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
         "task_stop",
         lua.create_function(|lua, id: String| {
             let s = session(lua)?;
-            let t = s.tasks.stop(&id).map_err(mlua::Error::runtime)?;
-            s.emit(crate::Event::Tasks);
+            let t = s.stop_task(&id).map_err(mlua::Error::runtime)?;
             task(lua, &t, None)
         })?,
     )?;

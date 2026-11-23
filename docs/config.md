@@ -62,7 +62,7 @@ return g
 | `functions` | Map of named Lua helpers with `run`, `description`, optional `args` and `show_agent`. See [functions](functions.md). |
 | `hooks` | Map of named hooks `{events = {...}, run = function(e) ... end}`. See [hooks](hooks.md). |
 | `commands` | Map of custom slash command names to Lua functions (`commands = { hello = function() ... end }`). Built-in commands cannot be overridden. |
-| `open` | Map of file extensions (without the dot, e.g. `md = function(path) ... end`) to Lua callbacks for clicked local file paths. URLs are handled separately by the OS default opener. |
+| `open` | Map of file extensions (without the dot, e.g. `md = function(path) ... end`) to Lua callbacks for clicked local file paths (TUI-only: `tuse json` has no clicks). URLs are handled separately by the OS default opener. |
 | `plugins` | List of plugins from GitHub or local folders, merged under this config. See [plugins](plugins.md). |
 
 ## Validation

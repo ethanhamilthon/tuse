@@ -1,7 +1,7 @@
 # JSON mode
 
 `tuse json [--config PATH] [--resume ID]` serves a Tuse session over JSON-RPC 2.0 on stdin and stdout, one
-message per line (NDJSON), with feature parity with the TUI. stdout carries only the protocol; logs
+message per line (NDJSON). stdout carries only the protocol; logs
 go to stderr. Closing stdin, `shutdown`, SIGINT, SIGTERM or SIGHUP close the active session (tasks
 stop, pending UI requests clear, `close` hooks run) and exit. `session.new` and `session.resume`
 switch sessions within the same process and share the same SQLite store and session lock as the
@@ -15,6 +15,22 @@ TUI (sessions can be resumed freely between TUI and JSON-RPC).
 < {"jsonrpc":"2.0","method":"event","params":{"type":"text","text":"Let me"}}
 < {"jsonrpc":"2.0","method":"event","params":{"type":"turn_end","elapsedMs":5120,"calls":2,...}}
 ```
+
+## Capabilities
+
+| Capability | TUI | JSON-RPC |
+| --- | --- | --- |
+| Turns, steering, cancel | yes | `turn.submit`, `turn.withdraw`, `turn.cancel` |
+| `#` prompts, `@` files, images | yes | `turn.submit` `prompts`, `files`, `images` |
+| Sessions: new, resume, list | `/new`, `/resume` | `session.new`, `session.resume`, `session.list` |
+| Model and effort | `/models` | `model.get`, `model.set`, `model.list` |
+| Config view and reload | `/config`, `/reload` | `config.get`, `config.reload` |
+| Tasks | `/tasks` | `tasks.list`, `tasks.get`, `tasks.stop` |
+| Custom commands | `/name` | `commands.list`, `commands.run` |
+| `show`, `pick`, `ask` | rendered | `ui_*` events, `ui.state`, `ui.reply`, `ui.cancel` |
+| Session data, trace, usage | `/session`, `/trace` | `session.snapshot`, `session.trace`, `session.stats` |
+| Click a path or link to open it (`open.<ext>`) | yes | TUI-only |
+| Chat rendering, themes, selection, hotkeys | yes | client's job |
 
 ## Handshake
 
@@ -43,8 +59,17 @@ context blocks, just like `#` prompts, `@` files, and pasted images in the TUI
 | `config.set` | | deprecated, removed in protocol v2: `{key: "model" or "effort", value}` is `model.set` with the other value unchanged and `persist: true`, validated the same way |
 | `tasks.list` / `tasks.get` / `tasks.stop` | `/tasks` | `{id, lines?}` |
 | `commands.list` / `commands.run` | `/` custom commands | list configured custom command names; `{name}` runs `/name` as a Lua job |
-| `ui.state` / `ui.reply` / `ui.cancel` | `show`, `pick`, `ask` | snapshot of `{markdowns, active, entries}`; `{id, value}` answers active prompt; `{id}` cancels it (returns `nil`, leaves no entry) |
+| `ui.state` / `ui.reply` / `ui.cancel` | `show`, `pick`, `ask` | snapshot of `{markdowns, active, entries}`; `{id, value}` answers active prompt; `{id}` cancels it (returns `nil`, leaves no entry; see below) |
 | `shutdown` | `/quit` | closes the session and exits |
+
+## UI requests
+
+`ui_request` makes a request active; `ui_clear {id}` means Tuse took it away (the Lua job was
+cancelled, the session closed, or a reload dropped a hook's request). A successful `ui.reply`
+answers with a `ui_result`. A successful `ui.cancel` clears the active request and emits **no**
+`ui_clear`: the client clears its prompt itself when the call succeeds. The next queued request
+arrives as a new `ui_request`. To resync at any time, call `ui.state`: `active` is the current
+request or `null`.
 
 ## Models
 

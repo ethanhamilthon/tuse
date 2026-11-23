@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1
+
+- Restored the Lua `models` list for model display names, context windows, prices, and compaction thresholds. Model metadata from the 0.9.0 database is no longer used; put it in the config. SQLite still remembers the selected model and effort.
+- `tuse models` lists configured metadata and the saved default, without subcommands. JSON-RPC exposes metadata through `config.get` instead of `model.meta.*`.
+- Link detection is limited to agent messages, agent/system/user trace details, `show_markdown`, `/config`, and `/session`. No links are parsed in Lua code, tool output, or diffs.
+
 ## 0.9.0
 
 - **Single Lua session API (`require("tuse").session()`):**

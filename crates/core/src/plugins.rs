@@ -104,10 +104,16 @@ fn entry(t: &Table, base: &Path) -> Result<Entry, String> {
 }
 
 /// Loads the plugins `config` lists and returns the merged table (the user's keys on top).
-pub(crate) fn apply(lua: &Lua, config: Table, base: &Path) -> Result<Table, String> {
+pub(crate) fn apply(
+    lua: &Lua,
+    config: Table,
+    base: &Path,
+) -> Result<(Table, Vec<tuse_config::PluginInfo>), String> {
     let list = entries(&config, base)?;
+    let infos = list.iter().map(|e| e.plugin.info()).collect();
     if list.is_empty() {
-        return Ok(config);
+        let _ = config.raw_set("plugins", Value::Nil);
+        return Ok((config, infos));
     }
     let loaded = lua.create_table().map_err(|e| e.to_string())?;
     for e in list {
@@ -121,6 +127,7 @@ pub(crate) fn apply(lua: &Lua, config: Table, base: &Path) -> Result<Table, Stri
     lua.load(MERGE)
         .set_name("=plugins")
         .call::<Table>((loaded, config))
+        .map(|t| (t, infos))
         .map_err(|e| tuse_lua::message(&e))
 }
 

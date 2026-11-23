@@ -50,6 +50,9 @@ Plugins load in list order, then your config goes on top.
 - `settings` and `theme` merge deeply, with your values winning.
 - Plugins cannot set `model`, `provider`, `effort` or `plugins`.
 
+`/config` lists the loaded plugins with their `ref`, commit (or `local`) and folder; `config.get`
+in `tuse json` returns them as `plugins`.
+
 ## Installing
 
 Clones live in `~/.tuse/plugins` (`$TUSE_HOME/plugins`), one per repository. Starting Tuse

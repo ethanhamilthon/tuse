@@ -70,6 +70,19 @@ fn plugins_load_with_opts_and_merge_under_the_user() {
     );
     assert_eq!((c.settings.ui.pad_x, c.settings.ui.scroll_step), (4, 2));
     assert_eq!(c.commands, ["hi"]);
+    let names: Vec<_> = c
+        .plugins
+        .iter()
+        .map(|p| (p.name.as_str(), p.commit.is_none()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("me/kit", true),
+            ("me/kit/plugins/greet", true),
+            ("dev", true)
+        ]
+    );
     drop(s);
 
     let fails = |plugins: &str, want: &str| {

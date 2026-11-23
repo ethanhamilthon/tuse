@@ -147,11 +147,15 @@ impl App {
                     .insert_atom(&format!("#{v}"), AtomKind::Prompt(v.clone()));
                 self.editor.insert(" ");
             }
+            // A relative folder needs `/*` to be listed; an absolute one lists at its `/`.
+            (Kind::File, Some(v)) if v.ends_with('/') && crate::files::is_absolute(&v) => {
+                self.replace_token(&format!("@{v}"));
+            }
             (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}*")),
             (Kind::File, Some(v)) => {
                 self.cut_token();
                 self.editor
-                    .insert_atom(&format!("@{v}"), AtomKind::File(v.clone().into()));
+                    .insert_atom(&format!("@{v}"), AtomKind::File(crate::files::path(&v)));
                 self.editor.insert(" ");
             }
             (Kind::Resume, Some(v)) => self.switch(Some(v)),

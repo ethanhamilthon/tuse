@@ -1,9 +1,10 @@
 use std::path::Path;
 
 /// Entries of `root/dir` as paths relative to `root` (folders end with `/`),
-/// skipping `.git`. `dir` is empty or ends with `/`.
+/// skipping `.git`. `dir` is empty or ends with `/`; an absolute or `~/` `dir`
+/// is listed as is, and the entries keep it as their prefix.
 pub fn list(root: &Path, dir: &str, max: usize) -> Vec<String> {
-    let Ok(rd) = std::fs::read_dir(root.join(dir)) else {
+    let Ok(rd) = std::fs::read_dir(tuse_config::resolve_path(dir, root)) else {
         return vec![];
     };
     let mut entries: Vec<_> = rd.flatten().collect();
@@ -20,9 +21,34 @@ pub fn list(root: &Path, dir: &str, max: usize) -> Vec<String> {
         .collect()
 }
 
-/// Splits an `@` query: `some/*x` is (`some/`, `x`); without `/*` the
-/// directory is empty and the whole query is the filter.
+/// The file a picked `@` value points at: `~/x` is put under the home folder,
+/// other values stay as they are (relative ones are read from the working directory).
+pub fn path(value: &str) -> std::path::PathBuf {
+    if value.starts_with("~/") {
+        tuse_config::resolve_path(value, Path::new(""))
+    } else {
+        value.into()
+    }
+}
+
+/// `true` for `/abs/...`, `~` and `~/...`: paths outside the working directory.
+pub fn is_absolute(query: &str) -> bool {
+    query.starts_with('/') || query == "~" || query.starts_with("~/")
+}
+
+/// Splits an `@` query into the directory to list and the filter.
+/// Relative: `some/*x` is (`some/`, `x`); without `/*` the directory is empty
+/// and the whole query is the filter. Absolute (`/`, `~/`): the directory runs
+/// to the last `/`, so `/etc/ho` is (`/etc/`, `ho`).
 pub fn split(query: &str) -> (&str, &str) {
+    if is_absolute(query) {
+        let q = query.strip_suffix('*').unwrap_or(query);
+        return match q.rfind('/') {
+            Some(i) => (&q[..=i], &q[i + 1..]),
+            // A lone `~` lists the home folder.
+            None => ("~/", ""),
+        };
+    }
     match query.rfind("/*") {
         Some(i) => (&query[..=i], &query[i + 2..]),
         None => ("", query),
@@ -38,5 +64,33 @@ mod tests {
         assert_eq!(split("some/*"), ("some/", ""));
         assert_eq!(split("a/b/*ma"), ("a/b/", "ma"));
         assert_eq!(split("src/ma"), ("", "src/ma"));
+    }
+
+    #[test]
+    fn split_absolute_query() {
+        assert_eq!(split("/"), ("/", ""));
+        assert_eq!(split("/etc/ho"), ("/etc/", "ho"));
+        assert_eq!(split("/etc/*"), ("/etc/", ""));
+        assert_eq!(split("~"), ("~/", ""));
+        assert_eq!(split("~/do"), ("~/", "do"));
+        assert_eq!(split("~/a/b"), ("~/a/", "b"));
+    }
+
+    #[test]
+    fn picked_paths() {
+        assert_eq!(path("src/a.rs"), Path::new("src/a.rs"));
+        assert_eq!(path("/etc/hosts"), Path::new("/etc/hosts"));
+        assert_eq!(path("~/a"), tuse_config::home().join("a"));
+    }
+
+    #[test]
+    fn lists_absolute_dirs_with_their_prefix() {
+        let dir = std::env::temp_dir().join(format!("tuse-files-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("a.txt"), "a").unwrap();
+        let abs = format!("{}/", dir.display());
+        let got = list(Path::new("/nowhere"), &abs, 10);
+        assert_eq!(got, [format!("{abs}a.txt"), format!("{abs}sub/")]);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -55,6 +55,9 @@ pub enum Record {
     Usage {
         model: String,
         usage: Usage,
+        /// A tool-less `llm()` request from Lua, not a step of the conversation.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        llm: bool,
     },
     Settings {
         model: String,

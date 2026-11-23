@@ -48,8 +48,12 @@ pub struct UsageSnapshot {
     pub output: u64,
     pub cache_read: u64,
     pub cache_write: u64,
+    /// `main + llm`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cost: Option<f64>,
+    /// The part of `cost` that `llm()` requests spent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub llm_cost: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -166,6 +170,7 @@ impl Session {
                 cache_read: stats.totals.cached,
                 cache_write: stats.totals.cache_write,
                 cost: stats.priced.then_some(stats.cost),
+                llm_cost: stats.priced.then_some(stats.llm_cost),
             }),
             model_info: def.map(Into::into),
             steps: Some(stats.steps),

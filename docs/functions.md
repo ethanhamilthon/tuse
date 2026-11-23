@@ -77,17 +77,29 @@ and `lua` tool calls, `session()` returns the full live session snapshot.
   (its coroutine gets a `cancelled` error at its next wait), `task_list()` lists them. A task has
   `.id`, `.name`, `.status` (`running`, `done`, `failed`, `stopped`), `.started` and `.ended`.
 - `json.encode(value)`, `json.decode(text)` (`null` becomes `nil`) and `inspect(value)`.
-- `show_markdown(name, text, pin)`: renders or updates a UI-only Markdown block by name.
+- `show(name, text, pin)`: renders or updates a UI-only Markdown block by name.
   Unpinned blocks stay in chat order; pinned blocks stay together at the end of the chat after new
-  messages. `show_markdown(name, "", false)` removes the block. Blocks survive `/reload` but are
+  messages. `show(name, "", false)` removes the block. Blocks survive `/reload` but are
   never sent to the model or saved across resume.
-- `show_picker(options)` -> `option | nil`: shows a picker for a Lua list of strings (editor
+- `pick(options)` -> `option | nil`: shows a picker for a Lua list of strings (editor
   disabled, Enter selects, Esc returns `nil`).
-- `show_question(text)` -> `user_input | nil`: renders a Markdown question panel and uses the
+- `ask(text)` -> `user_input | nil`: renders a Markdown question panel and uses the
   editor for the answer (Enter returns the answer to Lua without sending to the model, Esc returns
   `nil`).
 - Picker and question requests share one FIFO queue, pause the calling coroutine's timeout while
   waiting, and leave a UI-only chat entry when answered (cancelled prompts leave no entry).
+- `reload()`: the same reload as `/reload` and `config.reload`. In the agent's `lua` tool, a
+  command, a task, or a helper it waits until the reload is done and raises the error if the
+  config is invalid (the old config stays). The new config takes effect once `reload()` returns:
+  new helpers, hooks, commands, prompts, and theme are live, and a running turn keeps its model.
+  In a hook, `reload()` returns at once and the reload starts when that hook run returns (a
+  reload fires `close` hooks, so it cannot wait inside one); errors show as an `error` event.
+- `llm(prompt, model, effort)` -> `text`: one request to a configured model with no tools and no
+  history, through the same providers as the session. `model` (`provider/model`) and `effort`
+  default to the session's. It waits without blocking other coroutines; Esc or a timeout cancels
+  it. Its usage is saved with the session and priced like any request, but kept apart as `$llm`:
+  `session().usage.cost` is the total `$main + $llm` and `usage.llm_cost` is the `llm()` part
+  (`/session` shows both).
 - `set_title(text)` names the session (and emits `name_change`); `docs(topic)`: call `docs()` to
   list documentation topics, or `docs("<topic>")` to read one.
 

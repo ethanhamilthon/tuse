@@ -17,13 +17,13 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
   commands = {
     ui_demo = function()
       local t = require("tuse")
-      t.show_markdown("m1", "Hello", true)
-      t.show_markdown("drop", "Temp", false)
-      t.show_markdown("drop", "", false)
-      local p = t.show_picker({"a", "b"})
-      local q = t.show_question("Why?")
-      local c = t.show_picker({"x"})
-      t.show_markdown("done", tostring(p) .. ":" .. tostring(q) .. ":" .. tostring(c), false)
+      t.show("m1", "Hello", true)
+      t.show("drop", "Temp", false)
+      t.show("drop", "", false)
+      local p = t.pick({"a", "b"})
+      local q = t.ask("Why?")
+      local c = t.pick({"x"})
+      t.show("done", tostring(p) .. ":" .. tostring(q) .. ":" .. tostring(c), false)
     end,
   },
 "#;
@@ -47,7 +47,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
         json!(["ui_demo"])
     );
 
-    // Custom command driving show_markdown, show_picker, show_question.
+    // Custom command driving show, pick, ask.
     assert!(call(&tx, &out, 3, "commands.run", json!({"name": "ui_demo"}))["error"].is_null());
     let r1 = event(&out, "ui_request");
     assert_eq!(r1["kind"], "picker");

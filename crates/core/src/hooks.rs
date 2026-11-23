@@ -128,6 +128,14 @@ impl Session {
         self.push(&mut st, r);
         drop(st);
         self.next_hook(name.to_string());
+        if self.reload_after_hook.swap(false, Ordering::AcqRel) {
+            let s = self.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = s.reload() {
+                    s.emit(crate::Event::Error(format!("reload: {e}")));
+                }
+            });
+        }
     }
 
     /// Fires `close` and waits for every hook run to end, with no time limit.

@@ -77,4 +77,4 @@ develop locally, skip the clone and use `{ "name", dir = "~/code/my-plugin" }`.
 `ethanhamilthon/tuse/plugins/welcome` listens to the `start` hook (when `e.is_new` is true) and
 reads `require("tuse").session()` to show a banner with the model, folder, git state, date, config
 path, and version in new TUI sessions. Its options are `title` (the banner text, default: the
-project folder name) and `block` (the `show_markdown` name, default `welcome`).
+project folder name) and `block` (the `show` name, default `welcome`).

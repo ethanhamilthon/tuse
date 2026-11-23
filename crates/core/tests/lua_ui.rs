@@ -17,7 +17,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     let addr = common::provider(vec![
         common::Reply::Call(
             "lua",
-            serde_json::json!({"code": "ran = 0; spawn(function() sleep(0.05); ran = 1 end, 'bg'); local p = show_picker({'yes'}); return tostring(p) .. ':' .. tostring(ran)"}).to_string(),
+            serde_json::json!({"code": "ran = 0; spawn(function() sleep(0.05); ran = 1 end, 'bg'); local p = pick({'yes'}); return tostring(p) .. ':' .. tostring(ran)"}).to_string(),
         ),
         common::Reply::Text("ok"),
     ]);
@@ -25,20 +25,20 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
   commands = {
     ask_flow = function()
       local t = require("tuse")
-      t.show_markdown("note", "## First", false)
-      t.show_markdown("note", "## Updated", false)
-      t.show_markdown("pin1", "Pinned A", true)
-      t.show_markdown("gone", "Temp", false)
-      t.show_markdown("gone", "", false)
-      local pick = t.show_picker({"alpha", "beta"})
-      local ans = t.show_question("**Name?**")
-      local skip = t.show_picker({"x", "y"})
-      t.show_markdown("summary", tostring(pick) .. "|" .. tostring(ans) .. "|" .. tostring(skip), true)
+      t.show("note", "## First", false)
+      t.show("note", "## Updated", false)
+      t.show("pin1", "Pinned A", true)
+      t.show("gone", "Temp", false)
+      t.show("gone", "", false)
+      local pick = t.pick({"alpha", "beta"})
+      local ans = t.ask("**Name?**")
+      local skip = t.pick({"x", "y"})
+      t.show("summary", tostring(pick) .. "|" .. tostring(ans) .. "|" .. tostring(skip), true)
     end,
     second = function()
       local t = require("tuse")
-      local v = t.show_question("Queued?")
-      t.show_markdown("q2", tostring(v), false)
+      local v = t.ask("Queued?")
+      t.show("q2", tostring(v), false)
     end,
   },
   hooks = {
@@ -46,7 +46,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
       events = {"start", "close"},
       run = function(e)
         if e.event == "start" and e.reason == "reload" then return end
-        require("tuse").show_question("hook " .. e.event)
+        require("tuse").ask("hook " .. e.event)
       end,
     },
   },
@@ -149,7 +149,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     // Reload keeps markdown blocks (with pin state) and UI entries, updates custom commands.
     std::fs::write(
         &cfg,
-        "return { commands = { updated_cmd = function() require('tuse').show_question('still open') end } }",
+        "return { commands = { updated_cmd = function() require('tuse').ask('still open') end } }",
     )
     .unwrap();
     s.reload().unwrap();
@@ -162,7 +162,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     std::fs::write(&cfg, "return { commands = { reload = function() end } }").unwrap();
     assert!(s.reload().unwrap_err().contains("cannot override built-in"));
 
-    // Tool call calling show_picker yields so other Lua jobs keep running, then finishes on reply.
+    // Tool call calling pick yields so other Lua jobs keep running, then finishes on reply.
     s.submit(UserInput::text("persist me"));
     let treq = next_req(&rx);
     std::thread::sleep(Duration::from_millis(120));

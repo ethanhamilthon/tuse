@@ -62,7 +62,7 @@ local function hook(opts)
             local weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }
             local now = os.time()
             local started = weekdays[os.date("*t", now).wday] .. os.date(" %d.%m, %H:%M", now)
-            t.show_markdown(opts.block or "welcome", ([[
+            t.show(opts.block or "welcome", ([[
 ```
 %s
 ```
@@ -86,7 +86,7 @@ local function hook(opts)
     }
 end
 
--- opts.title: banner text (default: the project folder); opts.block: show_markdown name.
+-- opts.title: banner text (default: the project folder); opts.block: show name.
 return function(opts)
     if t.session().mode ~= "tui" then return {} end
     return { hooks = { welcome = hook(opts) } }

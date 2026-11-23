@@ -129,7 +129,7 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
         &cfg,
         r#"return {
             prompts = { keep = "alive" },
-            commands = { ok = function() require("tuse").show_markdown("m", "still-active", false) end },
+            commands = { ok = function() require("tuse").show("m", "still-active", false) end },
         }"#,
     )
     .unwrap();

@@ -8,14 +8,14 @@ impl App {
         self.picker.as_ref().is_some_and(|p| p.kind.is_searchable())
     }
 
-    /// True while a Lua `show_picker` disables the input editor completely.
+    /// True while a Lua `pick` disables the input editor completely.
     pub(crate) fn input_disabled(&self) -> bool {
         self.picker
             .as_ref()
             .is_some_and(|p| matches!(p.kind, Kind::LuaPicker(_)))
     }
 
-    /// True while a Lua `show_question` uses the input editor for the answer.
+    /// True while a Lua `ask` uses the input editor for the answer.
     pub(crate) fn answering(&self) -> bool {
         self.question.is_some()
     }

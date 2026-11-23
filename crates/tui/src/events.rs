@@ -161,6 +161,7 @@ impl App {
                 }
             }
             Event::Usage => {}
+            Event::Reloaded => self.restyle(),
             Event::Models => {
                 if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Model) {
                     self.open_models();

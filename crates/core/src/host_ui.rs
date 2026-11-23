@@ -8,11 +8,11 @@ use std::time::Instant;
 use tuse_lua::mlua::{self, Lua, MultiValue, Table, Value};
 use tuse_lua::{Done, ExtWait, Job, Out, Stop};
 
-/// Installs `show_markdown`, `show_picker`, and `show_question`.
+/// Installs `show`, `pick`, `ask`, and `reload`.
 pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     g.set(
-        "show_markdown",
+        "show",
         lua.create_function(|lua, (name, text, pin): (String, String, Option<bool>)| {
             session(lua)?.ui_markdown(name, text, pin.unwrap_or(false));
             Ok(())
@@ -20,9 +20,11 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
     let start_picker = lua.create_function(start_picker)?;
     let start_question = lua.create_function(start_question)?;
-    g.set("show_picker", tuse_lua::yield_wait(lua, start_picker)?)?;
-    g.set("show_question", tuse_lua::yield_wait(lua, start_question)?)?;
-    tuse_lua::wrap(lua, &g, &["show_markdown"])
+    g.set("pick", tuse_lua::yield_wait(lua, start_picker)?)?;
+    g.set("ask", tuse_lua::yield_wait(lua, start_question)?)?;
+    let start_reload = lua.create_function(start_reload)?;
+    g.set("reload", tuse_lua::yield_wait(lua, start_reload)?)?;
+    tuse_lua::wrap(lua, &g, &["show"])
 }
 
 fn start_picker(lua: &Lua, options: Table) -> mlua::Result<Value> {
@@ -30,7 +32,7 @@ fn start_picker(lua: &Lua, options: Table) -> mlua::Result<Value> {
     for v in options.sequence_values::<Value>() {
         match v? {
             Value::String(s) => list.push(s.to_str()?.to_string()),
-            _ => return Err(err("show_picker: options must be a list of strings".into())),
+            _ => return Err(err("pick: options must be a list of strings".into())),
         }
     }
     if list.is_empty() {
@@ -41,6 +43,29 @@ fn start_picker(lua: &Lua, options: Table) -> mlua::Result<Value> {
 
 fn start_question(lua: &Lua, text: String) -> mlua::Result<Value> {
     enqueue(lua, UiPrompt::Question { text })
+}
+/// Runs the reload on its own thread so the VM keeps serving it (and its hooks) while the
+/// caller waits. A hook cannot wait for the `close` hooks of a reload, so from a hook the
+/// reload is queued and runs once the hook returns.
+fn start_reload(lua: &Lua, (): ()) -> mlua::Result<Value> {
+    let s = session(lua)?;
+    if tuse_lua::is_hook(lua) {
+        s.reload_after_hook.store(true, Ordering::Release);
+        return Ok(Value::Nil);
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(s.reload().map(|_| serde_json::Value::Null));
+    });
+    let key = tuse_lua::add_wait(
+        lua,
+        ExtWait {
+            rx,
+            pause_timeout: true,
+            on_cancel: None,
+        },
+    )?;
+    Ok(Value::Integer(key as i64))
 }
 
 fn enqueue(lua: &Lua, prompt: UiPrompt) -> mlua::Result<Value> {

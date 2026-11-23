@@ -34,6 +34,9 @@ pub struct Session {
     pub(crate) http: tuse_api::HttpAgent,
     pub(crate) next_lua: AtomicU64,
     pub(crate) task_lua: Mutex<HashMap<String, (String, Instant)>>,
+    /// One reload at a time; `reload()` from a hook sets `reload_after_hook`.
+    pub(crate) reload_lock: Mutex<()>,
+    pub(crate) reload_after_hook: AtomicBool,
 }
 
 pub(crate) struct State {
@@ -171,7 +174,9 @@ impl Prepared {
                     st.model = model.clone();
                     st.effort = effort.clone();
                 }
-                Record::Usage { usage, .. } => st.context = usage.input + usage.output,
+                Record::Usage {
+                    usage, llm: false, ..
+                } => st.context = usage.input + usage.output,
                 _ => {}
             }
         }
@@ -200,6 +205,8 @@ impl Prepared {
                 http: tuse_api::default_agent(),
                 next_lua: AtomicU64::new(0),
                 task_lua: Mutex::default(),
+                reload_lock: Mutex::default(),
+                reload_after_hook: AtomicBool::new(false),
             }
         });
         s.start_hook(opts.start.reason(), !restored, restored);
@@ -239,6 +246,7 @@ impl Session {
     /// if validation fails, the previous config and callbacks stay active.
     /// Otherwise `close` runs on old hooks, then `start` (`reason = "reload"`) on new hooks.
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
+        let _one = self.reload_lock.lock().unwrap();
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
         let c = self
             .vm
@@ -252,6 +260,7 @@ impl Session {
         self.ui_cancel_hooks(false);
         self.hooks_on.store(true, Ordering::Release);
         self.start_hook("reload", false, false);
+        self.emit(crate::Event::Reloaded);
         Ok(())
     }
 }

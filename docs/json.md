@@ -43,7 +43,7 @@ context blocks, just like `#` prompts, `@` files, and pasted images in the TUI
 | `config.set` | | deprecated, removed in protocol v2: `{key: "model" or "effort", value}` is `model.set` with the other value unchanged and `persist: true`, validated the same way |
 | `tasks.list` / `tasks.get` / `tasks.stop` | `/tasks` | `{id, lines?}` |
 | `commands.list` / `commands.run` | `/` custom commands | list configured custom command names; `{name}` runs `/name` as a Lua job |
-| `ui.state` / `ui.reply` / `ui.cancel` | `show_markdown`, `show_picker`, `show_question` | snapshot of `{markdowns, active, entries}`; `{id, value}` answers active prompt; `{id}` cancels it (returns `nil`, leaves no entry) |
+| `ui.state` / `ui.reply` / `ui.cancel` | `show`, `pick`, `ask` | snapshot of `{markdowns, active, entries}`; `{id, value}` answers active prompt; `{id}` cancels it (returns `nil`, leaves no entry) |
 | `shutdown` | `/quit` | closes the session and exits |
 
 ## Models
@@ -56,10 +56,10 @@ call `model.list {"cached": true}` to read the refreshed list without starting a
 Every session event arrives as an `event` notification with `type`: `user`, `turn_start`, `text`
 and `reasoning` (deltas), `stream_reset`, `assistant`, `tool_delta`, `tool_start`, `tool_end`
 (with `diffs`), `status`, `notice`, `flash`, `error`, `turn_end`, `tasks`, `usage`, `models`,
-`notification`, `ui_markdown` (`{name, text, pin, removed}`), `ui_request` (`{id, kind, options}` or
+`notification`, `reloaded` (a reload committed a new config, from any source), `ui_markdown` (`{name, text, pin, removed}`), `ui_request` (`{id, kind, options}` or
 `{id, kind, text}`), `ui_clear` (`{id}`), and `ui_result` (`{id, kind, prompt, value}`). After
 resuming a session (`--resume` or `session.resume`), read `session.records` for durable history;
-transient `show_markdown` blocks, interactive requests, and their UI results are not restored across
+transient `show` blocks, interactive requests, and their UI results are not restored across
 resume.
 
 Errors use the JSON-RPC codes: `-32700` bad JSON (the process keeps running), `-32600` not a

@@ -83,6 +83,8 @@ The agent's tool is `lua(code)`, a persistent Lua 5.4 VM with these functions:
 - `sh(cmd)` runs `bash -c` (use `sh([=[…]=])` for quotes/backslashes) and returns `.out`, `.code`, `.ok`; it is killed at its timeout.
 - `spawn(fn, name)` runs a function as a background task in the same VM; `task_get`, `task_stop`
   and `task_list` manage them (listed in `/tasks`; the agent gets a message when one ends).
+- `show`, `pick` and `ask` show Markdown, a picker or a question; `llm(prompt)` asks a model
+  without tools; `reload()` reloads the config. All of them: `docs("functions")`.
 
 The VM lives as long as the process. A call is stopped after 120 seconds.
 
@@ -134,7 +136,7 @@ Tuse runs `--config PATH`, else `./tuse.lua`, else the global config (`~/.config
 Plugins from GitHub go in `plugins = { "owner/repo" }` ([docs/plugins.md](docs/plugins.md)).
 
 ```lua
-local t = require("tuse")              -- session(), sh, read, edit, show_markdown...
+local t = require("tuse")              -- session(), sh, read, edit, show...
 local shared = require("shared")       -- shared.lua or shared/init.lua next to this file
 
 return {

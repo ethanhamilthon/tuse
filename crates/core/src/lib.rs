@@ -10,6 +10,7 @@ mod hook_events;
 mod hooks;
 mod host;
 mod host_fs;
+mod host_llm;
 mod host_tasks;
 mod host_ui;
 mod id;
@@ -52,4 +53,5 @@ pub use snapshot::{ModelInfoSnapshot, PricesSnapshot, SessionSnapshot, UsageSnap
 pub use store::{Meta, list_sessions, tuse_home};
 pub use tasks::{TaskInfo, tail};
 pub use trace::TraceItem;
+pub use tuse_config::HOST_FUNCTIONS;
 pub use usage::{Stats, tokens};

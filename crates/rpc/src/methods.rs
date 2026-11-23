@@ -108,6 +108,8 @@ fn stats(s: &Session) -> Value {
         "cached": st.totals.cached,
         "cacheWrite": st.totals.cache_write,
         "cost": st.priced.then_some(st.cost),
+        "llmCost": st.priced.then_some(st.llm_cost),
+        "llmRequests": st.llm_requests,
         "requests": st.requests,
         "context": st.context,
         "turns": st.turns,

@@ -118,6 +118,7 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     )?;
     crate::host_tasks::install(lua)?;
     crate::host_ui::install(lua)?;
+    crate::host_llm::install(lua)?;
     let names = [
         "read",
         "write",

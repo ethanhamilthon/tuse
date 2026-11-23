@@ -7,8 +7,12 @@ use tuse_core::{Event, Options, Record, Session, UserInput};
 const CODE: &str = r#"
 write("a.txt", "one\ntwo\n")
 edit("a.txt", "two", "2")
-print(read("a.txt"))
-print(grep("2", {path = "."}))
+append("a.txt", "3[lit]\n")
+write("b.txt", "drop me\n")
+delete("b.txt")
+print("raw", read("a.txt"))
+print(read("a.txt", {lines = true}))
+print(grep("3[lit]", {path = {"a.txt", "."}, literal = true}))
 local ok, e = pcall(edit, "a.txt", "missing", "x")
 print("caught", e)
 seen = 0
@@ -71,8 +75,9 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
     let (output, diffs, code) = tools[0];
     assert_eq!(*code, Some(0), "{}", &output[..600.min(output.len())]);
     let head: String = output.chars().take(600).collect();
+    assert!(output.contains("raw\tone\n2\n3[lit]"), "{head}");
     assert!(output.contains("2\t2"), "{head}");
-    assert!(output.contains("a.txt:2: 2"), "grep: {head}");
+    assert!(output.contains("a.txt:3: 3[lit]"), "grep: {head}");
     assert!(output.contains("caught\t`old` was not found"), "{head}");
     assert!(
         output.contains("sh\ttrue\tslept\t3"),
@@ -85,11 +90,18 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         "{}",
         output.len()
     );
-    assert_eq!(diffs.len(), 2, "write and edit each record a diff");
+    assert_eq!(
+        diffs.len(),
+        5,
+        "write, edit, append, write, delete record diffs"
+    );
     assert!(diffs[1].diff.contains("-    2 | two") && diffs[1].diff.contains("+    2 | 2"));
+    assert!(diffs[2].diff.contains("+    3 | 3[lit]"));
+    assert!(diffs[4].diff.contains("-    1 | drop me"));
+    assert!(!dir.join("b.txt").exists());
     assert_eq!(
         std::fs::read_to_string(dir.join("a.txt")).unwrap(),
-        "one\n2\n"
+        "one\n2\n3[lit]\n"
     );
     // A function called as a tool of its own is refused with a hint.
     assert!(
@@ -98,12 +110,15 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         tools[1].0
     );
     assert_eq!(
-        statuses[..6],
+        statuses[..9],
         [
             "writing a.txt...",
             "editing a.txt...",
+            "appending a.txt...",
+            "writing b.txt...",
+            "deleting b.txt...",
             "reading a.txt...",
-            "searching 2...",
+            "searching 3[lit]...",
             "editing a.txt...",
             "running sleep 0.3; echo slept..."
         ]

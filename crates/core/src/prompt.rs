@@ -28,7 +28,7 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
 pub fn tools() -> Vec<Value> {
     vec![tool(
         "lua",
-        "Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Files and search: read(), write(), edit(), grep(); programs: sh(cmd).",
+        "Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Prefer read() for file contents, grep() for search, and write()/edit()/append()/delete() for file changes so the user sees diffs. Use sh(cmd) for running programs and processing their output, not as the default for file operations; use sh([=[…]=]) when a shell command has quotes, backslashes, or regexes.",
         json!({
             "code": {"type": "string", "description": "The Lua code to run."}
         }),

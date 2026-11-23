@@ -1,9 +1,8 @@
 use crate::session::Session;
-use crate::tools;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
-use tuse_lua::mlua::{self, Lua, Table, Value};
-use tuse_lua::{Done, Host, TaskStart, with_run};
+use tuse_lua::mlua::{self, Lua, Value};
+use tuse_lua::{Done, Host, TaskStart};
 
 /// The session of a VM, filled once the session is built (the VM comes first).
 pub(crate) type Slot = Arc<Mutex<Weak<Session>>>;
@@ -82,34 +81,21 @@ pub(crate) fn session(lua: &Lua) -> mlua::Result<Arc<Session>> {
         .ok_or_else(|| mlua::Error::runtime("session closed"))
 }
 
-fn err(e: String) -> mlua::Error {
+pub(crate) fn err(e: String) -> mlua::Error {
     mlua::Error::runtime(e)
 }
 
 /// Shows what the agent is doing in the working indicator.
-fn action(s: &Session, verb: &str, what: &str) {
+pub(crate) fn action(s: &Session, verb: &str, what: &str) {
     let what: String = what.lines().next().unwrap_or("").chars().take(60).collect();
     s.set_status(format!("{verb} {what}..."));
 }
 
-/// The session functions of the VM: `read`, `write`, `edit`, `grep`, `docs`, `set_title`, `task_*`.
+/// The session functions of the VM: file helpers, `docs`, `set_title`, `task_*`.
 pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     lua.set_app_data(s);
     let g = lua.globals();
-    g.set("read", lua.create_function(read)?)?;
-    g.set(
-        "write",
-        lua.create_function(|lua, (path, content): (String, String)| {
-            let s = session(lua)?;
-            action(&s, "writing", &path);
-            let p = tools::resolve(&path, &s.cwd);
-            let (msg, diff) = tools::write(&p, &content).map_err(err)?;
-            with_run(lua, |j| j.diffs.push((p.display().to_string(), diff)));
-            Ok(msg)
-        })?,
-    )?;
-    g.set("edit", lua.create_function(edit)?)?;
-    g.set("grep", lua.create_function(grep)?)?;
+    crate::host_fs::install(lua)?;
     g.set(
         "docs",
         lua.create_function(|lua, topic: Option<String>| {
@@ -145,6 +131,8 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     let names = [
         "read",
         "write",
+        "append",
+        "delete",
         "edit",
         "grep",
         "docs",
@@ -154,61 +142,6 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
         "task_list",
     ];
     tuse_lua::wrap(lua, &g, &names)
-}
-
-fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
-    let s = session(lua)?;
-    action(&s, "reading", &path);
-    let p = tools::resolve(&path, &s.cwd);
-    let opt = |k: &str| -> mlua::Result<Option<usize>> {
-        Ok(match &o {
-            Some(t) => t.get::<Option<i64>>(k)?.map(|n| n.max(1) as usize),
-            None => None,
-        })
-    };
-    let (offset, limit) = (
-        opt("offset")?.unwrap_or(1),
-        opt("limit")?.unwrap_or(tools::DEFAULT_LIMIT),
-    );
-    let r = tools::read(&p, offset, limit, s.config().settings.max_image_bytes).map_err(err)?;
-    if let Some(url) = r.image {
-        with_run(lua, |j| j.images.push(url));
-    }
-    Ok(r.text)
-}
-
-fn edit(
-    lua: &Lua,
-    (path, old, new, o): (String, String, String, Option<Table>),
-) -> mlua::Result<String> {
-    let s = session(lua)?;
-    action(&s, "editing", &path);
-    let p = tools::resolve(&path, &s.cwd);
-    let all = match o {
-        Some(t) => t.get::<Option<bool>>("all")?.unwrap_or(false),
-        None => false,
-    };
-    let (msg, diff) = tools::edit(&p, &old, &new, all).map_err(err)?;
-    with_run(lua, |j| j.diffs.push((p.display().to_string(), diff)));
-    Ok(msg)
-}
-
-fn grep(lua: &Lua, (pattern, o): (String, Option<Table>)) -> mlua::Result<String> {
-    let s = session(lua)?;
-    action(&s, "searching", &pattern);
-    let o = o.unwrap_or(lua.create_table()?);
-    let n = |k: &str| -> mlua::Result<Option<usize>> {
-        Ok(o.get::<Option<i64>>(k)?.map(|n| n.max(0) as usize))
-    };
-    let opts = tools::GrepOpts {
-        path: o.get("path")?,
-        glob: o.get("glob")?,
-        ignore_case: o.get::<Option<bool>>("ignore_case")?.unwrap_or(false),
-        context: n("context")?.unwrap_or(0),
-        limit: n("limit")?,
-    };
-    let stopped = || tuse_lua::stopped(lua).is_some();
-    tools::grep(&pattern, opts, &s.cwd, &stopped).map_err(err)
 }
 
 /// The line that says what failed: the one before a traceback, else the last one.

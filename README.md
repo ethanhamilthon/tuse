@@ -4,11 +4,13 @@ A minimal AI coding agent for the terminal. Rust + Crossterm, any OpenAI
 Chat Completions compatible API, one tool: `lua`.
 
 - Full-screen TUI with Markdown rendering and pickers for `/` commands, `#` prompts and `@` files.
-- The agent works in a persistent Lua 5.4 VM with `read()`, `write()`, `edit()`, `grep()`,
-  `sh()`, `sleep()` and `spawn()`. Each call has a 120-second deadline; output is not capped.
+- The agent works in a persistent Lua 5.4 VM with `read()`, `write()`, `append()`, `delete()`,
+  `edit()`, `grep()`, `sh()`, `sleep()`, and `spawn()`. Each call has a 120-second deadline; output
+  is not capped.
 - One VM per session runs the config, the agent's code, hooks and background tasks as
   coroutines: while one waits on `sh`, the others go on.
-- `read()` shows images to the model; files changed by `write()` and `edit()` are shown as a
+- `read()` returns raw text by default (or numbered lines with `{lines=true}`) and shows images to
+  the model; files changed by `write()`, `append()`, `edit()`, and `delete()` are shown as a
   colored diff at the end of the call; Lua code is syntax highlighted.
 - A JSON-RPC mode (`tuse json`) for editors; sessions, providers and the last picks in SQLite
   (`~/.tuse/tuse.db`).
@@ -69,11 +71,13 @@ opens a saved session: the ID is printed to stderr when Tuse exits.
 
 The agent's tool is `lua(code)`, a persistent Lua 5.4 VM with these functions:
 
-- `read(path)`: numbered text lines in pages, or an image the model sees. `write(path, content)`
-  creates or replaces a file atomically. `edit(path, old, new)` replaces exact, unique text. The
-  user sees what `write` and `edit` changed as a diff at the end of the call.
-- `grep(pattern, {path = "."})`: a regex search that respects `.gitignore`.
-- `sh(cmd)` runs `bash -c` and returns `.out`, `.code`, `.ok`; it is killed at its timeout.
+- `read(path)` returns raw file text (pass `{lines=true}` for numbered pages) or an image the
+  model sees. `write(path, content)` creates or replaces a file atomically; `append(path, text)`
+  appends to a file; `delete(path)` deletes a single file; `edit(path, old, new)` replaces exact,
+  unique text. The user sees every file change as a diff at the end of the call.
+- `grep(pattern, {path = "."})` searches one or more paths with regex or `literal = true`,
+  respecting `.gitignore`.
+- `sh(cmd)` runs `bash -c` (use `sh([=[…]=])` for quotes/backslashes) and returns `.out`, `.code`, `.ok`; it is killed at its timeout.
 - `spawn(fn, name)` runs a function as a background task in the same VM; `task_get`, `task_stop`
   and `task_list` manage them (listed in `/tasks`; the agent gets a message when one ends).
 

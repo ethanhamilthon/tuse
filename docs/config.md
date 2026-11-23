@@ -31,7 +31,7 @@ return g
 
   | Call | Loads |
   | --- | --- |
-  | `require("tuse")` | The host functions (`sh`, `sleep`, `spawn`, `read`, `write`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `json`, `inspect`) and `env`. |
+  | `require("tuse")` | The host functions (`sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `json`, `inspect`) and `env`. |
   | `require("name")` | `name.lua`, else `name/init.lua`, relative to the calling file (`a.b` is `a/b`). |
   | `require("./name")` | `./name.lua`, else `./name/init.lua`, relative to the calling file (`../name` works too). |
   | `require("global")` | The global config: `$TUSE_GLOBAL_CONFIG`, else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. |

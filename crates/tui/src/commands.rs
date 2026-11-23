@@ -49,9 +49,6 @@ impl App {
                     if let Some(q) = &mut self.question {
                         q.panel.invalidate();
                     }
-                    for p in self.session.config().problems() {
-                        self.notice(p);
-                    }
                     self.flash("Config reloaded.");
                 }
                 Err(e) => self.error(format!("Reload failed: {e}")),
@@ -160,12 +157,7 @@ impl App {
                 self.open_modal(ep).select(&effort);
             }
             (Kind::Effort(model), Some(v)) => {
-                self.session.set_model(model, &v);
-                let saved = self
-                    .session
-                    .save_choice("model", model)
-                    .and_then(|()| self.session.save_choice("effort", &v));
-                if let Err(e) = saved {
+                if let Err(e) = self.session.select_model(model, &v, true) {
                     self.error(format!("Can't save the model: {e}"));
                 }
             }

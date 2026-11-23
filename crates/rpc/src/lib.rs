@@ -30,22 +30,34 @@ impl Out {
 /// Serves `session` until the input ends, `shutdown` arrives or `stop` is set; then
 /// closes the session (tasks stop, `process_end` hooks run).
 pub fn serve(
-    session: Arc<Session>,
+    mut session: Arc<Session>,
     input: impl BufRead + Send + 'static,
     out: Out,
     stop: Arc<AtomicBool>,
 ) {
-    // Set only after the `initialize` answer is written; until then events wait in the channel.
+    // Set only after `initialize` (or session switch) answers; until then events wait in the channel.
     let ready = Arc::new(AtomicBool::new(false));
-    let events = session.subscribe();
+    let mut events = session.subscribe();
     let done = Arc::new(AtomicBool::new(false));
+    let (swap_tx, swap_rx) = std::sync::mpsc::channel::<(
+        std::sync::mpsc::Receiver<tuse_core::Event>,
+        std::sync::mpsc::Sender<()>,
+    )>();
     let pump = {
         let (out, ready, done) = (out.clone(), ready.clone(), done.clone());
         std::thread::spawn(move || {
             while !done.load(Ordering::Relaxed) {
+                if let Ok((next, ack)) = swap_rx.try_recv() {
+                    while let Ok(e) = events.try_recv() {
+                        out.send(&notify("event", events::to_json(&e)));
+                    }
+                    events = next;
+                    let _ = ack.send(());
+                    continue;
+                }
                 if !ready.load(Ordering::Acquire) {
                     std::thread::sleep(Duration::from_millis(10));
-                } else if let Ok(e) = events.recv_timeout(Duration::from_millis(50)) {
+                } else if let Ok(e) = events.recv_timeout(Duration::from_millis(20)) {
                     out.send(&notify("event", events::to_json(&e)));
                 }
             }
@@ -95,6 +107,40 @@ pub fn serve(
             }
             _ if !ready.load(Ordering::Acquire) => {
                 Err(Fail(NOT_READY, "call `initialize` first".into()))
+            }
+            "session.new" | "session.resume" => {
+                let resume = if req.method == "session.resume" {
+                    match proto::str_param(&req.params, "id") {
+                        Ok(id) => Some(id),
+                        Err(f) => {
+                            if let Some(id) = req.id {
+                                out.send(&answer(id, Err(f)));
+                            }
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
+                match session.switch(resume) {
+                    Ok(next) => {
+                        ready.store(false, Ordering::Release);
+                        let (ack_tx, ack_rx) = std::sync::mpsc::channel();
+                        let _ = swap_tx.send((next.subscribe(), ack_tx));
+                        let _ = ack_rx.recv();
+                        session = next;
+                        if let Some(id) = req.id {
+                            out.send(&answer(id, Ok(methods::switched(&session))));
+                        }
+                        ready.store(true, Ordering::Release);
+                    }
+                    Err(e) => {
+                        if let Some(id) = req.id {
+                            out.send(&answer(id, Err(Fail::session(e))));
+                        }
+                    }
+                }
+                continue;
             }
             m => methods::call(&session, m, &req.params),
         };

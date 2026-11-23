@@ -75,10 +75,7 @@ impl App {
         let cwd = session.cwd.clone();
         let palette = Palette::from_config(&session.config());
         let events = session.subscribe();
-        let mut chat = Chat::from_session(&session);
-        for p in session.config().problems() {
-            chat.push(Entry::Notice(p));
-        }
+        let chat = Chat::from_session(&session);
         App {
             session,
             events,
@@ -135,21 +132,12 @@ impl App {
 
     /// Closes the current session and opens a new (`resume: None`) or existing one.
     pub fn switch(&mut self, resume: Option<String>) {
-        let start = if resume.is_some() {
-            tuse_core::Start::Resume
-        } else {
-            tuse_core::Start::New
-        };
-        self.session.close_for(start.reason());
-        let opened = Session::open(Options {
-            cwd: self.cwd.clone(),
-            config: self.config_arg.clone(),
-            mode: tuse_core::Mode::Tui,
-            resume: resume.clone(),
-            start,
-        });
-        let (session, err) = match opened {
+        let (session, err) = match self.session.switch(resume) {
             Ok(s) => (s, None),
+            Err(e) if self.session.is_open() => {
+                self.error(e);
+                return;
+            }
             Err(e) => {
                 let fresh = Session::open(Options {
                     cwd: self.cwd.clone(),

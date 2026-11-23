@@ -152,6 +152,9 @@ impl Session {
                 http: tuse_api::default_agent(),
             }
         });
+        for p in s.config().problems() {
+            s.emit(crate::Event::Notice(p));
+        }
         s.hook(
             "process_start",
             Data {
@@ -196,7 +199,11 @@ impl Session {
         let c2 = c.clone();
         self.vm
             .call(move |lua| crate::config_lua::commit(lua, &c2))?;
+        let problems = c.problems();
         self.swap_config(c);
+        for p in problems {
+            self.emit(crate::Event::Notice(p));
+        }
         self.ui_cancel_hooks(false);
         self.hooks_on
             .store(true, std::sync::atomic::Ordering::Release);

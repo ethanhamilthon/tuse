@@ -56,3 +56,38 @@ pub fn event(rx: &mpsc::Receiver<Value>, ty: &str) -> Value {
 pub fn reply(rx: &mpsc::Receiver<Value>, id: u64) -> Value {
     until(rx, |v| v["id"] == id)
 }
+
+#[allow(dead_code)]
+pub fn spawn(
+    session: Arc<tuse_core::Session>,
+) -> (
+    mpsc::Sender<String>,
+    mpsc::Receiver<Value>,
+    std::thread::JoinHandle<()>,
+) {
+    let (req_tx, req_rx) = mpsc::channel::<String>();
+    let (out_tx, out) = mpsc::channel();
+    let input = std::io::BufReader::new(Pipe(Arc::new(Mutex::new(req_rx)), vec![]));
+    let server = std::thread::spawn(move || {
+        tuse_rpc::serve(
+            session,
+            input,
+            tuse_rpc::Out::new(Lines(out_tx, vec![])),
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        )
+    });
+    (req_tx, out, server)
+}
+
+#[allow(dead_code)]
+pub fn call(
+    tx: &mpsc::Sender<String>,
+    out: &mpsc::Receiver<Value>,
+    id: u64,
+    method: &str,
+    params: Value,
+) -> Value {
+    let msg = serde_json::json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+    tx.send(format!("{msg}\n")).unwrap();
+    reply(out, id)
+}

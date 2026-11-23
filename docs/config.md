@@ -1,29 +1,31 @@
 # Config
 
-Tuse runs `--config PATH`, else `./tuse.lua`, else the global config: `$TUSE_GLOBAL_CONFIG`,
-else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. The file returns a table. The defaults
-and system prompt are built into the binary. `tuse update` never touches your config.
+Tuse runs `--config PATH`, else `./tuse.lua`, else the global config: `~/.config/tuse.lua`, else
+`~/.config/tuse/init.lua`. The file returns a table. Defaults and the built-in system prompt live
+in the binary. `tuse update` never touches your config.
 
-Configuration files execute as Lua code with your user permissions. Only load project
-configs and modules you trust. Host functions are globals only in the agent's `lua` tool.
-In config files, Lua modules, and callbacks defined in them, use `require("tuse")`.
-For example, `local cwd = require("tuse").sh("pwd").out` works at the top level.
-Functions that need a live session, such as `spawn` or `show_question`, belong in callbacks.
+Configuration files execute as Lua code with your user permissions. Only load project configs and
+modules you trust. Host functions are globals only in the agent's `lua` tool. In config files,
+Lua modules, and callbacks defined in them, use `require("tuse")`. Functions that need a live
+session, such as `spawn` or `show_question`, belong in callbacks.
 
 ```lua
-local t = require("tuse")              -- host functions and t.env
-local g = require("global")            -- global config (~/.config/tuse.lua or ~/.config/tuse/init.lua)
+local t = require("tuse")              -- host functions and t.session()
+local ok, g = pcall(require, "global") -- global config (~/.config/tuse.lua or ~/.config/tuse/init.lua)
+g = ok and g or {}
 local shared = require("shared")       -- shared.lua or shared/init.lua next to this file
-local interactive = t.env.TUSE_MODE == "tui"
+local interactive = t.session().mode == "tui"
 
-g.model = "c/claude-opus-5-5"
-g.effort = "medium"
 g.settings = g.settings or {}
 g.settings.retries = 3
 g.systems = g.systems or {}
 g.systems[#g.systems + 1] = interactive and "Answer interactively." or "Keep responses concise."
 g.prompts = g.prompts or {}
 g.prompts.review = shared.review
+g.open = g.open or {}
+g.open.md = function(path)
+  t.sh('open -a Typora "$P"', { env = { P = path } })
+end
 return g
 ```
 
@@ -34,50 +36,54 @@ return g
 
   | Call | Loads |
   | --- | --- |
-  | `require("tuse")` | The host functions (`sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `show_markdown`, `show_picker`, `show_question`, `json`, `inspect`) and `env`. |
+  | `require("tuse")` | Host functions (`session`, `sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `show_markdown`, `show_picker`, `show_question`, `json`, `inspect`). |
   | `require("name")` | `name.lua`, else `name/init.lua`, relative to the calling file (`a.b` is `a/b`). |
   | `require("./name")` | `./name.lua`, else `./name/init.lua`, relative to the calling file (`../name` works too). |
-  | `require("global")` | The global config: `$TUSE_GLOBAL_CONFIG`, else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. |
+  | `require("global")` | The global config: `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. |
   | `require("~/path")` | `~/path.lua`, else `~/path/init.lua`. An absolute `/path` works the same. |
   | `require("~/path/file.lua")` | That file. A relative `dir/file.lua` is relative to the calling file. |
 
   File modules are cached by canonical path, so files in different folders do not collide and
   different relative paths to the same file share one module. `/reload` forgets file modules and
-  runs everything again.
-- `require("tuse").env.NAME` is `os.getenv(NAME)`, with Tuse's variables (`TUSE_MODE`,
-  `TUSE_CWD`, `TUSE_GLOBAL_CONFIG`, ...; see [env](env.md)). `TUSE_MODE` is `tui` or `json`: it
-  describes the front end, it does not select one. It is no longer a Lua global. Per-entry
-  `modes` and `include` are not supported.
+  runs everything again (restoring the previous modules if reload fails).
 
 ## Keys
 
 | Key | Meaning |
 | --- | --- |
-| `model` | Default model, `name` or `provider/name`. A saved `/models` pick wins. |
-| `provider` | Provider for a model with no prefix (default: first saved provider). |
-| `effort` | `default` (omit `reasoning_effort`), `low`, `medium`, `high`, `xhigh`, `max`. |
-| `models` | List of `{name, display, window, compact_at, prices}`. Prices per million tokens: `["in"]`, `out`, `cache`, `cache_write`. |
-| `settings.compact_at` | Context size that triggers compaction. Unset: 60% of the model's `window`, when known; `0` disables it. The model override wins. |
+| `settings.compact_at` | Context size (tokens) that triggers compaction. Unset: 60% of the model's `window` when known; `0` disables it. A per-model `compact_at` in SQLite wins. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
-| `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |
+| `settings.retries` | Retries for 429, 5xx and network errors (0-100). Default 5. |
+| `settings.ui` | UI behavior; see [theme](theme.md). |
+| `theme` | The 10 base colors; see [theme](theme.md). |
 | `systems` | List of strings appended to the built-in system prompt. |
 | `prompts` | Map of names to strings for [the `#` picker](prompts.md). |
 | `functions` | Map of named Lua helpers with `run`, `description`, optional `args` and `show_agent`. See [functions](functions.md). |
 | `hooks` | Map of named hooks `{events = {...}, run = function(e) ... end}`. See [hooks](hooks.md). |
 | `commands` | Map of custom slash command names to Lua functions (`commands = { hello = function() ... end }`). Built-in commands cannot be overridden. |
+| `open` | Map of file extensions (without the dot, e.g. `md = function(path) ... end`) to Lua callbacks for clicked local file paths. URLs are handled separately by the OS default opener. |
 | `plugins` | List of plugins from GitHub or local folders, merged under this config. See [plugins](plugins.md). |
-| `settings.ui` | UI behavior; see [theme](theme.md). |
-| `theme` | The 10 base colors; see [theme](theme.md). |
 
-## Providers and history
+## Validation
 
-Providers come from SQLite, not the Lua config. Run
-`tuse connect --base URL --key '$ENV' --name NAME`, `tuse providers` or `tuse disconnect NAME`.
+Tuse validates both the user config and each plugin strictly before applying changes on startup
+and `/reload`. Unknown keys, removed keys (`include`, `model`, `provider`, `effort`, `models`,
+`*.modes`), wrong types, out-of-range settings, invalid theme colors, and malformed `hooks`,
+`commands`, or `open` handlers fail with diagnostics that include the source file or plugin and
+the full key path. If `/reload` fails, the previous working config, modules, and callbacks remain
+active.
 
-`~/.tuse/tuse.db` (or `$TUSE_HOME/tuse.db`) stores providers, sessions, records and the last
-model/effort pick. Session subdirectories hold locks, task logs and images. SQLite history
-from 0.7.x remains readable. To import older `session.jsonl` history, open Tuse 0.7.2 with the
-same `TUSE_HOME` before moving to this version; 0.7.3 does not import it automatically.
+## Providers, models, and history
+
+Providers, default model/effort selection, and model metadata live in SQLite (`~/.tuse/tuse.db`),
+not in `tuse.lua`:
+
+- Providers: `tuse connect --base URL --key '$ENV' --name NAME`, `tuse providers`, `tuse disconnect NAME`.
+- Model selection and metadata: `/models` in the TUI, or `tuse models [list|use|set|remove|import]`
+  (see [commands](commands.md)).
+- Migrating an existing 0.8.x config: run `tuse models import [PATH]` to copy `model`, `provider`,
+  `effort`, and `models` from your old `tuse.lua` into SQLite, then remove those keys from
+  `tuse.lua`. Saved sessions keep their own active model/effort record and resume cleanly.
 
 Compaction only changes what the model receives, not the saved log. It keeps recent context
 intact, shortens older tool outputs, and keeps only the user/assistant text further back.

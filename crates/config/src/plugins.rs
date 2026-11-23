@@ -3,12 +3,9 @@
 use crate::load::{home, resolve_path};
 use std::path::{Path, PathBuf};
 
-/// `$TUSE_HOME`, else `~/.tuse`.
+/// `~/.tuse`.
 pub fn tuse_home() -> PathBuf {
-    match std::env::var_os("TUSE_HOME") {
-        Some(p) => PathBuf::from(p),
-        None => home().join(".tuse"),
-    }
+    home().join(".tuse")
 }
 
 /// `~/.tuse/plugins`: one clone per repository.

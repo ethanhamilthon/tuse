@@ -24,11 +24,11 @@ pub struct Options {
     pub mode: Mode,
     /// Resume this session instead of creating a new one.
     pub resume: Option<String>,
-    /// Why the session opens, for `process_start`.
+    /// Why the session opens, for `start`.
     pub start: Start,
 }
 
-/// The `reason` of `process_start`.
+/// The `reason` of `start`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Start {
     /// Tuse was started (with or without `--resume`).

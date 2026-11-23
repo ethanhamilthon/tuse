@@ -2,7 +2,8 @@ use crate::prompt;
 use crate::record::Record;
 use crate::session::Session;
 
-/// One entry of `/trace`.
+/// One entry of `/trace` and `tuse.session().trace`.
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct TraceItem {
     /// `system`, `user`, `agent`, `thinking`, `lua` (or `tool` for another name),
     /// `output`, `notification`, `notice`, `error` or `hook`.

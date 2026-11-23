@@ -23,4 +23,5 @@ They are Lua globals, not tools: call them inside `lua` code. Errors are Lua err
 - `show_markdown(name, text, pin)`: render or update a UI-only Markdown block by name (`pin=true` keeps it at the end of the chat after new messages; `show_markdown(name, "", false)` removes it).
 - `show_picker(options)`: show a list of strings to the user and return the selected string, or `nil` on Esc (pauses your timeout while waiting).
 - `show_question(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
+- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `trace`).
 - `docs(topic)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.

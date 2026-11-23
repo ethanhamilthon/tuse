@@ -1,9 +1,8 @@
--- Merges plugin tables (in order) and then the user's config on top.
+-- Merges validated plugin tables (in order) and then the user's config on top.
 local list, user = ...
-local maps = { prompts = true, functions = true, hooks = true, commands = true }
+local maps = { prompts = true, functions = true, hooks = true, commands = true, open = true }
 local deep = { settings = true, theme = true }
-local lists = { systems = true, models = true }
-local denied = { model = true, provider = true, effort = true, plugins = true }
+local lists = { systems = true }
 
 local function merge(dst, src)
     for k, v in pairs(src) do
@@ -18,14 +17,6 @@ end
 
 local out, owner = {}, {}
 local function put(k, v, from)
-    if type(v) ~= "table" or (from and denied[k]) then
-        if from then
-            error(("plugin %s: `%s` %s"):format(from, k,
-                denied[k] and "is not allowed in a plugin" or "must be a table"), 0)
-        end
-        out[k] = v
-        return
-    end
     if lists[k] then
         out[k] = out[k] or {}
         for _, x in ipairs(v) do out[k][#out[k] + 1] = x end
@@ -41,8 +32,6 @@ local function put(k, v, from)
         end
     elseif deep[k] then
         out[k] = merge(type(out[k]) == "table" and out[k] or {}, v)
-    elseif from then
-        error(("plugin %s: unknown key `%s`"):format(from, k), 0)
     else
         out[k] = v
     end

@@ -11,18 +11,8 @@ local function project_name(cwd)
     return (name:gsub("^%l", string.upper))
 end
 
-local function saved_session(id)
-    -- `launch` also covers --resume. Tuse opens the lock for saved sessions;
-    -- fresh sessions don't get one until the first message.
-    local home = os.getenv("TUSE_HOME") or (os.getenv("HOME") .. "/.tuse")
-    local lock = io.open(home .. "/" .. id .. "/lock", "r")
-    if not lock then return false end
-    lock:close()
-    return true
-end
-
 local function inline_code(text)
-    text = (text or "?"):gsub("%c", " ")
+    text = (text or "(none)"):gsub("%c", " ")
     local fence = "`"
     while text:find(fence, 1, true) do fence = fence .. "`" end
     return fence .. " " .. text .. " " .. fence
@@ -54,13 +44,21 @@ local function git_status(cwd)
     return inline_code(head) .. " · " .. state
 end
 
+local function model_label(s)
+    local name = s.model_info and s.model_info.display or s.model
+    if not name then return "(none)" end
+    if s.effort and s.effort ~= "default" then
+        return name .. " (" .. s.effort .. ")"
+    end
+    return name
+end
+
 local function hook(opts)
     return {
-        events = { "process_start" },
+        events = { "start" },
         run = function(e)
-            if e.reason ~= "new" and (e.reason ~= "launch" or saved_session(e.session)) then
-                return
-            end
+            if not e.is_new then return end
+            local s = t.session()
             local weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }
             local now = os.time()
             local started = weekdays[os.date("*t", now).wday] .. os.date(" %d.%m, %H:%M", now)
@@ -75,13 +73,21 @@ local function hook(opts)
 - **Date & time:** %s
 - **Config:** %s
 - **Version:** %s
-]]):format(table.concat(banner.render(opts.title or project_name(e.cwd)), "\n"), inline_code(e.model), inline_code(e.cwd), git_status(e.cwd), inline_code(started), inline_code(e.config), inline_code(tuse_version())), false)
+]]):format(
+                table.concat(banner.render(opts.title or project_name(s.cwd)), "\n"),
+                inline_code(model_label(s)),
+                inline_code(s.cwd),
+                git_status(s.cwd),
+                inline_code(started),
+                inline_code(s.configpath),
+                inline_code(tuse_version())
+            ), false)
         end,
     }
 end
 
 -- opts.title: banner text (default: the project folder); opts.block: show_markdown name.
 return function(opts)
-    if os.getenv("TUSE_MODE") ~= "tui" then return {} end
+    if t.session().mode ~= "tui" then return {} end
     return { hooks = { welcome = hook(opts) } }
 end

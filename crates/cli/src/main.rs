@@ -1,6 +1,7 @@
 mod args;
 mod connect;
 mod init;
+mod models;
 mod plugins;
 mod plugins_edit;
 mod update;
@@ -21,14 +22,16 @@ USAGE
                                            verify and save an API provider
   tuse disconnect NAME                    remove a provider
   tuse providers                          list the providers
+  tuse models [list|use|set|remove|import]
+                                          manage default model/effort and model metadata in SQLite
   tuse init                               create ./tuse.lua that extends the global config
   tuse plugins [list|add NAME [--ref R]|remove NAME|install|update [NAME]|clean] [-c PATH]
                                           manage plugins (see docs/plugins.md)
   tuse update                             update the binary
   tuse version | tuse help
 
-The config is --config, else ./tuse.lua, else $TUSE_GLOBAL_CONFIG, else
-~/.config/tuse.lua or ~/.config/tuse/init.lua: a Lua file that returns a table.";
+The config is --config, else ./tuse.lua, else ~/.config/tuse.lua or
+~/.config/tuse/init.lua: a Lua file that returns a table.";
 
 fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -51,6 +54,7 @@ fn run(raw: Vec<String>) -> Result<(), String> {
             connect::list();
             Ok(())
         }
+        "models" => models::run(rest),
         "json" => json(&Args::parse(rest, &["--config", "-c", "--resume", "-r"])?),
         "init" => init::run(rest),
         "plugins" => plugins::run(rest),

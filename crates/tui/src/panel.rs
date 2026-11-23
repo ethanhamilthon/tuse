@@ -47,18 +47,24 @@ impl Panel {
         if self.cache.as_ref().is_none_or(|(w, _)| *w != width) {
             let empty = vec![];
             let lines = match &self.body {
-                Body::Text(text) => plain(text, width, Style::fg(p.fg), "", ""),
+                Body::Text(text) => plain(text, width, Style::fg(p.fg), "", "", p),
                 Body::Markdown(text) => crate::markdown::render(text, width, p),
                 Body::Lua(code) => {
                     let clean = crate::render::clean(code);
                     crate::syntax::highlight(&clean, Style::fg(p.fg), p)
                         .into_iter()
-                        .flat_map(|r| wrap(&r, width, &empty, &empty))
+                        .flat_map(|r| {
+                            let r = crate::links::linkify_line(r, p);
+                            wrap(&r, width, &empty, &empty)
+                        })
                         .collect()
                 }
                 Body::Styled(rows) => rows
                     .iter()
-                    .flat_map(|r| wrap(r, width, &empty, &empty))
+                    .flat_map(|r| {
+                        let r = crate::links::linkify_line(r.clone(), p);
+                        wrap(&r, width, &empty, &empty)
+                    })
                     .collect(),
             };
             self.cache = Some((width, lines));

@@ -110,7 +110,11 @@ impl Session {
             cancel.clone(),
             Some(Instant::now() + Duration::from_secs(TIMEOUT_SECS)),
         );
+        let exec_id = self.next_lua_id();
+        let started = Instant::now();
+        self.lua_start_hook(exec_id.clone(), "tool", Some(code.to_string()), None);
         let d = self.vm.run(code, "lua", stop);
+        self.lua_end_done(&exec_id, "tool", started.elapsed(), &d);
         Outcome {
             code: match (d.ok, d.stop) {
                 (true, _) => Some(0),

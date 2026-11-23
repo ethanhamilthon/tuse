@@ -4,14 +4,9 @@ use tuse_config::{Connect, Function, Hook};
 #[test]
 fn renders_all_sections_without_secrets() {
     let mut cfg = Config {
-        model: "p/m".into(),
         systems: vec!["Be helpful.".into()],
-        models: vec![ModelDef {
-            name: "p/m".into(),
-            window: 100_000,
-            ..Default::default()
-        }],
         commands: vec!["hello".into()],
+        open: vec!["md".into()],
         path: "/home/me/.config/tuse/init.lua".into(),
         plugins: vec![tuse_config::PluginInfo {
             name: "me/kit".into(),
@@ -53,11 +48,12 @@ fn renders_all_sections_without_secrets() {
         .map(|s| s.text)
         .collect();
     for s in
-        "Settings|Theme|Models|System prompts|Prompts|Functions|Hooks|Commands|Plugins".split('|')
+        "Settings|Theme|System prompts|Prompts|Functions|Hooks|Commands|Open|Plugins".split('|')
     {
         assert!(text.contains(s), "missing {s}");
     }
     assert!(text.contains("/hello") && text.contains("#rev") && text.contains("helper(x)"));
+    assert!(text.contains(".md"));
     assert!(text.contains("Config file") && text.contains("/home/me/.config/tuse/init.lua"));
     assert!(text.contains("me/kit") && text.contains("@v1 abc1234"));
     assert!(!text.contains("sk-secret"));

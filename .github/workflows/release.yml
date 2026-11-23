@@ -70,8 +70,7 @@ jobs:
           tar -xzf "$ASSET" -C "$tmp"
           test "$("$tmp/tuse" version)" = "tuse ${GITHUB_REF_NAME#v}"
           cd "$tmp"
-          unset TUSE_GLOBAL_CONFIG
-          export HOME="$tmp" TUSE_HOME="$tmp/state"
+          export HOME="$tmp"
           printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize"}' \
             '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' > request.jsonl

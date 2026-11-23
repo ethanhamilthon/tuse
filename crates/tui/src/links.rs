@@ -1,14 +1,20 @@
-//! Clickable links: URLs are interned so a `Style` can carry one as a small `Copy` id.
+//! Interactive links and local file paths: interned targets, styling, hit testing and hover.
 use crate::style::{Palette, Style};
 use crate::text::{Line, Span, span, width};
 use std::collections::HashMap;
-use std::process::{Command, Stdio};
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LinkTarget {
+    Url(String),
+    Path(PathBuf),
+}
 
 #[derive(Default)]
 struct Table {
-    ids: HashMap<String, u32>,
-    urls: Vec<String>,
+    ids: HashMap<LinkTarget, u32>,
+    targets: Vec<LinkTarget>,
 }
 
 fn table() -> &'static Mutex<Table> {
@@ -16,121 +22,92 @@ fn table() -> &'static Mutex<Table> {
     T.get_or_init(Default::default)
 }
 
-pub fn intern(url: &str) -> u32 {
+pub fn intern(target: LinkTarget) -> u32 {
     let mut t = table().lock().unwrap();
-    if let Some(id) = t.ids.get(url) {
+    if let Some(id) = t.ids.get(&target) {
         return *id;
     }
-    let id = t.urls.len() as u32;
-    t.urls.push(url.to_string());
-    t.ids.insert(url.to_string(), id);
+    let id = t.targets.len() as u32;
+    t.targets.push(target.clone());
+    t.ids.insert(target, id);
     id
 }
 
-pub fn url(id: u32) -> Option<String> {
-    table().lock().unwrap().urls.get(id as usize).cloned()
+pub fn intern_url(url: &str) -> u32 {
+    intern(LinkTarget::Url(url.to_string()))
 }
 
-/// Only these schemes are made clickable; text from the model never reaches `open` otherwise.
-pub fn openable(url: &str) -> bool {
-    let u = url.to_ascii_lowercase();
-    url.len() < 2000
-        && ["http://", "https://", "mailto:"]
-            .iter()
-            .any(|s| u.starts_with(s))
+pub fn intern_path(path: PathBuf) -> u32 {
+    intern(LinkTarget::Path(path))
 }
 
-pub fn open(url: &str) {
-    if !openable(url) {
-        return;
-    }
-    let tool = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    let child = Command::new(tool)
-        .arg(url)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
-    if let Ok(mut c) = child {
-        std::thread::spawn(move || {
-            let _ = c.wait();
-        });
-    }
+pub fn target(id: u32) -> Option<LinkTarget> {
+    table().lock().unwrap().targets.get(id as usize).cloned()
 }
 
-/// Splits `text` into pieces; a piece with an id is a bare `http(s)://` URL.
-pub fn split_urls(text: &str) -> Vec<(String, Option<u32>)> {
-    let mut out = vec![];
-    let mut rest = text;
-    let mut prev = None::<char>;
-    while let Some(at) = ["https://", "http://"]
-        .iter()
-        .filter_map(|s| rest.find(s))
-        .min()
-    {
-        let before = rest[..at].chars().last().or(prev);
-        let scheme = if rest[at..].starts_with("https://") {
-            8
-        } else {
-            7
-        };
-        let mut end = rest[at..]
-            .find(char::is_whitespace)
-            .map_or(rest.len(), |i| at + i);
-        loop {
-            let t = &rest[at..end];
-            let unbalanced = t.ends_with(')') && t.matches(')').count() > t.matches('(').count();
-            match t.chars().last() {
-                Some('.' | ',' | ';' | ':' | '!' | '?' | '\'' | '"') => {}
-                Some(')') if unbalanced => {}
-                _ => break,
-            }
-            end -= 1;
-        }
-        if before.is_some_and(char::is_alphanumeric) || end <= at + scheme {
-            let keep = at + scheme;
-            out.push((rest[..keep].to_string(), None));
-            prev = rest[..keep].chars().last();
-            rest = &rest[keep..];
-            continue;
-        }
-        if at > 0 {
-            out.push((rest[..at].to_string(), None));
-        }
-        out.push((rest[at..end].to_string(), Some(intern(&rest[at..end]))));
-        prev = rest[..end].chars().last();
-        rest = &rest[end..];
-    }
-    if !rest.is_empty() || out.is_empty() {
-        out.push((rest.to_string(), None));
-    }
-    let mut merged: Vec<(String, Option<u32>)> = vec![];
-    for (t, id) in out {
-        match merged.last_mut() {
-            Some((prev, None)) if id.is_none() => prev.push_str(&t),
-            _ => merged.push((t, id)),
-        }
-    }
-    merged
+pub fn openable_url(url: &str) -> bool {
+    tuse_core::openable_url(url)
 }
 
-/// `st` for a link to `url`; one that may not be opened is only colored.
-pub fn styled(url: &str, st: Style, p: &Palette) -> Style {
+/// Resolves a Markdown link destination into a URL or local path target.
+pub fn resolve_markdown_target(dest: &str, cwd: &Path) -> Option<LinkTarget> {
+    let dest = dest.trim();
+    if dest.is_empty() || dest.starts_with('#') {
+        return None;
+    }
+    if openable_url(dest) {
+        return Some(LinkTarget::Url(dest.to_string()));
+    }
+    if let Some(rest) = dest.strip_prefix("file://") {
+        let stripped = rest.strip_prefix("localhost").unwrap_or(rest);
+        let decoded = percent_decode(strip_anchor(stripped));
+        if decoded.is_empty() {
+            return None;
+        }
+        return Some(LinkTarget::Path(PathBuf::from(decoded)));
+    }
+    if has_other_scheme(dest) {
+        return None;
+    }
+    let raw = percent_decode(strip_anchor(dest));
+    if raw.is_empty() {
+        return None;
+    }
+    let resolved = resolve_path(&raw, cwd)?;
+    Some(LinkTarget::Path(resolved))
+}
+
+/// `st` for a Markdown link to `dest`; unsupported schemes are colored without a click target.
+pub fn styled(dest: &str, st: Style, p: &Palette) -> Style {
     Style {
         fg: p.info,
         underline: true,
-        link: openable(url).then(|| intern(url)),
+        link: resolve_markdown_target(dest, &p.cwd).map(intern),
         ..st
     }
 }
 
-/// `text` as spans of `st`, with bare URLs underlined, colored `info` and clickable.
+/// A single span pointing directly at a local path (even if the path has spaces or is clipped).
+pub fn path_span(label: impl Into<String>, path: &str, st: Style, p: &Palette) -> Span {
+    let resolved = resolve_path(path, &p.cwd).filter(|rp| rp.exists());
+    match resolved {
+        Some(rp) => span(
+            label,
+            Style {
+                fg: p.info,
+                underline: true,
+                link: Some(intern_path(rp.canonicalize().unwrap_or(rp))),
+                ..st
+            },
+        ),
+        None => span(label, st),
+    }
+}
+
+/// `text` as spans of `st`, with bare URLs and existing file paths underlined, colored `info`
+/// and clickable.
 pub fn spans(text: &str, st: Style, p: &Palette) -> Vec<Span> {
-    split_urls(text)
+    crate::link_scan::split(text, &p.cwd)
         .into_iter()
         .map(|(piece, id)| match id {
             Some(id) => span(
@@ -145,6 +122,19 @@ pub fn spans(text: &str, st: Style, p: &Palette) -> Vec<Span> {
             None => span(piece, st),
         })
         .collect()
+}
+
+/// Applies URL/path detection to every non-link span of `line`.
+pub fn linkify_line(line: Line, p: &Palette) -> Line {
+    let mut out = Vec::with_capacity(line.len());
+    for s in line {
+        if s.style.link.is_some() {
+            out.push(s);
+        } else {
+            out.extend(spans(&s.text, s.style, p));
+        }
+    }
+    out
 }
 
 /// Where a link is on the screen (`end` exclusive), in screen columns.
@@ -187,42 +177,54 @@ pub fn highlight(screen: &mut [Line], hover: Option<u32>, color: Option<crosster
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn pieces(t: &str) -> Vec<(String, bool)> {
-        split_urls(t)
-            .into_iter()
-            .map(|(s, i)| (s, i.is_some()))
-            .collect()
+pub(crate) fn resolve_path(raw: &str, cwd: &Path) -> Option<PathBuf> {
+    if let Some(rest) = raw.strip_prefix("~/") {
+        let home = tuse_config::home();
+        return (!home.as_os_str().is_empty()).then(|| home.join(rest));
     }
-
-    #[test]
-    fn finds_bare_urls_and_drops_trailing_punctuation() {
-        assert_eq!(
-            pieces("see https://a.dev/x?q=1, and (http://b.io/p_(1))."),
-            [
-                ("see ".into(), false),
-                ("https://a.dev/x?q=1".into(), true),
-                (", and (".into(), false),
-                ("http://b.io/p_(1)".into(), true),
-                (").".into(), false),
-            ]
-        );
-        assert_eq!(pieces("no link here"), [("no link here".into(), false)]);
-        assert_eq!(
-            pieces("xhttps://a.dev https://"),
-            [("xhttps://a.dev https://".into(), false)]
-        );
+    let p = Path::new(raw);
+    if p.is_absolute() {
+        Some(p.to_path_buf())
+    } else if !cwd.as_os_str().is_empty() {
+        Some(cwd.join(p))
+    } else {
+        None
     }
+}
 
-    #[test]
-    fn interning_is_stable_and_only_web_schemes_open() {
-        let a = intern("https://same.example");
-        assert_eq!(a, intern("https://same.example"));
-        assert_eq!(url(a).as_deref(), Some("https://same.example"));
-        assert!(openable("HTTPS://x.dev") && openable("mailto:a@b.c"));
-        assert!(!openable("file:///etc/passwd") && !openable("-a Calculator"));
+fn strip_anchor(s: &str) -> &str {
+    s.split(['#', '?']).next().unwrap_or(s)
+}
+
+fn has_other_scheme(s: &str) -> bool {
+    let Some((scheme, _)) = s.split_once(':') else {
+        return false;
+    };
+    let mut chars = scheme.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    scheme.len() > 1
+        && first.is_ascii_alphabetic()
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Ok(hex) = std::str::from_utf8(&bytes[i + 1..i + 3])
+            && let Ok(b) = u8::from_str_radix(hex, 16)
+        {
+            out.push(b);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
     }
+    String::from_utf8_lossy(&out).into_owned()
 }

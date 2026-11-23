@@ -3,7 +3,7 @@ use serde::Deserialize;
 /// The 10 base colors of a theme. Values are `#rrggbb`, `#rgb`, an ANSI number
 /// (`0`-`255`), a name (`red`, `dark_grey`, ...), `accent`, or `none`.
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Theme {
     pub bg: String,
     pub surface: String,
@@ -35,9 +35,47 @@ impl Default for Theme {
     }
 }
 
+/// Whether `s` is a valid theme color token (`#rrggbb`, `#rgb`, `0`-`255`, named color, `accent`, `none`).
+pub fn valid_color(s: &str) -> bool {
+    let s = s.trim().to_ascii_lowercase();
+    if matches!(
+        s.as_str(),
+        "none"
+            | "accent"
+            | "black"
+            | "red"
+            | "green"
+            | "yellow"
+            | "blue"
+            | "magenta"
+            | "cyan"
+            | "white"
+            | "grey"
+            | "gray"
+            | "dark_grey"
+            | "dark_gray"
+            | "bright_red"
+            | "bright_green"
+            | "bright_yellow"
+            | "bright_blue"
+            | "bright_magenta"
+            | "bright_cyan"
+            | "bright_white"
+    ) {
+        return true;
+    }
+    if s.parse::<u8>().is_ok() {
+        return true;
+    }
+    if let Some(hex) = s.strip_prefix('#') {
+        return matches!(hex.len(), 3 | 6) && hex.chars().all(|c| c.is_ascii_hexdigit());
+    }
+    false
+}
+
 /// User-facing UI behavior and layout preferences (`settings.ui`), independent of the color theme.
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct UiSettings {
     /// `true` folds multiline Lua long strings (`[[...]]`) in chat tool calls.
     pub fold_strings: bool,

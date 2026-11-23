@@ -16,7 +16,6 @@ enum Transient {
 impl Chat {
     /// Builds chat history plus live transient UI items (kept across `/reload`, not resume).
     pub fn from_session(session: &Session) -> Chat {
-        let config = session.config();
         let snap = session.ui_snapshot();
         let mut transient: Vec<(usize, u64, Transient)> = vec![];
         let mut pinned = vec![];
@@ -72,7 +71,7 @@ impl Chat {
             };
             flush(&mut chat, &mut ti, 0);
             for (i, r) in records.iter().enumerate() {
-                chat.push_record(r, &|m| config.display_name(m));
+                chat.push_record(r, &|m| session.display_name(m));
                 flush(&mut chat, &mut ti, i + 1);
             }
             flush(&mut chat, &mut ti, usize::MAX);

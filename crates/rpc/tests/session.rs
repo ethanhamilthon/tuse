@@ -79,6 +79,29 @@ fn a_client_drives_a_session() {
         (stats["requests"].clone(), stats["turns"].clone()),
         (json!(2), json!(1))
     );
+    call(61, "session.snapshot", json!({}));
+    let snap = reply(&out, 61)["result"].clone();
+    assert_eq!(
+        (
+            snap["mode"].clone(),
+            snap["model"].clone(),
+            snap["provider"].clone(),
+            snap["steps"].clone(),
+            snap["turns"].clone()
+        ),
+        (json!("json"), json!("p/m"), json!("p"), json!(2), json!(1))
+    );
+    assert!(snap["trace"].as_array().unwrap().len() >= 4);
+    call(
+        62,
+        "model.meta.set",
+        json!({"name": "p/m", "display": "M", "window": 50000}),
+    );
+    assert!(reply(&out, 62)["error"].is_null());
+    call(63, "model.meta.list", json!({}));
+    assert_eq!(reply(&out, 63)["result"][0]["display"], json!("M"));
+    call(64, "model.meta.remove", json!({"name": "p/m"}));
+    assert_eq!(reply(&out, 64)["result"], json!(true));
     call(7, "session.records", json!({}));
     let records = reply(&out, 7)["result"].clone();
     assert!(records.as_array().unwrap().iter().any(|r| r["t"] == "tool"));

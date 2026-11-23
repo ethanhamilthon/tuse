@@ -2,6 +2,7 @@ use crate::event::Event;
 use crate::session::Session;
 use std::sync::Arc;
 use tuse_api::Client;
+use tuse_config::ModelDef;
 
 /// Whether `full` (`provider/model`) has an active `connect` entry.
 pub fn model_available(config: &tuse_config::Config, full: &str) -> bool {
@@ -10,6 +11,15 @@ pub fn model_available(config: &tuse_config::Config, full: &str) -> bool {
 }
 
 impl Session {
+    /// Saved metadata for `full` (`provider/model`) from SQLite.
+    pub fn model_def(&self, full: &str) -> Option<ModelDef> {
+        crate::db::model_def(full)
+    }
+
+    pub fn display_name(&self, full: &str) -> String {
+        tuse_config::display_name(self.model_def(full).as_ref(), full)
+    }
+
     /// Whether `full` (`provider/model`) can be used in this session.
     pub fn model_available(&self, full: &str) -> bool {
         model_available(&self.config(), full)
@@ -28,13 +38,12 @@ impl Session {
             .collect()
     }
 
-    /// Configured and reported models whose provider is active in this session.
+    /// Saved DB models and reported models whose provider is active in this session.
     pub fn available_models(&self) -> Vec<String> {
         let config = self.config();
-        let mut names: Vec<String> = config
-            .models
-            .iter()
-            .map(|m| m.name.clone())
+        let mut names: Vec<String> = crate::db::models()
+            .into_iter()
+            .map(|m| m.name)
             .filter(|m| model_available(&config, m))
             .collect();
         for m in self.remote_models() {
@@ -90,7 +99,12 @@ impl Session {
     }
 
     /// Validates and sets the session's model and effort, optionally persisting both as defaults.
-    pub fn select_model(&self, model: &str, effort: &str, persist: bool) -> Result<(), String> {
+    pub fn select_model(
+        self: &Arc<Self>,
+        model: &str,
+        effort: &str,
+        persist: bool,
+    ) -> Result<(), String> {
         if !tuse_config::EFFORTS.contains(&effort) {
             return Err(format!(
                 "`effort` must be one of {}",
@@ -108,13 +122,8 @@ impl Session {
         Ok(())
     }
 
-    /// Remembers a choice of the UI (`model` or `effort`) in the database and
-    /// applies it to the config at once; new sessions start with it.
+    /// Remembers a default choice (`model` or `effort`) in SQLite; new sessions start with it.
     pub fn save_choice(&self, key: &str, value: &str) -> Result<(), String> {
-        crate::db::set_state(key, value)?;
-        let mut c = (*self.config()).clone();
-        crate::store::apply_state(&mut c);
-        self.swap_config(Arc::new(c));
-        Ok(())
+        crate::db::set_state(key, value)
     }
 }

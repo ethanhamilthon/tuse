@@ -44,7 +44,7 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
 fn empty_tables_as_maps(v: &mut Value) {
     let Value::Object(m) = v else { return };
     for (k, v) in m.iter_mut() {
-        let list = matches!(k.as_str(), "systems" | "models" | "events" | "commands");
+        let list = matches!(k.as_str(), "systems" | "events" | "commands" | "open");
         if list && v.as_object().is_some_and(serde_json::Map::is_empty) {
             *v = Value::Array(vec![]);
         } else if !list && v.as_array().is_some_and(Vec::is_empty) {
@@ -76,18 +76,20 @@ mod tests {
     #[test]
     fn builds_from_a_table_and_checks_it() {
         let c = from_value(
-            json!({"model": "p/a", "settings": {"ui": {"tool_line": 7}},
+            json!({"settings": {"ui": {"tool_line": 7}},
                 "theme": {"accent": "blue", "info": "green"},
                 "prompts": [], "hooks": {"h": {"events": ["user_message"]}},
-                "models": [{"name": "p/a", "window": 1000}]}),
+                "open": ["md"]}),
             "t",
         )
         .unwrap();
         let t = &c.theme;
         assert_eq!((t.accent.as_str(), t.info.as_str()), ("blue", "green"));
-        assert_eq!((c.settings.ui.tool_line, c.compact_at("p/a")), (7, 600));
+        assert_eq!(c.settings.ui.tool_line, 7);
         assert_eq!(c.hooks["h"].events, ["user_message"]);
+        assert_eq!(c.open, ["md"]);
         assert!(from_value(json!("x"), "t").is_err());
+        assert!(from_value(json!({"unknown_key": 1}), "t").is_err());
         let s = crate::Settings::default();
         assert_eq!(s.retries, 5);
     }

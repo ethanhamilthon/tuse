@@ -75,7 +75,7 @@ pub struct App {
 impl App {
     pub fn new(session: Arc<Session>, config_arg: Option<PathBuf>) -> App {
         let cwd = session.cwd.clone();
-        let palette = Palette::from_config(&session.config());
+        let palette = Palette::for_session(&session.config(), &cwd);
         let events = session.subscribe();
         let chat = Chat::from_session(&session);
         App {
@@ -169,16 +169,16 @@ impl App {
     }
 }
 
-/// Points `TUSE_HOME` at a temporary folder once, before any test opens a session.
+/// Points `HOME` at a temporary folder once, before any test opens a session.
 #[cfg(test)]
 pub fn test_home() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         let home = std::env::temp_dir().join(format!("tuse-home-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
         // SAFETY: every test that reads the environment calls this first and waits for it.
         unsafe {
-            std::env::set_var("TUSE_HOME", &home);
-            std::env::set_var("TUSE_GLOBAL_CONFIG", home.join("none.lua"));
+            std::env::set_var("HOME", &home);
         }
     });
 }

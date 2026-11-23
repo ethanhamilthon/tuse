@@ -75,11 +75,11 @@ mod tests {
 
     #[test]
     fn edits_the_list() {
-        let t = "return {\n    model = 'x',\n}\n";
+        let t = "return {\n    settings = {},\n}\n";
         let a = add(t, &entry("a/b", None)).unwrap();
         assert_eq!(
             a,
-            "return {\n    plugins = {\n        \"a/b\",\n    },\n    model = 'x',\n}\n"
+            "return {\n    plugins = {\n        \"a/b\",\n    },\n    settings = {},\n}\n"
         );
         let b = add(&a, &entry("c/d", Some("v1"))).unwrap();
         assert!(
@@ -88,7 +88,7 @@ mod tests {
         assert!(has(&b, "c/d") && !has(&b, "c"));
         assert_eq!(
             remove(&remove(&b, "c/d").unwrap(), "a/b").unwrap(),
-            "return {\n    plugins = {\n    },\n    model = 'x',\n}\n"
+            "return {\n    plugins = {\n    },\n    settings = {},\n}\n"
         );
         assert_eq!(add("return g\n", "\"a/b\""), None);
         assert_eq!(remove(t, "a/b"), None);

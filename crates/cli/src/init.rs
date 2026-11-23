@@ -1,10 +1,9 @@
 //! `tuse init`: a `./tuse.lua` that extends the global config.
 
 const TEMPLATE: &str = r#"-- Project config: starts from the global one and changes what this project needs.
--- TUSE_GLOBAL_CONFIG is set only when the global config exists.
-local g = os.getenv("TUSE_GLOBAL_CONFIG") and require("global") or {}
+local ok, g = pcall(require, "global")
+g = ok and g or {}
 
--- g.model = "provider/model"
 -- g.systems = g.systems or {}
 -- table.insert(g.systems, "Project rules go here.")
 

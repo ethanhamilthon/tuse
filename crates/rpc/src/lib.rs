@@ -1,6 +1,7 @@
 //! `tuse json`: a JSON-RPC 2.0 session over stdin and stdout, one message per line.
 mod events;
 mod methods;
+mod models;
 mod proto;
 
 use proto::{Fail, NOT_READY, answer, notify};
@@ -28,7 +29,7 @@ impl Out {
 }
 
 /// Serves `session` until the input ends, `shutdown` arrives or `stop` is set; then
-/// closes the session (tasks stop, `process_end` hooks run).
+/// closes the session (tasks stop, `close` hooks run).
 pub fn serve(
     mut session: Arc<Session>,
     input: impl BufRead + Send + 'static,
@@ -149,7 +150,7 @@ pub fn serve(
         }
     }
     session.close();
-    // Events of the closing (`process_end` notices and the like) still reach the client.
+    // Events of the closing (`close` notices and the like) still reach the client.
     std::thread::sleep(Duration::from_millis(100));
     done.store(true, Ordering::Relaxed);
     let _ = pump.join();

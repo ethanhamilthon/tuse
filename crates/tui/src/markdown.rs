@@ -1,6 +1,6 @@
 use crate::style::{BULLET, LIST_INDENT, Palette, QUOTE_PREFIX, RULE_CHAR, Style};
 use crate::text::{Line, span, wrap};
-use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 /// Renders Markdown into wrapped lines.
 pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
@@ -37,7 +37,7 @@ pub(crate) struct Renderer<'a> {
     styles: Vec<Style>,
     lists: Vec<Option<u64>>,
     quote: usize,
-    code: bool,
+    pub(crate) code: bool,
     /// The language of the open fenced block.
     pub(crate) lang: String,
     /// A long string or comment left open by the line before (Lua blocks).
@@ -100,12 +100,16 @@ impl Renderer<'_> {
         }
     }
 
-    fn text(&mut self, t: &str) {
-        let st = self.style();
+    fn push_text(&mut self, t: &str, st: Style) {
         if st.link.is_some() {
-            return self.cur.push(span(t, st));
+            self.cur.push(span(t, st));
+        } else {
+            self.cur.extend(crate::links::spans(t, st, self.p));
         }
-        self.cur.extend(crate::links::spans(t, st, self.p));
+    }
+
+    fn text(&mut self, t: &str) {
+        self.push_text(t, self.style());
     }
 
     fn event(&mut self, ev: Event) {
@@ -114,13 +118,13 @@ impl Renderer<'_> {
             Event::End(tag) => self.end(tag),
             Event::Text(t) if self.code => self.code_block(&t),
             Event::Text(t) => self.text(&t),
-            Event::Code(t) => {
-                let st = Style {
+            Event::Code(t) => self.push_text(
+                &t,
+                Style {
                     fg: self.p.ok,
                     ..self.style()
-                };
-                self.cur.push(span(t.to_string(), st));
-            }
+                },
+            ),
             Event::SoftBreak => self.text(" "),
             Event::HardBreak => self.flush(),
             Event::Rule => {
@@ -154,22 +158,7 @@ impl Renderer<'_> {
             }
             Tag::CodeBlock(kind) => {
                 self.flush();
-                self.code = true;
-                self.open.clear();
-                self.lang = match &kind {
-                    CodeBlockKind::Fenced(l) => {
-                        l.split_whitespace().next().unwrap_or("").to_lowercase()
-                    }
-                    CodeBlockKind::Indented => String::new(),
-                };
-                if let CodeBlockKind::Fenced(lang) = kind
-                    && !lang.is_empty()
-                {
-                    let (first, _) = self.prefixes();
-                    let mut l = first;
-                    l.push(span(lang.to_string(), Style::fg(self.p.dim)));
-                    self.out.push(l);
-                }
+                self.start_code_block(kind);
             }
             Tag::List(start) => {
                 self.flush();

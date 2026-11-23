@@ -87,6 +87,7 @@ pub struct Job {
     pub diffs: Vec<(String, String)>,
     pub images: Vec<String>,
     pub is_hook: bool,
+    pub is_lua_hook: bool,
     pub(crate) thread: Thread,
     pub(crate) wait: Wait,
     pub(crate) done: Option<OnDone>,
@@ -108,6 +109,7 @@ impl Job {
             diffs: vec![],
             images: vec![],
             is_hook: false,
+            is_lua_hook: false,
             thread: lua.create_thread(f)?,
             wait: Wait::Ready(args),
             done: Some(Box::new(done)),
@@ -183,6 +185,11 @@ pub fn stopped(lua: &Lua) -> Option<&'static str> {
 /// Whether the running job is a hook run.
 pub fn is_hook(lua: &Lua) -> bool {
     with_run(lua, |j| j.is_hook).unwrap_or(false)
+}
+
+/// Whether the running job is a `lua_start`/`lua_end` hook run.
+pub fn is_lua_hook(lua: &Lua) -> bool {
+    with_run(lua, |j| j.is_lua_hook).unwrap_or(false)
 }
 
 /// Registers an external wait on the scheduler; returns the key to yield on.

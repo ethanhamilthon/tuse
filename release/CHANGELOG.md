@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.0
+
+- **Single Lua session API (`require("tuse").session()`):**
+  - Returns a fresh runtime snapshot with `mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage` (`input`, `output`, `cache_read`, `cache_write`, `cost`), `model_info` (including `prices`), `steps`, `turns`, and full untruncated `trace` (including resumed history), without exposing credentials.
+  - Consistent pre-session semantics (`{mode, configpath, cwd, home}`, session fields `nil`) during initial config load and `/reload`.
+  - Replaced `/usage` in the TUI with `/session`, displaying every field of `tuse.session()` except `trace`; `/trace` keeps full trace browsing. JSON-RPC adds `session.snapshot`.
+  - **Breaking:** Removed `require("tuse").env` and old `TUSE_*` environment variables (`TUSE_MODE`, `TUSE_SESSION`, `TUSE_CWD`, `TUSE_MODEL`, `TUSE_CURRENT_CONFIG`, `TUSE_HOME`, `TUSE_GLOBAL_CONFIG`), including injection into `sh` and tasks. Only `THIS_PATH` (Lua-only) and `TUSE_RELEASE_URL` remain; ordinary process environment variables are untouched. See `docs/env.md` for migration.
+- **Hooks overhaul:**
+  - **Breaking:** Replaced `process_start` and `process_end` with `start` (`reason`, `is_new`, `restored`) and `close` (`reason`, keeping the session readable while `close` runs).
+  - Hook payloads now carry only `event` and event-specific fields; callbacks call `tuse.session()` for session data.
+  - Added `model_change`, `name_change`, `lua_start`, and `lua_end` (covering `tool`, `command`, `task`, and `open` jobs without recursion), and added `tool_calls` to `agent_message`.
+  - Updated bundled `welcome` plugin to use `start` (`e.is_new`) and `tuse.session()` without inspecting lock files.
+- **Interactive links, file paths, and `open` config:**
+  - URLs, local file paths (absolute, `~/`, relative, optional `:line[:col]`), and Markdown links are clickable and highlighted on hover across chat, custom Markdown blocks, tool output, diffs, and panels (`/session`, `/config`, `/trace`, `/tasks`), including wrapped links.
+  - Added `open = { ext = function(path) ... end }` for local file extensions (without the dot), keeping URL handling separate, falling back to the OS default opener (`open` / `xdg-open` / `cmd /C start`), and reporting open failures in the UI.
+- **Model settings moved to SQLite:**
+  - **Breaking:** Removed `model`, `provider`, `effort`, and `models` from `tuse.lua`; selection and model metadata now live in `~/.tuse/tuse.db` while saved sessions retain their own active selection on resume.
+  - Added `tuse models [list|use|set|remove|import]` CLI and `model.meta.*` JSON-RPC methods (`tuse models import [PATH]` migrates legacy configs).
+- **Strict config & plugin validation:**
+  - User config and each plugin are validated before merging/applying at load and `/reload`, reporting unknown/removed keys, wrong types, invalid values, and malformed `hooks`, `commands`, or `open` handlers with source and full key path.
+  - Failed `/reload` preserves the previous working config, modules, and callbacks.
+
 ## 0.8.6
 
 - `@` picker: Tab completes a folder, Enter attaches the highlighted entry (a folder too) as a token. A folder reaches the model as `<dir path="...">` with its entries.

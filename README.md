@@ -65,6 +65,7 @@ tuse init                                 ./tuse.lua that extends the global con
 tuse connect --base URL --key KEY --name NAME
                                           verify and save a provider
 tuse providers | tuse disconnect NAME     list | remove providers
+tuse models [list|use|set|remove|import]  manage default model/effort and metadata
 tuse update                              update the binary
 ```
 
@@ -99,7 +100,7 @@ The VM lives as long as the process. A call is stopped after 120 seconds.
 | Shift+PageUp / Shift+PageDown | scroll the open panel |
 | Up / Down, Left / Right, Home / End | move in the input |
 | click in the input | put the cursor there |
-| hover / click a link | highlight it / open it in the browser |
+| hover / click a link or path | highlight it / open via `open.<ext>` or OS default |
 | Ctrl+V, Cmd+V | paste; an image becomes `[Image #n]` in the input and is attached when the message is sent |
 | Ctrl/Cmd+C | copy selected text; otherwise clear the input or quit if empty |
 | SIGINT, SIGTERM, SIGHUP | quit and reset the terminal (SIGKILL cannot; run `reset` after it) |
@@ -113,35 +114,35 @@ A message sent while the agent is working stays dimmed in the input until the ag
 Editing it withdraws it from the queue without interrupting the turn. Press Enter to send
 the edited draft. Esc still stops the turn.
 
-Commands: `/new`, `/resume`, `/models`, `/tasks`, `/usage`, `/trace`, `/config`, `/reload`,
-`/quit`. `/trace` opens a scrollable log of the conversation, tool calls and hooks. Pickers
-filter by substring; the input becomes the search box and restores your draft on close.
+Commands: `/new`, `/resume`, `/models`, `/tasks`, `/session`, `/trace`, `/config`, `/reload`,
+`/quit`. `/session` shows the full session snapshot (except `trace`); `/trace` opens a scrollable
+log of the conversation, tool calls and hooks. Pickers filter by substring; the input becomes the
+search box and restores your draft on close.
 
 `#name` inserts a prompt from the config; `@` picks a file or folder from the current folder
 (`@dir/name` filters the entries inside `dir`), or by absolute path: `@/etc/` and `@~/` list those
 folders as you type. The message keeps `#name` and `@path` as typed; the prompt
 text and the file go to the model in a hidden block ([docs/prompts.md](docs/prompts.md)).
 Files, prompts and images are one unit in the input: arrows and Backspace move over them whole.
-`/models` remembers your choice in the database; it wins over the config file.
+`/models` (and `tuse models`) store your default model, effort, and model metadata in SQLite.
 
 ## Config
 
-Tuse runs `--config PATH`, else `./tuse.lua`, else the global config (`$TUSE_GLOBAL_CONFIG`,
-`~/.config/tuse.lua` or `~/.config/tuse/init.lua`). See [docs/config.md](docs/config.md) for every key.
+Tuse runs `--config PATH`, else `./tuse.lua`, else the global config (`~/.config/tuse.lua` or
+`~/.config/tuse/init.lua`). See [docs/config.md](docs/config.md) for every key.
 Plugins from GitHub go in `plugins = { "owner/repo" }` ([docs/plugins.md](docs/plugins.md)).
 
 ```lua
-local t = require("tuse")              -- sh, read, edit... and t.env.TUSE_MODE
+local t = require("tuse")              -- session(), sh, read, edit, show_markdown...
 local shared = require("shared")       -- shared.lua or shared/init.lua next to this file
 
 return {
-  model = "x/claude-sonnet-5-5",
-  effort = "high",                     -- default | low | medium | high | xhigh | max
   systems = shared.systems,
 
-  models = {
-    { name = "x/claude-sonnet-5-5", display = "Sonnet 5.5", window = 1000000,
-      compact_at = 600000, prices = { ["in"] = 3, out = 15, cache = 0.3, cache_write = 3.75 } },
+  open = {
+    md = function(path)
+      t.sh('open -a Typora "$P"', { env = { P = path } })
+    end,
   },
 
   functions = {
@@ -157,7 +158,7 @@ return {
 
   hooks = {
     notify = {
-      events = { "agent_message" },  -- process_start, process_end, user_message, agent_message
+      events = { "agent_message" },  -- start, close, user_message, agent_message, model_change, name_change, lua_start, lua_end
       run = function(e)
         if e.status == "finished" then
           t.sh([[osascript -e 'display notification "done"']])

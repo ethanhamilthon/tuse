@@ -4,6 +4,7 @@ use crate::host::{err, session};
 use crate::session::Session;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 use tuse_lua::mlua::{self, Lua, MultiValue, Table, Value};
 use tuse_lua::{Done, ExtWait, Job, Out, Stop};
 
@@ -76,18 +77,21 @@ impl Session {
         let stop = Stop::new(cancel.clone(), None);
         let weak = Arc::downgrade(self);
         let cmd = name.to_string();
+        let exec_id = self.next_lua_id();
+        let started = Instant::now();
+        self.lua_start_hook(exec_id.clone(), "command", None, Some(cmd.clone()));
         self.vm.post(move |lua| {
-            let (s2, c2, flag) = (weak.clone(), cmd.clone(), cancel.clone());
+            let (s2, c2, flag, id2) = (weak.clone(), cmd.clone(), cancel.clone(), exec_id.clone());
             let done = move |_: &Lua, d: Done| {
                 flag.store(true, Ordering::Relaxed);
-                if !d.ok
-                    && d.stop != Some("cancelled")
-                    && let Some(s) = s2.upgrade()
-                {
-                    s.emit(Event::Error(format!(
-                        "/{c2}: {}",
-                        crate::host::error_line(&d.text)
-                    )));
+                if let Some(s) = s2.upgrade() {
+                    s.lua_end_done(&id2, "command", started.elapsed(), &d);
+                    if !d.ok && d.stop != Some("cancelled") {
+                        s.emit(Event::Error(format!(
+                            "/{c2}: {}",
+                            crate::host::error_line(&d.text)
+                        )));
+                    }
                 }
             };
             let start = || -> mlua::Result<()> {
@@ -106,8 +110,17 @@ impl Session {
             };
             if let Err(e) = start() {
                 cancel.store(true, Ordering::Relaxed);
+                let msg = tuse_lua::message(&e);
                 if let Some(s) = weak.upgrade() {
-                    s.emit(Event::Error(format!("/{cmd}: {}", tuse_lua::message(&e))));
+                    s.lua_end_hook(
+                        exec_id,
+                        "command",
+                        "error",
+                        started.elapsed(),
+                        None,
+                        Some(msg.clone()),
+                    );
+                    s.emit(Event::Error(format!("/{cmd}: {msg}")));
                 }
             }
         });

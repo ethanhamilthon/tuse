@@ -139,7 +139,7 @@ impl Session {
             effort,
             cancelled: true,
         });
-        self.agent_message_hook(partial, "cancelled");
+        self.agent_message_hook(partial, "cancelled", &[]);
     }
 
     pub fn records(&self) -> Vec<Record> {
@@ -157,8 +157,10 @@ impl Session {
         (st.model.clone(), st.effort.clone())
     }
 
-    pub fn set_model(&self, model: &str, effort: &str) {
+    pub fn set_model(self: &Arc<Self>, model: &str, effort: &str) {
         let mut st = self.state.lock().unwrap();
+        let (prev_model, prev_effort) = (st.model.clone(), st.effort.clone());
+        let changed = prev_model != model || prev_effort != effort;
         st.model = model.to_string();
         st.effort = effort.to_string();
         let r = Record::Settings {
@@ -169,6 +171,9 @@ impl Session {
         self.save_meta(&mut st);
         drop(st);
         self.emit(Event::Usage);
+        if changed {
+            self.model_change_hook(&prev_model, &prev_effort, model, effort);
+        }
     }
 
     pub fn busy(&self) -> bool {
@@ -182,13 +187,13 @@ impl Session {
             .then(|| (st.turn_start.elapsed(), st.status.clone()))
     }
 
-    /// Totals of the session, kept up to date as records arrive. Prices come from the
-    /// config, so the totals are rebuilt once after the config changes.
+    /// Totals of the session, kept up to date as records arrive. Prices come from
+    /// SQLite model metadata, so totals are rebuilt if metadata changes.
     pub fn stats(&self) -> Stats {
-        let config = self.config();
+        let models = crate::db::models();
         let mut st = self.state.lock().unwrap();
-        if !Arc::ptr_eq(&st.stats.1, &config) {
-            st.stats = (Stats::of(&st.records, &config), config);
+        if st.stats.1 != models {
+            st.stats = (Stats::of(&st.records, &models), models);
         }
         let mut out = st.stats.0.clone();
         out.context = st.context;
@@ -201,13 +206,28 @@ impl Session {
     pub fn title(&self) -> String {
         self.state.lock().unwrap().meta.title.clone()
     }
-}
 
-/// A new session records the config's model and effort at once and keeps them from then on.
-pub(crate) fn initial_settings(config: &tuse_config::Config) -> Record {
-    Record::Settings {
-        model: config.default_model(),
-        effort: config.default_effort(),
+    /// Updates the session name/title and emits `name_change` after the change takes effect.
+    pub fn set_name(self: &Arc<Self>, text: &str) -> Result<(), String> {
+        let text: String = text
+            .trim()
+            .replace(['\r', '\n'], " ")
+            .chars()
+            .take(80)
+            .collect();
+        if text.is_empty() {
+            return Err("empty title".into());
+        }
+        let mut st = self.state.lock().unwrap();
+        let prev = st.meta.title.clone();
+        if prev == text {
+            return Ok(());
+        }
+        st.meta.title = text.clone();
+        self.save_meta(&mut st);
+        drop(st);
+        self.name_change_hook((!prev.is_empty()).then_some(prev), text);
+        Ok(())
     }
 }
 

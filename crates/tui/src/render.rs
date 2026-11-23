@@ -1,7 +1,5 @@
 use crate::chat::Entry;
-use crate::style::{
-    ERROR_PREFIX, FILL_PAD, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style,
-};
+use crate::style::{ERROR_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style};
 use crate::text::{Line, line_width, span, wrap};
 use std::time::Duration;
 
@@ -54,9 +52,8 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             if *images > 0 && !text.contains("[Image") {
                 text.push_str(&format!("\n[{images} image(s)]"));
             }
-            // No prefix: the `surface` block marks the message, with a small left pad.
-            let lead = " ".repeat(FILL_PAD);
-            let mut lines = plain(&text, width, st, &lead, &lead);
+            // No prefix: the `surface` block marks the message.
+            let mut lines = plain(&text, width, st, "", "");
             for l in &mut lines {
                 let fill = width.saturating_sub(line_width(l));
                 l.push(span(" ".repeat(fill), st));
@@ -114,7 +111,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_user_message_is_a_padded_surface_block_without_a_prefix() {
+    fn a_user_message_is_a_surface_block_without_a_prefix() {
         let p = Palette::new(&Default::default(), &Default::default());
         let e = Entry::User {
             text: "hi there\nsecond".into(),
@@ -122,7 +119,7 @@ mod tests {
         };
         let lines = render(&e, 20, &p);
         assert_eq!(lines.len(), 2);
-        for (l, want) in lines.iter().zip([" hi there", " second"]) {
+        for (l, want) in lines.iter().zip(["hi there", "second"]) {
             let text: String = l.iter().map(|s| s.text.as_str()).collect();
             assert_eq!(text.trim_end(), want);
             assert_eq!(line_width(l), 20);

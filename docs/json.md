@@ -16,7 +16,15 @@ TUI (sessions can be resumed freely between TUI and JSON-RPC).
 < {"jsonrpc":"2.0","method":"event","params":{"type":"turn_end","elapsedMs":5120,"calls":2,...}}
 ```
 
-Requests are served while a turn runs. Methods before `initialize` fail with `-32002`.
+## Handshake
+
+The first request must be `initialize`. `protocolVersion` is the version the client speaks; this
+Tuse speaks `1`. An omitted `protocolVersion` means `1`, so existing clients keep working. Any
+other value fails with `-32602` and the connection stays uninitialized; the client can retry
+`initialize`. The result echoes `protocolVersion` and lists `capabilities.methods`. Methods before
+a successful `initialize` fail with `-32002`.
+
+Requests are served while a turn runs.
 In `turn.submit`, `text` stays as given; `prompts`, `files`, and image paths are attached as hidden
 context blocks, just like `#` prompts, `@` files, and pasted images in the TUI
 ([prompts.md](prompts.md)). A missing prompt or file fails the request.
@@ -30,12 +38,20 @@ context blocks, just like `#` prompts, `@` files, and pasted images in the TUI
 | `session.info` / `.snapshot` / `.records` / `.trace` / `.stats` | chat, `/session`, `/trace` | session info, full `tuse.session()` snapshot, durable history, trace items, usage totals |
 | `session.list` | `/resume` list | `{cwd?}` -> saved sessions for resuming |
 | `session.new` / `session.resume` | `/new`, `/resume` | `{}` / `{id}` -> `{session, model, effort}` (switches session in-process) |
-| `model.get` / `model.set` / `model.list` | `/models` | `{model, effort?, persist?}` (`persist` defaults to `true`, validating & saving both in one call); `model.list` fetches provider models |
-| `config.get` / `config.reload` / `config.set` | `/config`, `/reload` | structured resolved config JSON (with `commands`, `open`, `plugins`, no secrets/Lua bodies); reload (validates before applying, keeps live UI state); `{key, value}` saves `model` or `effort` |
+| `model.get` / `model.set` / `model.list` | `/models` | `model.set {model, effort?, persist?}` sets the model and effort of the active session (`effort` defaults to `default`); `persist` (default `true`) also saves them as the default for new sessions. `model.list {cached?}` -> the model names, see below |
+| `config.get` / `config.reload` | `/config`, `/reload` | structured resolved config JSON (with `commands`, `open`, `plugins`, no secrets/Lua bodies); reload (validates before applying, keeps live UI state) |
+| `config.set` | | deprecated, removed in protocol v2: `{key: "model" or "effort", value}` is `model.set` with the other value unchanged and `persist: true`, validated the same way |
 | `tasks.list` / `tasks.get` / `tasks.stop` | `/tasks` | `{id, lines?}` |
 | `commands.list` / `commands.run` | `/` custom commands | list configured custom command names; `{name}` runs `/name` as a Lua job |
 | `ui.state` / `ui.reply` / `ui.cancel` | `show_markdown`, `show_picker`, `show_question` | snapshot of `{markdowns, active, entries}`; `{id, value}` answers active prompt; `{id}` cancels it (returns `nil`, leaves no entry) |
 | `shutdown` | `/quit` | closes the session and exits |
+
+## Models
+
+`model.list` answers at once with a snapshot: the configured models plus the provider models
+fetched so far (cached until `/reload`). It is not a finished provider fetch: it also starts a
+fetch in the background, and each provider that answers sends a `models` event. On `models`,
+call `model.list {"cached": true}` to read the refreshed list without starting another fetch.
 
 Every session event arrives as an `event` notification with `type`: `user`, `turn_start`, `text`
 and `reasoning` (deltas), `stream_reset`, `assistant`, `tool_delta`, `tool_start`, `tool_end`

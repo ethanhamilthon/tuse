@@ -3,21 +3,21 @@
 ## Theme
 
 The config has one theme, `theme`; it is not selectable in the UI. It starts from the built-in
-Vercel Dark palette and overrides only the colors you write.
+dark palette and overrides only the colors you write.
 
 The theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`red`,
 `dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default:
 
-- `bg` (`#0A0A0A`): main background, including lists and panels.
-- `surface` (`#1A1A1A`): elevated background (user messages, filled input); lists and panels do not use it.
-- `fg` (`#EDEDED`): primary text and code blocks.
-- `dim` (`#A0A0A0`): secondary text (tool output, quotes, list details, notices).
-- `muted` (`#676767`): subtle text (reasoning, syntax comments, inactive list items).
-- `border` (`#2E2E2E`): horizontal rules, box frames, separators, `/usage` keys.
-- `accent` (`#EDEDED`): primary highlight (status, bar, list title, selected list item).
-- `ok` (`#00AC3A`): additions and success (`diff` `+`, inline `code`, strings, `/usage` cost).
-- `err` (`#F32E40`): errors and deletions (`diff` `-`, failed calls, keywords).
-- `info` (`#52A8FF`): tools, headings, links, functions.
+- `bg` (`#121212`): main background, including lists and panels.
+- `surface` (`#1E1E1E`): elevated background (user messages, filled input); lists and panels do not use it.
+- `fg` (`#DEDEDE`): primary text and code blocks.
+- `dim` (`#BDBDBD`): secondary text (tool output, quotes, list details, notices).
+- `muted` (`#929292`): subtle text (reasoning, syntax comments, inactive list items).
+- `border` (`#333333`): horizontal rules, box frames, separators, `/usage` keys.
+- `accent` (`#BDDEAB`): primary highlight (status, bar, list title, selected list item).
+- `ok` (`#94B979`): additions and success (`diff` `+`, inline `code`, strings, `/usage` cost).
+- `err` (`#E27373`): errors and deletions (`diff` `-`, failed calls, keywords).
+- `info` (`#97BEDC`): tools, headings, links, functions.
 
 ```lua
 return {

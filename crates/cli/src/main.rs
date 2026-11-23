@@ -174,3 +174,36 @@ fn json(a: &Args, cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
     tuse_rpc::serve(session, stdin, tuse_rpc::Out::new(std::io::stdout()), stop);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    const ALL: &[&str] = &[
+        "",
+        "json",
+        "connect",
+        "disconnect",
+        "providers",
+        "models",
+        "init",
+        "update",
+        "version",
+        "help",
+    ];
+
+    #[test]
+    fn help_and_docs_list_every_command() {
+        let docs = tuse_core::docs(Some("commands"));
+        for sub in ALL {
+            let cmd = super::spec(sub).unwrap();
+            let name = cmd.usage.split(" [").next().unwrap();
+            let name = name.split(" --").next().unwrap();
+            let name = name.split(" NAME").next().unwrap();
+            assert!(super::USAGE.contains(name), "help misses {name}");
+            assert!(docs.contains(&format!("`{name}")), "docs misses {name}");
+            if cmd.valued.contains(&"--config") {
+                assert!(cmd.usage.contains("[-c|--config PATH]"), "{}", cmd.usage);
+            }
+        }
+        assert!(super::spec("plugins").is_none());
+    }
+}

@@ -12,6 +12,7 @@ fn renders_all_sections_without_secrets() {
             ..Default::default()
         }],
         commands: vec!["hello".into()],
+        path: "/home/me/.config/tuse/init.lua".into(),
         plugins: vec![tuse_config::PluginInfo {
             name: "me/kit".into(),
             dir: "/p/kit".into(),
@@ -57,6 +58,7 @@ fn renders_all_sections_without_secrets() {
         assert!(text.contains(s), "missing {s}");
     }
     assert!(text.contains("/hello") && text.contains("#rev") && text.contains("helper(x)"));
+    assert!(text.contains("Config file") && text.contains("/home/me/.config/tuse/init.lua"));
     assert!(text.contains("me/kit") && text.contains("@v1 abc1234"));
     assert!(!text.contains("sk-secret"));
 }

@@ -72,6 +72,7 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
     }
     let mut config = tuse_config::from_value(raw, &name)?;
     config.plugins = plugins;
+    config.path = path.map(|p| p.display().to_string()).unwrap_or_default();
     for (key, names) in [
         ("hooks", config.hooks.keys().cloned().collect::<Vec<_>>()),
         ("functions", config.functions.keys().cloned().collect()),

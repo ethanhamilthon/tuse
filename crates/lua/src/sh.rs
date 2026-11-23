@@ -37,8 +37,19 @@ impl Proc {
             .current_dir(cwd)
             .stdin(Stdio::null())
             .stdout(writer.try_clone().map_err(fail)?)
-            .stderr(writer)
-            .process_group(0);
+            .stderr(writer);
+        // A new session, not just a process group: without a controlling terminal
+        // a command like `zsh -i` cannot take the foreground and stop Tuse (SIGTTIN).
+        // The group ID is still the child's PID, so `kill_group` keeps working.
+        // SAFETY: `setsid` is async-signal-safe and touches no memory.
+        unsafe {
+            c.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
         for (k, v) in env {
             c.env(k, v);
         }

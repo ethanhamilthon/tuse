@@ -1195,6 +1195,7 @@ dependencies = [
 name = "tuse-lua"
 version = "0.7.4"
 dependencies = [
+ "libc",
  "mlua",
  "serde_json",
 ]

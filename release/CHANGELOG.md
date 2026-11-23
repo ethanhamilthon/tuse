@@ -3,6 +3,7 @@
 ## 0.7.4
 
 - Tuse no longer keeps running at 100% CPU after its terminal is closed. If the UI does not stop within 2 seconds of a hangup, or after the terminal goes away, Tuse closes the session (with `process_end` hooks) and exits.
+- `sh` runs commands in their own session, without a controlling terminal. An interactive shell such as `zsh -ic` can no longer take the terminal and leave Tuse suspended (`suspended (tty input)`) with mouse codes printed in the shell.
 
 ## 0.7.3
 

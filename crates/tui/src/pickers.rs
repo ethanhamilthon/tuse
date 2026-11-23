@@ -4,7 +4,7 @@ use tuse_config::{Config, ModelDef};
 
 impl App {
     /// Every available model the providers reported plus the ones named in `models:`.
-    /// A saved/configured current model whose provider is excluded stays visible marked unavailable.
+    /// The current model stays visible even when its provider has been removed.
     pub fn open_models(&mut self) {
         let config = self.session.config();
         let (current, _) = self.session.model();
@@ -26,9 +26,6 @@ impl App {
         // A refresh keeps the search typed in the editor and re-applies it.
         self.open_modal(Picker::new(Kind::Model, "Model", items))
             .select(&selected);
-        if self.session.remote_models().is_empty() {
-            self.session.fetch_models();
-        }
     }
 }
 
@@ -87,44 +84,5 @@ mod tests {
             model_item(&config, "c/opus", false).detail,
             "unavailable · 200.0k ctx"
         );
-    }
-
-    #[test]
-    fn model_picker_hides_excluded_providers_and_marks_unavailable_current() {
-        let mut app = crate::app::test_app("picker-modes");
-        for (name, mode) in [
-            ("tui_p", tuse_config::Mode::Tui),
-            ("json_p", tuse_config::Mode::Json),
-        ] {
-            tuse_core::add_provider(&tuse_config::Connect {
-                name: name.into(),
-                base_url: "http://127.0.0.1:1".into(),
-                api_key: "k".into(),
-                modes: vec![mode],
-            })
-            .unwrap();
-        }
-        std::fs::write(
-            app.cwd.join("tuse.lua"),
-            "return { models = { {name = 'tui_p/a'}, {name = 'json_p/b'}, {name = 'json_p/saved'} } }",
-        )
-        .unwrap();
-        app.session.reload().unwrap();
-        app.session.set_model("json_p/saved", "default");
-        app.paste("keep me");
-        app.open_models();
-        let p = app.picker.as_ref().unwrap();
-        let items: Vec<_> = p
-            .items
-            .iter()
-            .map(|i| (i.value.as_str(), i.detail.as_str()))
-            .collect();
-        assert_eq!(items, [("json_p/saved", "unavailable"), ("tui_p/a", "")]);
-
-        // Selecting the unavailable current model is refused and restores the draft.
-        app.choose();
-        assert!(app.picker.is_none());
-        assert_eq!(app.editor.text(), "keep me");
-        crate::app::cleanup(app);
     }
 }

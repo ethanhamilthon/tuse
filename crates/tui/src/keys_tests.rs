@@ -72,7 +72,6 @@ fn editing_withdraws_only_the_waiting_tui_message() {
         name: "steer".into(),
         base_url: format!("http://{addr}"),
         api_key: "test".into(),
-        modes: vec![],
     })
     .unwrap();
     std::fs::write(&cfg, "return { model = 'steer/m' }").unwrap();
@@ -84,7 +83,7 @@ fn editing_withdraws_only_the_waiting_tui_message() {
         start: Default::default(),
     })
     .unwrap();
-    let mut app = App::new(session.clone(), dir.clone(), Some(cfg));
+    let mut app = App::new(session.clone(), Some(cfg));
     let press = |app: &mut App, code| app.key(KeyEvent::new(code, KeyModifiers::NONE), 0);
     app.editor.insert("draft /models after");
     app.editor.cursor = 13;

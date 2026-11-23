@@ -1,12 +1,11 @@
 use tuse_config::Config;
 
 /// The functions the agent is told about; `show_agent: false` ones stay callable but unlisted.
-pub fn listing(config: &Config, mode: crate::Mode, full: bool) -> String {
-    let mode = mode.into();
+pub fn listing(config: &Config, full: bool) -> String {
     let shown: Vec<_> = config
         .functions
         .iter()
-        .filter(|(_, f)| f.show_agent && f.matches(mode))
+        .filter(|(_, f)| f.show_agent)
         .collect();
     if shown.is_empty() {
         return String::new();
@@ -47,36 +46,11 @@ mod tests {
             );
         }
         for full in [false, true] {
-            let text = listing(&config, crate::Mode::Tui, full);
+            let text = listing(&config, full);
             assert!(text.contains("`seen("), "{text}");
             assert!(!text.contains("secret"), "{text}");
         }
         config.functions.get_mut("seen").unwrap().show_agent = false;
-        assert!(listing(&config, crate::Mode::Tui, false).is_empty());
-    }
-
-    #[test]
-    fn functions_filter_by_mode() {
-        let mut config = Config::default();
-        for (name, modes) in [
-            ("all", vec![]),
-            ("only_tui", vec![tuse_config::Mode::Tui]),
-            ("only_json", vec![tuse_config::Mode::Json]),
-        ] {
-            config.functions.insert(
-                name.into(),
-                tuse_config::Function {
-                    description: "d".into(),
-                    modes,
-                    ..Default::default()
-                },
-            );
-        }
-        let tui = listing(&config, crate::Mode::Tui, false);
-        assert!(tui.contains("`all(") && tui.contains("`only_tui(") && !tui.contains("only_json"));
-        let json = listing(&config, crate::Mode::Json, true);
-        assert!(
-            json.contains("`all(") && json.contains("`only_json(") && !json.contains("only_tui")
-        );
+        assert!(listing(&config, false).is_empty());
     }
 }

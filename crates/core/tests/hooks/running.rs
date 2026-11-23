@@ -37,13 +37,7 @@ end
 return {{
   model = "p/m",
   hooks = {{
-    tui_only = {{
-      modes = {{"tui"}},
-      events = {{"agent_message"}},
-      run = function(e) io.open("{unexpected}", "a"):write("x"):close() end,
-    }},
     record = {{
-      modes = {{"json"}},
       events = {{"user_message", "agent_message"}},
       run = function(e)
         local f = io.open("{}", "a")
@@ -54,8 +48,7 @@ return {{
   }},
 }}
 "#,
-            log.display(),
-            unexpected = dir.join("unexpected").display()
+            log.display()
         ),
     )
     .unwrap();
@@ -89,6 +82,5 @@ return {{
     let lines = wait_lines(&log, 6);
     assert_eq!(lines[5], "agent_message cancelled [loop]");
     s.close();
-    assert!(!dir.join("unexpected").exists());
     std::fs::remove_dir_all(dir).ok();
 }

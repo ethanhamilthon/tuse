@@ -116,7 +116,7 @@ impl Session {
             };
             self.push(&mut st, r);
         }
-        let system = prompt::system_prompt(&config, st.bounds.drop > 0, self.mode);
+        let system = prompt::system_prompt(&config, st.bounds.drop > 0);
         let (model, effort) = (st.model.clone(), st.effort.clone());
         drop(st);
         for (text, is_first) in typed {
@@ -133,7 +133,7 @@ impl Session {
         };
         drop(st);
         let (provider, _) = split_model(&model);
-        let Some(conn) = config.connect(provider, self.mode.into()) else {
+        let Some(conn) = config.connect(provider) else {
             return self.fail(
                 generation,
                 format!("no `connect` entry named `{provider}` for model `{model}`"),
@@ -222,7 +222,7 @@ impl Session {
                 drop: b.drop,
             },
         );
-        let system = prompt::system_prompt(config, true, self.mode);
+        let system = prompt::system_prompt(config, true);
         st.context = estimate_tokens(&messages(&st.records, b, &system));
         let text = format!(
             "Context compacted at {} tokens; now about {}.",

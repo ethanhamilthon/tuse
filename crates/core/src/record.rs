@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tuse_api::{ToolCall, Usage};
 
-/// One line of `session.jsonl`.
+/// One entry in the saved session log.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum Record {

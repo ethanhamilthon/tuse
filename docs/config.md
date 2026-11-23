@@ -1,72 +1,69 @@
 # Config
 
-Tuse runs one Lua file: `--config PATH`, else `./tuse.lua`, else `$TUSE_GLOBAL_CONFIG`, else
-`~/.config/tuse/main.lua`. The file returns a table. The system prompt and the default settings
-are built into the binary, so the table holds only what you change. `tuse reset` installs a fresh
-`main.lua`; `tuse update` never touches it.
+Tuse runs `--config PATH`, else `./tuse.lua`, else `$TUSE_GLOBAL_CONFIG` or
+`~/.config/tuse/main.lua`. The file returns a table. The defaults and system prompt are
+built into the binary. `tuse update` never touches your config.
 
-The file runs in the session's VM, the same one as the agent's code, hooks and tasks, so it can
-use everything of `docs("functions")`. Hooks and helpers are plain Lua functions, and locals of
-the file are their shared state. `MODE` is `tui` or `json`. Instead of the old `include`, `$VAR`
-and `#{{command}}`, use `require("name")` (a `name.lua` next to the config), `dofile(path)`,
-`os.getenv("VAR")` and `io.popen(cmd):read("a")` or `sh(cmd).out`. `/reload` runs the file again in
-the same VM: the agent's globals stay, the hooks and helpers are replaced.
+Configuration files execute as Lua code with your user permissions. Only load project
+configs and included files you trust. Hooks and helpers run in the session's Lua VM.
 
 ```lua
-local secrets = require("secrets")   -- secrets.lua next to this file
+local shared = require("shared")       -- ./shared.lua in the project
+local interactive = TUSE_MODE == "tui"
+
 return {
+  include = { os.getenv("TUSE_GLOBAL_CONFIG") },
   model = "c/claude-opus-5-5",
   effort = "medium",
-  settings = { retries = 3, ui = { input_design = "box" } },
-  systems = { "Answer in Russian." },
-  prompts = { review = "Review the diff for bugs." },
-  hooks = {
-    log = { events = {"user_message"}, run = function(e) print(e.text) end },
-  },
+  settings = { retries = 3 },
+  systems = { interactive and "Answer interactively." or "Keep responses concise." },
+  prompts = { review = shared.review },
 }
 ```
+
+## Include and require
+
+- `include` is a list of Lua config files to merge. Paths can be absolute, start with `~/`, or
+  be relative to the file that lists them. Files may include other config files. A cycle
+  is an error. Use the example above in a project config, not in the global file itself.
+- Files merge in list order, then the including file wins conflicts. `systems` and `models`
+  append; the last definition of a model name wins. `settings`, `settings.ui` and `theme`
+  merge key by key. Named `prompts`, `functions` and `hooks` replace whole entries on conflict.
+  An unset `TUSE_GLOBAL_CONFIG` makes the example's `include` empty.
+- `require("name")` loads a regular Lua module from the project's working directory
+  (`name.lua` or `name/init.lua`). It does not search beside an external config or include.
+  Lua caches modules loaded with `require`; `/reload` runs config files and includes again.
+- Use `TUSE_MODE` or `os.getenv("TUSE_MODE")` to branch on `tui` or `json` in Lua.
+  This describes the front end; it does not select one. Per-entry `modes` are not supported.
 
 ## Keys
 
 | Key | Meaning |
 | --- | --- |
-| `model` | Default model, `name` or `provider/name`. `/models` remembers a pick in the database, and it wins over this key. |
-| `provider` | The provider for `model` when it has no `provider/` prefix (default: the first one). |
-| `effort` | `default` (sends no `reasoning_effort`), `low`, `medium`, `high`, `xhigh`, `max`. |
-| `models` | List of `{name = "provider/model", display, window, compact_at, prices}`. `prices` are dollars per 1M tokens: `["in"]`, `out`, `cache` (cached reads) and `cache_write`. |
-| `settings.compact_at` | Context size that triggers compaction (0 turns it off). Unset: 60% of the model's `window` (off when the window is unknown). A model's `compact_at` wins. |
+| `include` | List of Lua config file paths, merged before this file. |
+| `model` | Default model, `name` or `provider/name`. A saved `/models` pick wins. |
+| `provider` | Provider for a model with no prefix (default: first saved provider). |
+| `effort` | `default` (omit `reasoning_effort`), `low`, `medium`, `high`, `xhigh`, `max`. |
+| `models` | List of `{name, display, window, compact_at, prices}`. Prices per million tokens: `["in"]`, `out`, `cache`, `cache_write`. |
+| `settings.compact_at` | Context size that triggers compaction. Unset: 60% of the model's `window`, when known; `0` disables it. The model override wins. |
 | `settings.max_image_bytes` | Largest image `read` sends to the model. Default 5242880. |
 | `settings.retries` | Retries for 429, 5xx and network errors, after 2, 5, 10, 20 and 30 s. Default 5. |
-| `systems` | Texts appended to the built-in system prompt; each item is a string or `{text, modes}`. |
-| `prompts` | `name = text` or `name = {text, modes}`. `#name` picked in the input sends the text along ([prompts.md](prompts.md)). |
-| `functions` | Named Lua helpers with `run` (a function), `description`, optional `args` and `modes`, see `docs("functions")`. |
-| `hooks` | `name = {events = {...}, run = function(e) ... end, modes?}`, see `docs("hooks")`. |
-| `settings.ui` | UI behavior and layout preferences, see `docs("theme")`. |
-| `theme` | `{bg = ..., ...}`: the 10 base colors, see `docs("theme")`. |
+| `systems` | List of strings appended to the built-in system prompt. |
+| `prompts` | Map of names to strings for [the `#` picker](prompts.md). |
+| `functions` | Map of named Lua helpers with `run`, `description`, optional `args` and `show_agent`. See [functions](functions.md). |
+| `hooks` | Map of named hooks `{events = {...}, run = function(e) ... end}`. See [hooks](hooks.md). |
+| `settings.ui` | UI behavior; see [theme](theme.md). |
+| `theme` | The 10 base colors; see [theme](theme.md). |
 
-## Providers
+## Providers and history
 
-Providers are not part of the config: `tuse connect` asks for a base URL, an API key and a name
-and saves them in `~/.tuse/tuse.db`. `tuse providers` lists them and `tuse disconnect NAME`
-removes one. A key written as `$VAR` is read from the environment when it is used.
+Providers come from SQLite, not the Lua config. Run
+`tuse connect --base URL --key '$ENV' --name NAME`, `tuse providers` or `tuse disconnect NAME`.
 
-## Modes
+`~/.tuse/tuse.db` (or `$TUSE_HOME/tuse.db`) stores providers, sessions, records and the last
+model/effort pick. Session subdirectories hold locks, task logs and images. SQLite history
+from 0.7.x remains readable. To import older `session.jsonl` history, open Tuse 0.7.2 with the
+same `TUSE_HOME` before moving to this version; 0.7.3 does not import it automatically.
 
-Run modes are `tui` (interactive TUI) and `json` (`tuse json`). Entries in `systems`, `prompts`,
-`functions` and `hooks` may set `modes = {"tui"}` (or any combination); omitted or empty enables
-the entry in all modes. For anything else, branch on `MODE` in the file.
-
-## Compaction
-
-Records stay intact; a compaction only moves two boundaries that every later request
-applies. The latest quarter of `compact_at` is sent unchanged. The quarter before it
-keeps tool calls but cuts their outputs to the first line. Everything older keeps
-only user and assistant text.
-
-## Files
-
-`~/.tuse/tuse.db` (or `$TUSE_HOME/tuse.db`, SQLite) holds the sessions and their records, the
-providers and the last picked model and effort. `~/.tuse/<id>/` holds the session's `lock`,
-`tasks/<id>.log` and pasted `images/`. A session can be open in one process only, and a process
-holds one session. Sessions of older versions (`session.jsonl` and `meta.json`) move into the
-database on the first start.
+Compaction only changes what the model receives, not the saved log. It keeps recent context
+intact, shortens older tool outputs, and keeps only the user/assistant text further back.

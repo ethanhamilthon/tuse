@@ -1,83 +1,63 @@
-use tuse_tui::{Field, Tone, ask, say};
+use crate::args::Args;
 
-/// `tuse connect`: asks for a provider, fetches its models and saves it to the database.
-pub fn run(theme: tuse_config::Theme) -> Result<(), String> {
-    let taken: Vec<String> = tuse_core::providers().into_iter().map(|c| c.name).collect();
+const FLAGS: &[&str] = &["--base", "--key", "--name"];
+const USAGE: &str = "tuse connect --base URL --key '$ENV' --name NAME";
 
-    let url = |v: &str| {
-        if v.starts_with("http://") || v.starts_with("https://") {
-            Ok(())
-        } else {
-            Err("the base url must start with http:// or https://".to_string())
-        }
-    };
-    let key = |v: &str| {
-        if v.is_empty() {
-            Err("the api key can't be empty".to_string())
-        } else {
-            Ok(())
-        }
-    };
-    let name = |v: &str| {
-        if v.is_empty() || v.contains(['/', ' ']) {
-            Err("the name can't be empty or contain `/` or spaces".to_string())
-        } else if taken.iter().any(|t| t == v) {
-            Err(format!(
-                "`{v}` already exists; `tuse disconnect {v}` removes it"
-            ))
-        } else {
-            Ok(())
-        }
-    };
-    let fields = [
-        Field {
-            label: "Base URL",
-            secret: false,
-            check: &url,
-        },
-        Field {
-            label: "API key ($ENV works too)",
-            secret: true,
-            check: &key,
-        },
-        Field {
-            label: "Name",
-            secret: false,
-            check: &name,
-        },
-    ];
-    let io = |e: std::io::Error| e.to_string();
-    let Some(a) = ask(&theme, &fields).map_err(io)? else {
+pub fn run(raw: &[String]) -> Result<(), String> {
+    if matches!(raw, [flag] if flag == "--help" || flag == "-h") {
+        println!("{USAGE}");
         return Ok(());
+    }
+    let args = Args::parse(raw, FLAGS)?;
+    if let Some(f) = args.unknown(FLAGS) {
+        return Err(format!("unknown flag {f}\nusage: {USAGE}"));
+    }
+    if !args.positional.is_empty() {
+        return Err(format!("usage: {USAGE}"));
+    }
+    let required = |flag| {
+        args.value(&[flag])
+            .filter(|v| !v.trim().is_empty())
+            .ok_or_else(|| format!("{flag} is required\nusage: {USAGE}"))
     };
-    let (base_url, api_key, name) = (&a[0], &a[1], &a[2]);
-
-    say(&theme, Tone::Notice, "Fetching models...").map_err(io)?;
-    let client = tuse_api::Client::new(base_url, &tuse_config::env_value(api_key));
-    let models = client
+    let base_url = required("--base")?;
+    let api_key = required("--key")?;
+    let name = required("--name")?;
+    if !base_url.starts_with("http://") && !base_url.starts_with("https://") {
+        return Err("the base URL must start with http:// or https://".into());
+    }
+    if name.contains('/') || name.chars().any(char::is_whitespace) {
+        return Err("the name can't contain `/` or whitespace".into());
+    }
+    if tuse_core::providers().iter().any(|p| p.name == name) {
+        return Err(format!(
+            "`{name}` already exists; `tuse disconnect {name}` removes it"
+        ));
+    }
+    let key = tuse_config::env_value(&api_key);
+    if key.trim().is_empty() {
+        return Err("the API key environment variable is unset or empty".into());
+    }
+    let models = tuse_api::Client::new(&base_url, &key)
         .models()
         .map_err(|e| format!("can't fetch models from {base_url}: {e}"))?;
     tuse_core::add_provider(&tuse_config::Connect {
         name: name.clone(),
-        base_url: base_url.clone(),
-        api_key: api_key.clone(),
-        modes: vec![],
+        base_url,
+        api_key,
     })?;
-    let msg = format!("Received {} models. Saved `{name}`.", models.len());
-    say(&theme, Tone::Notice, &msg).map_err(io)
+    println!("Received {} models. Saved `{name}`.", models.len());
+    Ok(())
 }
 
-/// `tuse disconnect NAME`: removes a provider.
 pub fn remove(name: &str) -> Result<(), String> {
-    if tuse_core::remove_provider(name)? {
-        println!("Removed `{name}`");
-        Ok(())
-    } else {
-        Err(format!("no provider `{name}`"))
+    if !tuse_core::remove_provider(name)? {
+        return Err(format!("no provider `{name}`"));
     }
+    println!("Removed `{name}`");
+    Ok(())
 }
 
-/// `tuse providers`: the saved providers, keys hidden.
 pub fn list() {
     for p in tuse_core::providers() {
         println!("{}\t{}", p.name, p.base_url);

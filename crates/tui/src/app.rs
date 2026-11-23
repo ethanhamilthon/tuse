@@ -62,7 +62,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(session: Arc<Session>, cwd: PathBuf, config_arg: Option<PathBuf>) -> App {
+    pub fn new(session: Arc<Session>, config_arg: Option<PathBuf>) -> App {
+        let cwd = session.cwd.clone();
         let palette = Palette::from_config(&session.config());
         let events = session.subscribe();
         let config = session.config();
@@ -155,9 +156,7 @@ impl App {
                 }
             }
         };
-        let cwd = self.cwd.clone();
-        let arg = self.config_arg.clone();
-        *self = App::new(session, cwd, arg);
+        *self = App::new(session, self.config_arg.clone());
         if let Some(e) = err {
             self.error(e);
         }
@@ -191,7 +190,7 @@ pub fn test_app(name: &str) -> App {
         resume: None,
     })
     .unwrap();
-    App::new(s, cwd, None)
+    App::new(s, None)
 }
 #[cfg(test)]
 pub fn cleanup(app: App) {

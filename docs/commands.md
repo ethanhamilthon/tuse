@@ -2,50 +2,30 @@
 
 ## CLI
 
-- `tuse [--config PATH] [--resume ID]` opens the TUI.
-  - `-c`, `--config PATH`: use this config file instead of `./tuse.lua` or the global
-    `main.lua` (relative to the working directory).
-  - `-r`, `--resume ID`: open the saved session `ID` (the ID Tuse prints to stderr on exit, or
-    the folder name in `~/.tuse/`) instead of a new one; `/resume` picks one inside the TUI.
-- `tuse json [-c PATH] [-r ID]` serves the session over JSON-RPC 2.0 on stdin/stdout. See
-  `docs("json")`.
-- `tuse connect` adds a provider.
-- `tuse reset [--yes]` replaces the global config folder with the latest `main.lua`. It deletes
-  everything in that folder.
-- `tuse update` updates the binary; `main.lua` is not touched.
-- `tuse connect` adds a provider, `tuse providers` lists them, `tuse disconnect NAME` removes one;
-  they live in `~/.tuse/tuse.db`.
+- `tuse [--config PATH] [--resume ID]` opens the TUI. `--config` (`-c`) picks the config;
+  `--resume` (`-r`) opens a saved session. Tuse prints the session ID on exit.
+- `tuse json [-c PATH] [-r ID]` serves one session over [JSON-RPC stdio](json.md).
+- `tuse connect --base URL --key '$ENV' --name NAME` verifies and saves a provider.
+  Quote `$ENV` to store an environment-variable reference rather than passing a literal key.
+- `tuse providers` lists providers; `tuse disconnect NAME` removes one.
+- `tuse update` updates the binary without touching your config.
 
-## TUI and slash commands
+## TUI
 
-When the user sends a message in the TUI during a turn, it stays dimmed in the input until
-the agent takes it. Editing the waiting message withdraws it without stopping the turn;
-Enter sends the edited draft.
+- `/new` starts a session; `/resume` picks a saved session from the current folder.
+- `/models` sets the session model and effort and remembers the pick for new sessions.
+  `/reload` and `/resume` do not change an existing session's model.
+- `/tasks` lists tasks; Enter shows the log and Ctrl+X stops the selected task.
+- `/usage` shows context, tokens and spend. The model window comes from config; unknown is `?`.
+- `/trace` opens the full session log in one scrollable panel, starting at the latest entries.
+  Use the wheel or Page Up/Down to scroll and Esc to close.
+- `/config` shows the resolved config without providers or Lua function bodies.
+- `/reload` runs config files again; `/quit` exits.
 
-`/new`, `/resume`, `/models`, `/tasks`, `/childrens`, `/usage`, `/trace`, `/config`, `/reload`, `/quit`.
-The input status shows context use as `used/max`, e.g. `5.2k/1m`. The maximum is the model's `window` from the config; without it the status shows `5.2k/?`.
-A question that arrives while another list is open waits and appears when that list closes.
-Every list (`/resume`, `/models`, `/tasks`, `/childrens`, `/trace`, and the `/`, `#` and `@`
-pickers) has one look: a rule on top, a title with the position, the rows, all drawn over the
-bottom of the chat. Typing filters most lists: the input becomes the search box (one line, with the usual editing keys and mouse), your draft is set aside and comes back when the list closes. `/usage` and a task's output
-open as text in the same frame (Esc closes it). `/trace` is a list, one row per item (`system`,
-`user`, `agent`, `thinking`, `lua`, `tool`, `output`, `notification`, `notice`, `error`, `hook`); Enter opens the item in full
-(with Left/Right to step between items and Esc back to the list). In the query, `+type` shows only
-that type (`+lua+agent`: either), `-type` hides one (`-hook`: all but hooks), and other words
-search the rows (`+lua read`). An unknown type shows nothing.
+Pickers match substrings without regard to case. When a picker uses the input as a search
+box, your draft comes back on close. A message queued during a turn stays dimmed in the
+input until the agent takes it. Editing it withdraws it; Enter sends the edited draft.
 
-`/childrens` lists all descendants of the session, at any depth, running and finished: sessions whose
-meta has `parent` set (from `TUSE_PARENT`, see `env.md`), indented per level. A row shows the
-name (title or short ID), `running` (its session lock is held) or `done`, the elapsed time,
-and input+output tokens and the spend (only for models with `prices`; the detail view also has the folder, cached tokens and context used/max, `?` when the model's window is unknown). A row with children also shows `all` (subtree) totals. Rows are compact (status, elapsed, total tokens and spend); Enter opens every field of the row (full ID, folder, in/out/cached, context, spend, subtree totals), Esc goes back to the list. A child that sets `TUSE_PARENT` shows up as soon as it starts, before its first prompt. Nothing is locked or changed.
-
-The chat scrolls with the mouse wheel only; the arrows move in the input, and a click in the input
-puts the cursor there. Links (Markdown, bare `https://` URLs, OSC 8) light up under the pointer and open on click. Drag to select rendered text; Ctrl/Cmd+C copies it. In the input, Shift+movement extends the selection, Ctrl/Cmd+A selects all, and Ctrl/Cmd+X cuts.
-
-A session keeps its own model and effort. `/models` changes them in the config and in the
-current session; a new session takes them from the config; `/resume` and `/reload` do not
-change the model of an old session.
-
-`/config` opens the resolved configuration as JSON (functions and providers left out). Esc closes the panel.
-
-Shortcuts also work with the Russian keyboard layout when the terminal reports modified Cyrillic keys (for example, with the kitty keyboard protocol).
+Use the mouse wheel to scroll the chat, click an input cell to place the cursor, and drag
+to select text. Ctrl/Cmd+C copies it. Click a highlighted link to open it. Shift+movement
+extends an input selection; Ctrl/Cmd+A selects all and Ctrl/Cmd+X cuts.

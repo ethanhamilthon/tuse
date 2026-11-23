@@ -26,7 +26,6 @@ mod trace;
 mod turn;
 mod usage;
 
-pub use config_lua::theme;
 pub use control::InputId;
 pub use db::{add_provider, providers, remove_provider};
 pub use docs::docs;

@@ -95,7 +95,6 @@ pub fn setup(name: &str, addr: &str, extra: &str) -> (PathBuf, PathBuf) {
         name: "p".into(),
         base_url: format!("http://{addr}"),
         api_key: "k".into(),
-        modes: vec![],
     })
     .unwrap();
     let cfg = dir.join("tuse.lua");

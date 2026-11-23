@@ -1,107 +1,152 @@
+use crate::Mode;
 use crate::host::to_json;
-use std::path::Path;
-use std::sync::Arc;
-use tuse_config::{Config, Mode};
+use std::path::{Path, PathBuf};
+use tuse_config::Config;
 use tuse_lua::mlua::{self, Function, Lua, Table, Value};
 
-/// Loads the config and makes it the active one at once.
-pub(crate) fn load(lua: &Lua, path: Option<&Path>, mode: Mode) -> Result<Config, String> {
-    let c = prepare(lua, path, mode)?;
-    commit(lua, &c, mode)?;
-    Ok(c)
+/// Sets up the project-only Lua module path and exposes the front end as `TUSE_MODE`.
+pub(crate) fn setup(lua: &Lua, cwd: &Path, mode: Mode) -> mlua::Result<()> {
+    let globals = lua.globals();
+    let mode = mode.name();
+    globals.set("TUSE_MODE", mode)?;
+    let os: Table = globals.get("os")?;
+    let getenv: Function = os.get("getenv")?;
+    os.set(
+        "getenv",
+        lua.create_function(move |lua, name: mlua::LuaString| {
+            if name.as_bytes().as_ref() == b"TUSE_MODE" {
+                Ok(Value::String(lua.create_string(mode)?))
+            } else {
+                getenv.call::<Value>(name)
+            }
+        })?,
+    )?;
+    let package: Table = globals.get("package")?;
+    let cwd = cwd.display();
+    package.set("path", format!("{cwd}/?.lua;{cwd}/?/init.lua"))?;
+    package.set("cpath", "")
 }
 
-/// Runs the config file in the VM and builds the config from the table it returns.
-/// The table waits in the registry until `commit`; the active hooks stay until then.
-pub(crate) fn prepare(lua: &Lua, path: Option<&Path>, mode: Mode) -> Result<Config, String> {
+/// Builds the config and stages its Lua functions until `commit`.
+pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     let table = match path {
-        Some(p) => {
-            run_file(lua, p, mode).map_err(|e| format!("{name}: {}", tuse_lua::message(&e)))?
-        }
+        Some(p) => read_file(lua, p, &mut Vec::new())?,
         None => lua.create_table().map_err(|e| e.to_string())?,
     };
     let mut config = tuse_config::from_value(to_json(lua, Value::Table(table.clone())), &name)?;
-    check_code(&table, &mut config, &name)?;
+    for (key, names) in [
+        ("hooks", config.hooks.keys().cloned().collect::<Vec<_>>()),
+        ("functions", config.functions.keys().cloned().collect()),
+    ] {
+        for n in names {
+            if entry(&table, key, &n).is_some_and(|t| t.contains_key("modes").unwrap_or(false)) {
+                return Err(format!(
+                    "{name}: {key}.{n}.modes was removed; branch on TUSE_MODE"
+                ));
+            }
+            if code(&table, key, &n).is_none() {
+                return Err(format!("{name}: {key}.{n}.run must be a function"));
+            }
+        }
+    }
     lua.set_named_registry_value("tuse.next", table)
         .map_err(|e| e.to_string())?;
     crate::store::apply_state(&mut config);
     Ok(config)
 }
 
-/// Hooks and functions now come from the prepared table.
-pub(crate) fn commit(lua: &Lua, config: &Config, mode: Mode) -> Result<(), String> {
-    let t: Table = lua
-        .named_registry_value("tuse.next")
-        .map_err(|e| e.to_string())?;
-    lua.set_named_registry_value("tuse.config", t)
-        .map_err(|e| e.to_string())?;
-    define_functions(lua, config, mode)
-}
-
-fn run_file(lua: &Lua, path: &Path, mode: Mode) -> mlua::Result<Table> {
-    let src = std::fs::read_to_string(path).map_err(|e| mlua::Error::runtime(e.to_string()))?;
-    let g = lua.globals();
-    g.set(
-        "MODE",
-        match mode {
-            Mode::Tui => "tui",
-            Mode::Json => "json",
-        },
-    )?;
-    if let Some(dir) = path.parent() {
-        let package: Table = g.get("package")?;
-        let old: String = package.get("path")?;
-        let own = format!("{}/?.lua;{}/?/init.lua;", dir.display(), dir.display());
-        if !old.starts_with(&own) {
-            package.set("path", format!("{own}{old}"))?;
+fn read_file(lua: &Lua, path: &Path, stack: &mut Vec<PathBuf>) -> Result<Table, String> {
+    let error = |e: mlua::Error| format!("{}: {}", path.display(), tuse_lua::message(&e));
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    if stack.contains(&canonical) || stack.len() >= 32 {
+        return Err(format!(
+            "{}: cyclic config include or too many nested includes",
+            path.display()
+        ));
+    }
+    stack.push(canonical);
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let source = match lua
+        .load(text)
+        .set_name(format!("@{}", path.display()))
+        .eval()
+        .map_err(error)?
+    {
+        Value::Table(t) => t,
+        Value::Nil => lua.create_table().map_err(error)?,
+        _ => {
+            return Err(format!(
+                "{}: the config must return a table",
+                path.display()
+            ));
+        }
+    };
+    let out = lua.create_table().map_err(error)?;
+    if let Some(includes) = source.raw_get::<Option<Table>>("include").map_err(error)? {
+        let bad = || format!("{}: include must be a list of paths", path.display());
+        let mut paths = Vec::new();
+        for value in includes.clone().sequence_values::<Value>() {
+            let Value::String(path) = value.map_err(error)? else {
+                return Err(bad());
+            };
+            paths.push(path.to_str().map_err(error)?.to_string());
+        }
+        if includes.pairs::<Value, Value>().count() != paths.len() {
+            return Err(bad());
+        }
+        let dir = path.parent().unwrap_or_else(|| Path::new("."));
+        for file in paths {
+            let module = read_file(lua, &tuse_config::resolve_path(&file, dir), stack)?;
+            merge(lua, &out, module, "").map_err(error)?;
         }
     }
-    let v: Value = lua
-        .load(src)
-        .set_name(format!("@{}", path.display()))
-        .eval()?;
-    match v {
-        Value::Table(t) => Ok(t),
-        Value::Nil => lua.create_table(),
-        _ => Err(mlua::Error::runtime("the config must return a table")),
-    }
+    merge(lua, &out, source, "").map_err(error)?;
+    stack.pop();
+    Ok(out)
 }
 
-/// Every hook needs `run`, every function `run`, and both must be Lua functions.
-fn check_code(t: &Table, config: &mut Config, name: &str) -> Result<(), String> {
-    for (key, names) in [
-        ("hooks", config.hooks.keys().cloned().collect::<Vec<_>>()),
-        ("functions", config.functions.keys().cloned().collect()),
-    ] {
-        for n in names {
-            if code(t, key, &n).is_none() {
-                return Err(format!("{name}: {key}.{n}.run must be a function"));
+/// Config sections merge by key, lists append, and named prompts, helpers and hooks replace.
+fn merge(lua: &Lua, out: &Table, source: Table, section: &str) -> mlua::Result<()> {
+    for pair in source.pairs::<String, Value>() {
+        let (key, value) = pair?;
+        match (section, key.as_str(), value) {
+            ("", "include", _) => {}
+            ("", "settings" | "theme" | "prompts" | "functions" | "hooks", Value::Table(t))
+            | ("settings", "ui", Value::Table(t)) => {
+                merge(lua, &section_table(lua, out, &key)?, t, &key)?;
             }
+            ("", "systems" | "models", Value::Table(t)) => {
+                let list = section_table(lua, out, &key)?;
+                for value in t.sequence_values::<Value>() {
+                    list.raw_push(value?)?;
+                }
+            }
+            (_, _, value) => out.raw_set(key, value)?,
         }
     }
     Ok(())
 }
 
-/// `config.<key>.<name>.run` of the config table in the registry.
-pub(crate) fn code_of(lua: &Lua, key: &str, name: &str) -> Option<Function> {
-    let t: Table = lua.named_registry_value("tuse.config").ok()?;
-    code(&t, key, name)
+fn section_table(lua: &Lua, out: &Table, key: &str) -> mlua::Result<Table> {
+    if let Value::Table(t) = out.raw_get(key)? {
+        return Ok(t);
+    }
+    let t = lua.create_table()?;
+    out.raw_set(key, &t)?;
+    Ok(t)
 }
 
-fn code(t: &Table, key: &str, name: &str) -> Option<Function> {
-    let entries: Table = t.get(key).ok()?;
-    let e: Table = entries.get(name).ok()?;
-    e.get::<Function>("run").ok()
-}
-
-/// Each function of the config becomes a global of the VM.
-fn define_functions(lua: &Lua, config: &Config, mode: Mode) -> Result<(), String> {
-    for (name, f) in &config.functions {
-        if !f.matches(mode) {
-            continue;
-        }
-        if let Some(run) = code_of(lua, "functions", name) {
+pub(crate) fn commit(lua: &Lua, config: &Config) -> Result<(), String> {
+    let t: Table = lua
+        .named_registry_value("tuse.next")
+        .map_err(|e| e.to_string())?;
+    lua.set_named_registry_value("tuse.config", &t)
+        .map_err(|e| e.to_string())?;
+    for name in config.functions.keys() {
+        if let Some(run) = code(&t, "functions", name) {
             lua.globals()
                 .set(name.as_str(), run)
                 .map_err(|e| e.to_string())?;
@@ -110,14 +155,15 @@ fn define_functions(lua: &Lua, config: &Config, mode: Mode) -> Result<(), String
     Ok(())
 }
 
-/// The theme of the config for `cwd`, read in a VM of its own (for `tuse connect`).
-pub fn theme(cwd: &Path) -> tuse_config::Theme {
-    let path = tuse_config::find(None, cwd);
-    let vm = tuse_lua::Vm::new(
-        Arc::new(crate::host::SessionHost(Default::default())),
-        |_| {},
-    );
-    vm.call(move |lua| load(lua, path.as_deref(), Mode::Tui))
-        .map(|c| c.theme)
-        .unwrap_or_default()
+pub(crate) fn code_of(lua: &Lua, key: &str, name: &str) -> Option<Function> {
+    let t: Table = lua.named_registry_value("tuse.config").ok()?;
+    code(&t, key, name)
+}
+
+fn code(t: &Table, key: &str, name: &str) -> Option<Function> {
+    entry(t, key, name)?.get("run").ok()
+}
+
+fn entry(t: &Table, key: &str, name: &str) -> Option<Table> {
+    t.get::<Table>(key).ok()?.get(name).ok()
 }

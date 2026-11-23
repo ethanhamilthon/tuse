@@ -7,12 +7,12 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "tool",
-        "Python REPL tool, limits, timeout, imports",
+        "Lua tool, limits, timeouts and modules",
         include_str!("../../../docs/tool.md"),
     ),
     (
         "functions",
-        "Built-in Python functions (read, write, edit, grep, sh, task_*, docs)",
+        "Built-in Lua functions (read, write, edit, grep, sh, task_*, docs)",
         include_str!("../../../docs/functions.md"),
     ),
     (
@@ -32,7 +32,7 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "config",
-        "Config merging, expansion, keys, compaction and files",
+        "Config includes, keys, compaction and files",
         include_str!("../../../docs/config.md"),
     ),
     (

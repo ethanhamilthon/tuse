@@ -22,8 +22,7 @@ CREATE TABLE IF NOT EXISTS records (
 CREATE TABLE IF NOT EXISTS providers (
     name TEXT PRIMARY KEY,
     base_url TEXT NOT NULL,
-    api_key TEXT NOT NULL,
-    modes TEXT NOT NULL DEFAULT ''
+    api_key TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS state (
     key TEXT PRIMARY KEY,
@@ -72,15 +71,12 @@ pub fn set_state(key: &str, value: &str) -> Result<(), String> {
 /// Providers saved by `tuse connect`.
 pub fn providers() -> Vec<tuse_config::Connect> {
     with(|c| {
-        let mut q =
-            c.prepare("SELECT name, base_url, api_key, modes FROM providers ORDER BY rowid")?;
+        let mut q = c.prepare("SELECT name, base_url, api_key FROM providers ORDER BY rowid")?;
         let rows = q.query_map([], |r| {
-            let modes: String = r.get(3)?;
             Ok(tuse_config::Connect {
                 name: r.get(0)?,
                 base_url: r.get(1)?,
                 api_key: r.get(2)?,
-                modes: serde_json::from_str(&modes).unwrap_or_default(),
             })
         })?;
         rows.collect()
@@ -89,12 +85,11 @@ pub fn providers() -> Vec<tuse_config::Connect> {
 }
 
 pub fn add_provider(p: &tuse_config::Connect) -> Result<(), String> {
-    let modes = serde_json::to_string(&p.modes).unwrap_or_default();
     with(|c| {
         c.execute(
-            "INSERT INTO providers(name, base_url, api_key, modes) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3, modes = ?4",
-            params![p.name, p.base_url, p.api_key, modes],
+            "INSERT INTO providers(name, base_url, api_key) VALUES (?1, ?2, ?3)
+             ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3",
+            params![p.name, p.base_url, p.api_key],
         )
         .map(|_| ())
     })

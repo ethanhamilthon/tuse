@@ -9,7 +9,7 @@ The theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name 
 `dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default:
 
 - `bg` (`#121212`): main background, including lists and panels.
-- `surface` (`#1E1E1E`): elevated background (user messages, shown as a block without `›`; the `fill` input); lists and panels do not use it.
+- `surface` (`#1E1E1E`): elevated background (user messages, shown as a block without `›`); lists and panels do not use it.
 - `fg` (`#DEDEDE`): primary text and code blocks.
 - `dim` (`#BDBDBD`): secondary text (quotes, list details, notices, the scroll mark).
 - `muted` (`#929292`): subtle text (tool output, reasoning, syntax comments, inactive list items, status bars).
@@ -29,7 +29,6 @@ return {
 
 UI behavior and layout live under `settings.ui`, apart from the colors:
 
-- `input_design`: `lines` (default), `box`, `fill` or `bar`.
 - `fold_strings`: `true` (default) or `false`. Folds multiline Lua long strings (`[[...]]`) in chat
   tool calls to a single line (`[[first line…]]`). `/trace` always shows the full code.
 - Lines shown in the chat (`0` hides the block, `-1` removes the limit): `tool_line` (`-1`),
@@ -39,7 +38,7 @@ UI behavior and layout live under `settings.ui`, apart from the colors:
 
 ### Input design
 
-Each design shows the input and two status bars: working (spinner, elapsed time and the current
+The input is framed by two rules with status labels: working (spinner, elapsed time and the current
 action (`reading PATH...`, `writing PATH...`, `editing PATH...`, `searching PATTERN...`, `running CMD...`; each stays at least 100 ms), or `steering…` while a queued message waits) and the model (model, effort,
 context, cost).
 
@@ -47,9 +46,3 @@ Colors of the two bars: the spinner and time are `accent`, the action is `muted`
 bar everything is `muted` except the used context (`x` of `x/y`), which is `accent`. A notice
 flashed in the working place (a copy, an error) is `accent`; the scroll mark `↑N` is `dim`.
 Each of the two labels takes at most half the width and is cut with `…`.
-
-- `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.
-- `box`: a frame around the input with the same two labels on its borders.
-- `fill`: the input is a `surface` block (a blank row above and below, one column of padding, no
-  `›`); one status row below, working on the left and the model on the right.
-- `bar`: an `accent` vertical bar left of the input (no `›`), a blank row, then the same status row.

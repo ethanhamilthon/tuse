@@ -16,7 +16,7 @@ use tuse_config::Config;
 pub struct Session {
     pub id: String,
     pub cwd: PathBuf,
-    pub mode: Mode,
+    pub(crate) mode: Mode,
     pub tasks: Tasks,
     pub(crate) dir: Mutex<Option<SessionDir>>,
     pub(crate) config: RwLock<(u64, Arc<Config>)>,
@@ -58,14 +58,26 @@ pub(crate) struct State {
 }
 
 impl Session {
-    pub fn open(opts: Options) -> Result<Arc<Session>, String> {
+    pub fn open(mut opts: Options) -> Result<Arc<Session>, String> {
         let id = opts
             .resume
             .clone()
             .unwrap_or_else(crate::id::new_session_id);
-        if opts.resume.is_some() && crate::store::read_meta(&id).is_none() {
-            return Err(format!("no session {id}"));
-        }
+        let meta = if opts.resume.is_some() {
+            let meta = crate::store::read_meta(&id).ok_or_else(|| format!("no session {id}"))?;
+            let cwd = PathBuf::from(&meta.cwd);
+            if cwd.is_dir() {
+                opts.cwd = cwd;
+            }
+            meta
+        } else {
+            Meta {
+                id: id.clone(),
+                cwd: opts.cwd.display().to_string(),
+                created: crate::id::now(),
+                ..Default::default()
+            }
+        };
         let mut dir = SessionDir::open(&id, opts.resume.is_none())?;
         let (vm, weak, config) = start_vm(&opts)?;
         let mut records = dir.records();
@@ -73,20 +85,14 @@ impl Session {
             dir.append(&r);
             records.push(r);
         }
-        let meta = crate::store::read_meta(&id).unwrap_or_else(|| Meta {
-            id: id.clone(),
-            cwd: opts.cwd.display().to_string(),
-            created: crate::id::now(),
-            ..Default::default()
-        });
         if opts.resume.is_none() {
-            let r = crate::control::initial_settings(&config, opts.mode);
+            let r = crate::control::initial_settings(&config);
             dir.append(&r);
             records.push(r);
         }
         let mut st = State {
             bounds: Bounds::default(),
-            model: crate::control::or_default(&meta.model, config.default_model(opts.mode.into())),
+            model: crate::control::or_default(&meta.model, config.default_model()),
             effort: crate::control::or_default(&meta.effort, config.default_effort()),
             busy: false,
             turn_error: None,
@@ -124,16 +130,11 @@ impl Session {
         st.stats = (crate::usage::Stats::of(&records, &config), config.clone());
         st.records = records;
         let path = dir.path.clone();
-        let cwd = PathBuf::from(&st.meta.cwd);
         let s = Arc::new_cyclic(|me| {
             *weak.lock().unwrap() = me.clone();
             Session {
                 id,
-                cwd: if opts.resume.is_some() && cwd.is_dir() {
-                    cwd
-                } else {
-                    opts.cwd
-                },
+                cwd: opts.cwd,
                 mode: opts.mode,
                 tasks: Tasks::new(path.join("tasks")),
                 dir: Mutex::new(Some(dir)),
@@ -181,15 +182,14 @@ impl Session {
     /// `process_end` runs on the old hooks, then `process_start` on the new ones.
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
-        let mode = self.mode.into();
         let c = self
             .vm
-            .call(move |lua| crate::config_lua::prepare(lua, path.as_deref(), mode))?;
+            .call(move |lua| crate::config_lua::prepare(lua, path.as_deref()))?;
         self.finish_hooks("reload");
         let c = Arc::new(c);
         let c2 = c.clone();
         self.vm
-            .call(move |lua| crate::config_lua::commit(lua, &c2, mode))?;
+            .call(move |lua| crate::config_lua::commit(lua, &c2))?;
         self.swap_config(c);
         self.hooks_on
             .store(true, std::sync::atomic::Ordering::Release);
@@ -208,13 +208,22 @@ impl Session {
 /// gets a slot that `open` fills.
 fn start_vm(opts: &Options) -> Result<(tuse_lua::Vm, crate::host::Slot, Config), String> {
     let slot = crate::host::Slot::default();
-    let vm = tuse_lua::Vm::new(Arc::new(crate::host::SessionHost(slot.clone())), |_| {});
-    let path = tuse_config::find(opts.config.as_deref(), &opts.cwd);
-    let mode = opts.mode.into();
+    let cwd = opts.cwd.clone();
+    let host = crate::host::SessionHost {
+        slot: slot.clone(),
+        cwd: cwd.clone(),
+        mode: opts.mode,
+    };
+    let vm = tuse_lua::Vm::new(Arc::new(host), |_| {});
+    let path = tuse_config::find(opts.config.as_deref(), &cwd);
+    let mode = opts.mode;
     let s2 = slot.clone();
     let config = vm.call(move |lua| {
         crate::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
-        crate::config_lua::load(lua, path.as_deref(), mode)
+        crate::config_lua::setup(lua, &cwd, mode).map_err(|e| tuse_lua::message(&e))?;
+        let config = crate::config_lua::prepare(lua, path.as_deref())?;
+        crate::config_lua::commit(lua, &config)?;
+        Ok::<_, String>(config)
     })?;
     Ok((vm, slot, config))
 }

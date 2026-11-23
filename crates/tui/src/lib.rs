@@ -9,7 +9,6 @@ mod editor;
 mod events;
 mod files;
 mod fold;
-mod inline;
 mod input_view;
 mod keys;
 mod layout_keys;
@@ -49,14 +48,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tuse_core::{Event, Session};
 
-pub use inline::{Field, Tone, ask, say};
-
 /// Runs the full-screen UI until the user quits; returns the last session ID.
-pub fn run(
-    session: Arc<Session>,
-    cwd: PathBuf,
-    config_arg: Option<PathBuf>,
-) -> std::io::Result<String> {
+pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Result<String> {
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     for sig in [
         signal_hook::consts::SIGINT,
@@ -73,7 +66,7 @@ pub fn run(
         restore();
         prev(info);
     }));
-    main_loop(app::App::new(session, cwd, config_arg), &stop)
+    main_loop(app::App::new(session, config_arg), &stop)
 }
 
 /// Restores the terminal on every way out of `run` (return, `?`, unwinding).

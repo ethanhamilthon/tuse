@@ -35,8 +35,8 @@ pub(crate) type Runs = Arc<Mutex<HashMap<String, Lane>>>;
 /// Variables every hook gets; the trace lists only the event's own.
 const COMMON: &[&str] = &["event", "hook", "session", "cwd", "model", "config"];
 
-fn listens(hook: &tuse_config::Hook, mode: tuse_config::Mode, event: &str) -> bool {
-    hook.matches(mode) && hook.events.iter().any(|e| e == event)
+fn listens(hook: &tuse_config::Hook, event: &str) -> bool {
+    hook.events.iter().any(|e| e == event)
 }
 
 impl Session {
@@ -45,11 +45,10 @@ impl Session {
             return;
         }
         let config = self.config();
-        let mode = self.mode.into();
         let config_path = tuse_config::find(self.config_arg.as_deref(), &self.cwd)
             .map(|p| p.display().to_string());
         for (name, hook) in &config.hooks {
-            if !listens(hook, mode, event) {
+            if !listens(hook, event) {
                 continue;
             }
             let vars = json!({
@@ -182,12 +181,11 @@ impl Session {
     }
 
     pub(crate) fn agent_message_hook(self: &Arc<Self>, text: String, status: &'static str) {
-        let mode = self.mode.into();
         if !self
             .config()
             .hooks
             .values()
-            .any(|h| listens(h, mode, "agent_message"))
+            .any(|h| listens(h, "agent_message"))
         {
             return;
         }

@@ -26,45 +26,6 @@ fn write(path: &Path, data: &[u8]) -> Result<(), String> {
     std::fs::write(path, data).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// The folder of the global config and the config file itself.
-fn global() -> Result<(PathBuf, PathBuf), String> {
-    let file = tuse_config::global_path();
-    let dir = file.parent().filter(|d| !d.as_os_str().is_empty());
-    match dir {
-        Some(d) if d != tuse_config::home() && d.parent().is_some() => {
-            Ok((d.to_path_buf(), file.clone()))
-        }
-        _ => Err(format!(
-            "refusing to reset {}: its folder is the home or the root",
-            file.display()
-        )),
-    }
-}
-
-/// `tuse reset`: replaces the global config folder with the latest `main.lua`.
-pub fn reset(yes: bool) -> Result<(), String> {
-    let (dir, file) = global()?;
-    let main = get("main.lua")?;
-    if dir.exists() {
-        if !yes && !confirm(&dir) {
-            return Err("cancelled".into());
-        }
-        std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    write(&file, &main)?;
-    println!("Config reset in {}", dir.display());
-    Ok(())
-}
-
-fn confirm(dir: &Path) -> bool {
-    eprint!(
-        "Delete {} and install fresh config files? [y/N] ",
-        dir.display()
-    );
-    let mut answer = String::new();
-    std::io::stdin().read_line(&mut answer).is_ok() && answer.trim().eq_ignore_ascii_case("y")
-}
-
 /// `tuse update`: replaces this binary with the latest release.
 pub fn update() -> Result<(), String> {
     let old = env!("CARGO_PKG_VERSION");

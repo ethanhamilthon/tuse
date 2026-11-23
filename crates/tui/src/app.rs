@@ -19,6 +19,11 @@ pub struct InputArea {
     pub cols: usize,
 }
 
+pub struct QuestionPrompt {
+    pub id: u64,
+    pub panel: Panel,
+}
+
 pub struct App {
     pub session: Arc<Session>,
     pub events: Receiver<Event>,
@@ -34,6 +39,7 @@ pub struct App {
     pub hover: Option<u32>,
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
+    pub question: Option<QuestionPrompt>,
     /// Rows the open list shows (set while drawing); the keys keep the selection in view.
     pub list_rows: usize,
     pub input_area: Option<InputArea>,
@@ -66,8 +72,7 @@ impl App {
         let cwd = session.cwd.clone();
         let palette = Palette::from_config(&session.config());
         let events = session.subscribe();
-        let config = session.config();
-        let mut chat = session.with_records(|r| Chat::from_records(r, &|m| config.display_name(m)));
+        let mut chat = Chat::from_session(&session);
         for p in session.config().problems() {
             chat.push(Entry::Notice(p));
         }
@@ -85,6 +90,7 @@ impl App {
             hover: None,
             picker: None,
             panel: None,
+            question: None,
             list_rows: 8,
             input_area: None,
             dismissed: None,

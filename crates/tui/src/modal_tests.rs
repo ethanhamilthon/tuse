@@ -85,3 +85,62 @@ fn model_to_effort_keeps_the_draft_and_a_refresh_keeps_the_search() {
     assert_eq!(app.editor.text(), "draft");
     crate::app::cleanup(app);
 }
+
+#[test]
+fn lua_picker_disables_editor_question_uses_separate_input_and_pinned_stays_last() {
+    let mut app = crate::app::test_app("modal-lua-ui");
+    app.paste("keep draft");
+
+    // show_markdown: pinned stays at end even after later messages; update avoids duplicates.
+    app.handle_event(tuse_core::Event::UiMarkdown {
+        name: "p".into(),
+        text: "PINNED".into(),
+        pin: true,
+        removed: false,
+    });
+    app.handle_event(tuse_core::Event::UiMarkdown {
+        name: "u".into(),
+        text: "UNPIN1".into(),
+        pin: false,
+        removed: false,
+    });
+    app.handle_event(tuse_core::Event::UiMarkdown {
+        name: "u".into(),
+        text: "UNPIN2".into(),
+        pin: false,
+        removed: false,
+    });
+    app.notice("LATER");
+    let (lines, _) = app.chat.window(60, &app.palette, 0, 20);
+    let rendered: Vec<String> = lines
+        .iter()
+        .map(|l| l.iter().map(|s| s.text.as_str()).collect::<String>())
+        .filter(|s| !s.trim().is_empty())
+        .collect();
+    assert_eq!(rendered.last().unwrap().trim(), "PINNED", "{rendered:?}");
+    assert!(
+        rendered.iter().any(|l| l.contains("UNPIN2"))
+            && !rendered.iter().any(|l| l.contains("UNPIN1"))
+    );
+
+    // Lua picker disables typing & paste and restores draft on Esc.
+    app.open_lua_picker(1, vec!["one".into(), "two".into()]);
+    assert!(app.input_disabled() && app.editor.is_empty());
+    type_text(&mut app, "two");
+    app.paste("ignored");
+    assert!(app.editor.is_empty());
+    press(&mut app, KeyCode::Down, KeyModifiers::NONE);
+    assert_eq!(app.picker.as_ref().unwrap().current().unwrap().value, "two");
+    press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+    assert!(app.picker.is_none() && app.editor.text() == "keep draft");
+
+    // Lua question uses editor separately, does not submit to model, restores draft on Enter.
+    app.open_question(2, "## Pick a name".into());
+    assert!(app.answering() && app.editor.is_empty());
+    type_text(&mut app, "my answer");
+    assert_eq!(app.editor.text(), "my answer");
+    press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+    assert!(app.question.is_none() && !app.session.busy());
+    assert_eq!(app.editor.text(), "keep draft");
+    crate::app::cleanup(app);
+}

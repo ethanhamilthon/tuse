@@ -31,7 +31,7 @@ return g
 
   | Call | Loads |
   | --- | --- |
-  | `require("tuse")` | The host functions (`sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `json`, `inspect`) and `env`. |
+  | `require("tuse")` | The host functions (`sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_*`, `show_markdown`, `show_picker`, `show_question`, `json`, `inspect`) and `env`. |
   | `require("name")` | `name.lua`, else `name/init.lua`, relative to the calling file (`a.b` is `a/b`). |
   | `require("./name")` | `./name.lua`, else `./name/init.lua`, relative to the calling file (`../name` works too). |
   | `require("global")` | The global config: `$TUSE_GLOBAL_CONFIG`, else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. |
@@ -61,6 +61,7 @@ return g
 | `prompts` | Map of names to strings for [the `#` picker](prompts.md). |
 | `functions` | Map of named Lua helpers with `run`, `description`, optional `args` and `show_agent`. See [functions](functions.md). |
 | `hooks` | Map of named hooks `{events = {...}, run = function(e) ... end}`. See [hooks](hooks.md). |
+| `commands` | Map of custom slash command names to Lua functions (`commands = { hello = function() ... end }`). Built-in commands cannot be overridden. |
 | `settings.ui` | UI behavior; see [theme](theme.md). |
 | `theme` | The 10 base colors; see [theme](theme.md). |
 

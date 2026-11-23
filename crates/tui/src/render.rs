@@ -1,5 +1,7 @@
 use crate::chat::Entry;
-use crate::style::{ERROR_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style};
+use crate::style::{
+    ERROR_PREFIX, INPUT_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style,
+};
 use crate::text::{Line, line_width, span, wrap};
 use std::time::Duration;
 
@@ -102,6 +104,31 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             }
             let text = parts.join(LABEL_SEP);
             plain(&text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad)
+        }
+        Entry::Markdown { text, .. } => crate::markdown::render(text, width, p),
+        Entry::UiResult {
+            is_picker,
+            prompt,
+            value,
+        } => {
+            let mut out = if *is_picker {
+                plain(prompt, width, Style::fg(p.dim), "", "")
+            } else {
+                crate::markdown::render(prompt, width, p)
+            };
+            let indent = " ".repeat(crate::text::width(INPUT_PREFIX));
+            let first = vec![span(INPUT_PREFIX, Style::fg(p.accent))];
+            let rest = vec![span(indent, Style::fg(p.accent))];
+            let st = Style::fg(p.fg);
+            for (i, l) in clean(value).split('\n').enumerate() {
+                out.extend(wrap(
+                    &vec![span(l, st)],
+                    width,
+                    if i == 0 { &first } else { &rest },
+                    &rest,
+                ));
+            }
+            out
         }
     }
 }

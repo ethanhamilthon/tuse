@@ -104,7 +104,7 @@ impl Session {
                 let f: Function = crate::config_lua::code_of(lua, "hooks", &name)
                     .ok_or_else(|| tuse_lua::mlua::Error::runtime("run is gone"))?;
                 let arg = tuse_lua::to_lua(lua, &vars)?;
-                let job = Job::new(
+                let mut job = Job::new(
                     lua,
                     f,
                     MultiValue::from_vec(vec![arg]),
@@ -112,6 +112,7 @@ impl Session {
                     Out::Buf(String::new()),
                     done,
                 )?;
+                job.is_hook = true;
                 job.start(lua);
                 Ok(())
             };
@@ -151,6 +152,7 @@ impl Session {
     /// Fires `process_end` and waits for every hook run to end, with no time limit.
     /// No hook fires after this.
     pub(crate) fn finish_hooks(self: &Arc<Self>, reason: &'static str) {
+        self.ui_cancel_hooks(true);
         self.hook(
             "process_end",
             Data {

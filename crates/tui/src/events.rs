@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::chat::Entry;
-use tuse_core::Event;
+use tuse_core::{Event, UiPrompt};
 
 impl App {
     fn drop_pending(&mut self) {
@@ -165,6 +165,49 @@ impl App {
                 if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::Model) {
                     self.open_models();
                 }
+            }
+            Event::UiMarkdown {
+                name,
+                text,
+                pin,
+                removed,
+            } => {
+                if let Some(pos) = self.chat.set_markdown(name, text, pin, removed) {
+                    for idx in [&mut self.streaming, &mut self.thinking]
+                        .into_iter()
+                        .flatten()
+                    {
+                        if *idx > pos {
+                            *idx -= 1;
+                        }
+                    }
+                    for (_, p) in &mut self.pending_tools {
+                        if *p > pos {
+                            *p -= 1;
+                        }
+                    }
+                }
+            }
+            Event::UiRequest(req) => match req.prompt {
+                UiPrompt::Picker { options } => self.open_lua_picker(req.id, options),
+                UiPrompt::Question { text } => self.open_question(req.id, text),
+            },
+            Event::UiClear { id } => {
+                if matches!(&self.picker, Some(p) if p.kind == crate::picker::Kind::LuaPicker(id)) {
+                    self.close_modal();
+                }
+                if self.question.as_ref().is_some_and(|q| q.id == id) {
+                    self.question = None;
+                    self.restore_draft();
+                }
+            }
+            Event::UiResult(entry) => {
+                self.chat.push(Entry::UiResult {
+                    is_picker: entry.kind == "picker",
+                    prompt: entry.prompt,
+                    value: entry.value,
+                });
+                self.scroll = 0;
             }
         }
     }

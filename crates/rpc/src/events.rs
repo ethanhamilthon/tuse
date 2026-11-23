@@ -56,5 +56,28 @@ pub fn to_json(e: &Event) -> Value {
         Event::Tasks => json!({"type": "tasks"}),
         Event::Usage => json!({"type": "usage"}),
         Event::Models => json!({"type": "models"}),
+        Event::UiMarkdown {
+            name,
+            text,
+            pin,
+            removed,
+        } => {
+            json!({"type": "ui_markdown", "name": name, "text": text, "pin": pin, "removed": removed})
+        }
+        Event::UiRequest(req) => {
+            let mut v = serde_json::to_value(req).unwrap_or_default();
+            if let Some(m) = v.as_object_mut() {
+                m.insert("type".into(), json!("ui_request"));
+            }
+            v
+        }
+        Event::UiClear { id } => json!({"type": "ui_clear", "id": id}),
+        Event::UiResult(entry) => {
+            let mut v = serde_json::to_value(entry).unwrap_or_default();
+            if let Some(m) = v.as_object_mut() {
+                m.insert("type".into(), json!("ui_result"));
+            }
+            v
+        }
     }
 }

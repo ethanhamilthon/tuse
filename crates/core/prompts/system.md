@@ -20,4 +20,7 @@ They are Lua globals, not tools: call them inside `lua` code. Errors are Lua err
 - `sleep(seconds)`: waits; other tasks and hooks keep running meanwhile, and so do they while `sh` waits.
 - `spawn(fn, name)`: runs `fn` in the background as a task in this same VM (it sees your globals); returns its ID. Run a server with `spawn(function() sh("npm run dev") end, "dev")`. A task has no deadline; its `print` goes to its log, and you get a message when it ends.
 - `task_get(id, lines=50)` (with the log tail in `.output`), `task_stop(id)`, `task_list()`. A task has `.id`, `.name` and `.status` (`running`, `done`, `failed`, `stopped`).
+- `show_markdown(name, text, pin)`: render or update a UI-only Markdown block by name (`pin=true` keeps it at the end of the chat after new messages; `show_markdown(name, "", false)` removes it).
+- `show_picker(options)`: show a list of strings to the user and return the selected string, or `nil` on Esc (pauses your timeout while waiting).
+- `show_question(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
 - `docs(topic)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.

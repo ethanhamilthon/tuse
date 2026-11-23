@@ -120,6 +120,15 @@ end
 function tuse.wrap(f)
   return function(...) return unwrap(pcall(f, ...)) end
 end
+function tuse.yield_wait(start)
+  local wrapped = tuse.wrap(start)
+  return function(...)
+    if not isyieldable() then error("interactive wait cannot run here", 2) end
+    local key = wrapped(...)
+    if key == nil then return nil end
+    return wait("wait", key)
+  end
+end
 tuse.sh_start = tuse.wrap(tuse.sh_start)
 
 os.exit = nil

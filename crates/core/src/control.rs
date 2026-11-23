@@ -99,6 +99,7 @@ impl Session {
 
     /// Stops the running turn right away; its thread finds itself stale and exits.
     pub fn cancel(self: &Arc<Self>) {
+        self.stop_commands();
         self.stop_hook_runs();
         self.cancel_turn();
     }

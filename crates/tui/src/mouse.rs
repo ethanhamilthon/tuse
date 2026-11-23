@@ -30,7 +30,7 @@ impl App {
                 self.selection = Default::default();
                 self.click(point.1, point.0);
                 self.selection.drag = Some((point, point));
-                if inside {
+                if inside && !self.input_disabled() {
                     self.selection.input = Some(self.editor.cursor);
                 }
                 true
@@ -80,6 +80,8 @@ impl App {
                 p.selected = (p.selected as isize + dir).clamp(0, n - 1) as usize;
                 p.follow(self.list_rows);
             }
+        } else if let Some(q) = &mut self.question {
+            q.panel.scroll_by(dir * step);
         } else if let Some(panel) = &mut self.panel {
             panel.scroll_by(dir * step);
         } else if dir < 0 {
@@ -90,12 +92,15 @@ impl App {
     }
 
     fn click(&mut self, x: usize, y: usize) {
+        if self.input_disabled() {
+            return;
+        }
         let Some(a) = self.input_area else { return };
         if y < a.row || y >= a.row + a.height || x < a.col {
             return;
         }
         self.editor.click(y - a.row + a.top, x - a.col, a.cols);
-        if !self.searching() {
+        if !self.searching() && !self.answering() {
             self.update_token_picker();
         }
     }

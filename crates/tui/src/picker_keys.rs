@@ -14,11 +14,17 @@ impl App {
             KeyCode::Down => p.moved(1, rows),
             KeyCode::Char('p') if ctrl => p.moved(-1, rows),
             KeyCode::Char('n') if ctrl => p.moved(1, rows),
-            KeyCode::Enter | KeyCode::Tab if !shift => self.choose(),
+            KeyCode::Enter if !shift => self.choose(),
+            KeyCode::Tab if !shift && !matches!(p.kind, Kind::LuaPicker(_)) => self.choose(),
             KeyCode::Esc => {
                 let p = self.picker.take().unwrap();
                 match &p.kind {
                     k if k.is_token() => self.dismissed = Some(self.editor.token().1),
+                    Kind::LuaPicker(id) => {
+                        let id = *id;
+                        self.restore_draft();
+                        let _ = self.session.ui_reply(id, None);
+                    }
                     _ => self.restore_draft(),
                 }
             }
@@ -30,6 +36,7 @@ impl App {
                 }
             }
             _ if p.kind.is_token() => return false,
+            _ if !p.kind.is_searchable() => return true,
             _ => return !edits_text(k),
         }
         true

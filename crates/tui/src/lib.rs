@@ -1,6 +1,7 @@
 mod app;
 mod chat;
 mod chat_stream;
+mod chat_ui;
 mod clipboard;
 mod code_block;
 mod commands;

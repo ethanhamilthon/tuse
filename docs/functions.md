@@ -42,6 +42,17 @@ changes so the user sees diffs. Use `sh` for running programs and processing the
   (its coroutine gets a `cancelled` error at its next wait), `task_list()` lists them. A task has
   `.id`, `.name`, `.status` (`running`, `done`, `failed`, `stopped`), `.started` and `.ended`.
 - `json.encode(value)`, `json.decode(text)` (`null` becomes `nil`) and `inspect(value)`.
+- `show_markdown(name, text, pin)`: renders or updates a UI-only Markdown block by name.
+  Unpinned blocks stay in chat order; pinned blocks stay together at the end of the chat after new
+  messages. `show_markdown(name, "", false)` removes the block. Blocks survive `/reload` but are
+  never sent to the model or saved across resume.
+- `show_picker(options)` -> `option | nil`: shows a picker for a Lua list of strings (editor
+  disabled, Enter selects, Esc returns `nil`).
+- `show_question(text)` -> `user_input | nil`: renders a Markdown question panel and uses the
+  editor for the answer (Enter returns the answer to Lua without sending to the model, Esc returns
+  `nil`).
+- Picker and question requests share one FIFO queue, pause the calling coroutine's timeout while
+  waiting, and leave a UI-only chat entry when answered (cancelled prompts leave no entry).
 - `set_title(text)` names the session; `docs(topic)`: call `docs()` to list documentation topics,
   or `docs("<topic>")` to read one.
 

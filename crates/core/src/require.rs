@@ -21,6 +21,9 @@ const HOST: &[&str] = &[
     "task_get",
     "task_list",
     "task_stop",
+    "show_markdown",
+    "show_picker",
+    "show_question",
     "json",
     "inspect",
 ];

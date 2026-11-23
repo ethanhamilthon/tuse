@@ -1,4 +1,49 @@
+use serde::Serialize;
 use std::time::Duration;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UiPrompt {
+    Picker { options: Vec<String> },
+    Question { text: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UiRequest {
+    pub id: u64,
+    #[serde(flatten)]
+    pub prompt: UiPrompt,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UiMarkdown {
+    pub name: String,
+    pub text: String,
+    pub pin: bool,
+    #[serde(skip)]
+    pub after_record: usize,
+    #[serde(skip)]
+    pub seq: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UiEntry {
+    pub id: u64,
+    pub kind: &'static str,
+    pub prompt: String,
+    pub value: String,
+    #[serde(skip)]
+    pub after_record: usize,
+    #[serde(skip)]
+    pub seq: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UiSnapshot {
+    pub markdowns: Vec<UiMarkdown>,
+    pub active: Option<UiRequest>,
+    pub entries: Vec<UiEntry>,
+}
 
 /// What a session tells its front ends (TUI or JSON-RPC).
 #[derive(Debug, Clone)]
@@ -53,4 +98,19 @@ pub enum Event {
     Usage,
     /// A provider's model list arrived.
     Models,
+    /// A named Markdown block was created, updated, or removed (`removed = text.is_empty() && !pin`).
+    UiMarkdown {
+        name: String,
+        text: String,
+        pin: bool,
+        removed: bool,
+    },
+    /// The active interactive picker or question prompt changed.
+    UiRequest(UiRequest),
+    /// The active interactive prompt was cancelled externally.
+    UiClear {
+        id: u64,
+    },
+    /// A picker or question was answered (not cancelled).
+    UiResult(UiEntry),
 }

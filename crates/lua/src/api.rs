@@ -30,6 +30,7 @@ pub fn install(lua: &Lua) -> mlua::Result<()> {
         .call::<()>((tuse.clone(), marker))?;
     lua.set_named_registry_value("tuse.render", tuse.get::<Function>("render")?)?;
     lua.set_named_registry_value("tuse.wrap", tuse.get::<Function>("wrap")?)?;
+    lua.set_named_registry_value("tuse.yield_wait", tuse.get::<Function>("yield_wait")?)?;
     wrap(lua, &g, &["spawn"])?;
     let j: Table = g.get("json")?;
     wrap(lua, &j, &["encode", "decode"])?;
@@ -53,6 +54,12 @@ pub fn wrap(lua: &Lua, t: &Table, names: &[&str]) -> mlua::Result<()> {
         t.set(*n, w.call::<Function>(f)?)?;
     }
     Ok(())
+}
+
+/// Wraps a Rust wait-starter function so calling it yields to the scheduler on the returned key.
+pub fn yield_wait(lua: &Lua, start: Function) -> mlua::Result<Function> {
+    let w: Function = lua.named_registry_value("tuse.yield_wait")?;
+    w.call(start)
 }
 
 fn text_of(lua: &Lua, args: MultiValue, sep: &str) -> mlua::Result<String> {

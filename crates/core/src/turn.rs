@@ -202,8 +202,7 @@ impl Session {
         let Some(mut st) = self.lock_live(generation) else {
             return;
         };
-        let def = crate::db::model_def(&st.model);
-        let threshold = config.compact_at(def.as_ref());
+        let threshold = config.compact_at(config.model_def(&st.model));
         if threshold == 0 || st.context < threshold {
             return;
         }

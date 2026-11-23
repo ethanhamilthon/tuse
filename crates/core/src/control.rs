@@ -187,14 +187,9 @@ impl Session {
             .then(|| (st.turn_start.elapsed(), st.status.clone()))
     }
 
-    /// Totals of the session, kept up to date as records arrive. Prices come from
-    /// SQLite model metadata, so totals are rebuilt if metadata changes.
+    /// Totals of the session at the configured model prices.
     pub fn stats(&self) -> Stats {
-        let models = crate::db::models();
-        let mut st = self.state.lock().unwrap();
-        if st.stats.1 != models {
-            st.stats = (Stats::of(&st.records, &models), models);
-        }
+        let st = self.state.lock().unwrap();
         let mut out = st.stats.0.clone();
         out.context = st.context;
         if st.busy {

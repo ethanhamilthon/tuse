@@ -19,6 +19,11 @@ fn a_client_drives_a_session() {
         Reply::Text("deployed"),
     ]);
     let (dir, cfg) = common::setup("rpc", &addr, "");
+    std::fs::write(
+        &cfg,
+        "return { models = {{ name = 'p/m', display = 'M', window = 50000 }} }",
+    )
+    .unwrap();
     let session = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg),
@@ -92,16 +97,9 @@ fn a_client_drives_a_session() {
         (json!("json"), json!("p/m"), json!("p"), json!(2), json!(1))
     );
     assert!(snap["trace"].as_array().unwrap().len() >= 4);
-    call(
-        62,
-        "model.meta.set",
-        json!({"name": "p/m", "display": "M", "window": 50000}),
-    );
-    assert!(reply(&out, 62)["error"].is_null());
-    call(63, "model.meta.list", json!({}));
-    assert_eq!(reply(&out, 63)["result"][0]["display"], json!("M"));
-    call(64, "model.meta.remove", json!({"name": "p/m"}));
-    assert_eq!(reply(&out, 64)["result"], json!(true));
+    assert_eq!(snap["ctx_size"], 50000);
+    call(62, "config.get", json!({}));
+    assert_eq!(reply(&out, 62)["result"]["models"][0]["display"], "M");
     call(7, "session.records", json!({}));
     let records = reply(&out, 7)["result"].clone();
     assert!(records.as_array().unwrap().iter().any(|r| r["t"] == "tool"));

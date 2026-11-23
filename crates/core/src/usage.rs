@@ -31,7 +31,7 @@ pub fn tokens(n: u64) -> String {
 }
 
 fn find_model<'a>(models: &'a [ModelDef], full: &str) -> Option<&'a ModelDef> {
-    models.iter().find(|m| m.name == full)
+    models.iter().rev().find(|m| m.name == full)
 }
 
 impl Stats {

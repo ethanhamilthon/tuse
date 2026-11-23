@@ -148,12 +148,7 @@ fn model_list_discards_stale_fetches_on_reload() {
         ("p", format!("http://{old_addr}")),
         ("broken", format!("http://{err_addr}")),
     ]);
-    tuse_core::set_model_def(&tuse_config::ModelDef {
-        name: "p/cfg".into(),
-        ..Default::default()
-    })
-    .unwrap();
-    std::fs::write(&cfg, "return {}").unwrap();
+    std::fs::write(&cfg, "return { models = {{ name = 'p/cfg' }} }").unwrap();
     let (tx, out, server) = spawn_rpc(&dir, &cfg, Mode::Json);
     rpc_call(&tx, &out, 1, "initialize");
     assert_eq!(rpc_call(&tx, &out, 2, "model.list"), json!(["p/cfg"]));
@@ -179,11 +174,7 @@ fn model_list_discards_stale_fetches_on_reload() {
 
     // Reload drops cached `p/new_only` when `p` is removed; fresh fetch is gated.
     providers(&[("all_p", format!("http://{fresh_addr}"))]);
-    tuse_core::set_model_def(&tuse_config::ModelDef {
-        name: "all_p/cfg".into(),
-        ..Default::default()
-    })
-    .unwrap();
+    std::fs::write(&cfg, "return { models = {{ name = 'all_p/cfg' }} }").unwrap();
     rpc_call(&tx, &out, 6, "config.reload");
     assert_eq!(rpc_call(&tx, &out, 7, "model.list"), json!(["all_p/cfg"]));
     let (rel_fresh, _) = fresh_req.recv_timeout(Duration::from_secs(5)).unwrap();

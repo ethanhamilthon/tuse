@@ -65,7 +65,7 @@ tuse init                                 ./tuse.lua that extends the global con
 tuse connect --base URL --key KEY --name NAME
                                           verify and save a provider
 tuse providers | tuse disconnect NAME     list | remove providers
-tuse models [list|use|set|remove|import]  manage default model/effort and metadata
+tuse models                         list configured model metadata and the saved default
 tuse update                              update the binary
 ```
 
@@ -124,7 +124,8 @@ search box and restores your draft on close.
 folders as you type. The message keeps `#name` and `@path` as typed; the prompt
 text and the file go to the model in a hidden block ([docs/prompts.md](docs/prompts.md)).
 Files, prompts and images are one unit in the input: arrows and Backspace move over them whole.
-`/models` (and `tuse models`) store your default model, effort, and model metadata in SQLite.
+`/models` saves your selection and effort in SQLite. Set context windows and prices in the Lua
+config (`models`); run `tuse models` to see them.
 
 ## Config
 

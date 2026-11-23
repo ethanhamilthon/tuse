@@ -8,6 +8,7 @@ const TOP_KEYS: &[&str] = &[
     "settings",
     "theme",
     "systems",
+    "models",
     "prompts",
     "functions",
     "hooks",
@@ -96,12 +97,13 @@ pub(crate) fn table(t: &Table, source: &str, is_plugin: bool) -> Result<(), Stri
             "include" => c.err("include", "was removed; use `require(...)` instead"),
             "model" | "provider" | "effort" => c.err(
                 &key,
-                "was removed from tuse.lua; run `tuse models import` or `tuse models use` (stored in SQLite)",
+                "was removed from tuse.lua; use `/models` (selection is stored in SQLite)",
             ),
-            "models" => c.err(
-                "models",
-                "was removed from tuse.lua; run `tuse models import` or `tuse models set` (stored in SQLite)",
-            ),
+            "models" => {
+                if let Some(sub) = c.table("models", v) {
+                    crate::validate_models::check(&mut c, &sub);
+                }
+            }
             "plugins" if is_plugin => c.err("plugins", "is not allowed in a plugin"),
             "plugins" => {} // validated by `plugins::entries`
             "settings" => {
@@ -128,7 +130,10 @@ pub(crate) fn table(t: &Table, source: &str, is_plugin: bool) -> Result<(), Stri
                             Some(name) => {
                                 c.string(&format!("prompts.{name}"), &pv);
                             }
-                            None => c.err(&format!("prompts[{}]", key_str(&pk)), "key must be a string"),
+                            None => c.err(
+                                &format!("prompts[{}]", key_str(&pk)),
+                                "key must be a string",
+                            ),
                         }
                     }
                 }
@@ -145,7 +150,12 @@ pub(crate) fn table(t: &Table, source: &str, is_plugin: bool) -> Result<(), Stri
             }
             "commands" => {
                 if let Some(sub) = c.table("commands", v) {
-                    crate::validate_entries::check_fn_map(&mut c, "commands", &sub, check_command_name);
+                    crate::validate_entries::check_fn_map(
+                        &mut c,
+                        "commands",
+                        &sub,
+                        check_command_name,
+                    );
                 }
             }
             "open" => {

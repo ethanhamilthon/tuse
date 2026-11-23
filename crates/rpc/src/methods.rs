@@ -22,9 +22,6 @@ pub const METHODS: &[&str] = &[
     "model.get",
     "model.set",
     "model.list",
-    "model.meta.list",
-    "model.meta.set",
-    "model.meta.remove",
     "config.get",
     "config.reload",
     "config.set",
@@ -166,9 +163,6 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             s.fetch_models();
             Ok(json!(s.available_models()))
         }
-        "model.meta.list" => crate::models::list(),
-        "model.meta.set" => crate::models::set(p),
-        "model.meta.remove" => crate::models::remove(p),
         "config.get" => {
             serde_json::to_value(&*s.config()).map_err(|e| Fail::session(e.to_string()))
         }

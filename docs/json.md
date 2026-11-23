@@ -31,7 +31,6 @@ context blocks, just like `#` prompts, `@` files, and pasted images in the TUI
 | `session.list` | `/resume` list | `{cwd?}` -> saved sessions for resuming |
 | `session.new` / `session.resume` | `/new`, `/resume` | `{}` / `{id}` -> `{session, model, effort}` (switches session in-process) |
 | `model.get` / `model.set` / `model.list` | `/models` | `{model, effort?, persist?}` (`persist` defaults to `true`, validating & saving both in one call); `model.list` fetches provider models |
-| `model.meta.list` / `.set` / `.remove` | `tuse models` | list, upsert (`{name, display?, window?, compact_at?, prices?}`), or delete (`{name}`) SQLite model metadata |
 | `config.get` / `config.reload` / `config.set` | `/config`, `/reload` | structured resolved config JSON (with `commands`, `open`, `plugins`, no secrets/Lua bodies); reload (validates before applying, keeps live UI state); `{key, value}` saves `model` or `effort` |
 | `tasks.list` / `tasks.get` / `tasks.stop` | `/tasks` | `{id, lines?}` |
 | `commands.list` / `commands.run` | `/` custom commands | list configured custom command names; `{name}` runs `/name` as a Lua job |

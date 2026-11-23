@@ -8,13 +8,7 @@
 - `tuse connect --base URL --key '$ENV' --name NAME` verifies and saves a provider.
   Quote `$ENV` to store an environment-variable reference rather than passing a literal key.
 - `tuse providers` lists providers; `tuse disconnect NAME` removes one.
-- `tuse models [list]` lists the default model/effort and saved model metadata in SQLite.
-- `tuse models use [MODEL] [--effort EFFORT]` sets the default model and/or effort in SQLite.
-- `tuse models set NAME [--display TEXT] [--window N] [--compact-at N|auto] [--price-in F] [--price-out F] [--price-cache F] [--price-cache-write F] [--clear-prices]`
-  saves or updates model metadata in SQLite.
-- `tuse models remove NAME` deletes saved metadata for a model.
-- `tuse models import [PATH]` migrates legacy `model`, `provider`, `effort`, and `models` from an
-  old `tuse.lua` into SQLite.
+- `tuse models` lists model metadata from the effective Lua config and the default model/effort from SQLite.
 - `tuse init` creates `./tuse.lua` that starts from the global config (`require("global")`).
 - `tuse plugins ...` manages [plugins](plugins.md).
 - `tuse update` updates the binary without touching your config.
@@ -46,9 +40,9 @@ agent takes it. Editing it withdraws it; Enter sends the edited draft.
 
 Use the mouse wheel to scroll the chat, click an input cell to place the cursor, and drag to
 select text. Ctrl/Cmd+C copies it. URLs, local file paths (absolute, `~/`, relative, with optional
-`:line[:col]`), and Markdown links are interactive across chat, custom Markdown blocks, tool
-output, diffs, and panels (`/session`, `/config`, `/trace`, `/tasks`): hover to highlight and click
-to open. Local paths use a matching `open.<ext>` Lua callback if configured, otherwise the OS
+`:line[:col]`), and Markdown links are interactive in agent messages, `show_markdown` blocks,
+`/config`, `/session`, and the agent, system, and user entries in `/trace`. Lua code, tool output,
+and diffs are not linkified. Hover to highlight and click to open. Local paths use a matching `open.<ext>` Lua callback if configured, otherwise the OS
 default opener (`open` on macOS, `xdg-open` on Linux, `cmd /C start` on Windows); open failures
 are reported in the UI. Shift+movement extends an input selection; Ctrl/Cmd+A selects all and
 Ctrl/Cmd+X cuts.

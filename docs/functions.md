@@ -26,7 +26,7 @@ Tuse) and never exposes provider credentials or API keys.
 | `provider` | string \| nil | Active provider prefix, or `nil` when unset. |
 | `effort` | string \| nil | Reasoning effort (`"default"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`). |
 | `ctx` | integer \| nil | Latest request context size in tokens (`input + output` of the last usage record, or estimated tokens right after compaction). |
-| `ctx_size` | integer \| nil | Context window size in tokens from saved model metadata (`nil` when unknown). |
+| `ctx_size` | integer \| nil | Context window size in tokens from configured model metadata (`nil` when unknown). |
 | `usage` | table \| nil | Cumulative session totals (including resumed history): `input` (prompt tokens, including cached/cache-write), `output` (completion tokens), `cache_read` (cached prompt tokens read), `cache_write` (prompt tokens written to cache), and `cost` (USD, or `nil` if pricing is unknown). |
 | `model_info` | table \| nil | Saved metadata for the active model (`name`, `display`, `window` in tokens, `compact_at` override in tokens, `prices = {input, output, cache_read, cache_write}` in USD per 1M tokens), or `nil` when unset. |
 | `steps` | integer \| nil | Completed model request/response steps in the session (including resumed history). |

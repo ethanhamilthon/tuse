@@ -3,10 +3,10 @@ use crate::picker::{Item, Kind, Picker, item};
 use tuse_config::ModelDef;
 
 impl App {
-    /// Every available model providers reported plus saved DB models.
+    /// Every available model providers reported plus configured models.
     /// The current model stays visible even when its provider has been removed.
     pub fn open_models(&mut self) {
-        let defs = tuse_core::models();
+        let config = self.session.config();
         let (current, _) = self.session.model();
         let mut names = self.session.available_models();
         if !names.contains(&current) {
@@ -16,7 +16,7 @@ impl App {
         let items: Vec<Item> = names
             .iter()
             .map(|n| {
-                let def = defs.iter().find(|d| d.name == *n);
+                let def = config.model_def(n);
                 model_item(def, n, self.session.model_available(n))
             })
             .collect();

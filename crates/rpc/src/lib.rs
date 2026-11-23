@@ -1,7 +1,6 @@
 //! `tuse json`: a JSON-RPC 2.0 session over stdin and stdout, one message per line.
 mod events;
 mod methods;
-mod models;
 mod proto;
 
 use proto::{Fail, NOT_READY, answer, notify};

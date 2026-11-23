@@ -11,9 +11,9 @@ pub fn model_available(config: &tuse_config::Config, full: &str) -> bool {
 }
 
 impl Session {
-    /// Saved metadata for `full` (`provider/model`) from SQLite.
+    /// Configured metadata for `full` (`provider/model`).
     pub fn model_def(&self, full: &str) -> Option<ModelDef> {
-        crate::db::model_def(full)
+        self.config().model_def(full).cloned()
     }
 
     pub fn display_name(&self, full: &str) -> String {
@@ -38,12 +38,13 @@ impl Session {
             .collect()
     }
 
-    /// Saved DB models and reported models whose provider is active in this session.
+    /// Configured and reported models whose provider is active in this session.
     pub fn available_models(&self) -> Vec<String> {
         let config = self.config();
-        let mut names: Vec<String> = crate::db::models()
-            .into_iter()
-            .map(|m| m.name)
+        let mut names: Vec<String> = config
+            .models
+            .iter()
+            .map(|m| m.name.clone())
             .filter(|m| model_available(&config, m))
             .collect();
         for m in self.remote_models() {
@@ -60,8 +61,15 @@ impl Session {
     pub(crate) fn swap_config(&self, c: Arc<tuse_config::Config>) {
         let mut cfg = self.config.write().unwrap();
         cfg.0 += 1;
+        let mut st = self.state.lock().unwrap();
+        st.remote.clear();
+        if st.stats.1 != c.models {
+            st.stats = (
+                crate::usage::Stats::of(&st.records, &c.models),
+                c.models.clone(),
+            );
+        }
         cfg.1 = c;
-        self.state.lock().unwrap().remote.clear();
     }
 
     /// Asks every `connect` provider for its models in the background.

@@ -1,5 +1,7 @@
 use crate::host::to_json;
+use crate::mode::{Mode, Options, Start};
 use std::path::Path;
+use std::sync::Arc;
 use tuse_config::Config;
 use tuse_lua::mlua::{self, Function, Lua, Table, Value};
 
@@ -184,4 +186,47 @@ fn code(t: &Table, key: &str, name: &str) -> Option<Function> {
         .ok()?
         .get("run")
         .ok()
+}
+
+/// Loads the effective model metadata without opening a session or running its hooks.
+pub fn configured_models(cwd: std::path::PathBuf) -> Result<Vec<tuse_config::ModelDef>, String> {
+    let (_, _, config) = start_vm(&Options {
+        cwd,
+        config: None,
+        mode: Mode::Tui,
+        resume: None,
+        start: Start::Launch,
+    })?;
+    Ok(config.models)
+}
+
+/// The session's VM with the config loaded. The session is not built yet, so the VM
+/// gets a slot that `open` fills.
+pub(crate) fn start_vm(
+    opts: &Options,
+) -> Result<(tuse_lua::Vm, crate::host::Slot, Config), String> {
+    let slot = crate::host::Slot::default();
+    let cwd = opts.cwd.clone();
+    let mode = opts.mode;
+    let host = crate::host::SessionHost {
+        slot: slot.clone(),
+        cwd: cwd.clone(),
+    };
+    let vm = tuse_lua::Vm::new(Arc::new(host), |_| {});
+    let path = tuse_config::find(opts.config.as_deref(), &cwd);
+    let s2 = slot.clone();
+    let config = vm.call(move |lua| {
+        crate::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
+        lua.set_app_data(crate::snapshot::LoadCtx {
+            mode,
+            cwd: cwd.clone(),
+            configpath: path.as_ref().map(|p| p.display().to_string()),
+            loading: false,
+        });
+        crate::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
+        let config = crate::config_lua::prepare(lua, path.as_deref())?;
+        crate::config_lua::commit(lua, &config)?;
+        Ok::<_, String>(config)
+    })?;
+    Ok((vm, slot, config))
 }

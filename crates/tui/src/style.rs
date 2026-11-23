@@ -10,7 +10,8 @@ pub const CODE_INDENT: usize = 2;
 pub const TRACE_ROLE_WIDTH: usize = 9;
 
 pub const INPUT_PREFIX: &str = "› ";
-pub const USER_PREFIX: &str = "› ";
+/// Before each question of `tuse connect` and other inline prompts.
+pub const ASK_PREFIX: &str = "› ";
 pub const TOOL_PREFIX: &str = "* ";
 pub const REASONING_PREFIX: &str = "∴ ";
 pub const NOTICE_PREFIX: &str = "✓ ";
@@ -26,8 +27,8 @@ pub const MORE: &str = "…";
 pub const MASK_CHAR: &str = "•";
 pub const BAR_CHAR: &str = "┃";
 pub const BOX_CHARS: [&str; 5] = ["╭", "╮", "╰", "╯", "│"];
-pub const EDGE_TOP: &str = "▄";
-pub const EDGE_BOTTOM: &str = "▀";
+/// Blank columns left of the text in a `fill` input and a user message.
+pub const FILL_PAD: usize = 1;
 pub const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
 pub const STEERING_LABEL: &str = "steering…";
 

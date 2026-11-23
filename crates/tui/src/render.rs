@@ -1,6 +1,6 @@
 use crate::chat::Entry;
 use crate::style::{
-    ERROR_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style, USER_PREFIX,
+    ERROR_PREFIX, FILL_PAD, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style,
 };
 use crate::text::{Line, line_width, span, wrap};
 use std::time::Duration;
@@ -46,7 +46,7 @@ pub fn plain(text: &str, width: usize, style: Style, first: &str, rest: &str) ->
 }
 
 pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
-    let pad = " ".repeat(crate::text::width(USER_PREFIX));
+    let pad = " ".repeat(crate::text::width(NOTICE_PREFIX));
     match e {
         Entry::User { text, images } => {
             let st = Style::fg(p.fg).on(p.surface);
@@ -54,7 +54,9 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             if *images > 0 && !text.contains("[Image") {
                 text.push_str(&format!("\n[{images} image(s)]"));
             }
-            let mut lines = plain(&text, width, st, USER_PREFIX, &pad);
+            // No prefix: the `surface` block marks the message, with a small left pad.
+            let lead = " ".repeat(FILL_PAD);
+            let mut lines = plain(&text, width, st, &lead, &lead);
             for l in &mut lines {
                 let fill = width.saturating_sub(line_width(l));
                 l.push(span(" ".repeat(fill), st));
@@ -103,6 +105,28 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             }
             let text = parts.join(LABEL_SEP);
             plain(&text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_user_message_is_a_padded_surface_block_without_a_prefix() {
+        let p = Palette::new(&Default::default(), &Default::default());
+        let e = Entry::User {
+            text: "hi there\nsecond".into(),
+            images: 0,
+        };
+        let lines = render(&e, 20, &p);
+        assert_eq!(lines.len(), 2);
+        for (l, want) in lines.iter().zip([" hi there", " second"]) {
+            let text: String = l.iter().map(|s| s.text.as_str()).collect();
+            assert_eq!(text.trim_end(), want);
+            assert_eq!(line_width(l), 20);
+            assert!(l.iter().all(|s| s.style.bg == p.surface));
         }
     }
 }

@@ -9,7 +9,7 @@ The theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name 
 `dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default:
 
 - `bg` (`#121212`): main background, including lists and panels.
-- `surface` (`#1E1E1E`): elevated background (user messages, filled input); lists and panels do not use it.
+- `surface` (`#1E1E1E`): elevated background (user messages, shown as a block without `›`; the `fill` input); lists and panels do not use it.
 - `fg` (`#DEDEDE`): primary text and code blocks.
 - `dim` (`#BDBDBD`): secondary text (quotes, list details, notices, the scroll mark).
 - `muted` (`#929292`): subtle text (tool output, reasoning, syntax comments, inactive list items, status bars).
@@ -50,6 +50,6 @@ Each of the two labels takes at most half the width and is cut with `…`.
 
 - `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.
 - `box`: a frame around the input with the same two labels on its borders.
-- `fill`: the input has `surface` background; one status row below, working on the left and the
-  model on the right.
-- `bar`: an `accent` vertical bar left of the input, a blank row, then the same status row.
+- `fill`: the input is a `surface` block (a blank row above and below, one column of padding, no
+  `›`); one status row below, working on the left and the model on the right.
+- `bar`: an `accent` vertical bar left of the input (no `›`), a blank row, then the same status row.

@@ -61,6 +61,7 @@ or run `make install` from a checkout. The defaults are built in.
 tuse [-c|--config PATH] [-r|--resume ID] open the TUI
 tuse json [-c PATH] [-r ID]               JSON-RPC 2.0 over stdin/stdout (docs/json.md)
 tuse plugins [add|remove|install|update|clean]  manage plugins (docs/plugins.md)
+tuse init                                 ./tuse.lua that extends the global config
 tuse connect --base URL --key KEY --name NAME
                                           verify and save a provider
 tuse providers | tuse disconnect NAME     list | remove providers

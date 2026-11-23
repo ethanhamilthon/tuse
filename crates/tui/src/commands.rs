@@ -142,12 +142,7 @@ impl App {
                 self.editor.insert(" ");
             }
             (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}")),
-            (Kind::File, Some(v)) => {
-                self.cut_token();
-                self.editor
-                    .insert_atom(&format!("@{v}"), AtomKind::File(crate::files::path(&v)));
-                self.editor.insert(" ");
-            }
+            (Kind::File, Some(v)) => self.insert_file(&v),
             (Kind::Resume, Some(v)) => self.switch(Some(v)),
             (Kind::Model, Some(v)) if !v.is_empty() && !self.session.model_available(&v) => {
                 self.restore_draft();
@@ -194,5 +189,23 @@ impl App {
         if self.picker.is_none() {
             self.update_token_picker();
         }
+    }
+}
+
+impl App {
+    /// Enter in the `@` picker: the highlighted entry (a folder too) becomes a token.
+    pub fn pick_file(&mut self) {
+        let Some(p) = self.picker.take() else { return };
+        match p.current().map(|i| i.value.clone()) {
+            Some(v) => self.insert_file(&v),
+            None => self.picker = Some(p),
+        }
+    }
+
+    fn insert_file(&mut self, v: &str) {
+        self.cut_token();
+        self.editor
+            .insert_atom(&format!("@{v}"), AtomKind::File(crate::files::path(v)));
+        self.editor.insert(" ");
     }
 }

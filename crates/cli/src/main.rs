@@ -1,5 +1,6 @@
 mod args;
 mod connect;
+mod init;
 mod plugins;
 mod plugins_edit;
 mod update;
@@ -20,6 +21,7 @@ USAGE
                                            verify and save an API provider
   tuse disconnect NAME                    remove a provider
   tuse providers                          list the providers
+  tuse init                               create ./tuse.lua that extends the global config
   tuse plugins [list|add NAME [--ref R]|remove NAME|install|update [NAME]|clean] [-c PATH]
                                           manage plugins (see docs/plugins.md)
   tuse update                             update the binary
@@ -50,6 +52,7 @@ fn run(raw: Vec<String>) -> Result<(), String> {
             Ok(())
         }
         "json" => json(&Args::parse(rest, &["--config", "-c", "--resume", "-r"])?),
+        "init" => init::run(rest),
         "plugins" => plugins::run(rest),
         "update" => update::update(),
         "version" | "--version" | "-V" => {

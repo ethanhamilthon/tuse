@@ -205,3 +205,23 @@ fn streamed_text_is_not_repeated_after_a_tool_delta() {
     );
     crate::app::cleanup(app);
 }
+
+#[test]
+fn enter_picks_a_folder_and_tab_completes_it() {
+    let mut app = crate::app::test_app("enter-dir");
+    std::fs::create_dir_all(app.cwd.join("some/inner")).unwrap();
+    app.editor.insert("@some");
+    app.update_token_picker();
+    app.key(KeyEvent::from(KeyCode::Tab), 10);
+    assert_eq!(app.editor.text(), "@some/");
+    app.editor.clear();
+    app.picker = None;
+    app.editor.insert("@some");
+    app.update_token_picker();
+    app.key(KeyEvent::from(KeyCode::Enter), 10);
+    assert_eq!(app.editor.text(), "@some/ ");
+    assert!(app.picker.is_none());
+    let refs = app.refs();
+    assert_eq!(refs.files, [std::path::PathBuf::from("some/")]);
+    crate::app::cleanup(app);
+}

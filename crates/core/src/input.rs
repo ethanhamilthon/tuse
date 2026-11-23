@@ -72,7 +72,16 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
             }
             continue;
         }
-        match read_head(&refs.cwd.join(path)) {
+        let full = refs.cwd.join(path);
+        if full.is_dir() {
+            match list_dir(&full) {
+                Ok(list) => blocks.push(format!("<dir path=\"{shown}\">{list}</dir>")),
+                Err(e) if refs.strict => return Err(format!("{}: {e}", path.display())),
+                Err(_) => {}
+            }
+            continue;
+        }
+        match read_head(&full) {
             Ok((head, size)) => blocks.push(match head {
                 None => format!("<file path=\"{shown}\" binary=\"true\" size=\"{size}\"/>"),
                 Some(t) if size as usize > FILE_LIMIT => {
@@ -86,6 +95,33 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
     }
     input.context = blocks.join("\n");
     Ok(input)
+}
+
+/// A folder's entries, sorted, folders with a trailing `/`, cut at `FILE_LIMIT` bytes.
+fn list_dir(path: &Path) -> std::io::Result<String> {
+    let mut names: Vec<String> = std::fs::read_dir(path)?
+        .flatten()
+        .map(|e| {
+            let n = e.file_name().to_string_lossy().into_owned();
+            if e.path().is_dir() {
+                format!("{n}/")
+            } else {
+                n
+            }
+        })
+        .collect();
+    names.sort();
+    let mut out = String::new();
+    for n in names {
+        if out.len() + n.len() > FILE_LIMIT {
+            out.push_str("\n…");
+            break;
+        }
+        out.push('\n');
+        out.push_str(&n);
+    }
+    out.push('\n');
+    Ok(esc(&out))
 }
 
 /// The first `FILE_LIMIT` bytes as text (`None` for a binary file) and the file size.

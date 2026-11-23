@@ -43,6 +43,10 @@ Each design shows the input and two status bars: working (spinner, elapsed time 
 action (`reading PATH...`, `writing PATH...`, `editing PATH...`, `searching PATTERN...`, `running CMD...`; each stays at least 100 ms), or `steering…` while a queued message waits) and the model (model, effort,
 context, cost).
 
+Colors of the two bars: the spinner and time are `accent`, the action is `muted`. In the model
+bar everything is `muted` except the used context (`x` of `x/y`), which is `accent`. A notice
+flashed in the working place (a copy, an error) is `accent`; the scroll mark `↑N` is `dim`.
+
 - `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.
 - `box`: a frame around the input with the same two labels on its borders.
 - `fill`: the input has `surface` background; one status row below, working on the left and the

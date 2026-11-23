@@ -46,6 +46,31 @@ pub fn clip(s: &str, max: usize, more: &str) -> String {
     out + more
 }
 
+/// Cuts a styled line to at most `max` columns, ending with `more` (in the style of
+/// the span it cuts) when cut.
+pub fn clip_line(line: &Line, max: usize, more: &str) -> Line {
+    if line_width(line) <= max {
+        return line.clone();
+    }
+    let room = max.saturating_sub(width(more));
+    let mut out: Line = vec![];
+    let mut w = 0;
+    for s in line {
+        let mut text = String::new();
+        for c in s.text.chars() {
+            if w + char_width(c) > room {
+                text.push_str(more);
+                out.push(span(text, s.style));
+                return out;
+            }
+            w += char_width(c);
+            text.push(c);
+        }
+        out.push(span(text, s.style));
+    }
+    out
+}
+
 /// Word-wraps `content` to `width` columns; the first line starts with `first`,
 /// the following ones with `rest`.
 pub fn wrap(content: &Line, width: usize, first: &Line, rest: &Line) -> Vec<Line> {
@@ -101,6 +126,17 @@ fn join(prefix: &Line, cells: &[(char, Style)]) -> Line {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clip_line_keeps_styles() {
+        let a = Style::default().bold();
+        let b = Style::default();
+        let line = vec![span("ab", a), span("cdef", b)];
+        assert_eq!(clip_line(&line, 6, "…"), line);
+        assert_eq!(clip_line(&line, 4, "…"), vec![span("ab", a), span("c…", b)]);
+        assert_eq!(clip_line(&line, 2, "…"), vec![span("a…", a)]);
+        assert_eq!(clip_line(&line, 0, "…"), vec![span("…", a)]);
+    }
 
     fn plain(lines: &[Line]) -> Vec<String> {
         lines

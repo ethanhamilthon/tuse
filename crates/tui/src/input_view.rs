@@ -4,7 +4,7 @@ use crate::style::{
     BAR_CHAR, BOX_CHARS, EDGE_BOTTOM, EDGE_TOP, INPUT_PREFIX, MORE, Palette, RULE_CHAR,
     SCROLL_MARK, Style,
 };
-use crate::text::{Line, clip, line_width, span, width};
+use crate::text::{Line, Span, clip_line, line_width, span, width};
 use tuse_config::UiSettings;
 
 /// What the input design adds around the editor text.
@@ -36,13 +36,13 @@ pub fn frame(ui: &UiSettings) -> Frame {
 /// The input block: its frame, the visible editor `rows` and the status bars.
 pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Vec<Line> {
     let p = &app.palette;
-    let working = app
-        .flash
-        .as_ref()
-        .map(|(text, _)| text.clone())
-        .unwrap_or_else(|| status::working(app));
+    let working = match &app.flash {
+        Some((text, _)) => vec![span(text, Style::fg(p.accent))],
+        None => status::working(app),
+    };
     let model = status::model(app);
-    let mark = scroll_mark(app.scroll);
+    let mark = scroll_mark(p, app.scroll);
+    let marked: Line = mark.iter().chain(&working).cloned().collect();
     // A search typed into the editor is not the queued message.
     let steering = app.steering.is_some() && app.saved_editor.is_none();
     let body =
@@ -63,13 +63,13 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
                     vec![span(BOX_CHARS[4], side)],
                 )
             }));
-            out.push(border(p, w, (BOX_CHARS[2], BOX_CHARS[3]), "", &model));
+            out.push(border(p, w, (BOX_CHARS[2], BOX_CHARS[3]), &[], &model));
         }
         "fill" => {
             out.push(edge(p, w, EDGE_TOP));
             out.extend(body(&|_, _| (vec![], vec![])));
             out.push(edge(p, w, EDGE_BOTTOM));
-            out.push(status_row(p, w, 0, &join(&mark, &working), &model));
+            out.push(status_row(w, &marked, &model));
         }
         "bar" => {
             let bar = || span(format!("{BAR_CHAR} "), Style::fg(p.accent));
@@ -79,12 +79,12 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
                     .map(|(i, r)| row(p, fr, w, i, r, steering, (vec![bar()], vec![]))),
             );
             out.push(vec![]);
-            out.push(status_row(p, w, 0, &join(&mark, &working), &model));
+            out.push(status_row(w, &marked, &model));
         }
         _ => {
             out.push(border(p, w, ("", ""), &mark, &working));
             out.extend(body(&|_, _| (vec![], vec![])));
-            out.push(border(p, w, ("", ""), "", &model));
+            out.push(border(p, w, ("", ""), &[], &model));
         }
     }
     for (line, (a, b)) in out.iter_mut().skip(fr.head).zip(
@@ -98,15 +98,12 @@ pub fn block(app: &App, fr: &Frame, w: usize, rows: &[String], top: usize) -> Ve
     out
 }
 
-fn join(mark: &str, working: &str) -> String {
-    format!("{mark}{working}")
-}
-
-fn scroll_mark(scroll: usize) -> String {
+/// `↑N ` in `dim` while the chat is scrolled up, else nothing.
+fn scroll_mark(p: &Palette, scroll: usize) -> Line {
     if scroll > 0 {
-        format!("{SCROLL_MARK}{scroll} ")
+        vec![span(format!("{SCROLL_MARK}{scroll} "), Style::fg(p.dim))]
     } else {
-        String::new()
+        vec![]
     }
 }
 
@@ -145,26 +142,28 @@ fn row(
 }
 
 /// A rule with corners; `left` and `label` sit at its two ends.
-fn border(p: &Palette, w: usize, corners: (&str, &str), left: &str, label: &str) -> Line {
+fn border(p: &Palette, w: usize, corners: (&str, &str), left: &[Span], label: &[Span]) -> Line {
     let inner = w.saturating_sub(width(corners.0) + width(corners.1));
+    let left = left.to_vec();
     // A framed border keeps a space between the label and the corner.
     let tail = if corners.1.is_empty() { "" } else { " " };
-    let label = if label.is_empty() {
-        String::new()
+    let mut label = if label.is_empty() {
+        vec![]
     } else {
-        format!(" {label}{tail}")
+        let mut l = vec![span(" ", Style::default())];
+        l.extend(label.iter().cloned());
+        l.push(span(tail, Style::default()));
+        l
     };
-    let label = clip(&label, inner.saturating_sub(width(left) + 2), MORE);
-    let fill = inner.saturating_sub(width(left) + width(&label));
-    let mut line = vec![
-        span(corners.0, Style::fg(p.border)),
-        span(left, Style::fg(p.dim)),
-    ];
+    label = clip_line(&label, inner.saturating_sub(line_width(&left) + 2), MORE);
+    let fill = inner.saturating_sub(line_width(&left) + line_width(&label));
+    let mut line = vec![span(corners.0, Style::fg(p.border))];
+    line.extend(left);
     let rw = width(RULE_CHAR).max(1);
     for _ in 0..fill / rw {
         line.push(span(RULE_CHAR, Style::fg(p.border)));
     }
-    line.push(span(label, Style::fg(p.accent)));
+    line.extend(label);
     line.push(span(corners.1, Style::fg(p.border)));
     line
 }
@@ -175,16 +174,53 @@ fn edge(p: &Palette, w: usize, ch: &str) -> Line {
 }
 
 /// The status row under the input: working on the left, the model on the right.
-fn status_row(p: &Palette, w: usize, indent: usize, working: &str, model: &str) -> Line {
-    let st = Style::fg(p.accent);
-    let right = clip(model, w.saturating_sub(indent), MORE);
-    let room = w.saturating_sub(indent + width(&right) + 1);
-    let left = clip(working, room, MORE);
-    let gap = w.saturating_sub(indent + width(&left) + width(&right));
-    vec![
-        span(" ".repeat(indent), st),
-        span(left, st),
-        span(" ".repeat(gap), st),
-        span(right, st),
-    ]
+fn status_row(w: usize, working: &[Span], model: &[Span]) -> Line {
+    let right = clip_line(&model.to_vec(), w, MORE);
+    let room = w.saturating_sub(line_width(&right) + 1);
+    let left = clip_line(&working.to_vec(), room, MORE);
+    let gap = w.saturating_sub(line_width(&left) + line_width(&right));
+    let mut line = left;
+    line.push(span(" ".repeat(gap), Style::default()));
+    line.extend(right);
+    line
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn colored(line: &[Span]) -> Vec<(String, Option<crossterm::style::Color>)> {
+        line.iter()
+            .filter(|s| !s.text.trim().is_empty() && s.text != RULE_CHAR)
+            .map(|s| (s.text.trim().to_string(), s.style.fg))
+            .collect()
+    }
+
+    #[test]
+    fn bars_keep_the_label_colors_and_fit_the_width() {
+        let p = Palette::from_config(&tuse_config::Config::default());
+        let working = vec![
+            span("⠋ 3s", Style::fg(p.accent)),
+            span(" · reading src/main.rs...", Style::fg(p.muted)),
+        ];
+        let model = vec![
+            span("m · ", Style::fg(p.muted)),
+            span("5k", Style::fg(p.accent)),
+        ];
+        for w in [10, 30, 80] {
+            let line = border(&p, w, ("", ""), &scroll_mark(&p, 2), &working);
+            assert_eq!(line_width(&line), w, "border at {w}");
+            let row = status_row(w, &working, &model);
+            assert_eq!(line_width(&row), w, "status row at {w}");
+        }
+        let line = border(&p, 80, ("", ""), &scroll_mark(&p, 2), &working);
+        assert_eq!(
+            colored(&line),
+            [
+                ("↑2".to_string(), p.dim),
+                ("⠋ 3s".into(), p.accent),
+                ("· reading src/main.rs...".into(), p.muted),
+            ]
+        );
+    }
 }

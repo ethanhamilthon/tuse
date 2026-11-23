@@ -54,16 +54,26 @@ pub fn switched(s: &Session) -> Value {
     json!({"session": info(s), "model": model, "effort": effort})
 }
 
-pub fn initialize(s: &Session) -> Value {
+/// Answers `initialize`: an omitted `protocolVersion` means v1; other versions fail.
+pub fn initialize(s: &Session, p: &Value) -> Reply {
+    match &p["protocolVersion"] {
+        Value::Null => {}
+        v if v.as_u64() == Some(PROTOCOL) => {}
+        v => {
+            return Err(Fail::params(format!(
+                "unsupported protocolVersion {v}; this tuse speaks {PROTOCOL}"
+            )));
+        }
+    }
     let (model, effort) = s.model();
-    json!({
+    Ok(json!({
         "protocolVersion": PROTOCOL,
         "tuse": env!("CARGO_PKG_VERSION"),
         "session": info(s),
         "model": model,
         "effort": effort,
         "capabilities": {"methods": METHODS},
-    })
+    }))
 }
 
 fn submit(s: &Arc<Session>, p: &Value) -> Reply {
@@ -105,6 +115,20 @@ fn stats(s: &Session) -> Value {
     })
 }
 
+/// Validates and applies a model/effort to the active session; `persist` also saves it as
+/// the default for new sessions. `model.set` and the deprecated `config.set` both use it.
+fn set_model(s: &Arc<Session>, model: &str, effort: &str, persist: bool) -> Reply {
+    if !tuse_config::EFFORTS.contains(&effort) {
+        return Err(Fail::params(format!(
+            "`effort` must be one of {}",
+            tuse_config::EFFORTS.join(", ")
+        )));
+    }
+    s.select_model(model, effort, persist)
+        .map(|_| Value::Null)
+        .map_err(Fail::session)
+}
+
 /// Runs one method. `shutdown` is handled by the server.
 pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
     match method {
@@ -143,24 +167,26 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         }
         "model.set" => {
             let model = str_param(p, "model")?;
-            let effort = p["effort"].as_str().unwrap_or("default");
+            let effort = match &p["effort"] {
+                Value::Null => "default".to_string(),
+                _ => str_param(p, "effort")?,
+            };
             let persist = match &p["persist"] {
                 Value::Null => true,
                 Value::Bool(b) => *b,
                 _ => return Err(Fail::params("`persist` must be a boolean")),
             };
-            if !tuse_config::EFFORTS.contains(&effort) {
-                return Err(Fail::params(format!(
-                    "`effort` must be one of {}",
-                    tuse_config::EFFORTS.join(", ")
-                )));
-            }
-            s.select_model(&model, effort, persist)
-                .map(|_| Value::Null)
-                .map_err(Fail::session)
+            set_model(s, &model, &effort, persist)
         }
         "model.list" => {
-            s.fetch_models();
+            let cached = match &p["cached"] {
+                Value::Null => false,
+                Value::Bool(b) => *b,
+                _ => return Err(Fail::params("`cached` must be a boolean")),
+            };
+            if !cached {
+                s.fetch_models();
+            }
             Ok(json!(s.available_models()))
         }
         "config.get" => {
@@ -170,12 +196,12 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         "config.set" => {
             let key = str_param(p, "key")?;
             let value = str_param(p, "value")?;
-            if !matches!(key.as_str(), "model" | "effort") {
-                return Err(Fail::params("`key` must be `model` or `effort`"));
+            let (model, effort) = s.model();
+            match key.as_str() {
+                "model" => set_model(s, &value, &effort, true),
+                "effort" => set_model(s, &model, &value, true),
+                _ => Err(Fail::params("`key` must be `model` or `effort`")),
             }
-            s.save_choice(&key, &value)
-                .map(|_| Value::Null)
-                .map_err(Fail::session)
         }
         "tasks.list" => {
             serde_json::to_value(s.tasks.list()).map_err(|e| Fail::session(e.to_string()))

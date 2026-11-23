@@ -92,11 +92,14 @@ pub fn serve(
         };
         let reply = match req.method.as_str() {
             "initialize" => {
-                let reply = Ok(methods::initialize(&session));
+                let reply = methods::initialize(&session, &req.params);
+                let ok = reply.is_ok();
                 if let Some(id) = req.id {
                     out.send(&answer(id, reply));
                 }
-                ready.store(true, Ordering::Release);
+                if ok {
+                    ready.store(true, Ordering::Release);
+                }
                 continue;
             }
             "shutdown" => {

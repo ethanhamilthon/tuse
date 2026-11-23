@@ -36,12 +36,12 @@ impl Renderer {
         let ui = &p.ui;
         let pad = ui.pad_x as usize;
         let inner = w.saturating_sub(pad * 2).max(1);
-        let fr = input_view::frame(ui);
-        let text_w = inner.saturating_sub(fr.left + fr.right).max(1);
+        let left = crate::text::width(crate::style::INPUT_PREFIX);
+        let text_w = inner.saturating_sub(left).max(1);
         app.input_cols = text_w;
         let (rows, (crow, ccol)) = app.editor.layout(text_w);
-        let head = fr.head.min(h.saturating_sub(1));
-        let foot = fr.foot.min(h.saturating_sub(1).saturating_sub(head));
+        let head = usize::from(h > 1);
+        let foot = usize::from(h > 2);
         let editor_room = h.saturating_sub(head + foot).max(1);
         let input_h = tuse_config::limit(ui.input_max_height, rows.len())
             .max(1)
@@ -74,9 +74,9 @@ impl Renderer {
         rows.resize_with(rows.len().max(input_h), String::new);
         let shown = &rows[input_top..input_top + input_h];
         screen.extend(
-            input_view::block(app, &fr, inner, shown, input_top)
+            input_view::block(app, inner, shown, input_top)
                 .into_iter()
-                .skip(fr.head - head)
+                .skip(1 - head)
                 .take(head + input_h + foot),
         );
         screen.truncate(h);
@@ -112,13 +112,13 @@ impl Renderer {
         let first = h.saturating_sub(input_h + foot);
         app.input_area = Some(crate::app::InputArea {
             row: first,
-            col: pad + fr.left,
+            col: pad + left,
             height: input_h,
             top: input_top,
             cols: text_w,
         });
         let cy = (first + crow - input_top).min(h.saturating_sub(1));
-        out.queue(MoveTo((pad + fr.left + ccol) as u16, cy as u16))?;
+        out.queue(MoveTo((pad + left + ccol) as u16, cy as u16))?;
         out.queue(Show)?;
         out.queue(EndSynchronizedUpdate)?;
         out.flush()

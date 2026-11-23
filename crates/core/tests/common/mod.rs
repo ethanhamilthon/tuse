@@ -90,7 +90,6 @@ pub fn setup(name: &str, addr: &str, extra: &str) -> (PathBuf, PathBuf) {
     // SAFETY: see above.
     unsafe {
         std::env::set_var("TUSE_HOME", dir.join("home"));
-        std::env::remove_var("TUSE_PARENT");
     }
     tuse_core::add_provider(&tuse_config::Connect {
         name: "p".into(),

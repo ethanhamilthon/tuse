@@ -1,7 +1,6 @@
 mod app;
 mod chat;
 mod chat_stream;
-mod children;
 mod clipboard;
 mod code_block;
 mod commands;
@@ -35,7 +34,6 @@ mod table;
 mod text;
 mod token_picker;
 mod tool_view;
-mod trace_filter;
 mod usage;
 
 use crossterm::event::{

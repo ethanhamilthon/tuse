@@ -19,7 +19,6 @@ pub struct Data {
     pub reason: Option<&'static str>,
     /// `agent_message`: running background tasks, `(id, name)`.
     pub tasks: Option<Vec<[String; 2]>>,
-    pub children: Option<Vec<crate::children::RunningChild>>,
 }
 
 /// Per hook: whether a run is going, the events waiting behind it, and the flag
@@ -64,10 +63,7 @@ impl Session {
                 "is_first": data.is_first,
                 "status": data.status,
                 "reason": data.reason,
-                "tasks": data.tasks.as_ref().map(|t| t.iter().map(|[id, name]| json!({"id": id, "name": name})).collect::<Vec<_>>()),
-                "children": data.children.as_ref().map(|c| c.iter().map(|c| json!({
-                    "id": c.id, "name": c.name, "cwd": c.cwd, "elapsed": c.elapsed_secs
-                })).collect::<Vec<_>>()),
+                "tasks": data.tasks.as_ref().map(|t| t.iter().map(|[id, name]| json!({"id": id, "name": name})).collect::<Vec<_>>())
             });
             let mut runs = self.hook_runs.lock().unwrap();
             let lane = runs.entry(name.clone()).or_default();
@@ -203,7 +199,6 @@ impl Session {
             text: Some(text),
             status: Some(status),
             tasks: Some(tasks),
-            children: Some(crate::children::running_descendants(&self.id)),
             ..Default::default()
         };
         self.hook("agent_message", data);

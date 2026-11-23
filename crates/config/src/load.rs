@@ -90,9 +90,6 @@ mod tests {
         assert_eq!((t.accent.as_str(), t.info.as_str()), ("blue", "green"));
         assert_eq!((c.settings.ui.tool_line, c.compact_at("p/a")), (7, 600));
         assert_eq!(c.hooks["h"].events, ["user_message"]);
-        let e = from_value(json!({"settings": {"ui": {"input_design": "round"}}}), "t");
-        let e = e.unwrap_err();
-        assert!(e.contains("`round`") && e.contains("`fill`"), "{e}");
         assert!(from_value(json!("x"), "t").is_err());
         let s = crate::Settings::default();
         assert_eq!(s.retries, 5);

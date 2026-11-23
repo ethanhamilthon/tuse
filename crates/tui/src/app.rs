@@ -34,11 +34,6 @@ pub struct App {
     pub hover: Option<u32>,
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
-    /// The `/trace` item shown in the panel; Esc goes back to the list at this item.
-    pub trace_item: Option<usize>,
-    pub children_view: Option<String>,
-    /// `(role, text)` of every `/trace` item.
-    pub trace: Vec<(&'static str, String)>,
     /// Rows the open list shows (set while drawing); the keys keep the selection in view.
     pub list_rows: usize,
     pub input_area: Option<InputArea>,
@@ -89,9 +84,6 @@ impl App {
             hover: None,
             picker: None,
             panel: None,
-            trace_item: None,
-            children_view: None,
-            trace: vec![],
             list_rows: 8,
             input_area: None,
             dismissed: None,
@@ -182,7 +174,6 @@ pub fn test_home() {
         unsafe {
             std::env::set_var("TUSE_HOME", &home);
             std::env::set_var("TUSE_GLOBAL_CONFIG", home.join("none.lua"));
-            std::env::remove_var("TUSE_PARENT");
         }
     });
 }

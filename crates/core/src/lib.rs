@@ -1,4 +1,3 @@
-mod children;
 mod compaction;
 mod config_lua;
 mod control;
@@ -12,7 +11,6 @@ mod host;
 mod host_tasks;
 mod id;
 mod input;
-mod migrate;
 mod mode;
 mod models;
 mod prompt;
@@ -28,7 +26,6 @@ mod trace;
 mod turn;
 mod usage;
 
-pub use children::{Child, RunningChild, Totals, descendants, running_descendants};
 pub use config_lua::theme;
 pub use control::InputId;
 pub use db::{add_provider, providers, remove_provider};

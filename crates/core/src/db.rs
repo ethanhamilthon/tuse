@@ -10,11 +10,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     meta TEXT NOT NULL,
     cwd TEXT NOT NULL,
-    parent TEXT NOT NULL DEFAULT '',
     updated TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS sessions_cwd ON sessions(cwd);
-CREATE INDEX IF NOT EXISTS sessions_parent ON sessions(parent);
 CREATE TABLE IF NOT EXISTS records (
     session TEXT NOT NULL,
     seq INTEGER NOT NULL,

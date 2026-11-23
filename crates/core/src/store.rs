@@ -26,12 +26,6 @@ pub struct Meta {
     pub effort: String,
     pub created: String,
     pub updated: String,
-    /// When the process holding the session ended.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub closed: String,
-    /// The session whose process started this one (`TUSE_PARENT`).
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub parent: String,
 }
 
 /// A session in the database. Holding it holds the session's lock. A new session
@@ -69,7 +63,7 @@ impl SessionDir {
         Ok(d)
     }
 
-    pub(crate) fn materialize(&mut self) -> Result<(), String> {
+    fn materialize(&mut self) -> Result<(), String> {
         if self.lock.is_some() {
             return Ok(());
         }
@@ -130,13 +124,13 @@ impl SessionDir {
     }
 }
 
-pub(crate) fn put_meta(m: &Meta) -> Result<(), String> {
+fn put_meta(m: &Meta) -> Result<(), String> {
     let body = serde_json::to_string(m).map_err(|e| e.to_string())?;
     db::with(|c| {
         c.execute(
-            "INSERT INTO sessions(id, meta, cwd, parent, updated) VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT(id) DO UPDATE SET meta = ?2, cwd = ?3, parent = ?4, updated = ?5",
-            params![m.id, body, m.cwd, m.parent, m.updated],
+            "INSERT INTO sessions(id, meta, cwd, updated) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(id) DO UPDATE SET meta = ?2, cwd = ?3, updated = ?4",
+            params![m.id, body, m.cwd, m.updated],
         )
         .map(|_| ())
     })
@@ -152,12 +146,6 @@ pub fn read_records(id: &str) -> Vec<Record> {
             .collect())
     })
     .unwrap_or_default()
-}
-
-/// Whether some process holds the session's lock. The probe takes a shared lock and drops it at once.
-pub fn is_locked(id: &str) -> bool {
-    File::open(session_path(id).join("lock"))
-        .is_ok_and(|f| matches!(f.try_lock_shared(), Err(TryLockError::WouldBlock)))
 }
 
 pub fn read_meta(id: &str) -> Option<Meta> {
@@ -194,11 +182,6 @@ pub fn list_sessions(cwd: &Path) -> Vec<Meta> {
     .into_iter()
     .filter(|m: &Meta| !m.title.is_empty())
     .collect()
-}
-
-/// Every session with a parent.
-pub fn with_parents() -> Vec<Meta> {
-    metas("SELECT meta FROM sessions WHERE parent != ?1", "")
 }
 
 /// The last model and effort picked in the UI win over the config file.

@@ -5,13 +5,12 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
-pub const COMMANDS: [(&str, &str); 10] = [
+pub const COMMANDS: [(&str, &str); 9] = [
     ("config", "show the resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
     ("models", "switch model and effort"),
     ("tasks", "background tasks"),
-    ("childrens", "child sessions of this one"),
     ("usage", "context, tokens and cost"),
     ("trace", "everything in this session"),
     ("reload", "run the config file again"),
@@ -20,10 +19,8 @@ pub const COMMANDS: [(&str, &str); 10] = [
 
 impl App {
     pub fn run_command(&mut self, name: &str) {
-        self.children_view = None;
         match name {
             "config" => {
-                self.trace_item = None;
                 self.panel = Some(Panel::new("Config", self.session.config().to_json()));
             }
             "new" => self.switch(None),
@@ -31,12 +28,10 @@ impl App {
             "resume" => self.open_resume(),
             "models" => self.open_models(),
             "tasks" => self.open_tasks(),
-            "childrens" => self.open_children(None),
             "usage" => {
                 self.panel = Some(crate::usage::panel(&self.session, &self.palette));
-                self.trace_item = None;
             }
-            "trace" => self.open_trace(None),
+            "trace" => self.open_trace(),
             "reload" => match self.session.reload() {
                 Ok(()) => {
                     self.palette = Palette::from_config(&self.session.config());
@@ -72,35 +67,15 @@ impl App {
         self.open_modal(Picker::new(Kind::Resume, "Resume", items));
     }
 
-    /// The whole session as a list; Enter opens an item, Esc in the item comes back here.
-    pub fn open_trace(&mut self, select: Option<usize>) {
-        let all = self.session.trace();
-        let items = all
-            .iter()
-            .enumerate()
-            .map(|(i, it)| {
-                crate::picker::tagged(it.role, format!("{i} {}", it.summary), i.to_string())
-            })
-            .collect();
-        self.trace = all.into_iter().map(|it| (it.role, it.text)).collect();
-        let last = self.trace.len().saturating_sub(1);
-        self.open_modal(Picker::new(Kind::Trace, "Trace", items))
-            .select(&select.unwrap_or(last).to_string());
-        self.panel = None;
-        self.trace_item = None;
-    }
-
-    pub fn open_trace_item(&mut self, at: usize) {
-        if let Some((role, text)) = self.trace.get(at) {
-            let title = format!("Trace {}/{} {role}", at + 1, self.trace.len());
-            let panel = match *role {
-                "user" | "agent" | "system" => Panel::markdown(title, text.clone()),
-                "lua" => Panel::lua(title, text.clone()),
-                _ => Panel::new(title, text.clone()),
-            };
-            self.panel = Some(panel);
-            self.trace_item = Some(at);
+    fn open_trace(&mut self) {
+        let mut text = String::new();
+        for item in self.session.trace() {
+            use std::fmt::Write;
+            let _ = writeln!(text, "--- {} ---\n{}\n", item.role, item.text);
         }
+        let mut panel = Panel::new("Trace", text);
+        panel.scroll = usize::MAX;
+        self.panel = Some(panel);
     }
 
     pub fn open_tasks(&mut self) {
@@ -147,11 +122,7 @@ impl App {
                     .insert_atom(&format!("#{v}"), AtomKind::Prompt(v.clone()));
                 self.editor.insert(" ");
             }
-            // A relative folder needs `/*` to be listed; an absolute one lists at its `/`.
-            (Kind::File, Some(v)) if v.ends_with('/') && crate::files::is_absolute(&v) => {
-                self.replace_token(&format!("@{v}"));
-            }
-            (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}*")),
+            (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}")),
             (Kind::File, Some(v)) => {
                 self.cut_token();
                 self.editor
@@ -179,17 +150,12 @@ impl App {
                     self.error(format!("Can't save the model: {e}"));
                 }
             }
-            (Kind::Children, Some(v)) => self.open_child_detail(&v),
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.tasks.get(&v) {
                     let out = tuse_core::tail(&t.log, 200);
                     let title = format!("Task {} {} [{}]", t.id, t.name, t.status);
                     self.panel = Some(Panel::new(title, out));
                 }
-            }
-            (Kind::Trace, Some(v)) => {
-                let at: usize = v.parse().unwrap_or(0);
-                self.open_trace_item(at);
             }
             _ => {}
         }

@@ -28,21 +28,6 @@ pub fn now() -> String {
     format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
 }
 
-/// Seconds since the epoch of an RFC 3339 UTC timestamp made by `now`.
-pub fn parse(s: &str) -> Option<u64> {
-    let n = |r: std::ops::Range<usize>| s.get(r)?.parse::<i64>().ok();
-    let (y, m, d) = (n(0..4)?, n(5..7)?, n(8..10)?);
-    let (h, mi, sec) = (n(11..13)?, n(14..16)?, n(17..19)?);
-    let y = y - i64::from(m <= 2);
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let mp = if m > 2 { m - 3 } else { m + 9 };
-    let doy = (153 * mp + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146097 + doe - 719468;
-    u64::try_from(days * 86400 + h * 3600 + mi * 60 + sec).ok()
-}
-
 fn civil(secs: u64) -> (i64, u32, u32, u64, u64, u64) {
     let days = (secs / 86400) as i64;
     let rem = secs % 86400;
@@ -64,6 +49,5 @@ mod tests {
     fn civil_dates() {
         assert_eq!(super::civil(0), (1970, 1, 1, 0, 0, 0));
         assert_eq!(super::civil(1795049364), (2026, 11, 19, 0, 49, 24));
-        assert_eq!(super::parse("2026-11-19T00:49:24Z"), Some(1795049364));
     }
 }

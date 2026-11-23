@@ -20,7 +20,6 @@ fn a_session_keeps_its_model_when_the_config_changes() {
     // SAFETY: this file holds one test, so nothing else reads the environment meanwhile.
     unsafe {
         std::env::set_var("TUSE_HOME", dir.join("home"));
-        std::env::remove_var("TUSE_PARENT");
     }
     let cfg = dir.join("tuse.lua");
     let write = |model: &str| {

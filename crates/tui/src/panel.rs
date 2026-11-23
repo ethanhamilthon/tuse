@@ -5,8 +5,6 @@ use crate::text::{Line, wrap};
 enum Body {
     Text(String),
     Styled(Vec<Line>),
-    Markdown(String),
-    Lua(String),
 }
 
 /// Read-only text over the bottom of the chat (`/usage`, a task's output, an opened
@@ -31,12 +29,6 @@ impl Panel {
     pub fn new(title: impl Into<String>, value: impl Into<String>) -> Self {
         Self::with_body(title, Body::Text(value.into()))
     }
-    pub fn markdown(title: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::with_body(title, Body::Markdown(value.into()))
-    }
-    pub fn lua(title: impl Into<String>, value: impl Into<String>) -> Self {
-        Self::with_body(title, Body::Lua(value.into()))
-    }
     pub fn styled(title: impl Into<String>, value: Vec<Line>) -> Self {
         Self::with_body(title, Body::Styled(value))
     }
@@ -54,14 +46,6 @@ impl Panel {
                     .iter()
                     .flat_map(|r| wrap(r, width, &empty, &empty))
                     .collect(),
-                Body::Markdown(text) => crate::markdown::render(text, width, p),
-                Body::Lua(code) => {
-                    let cleaned = crate::render::clean(code);
-                    crate::syntax::highlight(&cleaned, Style::fg(p.fg), p)
-                        .into_iter()
-                        .flat_map(|r| wrap(&r, width, &empty, &empty))
-                        .collect()
-                }
             };
             self.cache = Some((width, lines));
         }
@@ -112,24 +96,5 @@ mod tests {
         assert_eq!(last.len(), 8);
         let short = Panel::new("T", "one").lines(20, 8, &p);
         assert_eq!(short.len(), 3);
-    }
-
-    #[test]
-    fn panel_highlights_markdown_and_lua() {
-        let p = Palette::new(&Theme::default(), &UiSettings::default());
-        let mut md = Panel::markdown(
-            "Trace 1/1 agent",
-            "# Heading
-
-`code`",
-        );
-        let md_lines = md.lines(40, 8, &p);
-        assert!(md_lines.iter().flatten().any(|s| s.style.fg == p.info));
-        assert!(md_lines.iter().flatten().any(|s| s.style.fg == p.ok));
-
-        let mut py = Panel::lua("Trace 1/1 lua", "local function f()\n  return \"hi\"\nend");
-        let py_lines = py.lines(40, 8, &p);
-        assert!(py_lines.iter().flatten().any(|s| s.style.fg == p.err));
-        assert!(py_lines.iter().flatten().any(|s| s.style.fg == p.ok));
     }
 }

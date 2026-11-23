@@ -7,7 +7,6 @@ pub const STATUS_MIN_MS: u64 = 100;
 pub const FILE_PICKER_MAX: usize = 20_000;
 pub const LIST_INDENT: usize = 2;
 pub const CODE_INDENT: usize = 2;
-pub const TRACE_ROLE_WIDTH: usize = 9;
 
 pub const INPUT_PREFIX: &str = "› ";
 /// Before each question of `tuse connect` and other inline prompts.
@@ -25,9 +24,7 @@ pub const SCROLL_MARK: &str = "↑";
 pub const LABEL_SEP: &str = " · ";
 pub const MORE: &str = "…";
 pub const MASK_CHAR: &str = "•";
-pub const BAR_CHAR: &str = "┃";
-pub const BOX_CHARS: [&str; 5] = ["╭", "╮", "╰", "╯", "│"];
-/// Blank columns left of the text in a `fill` input and a user message.
+/// Blank columns left of a user message.
 pub const FILL_PAD: usize = 1;
 pub const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
 pub const STEERING_LABEL: &str = "steering…";

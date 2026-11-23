@@ -22,7 +22,6 @@ pub enum Event {
         id: String,
         name: String,
         code: String,
-        title: Option<String>,
     },
     ToolStart {
         timeout: u64,
@@ -30,7 +29,6 @@ pub enum Event {
         tool: String,
         /// The code of `python`.
         input: String,
-        title: String,
     },
     ToolEnd {
         id: String,

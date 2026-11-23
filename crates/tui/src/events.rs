@@ -51,11 +51,7 @@ impl App {
                 self.streamed_text = false;
             }
             Event::ToolDelta {
-                index,
-                id,
-                code,
-                title,
-                ..
+                index, id, code, ..
             } => {
                 let pos =
                     if let Some((_, pos)) = self.pending_tools.iter().find(|(i, _)| *i == index) {
@@ -66,13 +62,11 @@ impl App {
                         let pos = self.chat.len();
                         self.pending_tools.push((index, pos));
                         self.chat.push(Entry::Tool {
-                            timer: None,
                             id: if id.is_empty() {
                                 format!("stream-{index}")
                             } else {
                                 id
                             },
-                            title: String::new(),
                             input: String::new(),
                             output: None,
                             code: None,
@@ -80,30 +74,11 @@ impl App {
                         });
                         pos
                     };
-                if let Some(Entry::Tool {
-                    input,
-                    title: shown,
-                    ..
-                }) = self.chat.get_mut(pos)
-                {
-                    if let Some(title) = title {
-                        *shown = title;
-                    }
+                if let Some(Entry::Tool { input, .. }) = self.chat.get_mut(pos) {
                     input.push_str(&code);
                 }
             }
-            Event::ToolStart {
-                id,
-                input,
-                title,
-                timeout,
-                ..
-            } => {
-                let clock = Some((
-                    std::time::Instant::now(),
-                    std::time::Duration::from_secs(timeout),
-                    None,
-                ));
+            Event::ToolStart { id, input, .. } => {
                 if let Some((n, _)) = self
                     .pending_tools
                     .iter()
@@ -112,24 +87,18 @@ impl App {
                 {
                     let (_, pos) = self.pending_tools.remove(n);
                     if let Some(Entry::Tool {
-                        timer,
                         id: old,
-                        title: shown,
                         input: text,
                         ..
                     }) = self.chat.get_mut(pos)
                     {
-                        *timer = clock;
                         *old = id;
-                        *shown = title;
                         *text = input;
                         return;
                     }
                 }
                 self.chat.push(Entry::Tool {
-                    timer: clock,
                     id,
-                    title,
                     input,
                     output: None,
                     code: None,
@@ -143,16 +112,12 @@ impl App {
                 diffs,
             } => {
                 if let Some(Entry::Tool {
-                    timer,
                     output: o,
                     code: c,
                     diffs: d,
                     ..
                 }) = self.chat.find_tool(&id)
                 {
-                    if let Some((start, _, elapsed)) = timer {
-                        *elapsed = Some(start.elapsed());
-                    }
                     *o = Some(output);
                     *c = code;
                     *d = diffs;

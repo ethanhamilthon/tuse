@@ -14,15 +14,6 @@ pub fn duration(d: Duration) -> String {
     }
 }
 
-/// Elapsed time of a tool call: milliseconds under one second, else `duration`.
-pub fn call_time(d: Duration) -> String {
-    if d.as_secs() == 0 {
-        format!("{}ms", d.as_millis())
-    } else {
-        duration(d)
-    }
-}
-
 /// Tabs become spaces and control characters (ESC included) are dropped,
 /// so text from scripts cannot move the cursor or break the width.
 pub(crate) fn clean(text: &str) -> String {
@@ -88,40 +79,12 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             all[all.len() - n..].to_vec()
         }
         Entry::Tool {
-            timer,
-            title,
             input,
             output,
             code,
             diffs,
             ..
-        } => {
-            let mut lines =
-                crate::tool_view::tool(title, input, output.as_deref(), *code, diffs, width, p);
-            if let Some((start, limit, elapsed)) = timer
-                && !title.trim().is_empty()
-                && p.ui.tool_line != 0
-                && let Some(line) = lines.first_mut()
-            {
-                let label = format!(
-                    " {}/{}",
-                    call_time(elapsed.unwrap_or_else(|| start.elapsed())),
-                    duration(*limit)
-                );
-                let left = width.saturating_sub(crate::text::width(&label));
-                line.truncate(1);
-                let title = clean(&title.split_whitespace().collect::<Vec<_>>().join(" "));
-                line.push(span(
-                    crate::text::clip(&title, left.saturating_sub(line_width(line)), "…"),
-                    Style::fg(p.dim),
-                ));
-                line.push(span(
-                    crate::text::clip(&label, width.saturating_sub(line_width(line)), ""),
-                    Style::fg(p.accent),
-                ));
-            }
-            lines
-        }
+        } => crate::tool_view::tool(input, output.as_deref(), *code, diffs, width, p),
         Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad),
         Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad),
         Entry::TurnEnd {
@@ -141,20 +104,5 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             let text = parts.join(LABEL_SEP);
             plain(&text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad)
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn call_time_uses_milliseconds_under_a_second() {
-        let ms = Duration::from_millis;
-        assert_eq!(call_time(ms(0)), "0ms");
-        assert_eq!(call_time(ms(302)), "302ms");
-        assert_eq!(call_time(ms(999)), "999ms");
-        assert_eq!(call_time(ms(1000)), "1s");
-        assert_eq!(call_time(ms(61_000)), "1m1s");
     }
 }

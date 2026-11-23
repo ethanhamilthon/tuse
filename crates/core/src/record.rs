@@ -26,9 +26,6 @@ pub enum Record {
     Tool {
         id: String,
         tool: String,
-        /// What the agent said the call does (`python`'s `title`).
-        #[serde(default, skip_serializing_if = "String::is_empty")]
-        title: String,
         input: String,
         output: String,
         #[serde(default)]

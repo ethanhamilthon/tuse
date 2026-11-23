@@ -128,7 +128,7 @@ impl Session {
         let req = Request {
             model: split_model(&model).1.to_string(),
             messages: messages(&st.records, st.bounds, &system),
-            tools: prompt::tools(&config),
+            tools: prompt::tools(),
             effort: (effort != "default").then_some(effort),
         };
         drop(st);
@@ -195,7 +195,7 @@ impl Session {
             return Step::Done;
         }
         for call in &calls {
-            if !self.tool(generation, cancel, call, &config) {
+            if !self.tool(generation, cancel, call) {
                 return Step::Stale;
             }
         }

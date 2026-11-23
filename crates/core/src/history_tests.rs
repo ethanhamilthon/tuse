@@ -39,7 +39,6 @@ fn result(id: &str, images: Vec<String>) -> Record {
     Record::Tool {
         id: id.into(),
         tool: "lua".into(),
-        title: String::new(),
         input: "read('a.png')".into(),
         output: "ok".into(),
         code: Some(0),

@@ -72,14 +72,13 @@ impl Accumulator {
                 } else {
                     f.get("arguments").and_then(Value::as_str).unwrap_or("")
                 };
-                let (code, title) = self.args[slot].feed(chunk);
-                if first || !code.is_empty() || title.is_some() {
+                let code = self.args[slot].feed(chunk);
+                if first || !code.is_empty() {
                     on_delta(Delta::Tool {
                         index: slot,
                         id: &call.id,
                         name: &call.name,
                         code: &code,
-                        title: title.as_deref(),
                     });
                 }
             }

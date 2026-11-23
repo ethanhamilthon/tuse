@@ -43,7 +43,7 @@ UI behavior and layout live under `settings.ui` so switching `/theme` keeps them
 ### Input design
 
 Each design shows the input and two status bars: working (spinner, elapsed time and the current
-tool call's `title`, or `steering…` while a queued message waits) and the model (model, effort,
+action, or `steering…` while a queued message waits) and the model (model, effort,
 context, cost).
 
 - `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.

@@ -67,7 +67,7 @@ tuse reset [--yes] | tuse update          reset the config folder | update the b
 `--config` picks the config file (else `./tuse.lua`, else the global `main.lua`). `--resume ID`
 opens a saved session: the ID is printed to stderr when Tuse exits.
 
-The agent's tool is `lua(code, title, timeout)`, a persistent Lua 5.4 VM with these functions:
+The agent's tool is `lua(code)`, a persistent Lua 5.4 VM with these functions:
 
 - `read(path)`: numbered text lines in pages, or an image the model sees. `write(path, content)`
   creates or replaces a file atomically. `edit(path, old, new)` replaces exact, unique text. The
@@ -77,7 +77,7 @@ The agent's tool is `lua(code, title, timeout)`, a persistent Lua 5.4 VM with th
 - `spawn(fn, name)` runs a function as a background task in the same VM; `task_get`, `task_stop`
   and `task_list` manage them (listed in `/tasks`; the agent gets a message when one ends).
 
-The VM lives as long as the process. Every call has a `title` that the working indicator shows.
+The VM lives as long as the process. A call is stopped after 120 seconds.
 
 `tuse connect` asks for the base url, the API key (`$ENV` works too) and a name, fetches
 the provider's models, says how many it got and saves the provider in `~/.tuse/tuse.db`.

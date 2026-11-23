@@ -162,7 +162,6 @@ pub fn missing_results(records: &[Record]) -> Vec<Record> {
         .map(|c| Record::Tool {
             id: c.id.clone(),
             tool: c.name.clone(),
-            title: String::new(),
             input: serde_json::from_str::<serde_json::Value>(&c.arguments)
                 .ok()
                 .and_then(|v| v["code"].as_str().map(String::from))

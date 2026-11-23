@@ -18,18 +18,16 @@ pub fn to_json(e: &Event) -> Value {
             id,
             name,
             code,
-            title,
         } => {
-            json!({"type": "tool_delta", "index": index, "id": id, "name": name, "code": code, "title": title})
+            json!({"type": "tool_delta", "index": index, "id": id, "name": name, "code": code})
         }
         Event::ToolStart {
             timeout,
             id,
             tool,
             input,
-            title,
         } => {
-            json!({"type": "tool_start", "timeout": timeout, "id": id, "tool": tool, "input": input, "title": title})
+            json!({"type": "tool_start", "timeout": timeout, "id": id, "tool": tool, "input": input})
         }
         Event::ToolEnd {
             id,

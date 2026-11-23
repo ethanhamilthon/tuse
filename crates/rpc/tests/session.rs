@@ -15,7 +15,7 @@ use support::{Lines, Pipe, event, reply, until};
 fn a_client_drives_a_session() {
     let code = "print('answer: ' .. 'yes')";
     let addr = common::provider(vec![
-        Reply::Call("lua", json!({"code": code, "title": "Asking"}).to_string()),
+        Reply::Call("lua", json!({"code": code}).to_string()),
         Reply::Text("deployed"),
     ]);
     let (dir, cfg) = common::setup("rpc", &addr, "");

@@ -4,7 +4,7 @@ use tuse_config::Config;
 const SYSTEM: &str = include_str!("../prompts/system.md");
 
 pub fn system_prompt(config: &Config, compacted: bool, mode: crate::Mode) -> String {
-    let mut parts = vec![fill(SYSTEM, config).trim_end().to_string()];
+    let mut parts = vec![SYSTEM.trim_end().to_string()];
     parts[0].push_str(&crate::helpers::listing(config, mode, false));
     let cfg_mode = mode.into();
     parts.extend(
@@ -21,11 +21,6 @@ pub fn system_prompt(config: &Config, compacted: bool, mode: crate::Mode) -> Str
     out
 }
 
-/// Fills `{tool_timeout}`.
-fn fill(text: &str, config: &Config) -> String {
-    text.replace("{tool_timeout}", &config.settings.tool_timeout.to_string())
-}
-
 fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
     json!({
         "type": "function",
@@ -37,15 +32,13 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
     })
 }
 
-pub fn tools(config: &Config) -> Vec<Value> {
+pub fn tools() -> Vec<Value> {
     vec![tool(
         "lua",
         "Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Files and search: read(), write(), edit(), grep(); programs: sh(cmd).",
         json!({
-            "code": {"type": "string", "description": "The Lua code to run."},
-            "title": {"type": "string", "description": "What this call does, in a few words and the user's language, e.g. \"Running the tests\". Shown to the user while it runs."},
-            "timeout": {"type": "integer", "description": format!("Seconds before the call is stopped; default {}, no upper limit.", config.settings.tool_timeout)}
+            "code": {"type": "string", "description": "The Lua code to run."}
         }),
-        &["code", "title"],
+        &["code"],
     )]
 }

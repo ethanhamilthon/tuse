@@ -34,7 +34,7 @@ fn wait_text(events: &std::sync::mpsc::Receiver<Event>) {
 fn hooks_see_process_and_message_events_in_order() {
     let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
     let addr = common::provider(vec![
-        Reply::Call("lua", json!({"code": "1", "title": "t"}).to_string()),
+        Reply::Call("lua", json!({"code": "1"}).to_string()),
         Reply::Text("done"),
         Reply::Stall("partial"),
     ]);

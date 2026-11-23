@@ -8,18 +8,13 @@ impl Session {
                 id,
                 name,
                 code,
-                title,
             } => {
                 if name == crate::tool::TOOL {
-                    if let Some(t) = title {
-                        self.set_status(t.into());
-                    }
                     self.emit(Event::ToolDelta {
                         index,
                         id: id.into(),
                         name: name.into(),
                         code: code.into(),
-                        title: title.map(str::to_string),
                     });
                 }
             }

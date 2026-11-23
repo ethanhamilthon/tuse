@@ -38,8 +38,6 @@ pub struct Settings {
     /// Unset: 60% of the model's `window` when it is known; `0` turns compaction off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compact_at: Option<u64>,
-    /// Seconds a `lua` call gets when the agent passes no `timeout`.
-    pub tool_timeout: u64,
     pub hook_timeout: u64,
     pub max_image_bytes: usize,
     pub retries: usize,
@@ -52,7 +50,6 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             compact_at: None,
-            tool_timeout: 10,
             hook_timeout: 30,
             max_image_bytes: 5 * 1024 * 1024,
             retries: 5,

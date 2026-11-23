@@ -39,7 +39,6 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
     if !value.is_object() {
         return Err(format!("{name}: the config must return a table"));
     }
-    crate::themes::resolve(&mut value).map_err(|e| format!("{name}: {e}"))?;
     empty_tables_as_maps(&mut value);
     let config: Config = serde_json::from_value(value).map_err(|e| format!("{name}: {e}"))?;
     config
@@ -48,10 +47,6 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
         .check()
         .map_err(|e| format!("{name}: settings.ui: {e}"))?;
     crate::functions::validate(&config).map_err(|e| format!("{name}: {e}"))?;
-    let theme = config.theme_name();
-    if !matches!(theme, "" | "default") && !config.themes.contains_key(theme) {
-        return Err(format!("{name}: theme {theme} not found"));
-    }
     Ok(config)
 }
 
@@ -89,18 +84,17 @@ mod tests {
     #[test]
     fn builds_from_a_table_and_checks_it() {
         let c = from_value(
-            json!({"model": "p/a", "settings": {"theme": "b", "ui": {"tool_line": 7}},
-                "themes": {"a": {"accent": "red", "info": "green"}, "b": {"extend": "a", "accent": "blue"}},
+            json!({"model": "p/a", "settings": {"ui": {"tool_line": 7}},
+                "theme": {"accent": "blue", "info": "green"},
                 "prompts": [], "hooks": {"h": {"events": ["user_message"]}},
                 "models": [{"name": "p/a", "window": 1000}]}),
             "t",
         )
         .unwrap();
-        let t = c.active_theme();
+        let t = &c.theme;
         assert_eq!((t.accent.as_str(), t.info.as_str()), ("blue", "green"));
         assert_eq!((c.settings.ui.tool_line, c.compact_at("p/a")), (7, 600));
         assert_eq!(c.hooks["h"].events, ["user_message"]);
-        assert!(from_value(json!({"settings": {"theme": "nope"}}), "t").is_err());
         let e = from_value(json!({"settings": {"ui": {"input_design": "round"}}}), "t");
         assert!(e.unwrap_err().contains("input_design"));
         assert!(from_value(json!("x"), "t").is_err());

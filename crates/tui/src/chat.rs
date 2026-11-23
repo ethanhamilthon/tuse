@@ -133,6 +133,7 @@ impl Chat {
         self.get_mut(i)
     }
 
+    #[cfg(test)]
     pub fn invalidate(&mut self) {
         self.stream = None;
         for (_, cache) in self.entries.iter_mut() {

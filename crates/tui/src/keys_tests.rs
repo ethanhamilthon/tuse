@@ -53,12 +53,12 @@ fn editing_withdraws_only_the_waiting_tui_message() {
     .unwrap();
     let mut app = App::new(session.clone(), dir.clone(), Some(cfg));
     let press = |app: &mut App, code| app.key(KeyEvent::new(code, KeyModifiers::NONE), 0);
-    app.editor.insert("draft /theme after");
-    app.editor.cursor = 12;
+    app.editor.insert("draft /models after");
+    app.editor.cursor = 13;
     app.update_token_picker();
     assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Command);
     press(&mut app, KeyCode::Enter);
-    assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Theme);
+    assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Model);
     assert!(app.editor.is_empty());
     press(&mut app, KeyCode::Esc);
     assert!(app.picker.is_none());

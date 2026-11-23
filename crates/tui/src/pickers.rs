@@ -1,6 +1,5 @@
 use crate::app::App;
 use crate::picker::{Item, Kind, Picker, item};
-use crate::style::Palette;
 use tuse_config::{Config, ModelDef};
 
 impl App {
@@ -29,35 +28,6 @@ impl App {
             .select(&selected);
         if self.session.remote_models().is_empty() {
             self.session.fetch_models();
-        }
-    }
-
-    pub fn open_themes(&mut self) {
-        let config = self.session.config();
-        let mut names = vec!["default".to_string()];
-        names.extend(config.themes.keys().filter(|k| *k != "default").cloned());
-        let items = names
-            .iter()
-            .map(|n| item(n.clone(), "", n.clone()))
-            .collect();
-        let active = match config.theme_name() {
-            "" => "default",
-            name => name,
-        };
-        self.open_modal(Picker::new(Kind::Theme, "Theme", items))
-            .select(active);
-    }
-
-    pub fn set_theme(&mut self, name: &str) {
-        if let Err(e) = self.session.save_choice("theme", name) {
-            self.error(format!("Can't save the theme: {e}"));
-            return;
-        }
-        self.palette = Palette::from_config(&self.session.config());
-        self.palette_gen += 1;
-        self.chat.invalidate();
-        if let Some(panel) = &mut self.panel {
-            panel.invalidate();
         }
     }
 }

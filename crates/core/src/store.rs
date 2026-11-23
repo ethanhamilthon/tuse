@@ -201,22 +201,15 @@ pub fn with_parents() -> Vec<Meta> {
     metas("SELECT meta FROM sessions WHERE parent != ?1", "")
 }
 
-/// The last model, effort and theme picked in the UI win over the config file.
+/// The last model and effort picked in the UI win over the config file.
 pub(crate) fn apply_state(config: &mut tuse_config::Config) {
     config.connect = db::providers();
     for c in &mut config.connect {
         c.api_key = tuse_config::env_value(&c.api_key);
     }
-    for (key, slot) in [
-        ("model", &mut config.model),
-        ("effort", &mut config.effort),
-        ("theme", &mut config.settings.theme),
-    ] {
+    for (key, slot) in [("model", &mut config.model), ("effort", &mut config.effort)] {
         if let Some(v) = db::get_state(key).filter(|v| !v.is_empty()) {
             *slot = v;
         }
-    }
-    if !config.themes.contains_key(&config.settings.theme) {
-        config.settings.theme.clear();
     }
 }

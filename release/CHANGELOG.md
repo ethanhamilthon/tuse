@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.4
+
+- Tuse no longer keeps running at 100% CPU after its terminal is closed. If the UI does not stop within 2 seconds of a hangup, or after the terminal goes away, Tuse closes the session (with `process_end` hooks) and exits.
+
 ## 0.7.3
 
 - Simplified the TUI: one `lines` input design, a scrollable `/trace` log, substring search and normal `@dir/name` paths. Removed `/childrens` and child-session tracking.

@@ -34,6 +34,7 @@ mod text;
 mod token_picker;
 mod tool_view;
 mod usage;
+mod watchdog;
 
 use crossterm::event::{
     self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
@@ -66,7 +67,8 @@ pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Resul
         restore();
         prev(info);
     }));
-    main_loop(app::App::new(session, config_arg), &stop)
+    let dog = watchdog::Watchdog::start(session.clone(), stop.clone());
+    main_loop(app::App::new(session, config_arg), &stop, &dog)
 }
 
 /// Restores the terminal on every way out of `run` (return, `?`, unwinding).
@@ -110,7 +112,11 @@ fn restore() {
     let _ = terminal::disable_raw_mode();
 }
 
-fn main_loop(mut app: app::App, stop: &std::sync::atomic::AtomicBool) -> std::io::Result<String> {
+fn main_loop(
+    mut app: app::App,
+    stop: &std::sync::atomic::AtomicBool,
+    dog: &watchdog::Watchdog,
+) -> std::io::Result<String> {
     let mut out = BufWriter::with_capacity(1 << 16, stdout());
     let mut renderer = draw::Renderer::default();
     let (mut w, mut h) = terminal::size()?;
@@ -119,6 +125,7 @@ fn main_loop(mut app: app::App, stop: &std::sync::atomic::AtomicBool) -> std::io
     let mut last_tick = Instant::now();
     let mut last_draw = Instant::now();
     loop {
+        dog.set_session(&app.session);
         while let Ok(e) = app.events.try_recv() {
             let stream = matches!(
                 e,
@@ -184,6 +191,12 @@ fn main_loop(mut app: app::App, stop: &std::sync::atomic::AtomicBool) -> std::io
         }
     }
     let id = app.session.id.clone();
+    if !dog.claim_close() {
+        // The watchdog is closing the session and will end the process.
+        loop {
+            std::thread::park();
+        }
+    }
     app.session.close();
     Ok(id)
 }

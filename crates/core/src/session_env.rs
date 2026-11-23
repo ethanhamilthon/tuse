@@ -29,6 +29,9 @@ impl Session {
             ("TUSE_CWD".into(), self.cwd.display().to_string()),
             ("TUSE_MODEL".into(), model),
         ];
+        if let Some(g) = tuse_config::global_path() {
+            env.push(("TUSE_GLOBAL_CONFIG".into(), g.display().to_string()));
+        }
         if let Some(c) = tuse_config::find(self.config_arg.as_deref(), &self.cwd) {
             env.push(("TUSE_CURRENT_CONFIG".into(), c.display().to_string()));
         }

@@ -15,6 +15,7 @@ mod mode;
 mod models;
 mod prompt;
 mod record;
+mod require;
 mod session;
 mod session_env;
 mod store;

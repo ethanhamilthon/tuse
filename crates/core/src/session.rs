@@ -216,11 +216,10 @@ fn start_vm(opts: &Options) -> Result<(tuse_lua::Vm, crate::host::Slot, Config),
     };
     let vm = tuse_lua::Vm::new(Arc::new(host), |_| {});
     let path = tuse_config::find(opts.config.as_deref(), &cwd);
-    let mode = opts.mode;
     let s2 = slot.clone();
     let config = vm.call(move |lua| {
         crate::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
-        crate::config_lua::setup(lua, &cwd, mode).map_err(|e| tuse_lua::message(&e))?;
+        crate::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
         let config = crate::config_lua::prepare(lua, path.as_deref())?;
         crate::config_lua::commit(lua, &config)?;
         Ok::<_, String>(config)

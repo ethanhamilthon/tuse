@@ -55,7 +55,7 @@ return {
 Each `run` becomes a global of the VM under the function's name. `args` is only the text shown
 to the agent between the parentheses. `show_agent = false` (default `true`) hides a helper from
 the agent: it is left out of the system prompt and of `docs("functions")`, but it stays defined,
-so other helpers, hooks and tasks can call it. Use `TUSE_MODE` to choose which helpers to define.
+so other helpers, hooks and tasks can call it. Use `os.getenv("TUSE_MODE")` to choose which helpers to define.
 
 `/reload` runs the config file again in the same VM: helpers are redefined and the agent's
 globals stay. A deleted helper remains defined until exit.

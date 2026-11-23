@@ -21,6 +21,12 @@ fn includes_external_configs_and_keeps_require_project_local() {
     fs::write(project.join("local_module.lua"), "return 'project module'").unwrap();
     fs::write(shared.join("local_module.lua"), "return 'wrong module'").unwrap();
     fs::write(shared.join("external_only.lua"), "return true").unwrap();
+    fs::create_dir_all(project.join("pkg")).unwrap();
+    fs::write(project.join("pkg/init.lua"), "return 'pkg init'").unwrap();
+    fs::create_dir_all(shared.join("lib")).unwrap();
+    fs::write(shared.join("lib/init.lua"), "return 'lib init'").unwrap();
+    fs::write(shared.join("lib/file.lua"), "return 'lib file'").unwrap();
+    fs::write(shared.join("lib.lua"), "return 'lib.lua wins'").unwrap();
     fs::write(
         shared.join("base.lua"),
         "return {systems = {'first'}, effort = 'low'}",
@@ -29,10 +35,19 @@ fn includes_external_configs_and_keeps_require_project_local() {
     fs::write(&global, r#"
         assert(not pcall(require, 'external_only'))
         local module = require('local_module')
-        assert(os.getenv('TUSE_MODE') == TUSE_MODE)
-        assert(sh('printf %s "$TUSE_MODE"').out == TUSE_MODE)
+        local t = require('tuse')
+        local mode = os.getenv('TUSE_MODE')
+        assert(t.env.TUSE_MODE == mode and t.env.TUSE_CWD ~= nil)
+        assert(t.sh == sh and t.read == read and t.edit == edit and t.json == json)
+        assert(t.sh('printf %s "$TUSE_MODE"').out == mode)
+        assert(t.env.TUSE_GLOBAL_CONFIG == os.getenv('TUSE_GLOBAL_CONFIG'))
+        assert(not pcall(function() return TUSE_MODE end))
+        assert(require('pkg') == 'pkg init')
+        local dir = t.env.TUSE_GLOBAL_CONFIG:match('(.*)/[^/]+$')
+        assert(require(dir .. '/lib') == 'lib.lua wins')
+        assert(require(dir .. '/lib/file.lua') == 'lib file')
         return {
-            include = {'base.lua'}, effort = 'high', systems = {module, TUSE_MODE},
+            include = {'base.lua'}, effort = 'high', systems = {module, mode},
             settings = { retries = 1, ui = { pad_x = 3 } },
             prompts = { local_wins = 'from global', shared = 'kept' },
             functions = { shared = { description = 'A helper', run = function() return module end } },
@@ -43,8 +58,9 @@ fn includes_external_configs_and_keeps_require_project_local() {
     fs::write(
         &root,
         r#"
+        assert(require('global').prompts.shared == 'kept')
         return {
-            include = { os.getenv('TUSE_GLOBAL_CONFIG') },
+            include = { require('tuse').env.TUSE_GLOBAL_CONFIG },
             model = 'p/m', systems = {'last'},
             settings = { ui = { scroll_step = 5 } },
             prompts = { local_wins = 'from project' },

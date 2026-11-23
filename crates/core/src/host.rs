@@ -28,7 +28,16 @@ impl Host for SessionHost {
 
     fn env(&self) -> Vec<(String, String)> {
         self.get().map_or_else(
-            || vec![("TUSE_MODE".into(), self.mode.name().into())],
+            || {
+                let mut env = vec![
+                    ("TUSE_MODE".into(), self.mode.name().into()),
+                    ("TUSE_CWD".into(), self.cwd.display().to_string()),
+                ];
+                if let Some(g) = tuse_config::global_path() {
+                    env.push(("TUSE_GLOBAL_CONFIG".into(), g.display().to_string()));
+                }
+                env
+            },
             |s| s.env(),
         )
     }

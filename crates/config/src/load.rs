@@ -8,26 +8,21 @@ pub fn home() -> PathBuf {
         .unwrap_or_default()
 }
 
-/// The global config: `$TUSE_GLOBAL_CONFIG`, else `~/.config/tuse/main.lua`.
-pub fn global_path() -> PathBuf {
-    match std::env::var_os("TUSE_GLOBAL_CONFIG").filter(|v| !v.is_empty()) {
-        Some(p) => PathBuf::from(p),
-        None => home().join(".config/tuse/main.lua"),
-    }
-}
-
 /// `--config PATH`, else `./tuse.lua`, else the global config.
 pub fn find(explicit: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
-    find_in(explicit, cwd, &global_path())
+    find_in(explicit, cwd, crate::global_path())
 }
 
-pub(crate) fn find_in(explicit: Option<&Path>, cwd: &Path, global: &Path) -> Option<PathBuf> {
+pub(crate) fn find_in(
+    explicit: Option<&Path>,
+    cwd: &Path,
+    global: Option<PathBuf>,
+) -> Option<PathBuf> {
     if let Some(p) = explicit {
         return Some(p.to_path_buf());
     }
-    [cwd.join("tuse.lua"), global.to_path_buf()]
-        .into_iter()
-        .find(|p| p.is_file())
+    let local = cwd.join("tuse.lua");
+    if local.is_file() { Some(local) } else { global }
 }
 
 /// Builds the config from the table a config file returned (as JSON, functions left out).
@@ -102,13 +97,12 @@ mod tests {
         let d = std::env::temp_dir().join(format!("tuse-find-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         let g = d.join("main.lua");
-        assert_eq!(find_in(None, &d, &g), None);
-        std::fs::write(&g, "return {}").unwrap();
-        assert_eq!(find_in(None, &d, &g), Some(g.clone()));
+        assert_eq!(find_in(None, &d, None), None);
+        assert_eq!(find_in(None, &d, Some(g.clone())), Some(g.clone()));
         std::fs::write(d.join("tuse.lua"), "return {}").unwrap();
-        assert_eq!(find_in(None, &d, &g), Some(d.join("tuse.lua")));
+        assert_eq!(find_in(None, &d, Some(g.clone())), Some(d.join("tuse.lua")));
         let x = d.join("x.lua");
-        assert_eq!(find_in(Some(&x), &d, &g), Some(x));
+        assert_eq!(find_in(Some(&x), &d, Some(g)), Some(x));
         std::fs::remove_dir_all(d).ok();
     }
 }

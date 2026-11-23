@@ -5,7 +5,7 @@ use crate::picker::Picker;
 use crate::style::Palette;
 use std::path::PathBuf;
 use std::sync::{Arc, mpsc::Receiver};
-use tuse_core::{Event, InputId, Options, Session};
+use tuse_core::{Event, InputId, Session};
 
 /// Where the input text is on the screen at the last draw, for mouse clicks.
 #[derive(Debug, Clone, Copy)]
@@ -137,34 +137,12 @@ impl App {
         self.scroll = 0;
     }
 
-    /// Closes the current session and opens a new (`resume: None`) or existing one.
+    /// Switches to a new (`resume: None`) or existing session; on failure the current
+    /// session stays open and the error is shown.
     pub fn switch(&mut self, resume: Option<String>) {
-        let (session, err) = match self.session.switch(resume) {
-            Ok(s) => (s, None),
-            Err(e) if self.session.is_open() => {
-                self.error(e);
-                return;
-            }
-            Err(e) => {
-                let fresh = Session::open(Options {
-                    cwd: self.cwd.clone(),
-                    config: self.config_arg.clone(),
-                    mode: tuse_core::Mode::Tui,
-                    resume: None,
-                    start: tuse_core::Start::New,
-                });
-                match fresh {
-                    Ok(s) => (s, Some(e)),
-                    Err(e2) => {
-                        self.error(format!("{e}; {e2}"));
-                        return;
-                    }
-                }
-            }
-        };
-        *self = App::new(session, self.config_arg.clone());
-        if let Some(e) = err {
-            self.error(e);
+        match self.session.switch(resume) {
+            Ok(s) => *self = App::new(s, self.config_arg.clone()),
+            Err(e) => self.error(e),
         }
     }
 }
@@ -188,7 +166,7 @@ pub fn test_app(name: &str) -> App {
     test_home();
     let cwd = std::env::temp_dir().join(format!("tuse-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&cwd).unwrap();
-    let s = Session::open(Options {
+    let s = Session::open(tuse_core::Options {
         cwd: cwd.clone(),
         mode: tuse_core::Mode::Tui,
         start: Default::default(),

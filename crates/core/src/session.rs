@@ -61,8 +61,23 @@ pub(crate) struct State {
     pub stats: (crate::usage::Stats, Vec<ModelDef>),
 }
 
+/// A session whose lock, VM and config are ready; `start` cannot fail.
+pub(crate) struct Prepared {
+    opts: Options,
+    id: String,
+    meta: Meta,
+    dir: SessionDir,
+    vm: tuse_lua::Vm,
+    weak: crate::host::Slot,
+    config: Config,
+}
+
 impl Session {
-    pub fn open(mut opts: Options) -> Result<Arc<Session>, String> {
+    pub fn open(opts: Options) -> Result<Arc<Session>, String> {
+        Ok(Session::prepare(opts)?.start())
+    }
+
+    pub(crate) fn prepare(mut opts: Options) -> Result<Prepared, String> {
         let restored = opts.resume.is_some();
         let id = opts
             .resume
@@ -83,8 +98,32 @@ impl Session {
                 ..Default::default()
             }
         };
-        let mut dir = SessionDir::open(&id, !restored)?;
+        let dir = SessionDir::open(&id, !restored)?;
         let (vm, weak, config) = crate::config_lua::start_vm(&opts)?;
+        Ok(Prepared {
+            opts,
+            id,
+            meta,
+            dir,
+            vm,
+            weak,
+            config,
+        })
+    }
+}
+
+impl Prepared {
+    pub(crate) fn start(self) -> Arc<Session> {
+        let Prepared {
+            opts,
+            id,
+            meta,
+            mut dir,
+            vm,
+            weak,
+            config,
+        } = self;
+        let restored = opts.resume.is_some();
         let mut records = dir.records();
         for r in history::missing_results(&records) {
             dir.append(&r);
@@ -164,9 +203,11 @@ impl Session {
             }
         });
         s.start_hook(opts.start.reason(), !restored, restored);
-        Ok(s)
+        s
     }
+}
 
+impl Session {
     pub(crate) fn next_lua_id(&self) -> String {
         let n = self.next_lua.fetch_add(1, Ordering::Relaxed) + 1;
         format!("lua-{n}")

@@ -20,21 +20,21 @@ pub fn tool(
     if keep < lines.len() {
         lines.truncate(keep);
         if keep > 0 {
-            lines.push(vec![span(format!("{pad}{MORE}"), Style::fg(p.dim))]);
+            lines.push(vec![span(format!("{pad}{MORE}"), Style::fg(p.border))]);
         }
     }
     let Some(out) = output else { return lines };
     let out = crate::render::clean(out);
     let all: Vec<&str> = out.trim_end().lines().collect();
     let shown = tuse_config::limit(p.ui.output_line, all.len());
-    let st = Style::fg(p.border);
+    let st = Style::fg(p.muted);
     for l in all.iter().take(shown) {
         let l = clip(l, width.saturating_sub(pad.len()), MORE);
         lines.push(vec![span(pad.clone(), st), span(l, st)]);
     }
     if shown > 0 && shown < all.len() {
         let more = format!("{pad}{MORE} {} more lines", all.len() - shown);
-        lines.push(vec![span(more, Style::fg(p.dim))]);
+        lines.push(vec![span(more, Style::fg(p.border))]);
     }
     for d in diffs {
         lines.extend(diff(d, width, &pad, p));
@@ -85,7 +85,7 @@ fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
     }
     if shown < all.len() {
         let more = format!("{pad}{MORE} {} more lines", all.len() - shown);
-        out.push(vec![span(more, Style::fg(p.dim))]);
+        out.push(vec![span(more, Style::fg(p.border))]);
     }
     out
 }
@@ -139,6 +139,43 @@ mod tests {
             "{got:?}"
         );
         assert!(got.iter().all(|l| width(l) <= 40));
+    }
+
+    #[test]
+    fn output_is_muted_and_cut_marks_are_border() {
+        let p = Palette::new(&Default::default(), &Default::default());
+        let fg = |l: &Line| l.last().unwrap().style.fg;
+        let lines = tool(
+            "a = 1\nb = 2",
+            Some("one\ntwo\nthree"),
+            Some(0),
+            &[],
+            40,
+            &p,
+        );
+        let n = lines.len();
+        assert_eq!(fg(&lines[n - 2]), p.muted, "the shown output line");
+        assert!(lines[n - 1].last().unwrap().text.ends_with("2 more lines"));
+        assert_eq!(fg(&lines[n - 1]), p.border, "`N more lines`");
+
+        let ui = tuse_config::UiSettings {
+            tool_line: 1,
+            ..Default::default()
+        };
+        let p = Palette::new(&Default::default(), &ui);
+        let lines = tool("a = 1\nb = 2", None, None, &[], 40, &p);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1][0].text.ends_with(MORE));
+        assert_eq!(fg(&lines[1]), p.border, "the cut code mark");
+
+        let d = FileDiff {
+            path: "f".into(),
+            diff: (0..20).map(|i| format!("+ {i}\n")).collect(),
+        };
+        let lines = tool("x", Some(""), Some(0), &[d], 40, &p);
+        let last = lines.last().unwrap();
+        assert!(last[0].text.ends_with("8 more lines"), "{last:?}");
+        assert_eq!(fg(last), p.border, "`N more lines` under a diff");
     }
 
     #[test]

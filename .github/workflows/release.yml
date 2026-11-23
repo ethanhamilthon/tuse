@@ -53,7 +53,7 @@ jobs:
           merge-multiple: true
       - name: Checksums and config files
         run: |
-          cp release/main.yaml dist/
+          cp release/main.lua dist/
           # Tuse 0.4.0 and older download this file in `tuse update` and `tuse reset`; an empty one
           # replaces their old copy, whose system prompt is built into the binary now.
           echo "# Not used any more: the system prompt and the default settings are built into tuse." > dist/default.yaml

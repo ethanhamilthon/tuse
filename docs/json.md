@@ -1,6 +1,6 @@
 # JSON mode
 
-`tuse json [-c PATH] [-r ID]` serves a Tuse session over JSON-RPC 2.0 on stdin and stdout, one
+`tuse json [--config PATH] [--resume ID]` serves a Tuse session over JSON-RPC 2.0 on stdin and stdout, one
 message per line (NDJSON), with feature parity with the TUI. stdout carries only the protocol; logs
 go to stderr. Closing stdin, `shutdown`, SIGINT, SIGTERM or SIGHUP close the active session (tasks
 stop, pending UI requests clear, `close` hooks run) and exit. `session.new` and `session.resume`

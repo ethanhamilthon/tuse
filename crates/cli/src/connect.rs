@@ -1,20 +1,8 @@
 use crate::args::Args;
 
-const FLAGS: &[&str] = &["--base", "--key", "--name"];
 const USAGE: &str = "tuse connect --base URL --key '$ENV' --name NAME";
 
-pub fn run(raw: &[String]) -> Result<(), String> {
-    if matches!(raw, [flag] if flag == "--help" || flag == "-h") {
-        println!("{USAGE}");
-        return Ok(());
-    }
-    let args = Args::parse(raw, FLAGS)?;
-    if let Some(f) = args.unknown(FLAGS) {
-        return Err(format!("unknown flag {f}\nusage: {USAGE}"));
-    }
-    if !args.positional.is_empty() {
-        return Err(format!("usage: {USAGE}"));
-    }
+pub fn run(args: &Args) -> Result<(), String> {
     let required = |flag| {
         args.value(&[flag])
             .filter(|v| !v.trim().is_empty())

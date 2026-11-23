@@ -205,11 +205,20 @@ fn code(t: &Table, key: &str, name: &str) -> Option<Function> {
         .ok()
 }
 
+/// The `-c/--config PATH` of a command as `Options::config`: relative to `cwd`, `~/` expanded.
+pub fn config_arg(cwd: &Path, path: Option<&str>) -> Option<std::path::PathBuf> {
+    path.map(|p| tuse_config::resolve_path(p, cwd))
+}
+
 /// Loads the effective model metadata without opening a session or running its hooks.
-pub fn configured_models(cwd: std::path::PathBuf) -> Result<Vec<tuse_config::ModelDef>, String> {
+/// `config` is resolved the way a session resolves it (see `config_arg`).
+pub fn configured_models(
+    cwd: std::path::PathBuf,
+    config: Option<std::path::PathBuf>,
+) -> Result<Vec<tuse_config::ModelDef>, String> {
     let (_, _, config) = start_vm(&Options {
         cwd,
-        config: None,
+        config,
         mode: Mode::Tui,
         resume: None,
         start: Start::Launch,

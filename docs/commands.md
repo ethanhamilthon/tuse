@@ -4,13 +4,16 @@
 
 - `tuse [--config PATH] [--resume ID]` opens the TUI. `--config` (`-c`) picks the config;
   `--resume` (`-r`) opens a saved session. Tuse prints the session ID on exit.
-- `tuse json [-c PATH] [-r ID]` serves one session over [JSON-RPC stdio](json.md).
+- `tuse json [--config PATH] [--resume ID]` serves one session over [JSON-RPC stdio](json.md).
 - `tuse connect --base URL --key '$ENV' --name NAME` verifies and saves a provider.
   Quote `$ENV` to store an environment-variable reference rather than passing a literal key.
 - `tuse providers` lists providers; `tuse disconnect NAME` removes one.
-- `tuse models` lists model metadata from the effective Lua config and the default model/effort from SQLite.
+- `tuse models [--config PATH]` lists model metadata from the effective Lua config and the default model/effort from SQLite.
 - `tuse init` creates `./tuse.lua` that starts from the global config (`require("global")`).
 - `tuse update` updates the binary without touching your config.
+- `tuse version` (`--version`, `-V`) prints the version; `tuse help` (`--help`, `-h`) prints the
+  usage. `tuse COMMAND --help` prints one command's usage without running it. Unknown flags and
+  extra arguments are errors. `--config PATH` is relative to the current folder; `~/` works.
 
 ## TUI
 

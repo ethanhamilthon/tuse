@@ -46,6 +46,7 @@ context, cost).
 Colors of the two bars: the spinner and time are `accent`, the action is `muted`. In the model
 bar everything is `muted` except the used context (`x` of `x/y`), which is `accent`. A notice
 flashed in the working place (a copy, an error) is `accent`; the scroll mark `↑N` is `dim`.
+Each of the two labels takes at most half the width and is cut with `…`.
 
 - `lines` (default): a rule above and below; working sits on the top rule, the model on the bottom one.
 - `box`: a frame around the input with the same two labels on its borders.

@@ -94,6 +94,22 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
 
 fn read_file(lua: &Lua, path: &Path) -> Result<Table, String> {
     let error = |e: mlua::Error| format!("{}: {}", path.display(), tuse_lua::message(&e));
+    match eval_file(lua, path)? {
+        Value::Table(t) => {
+            let base = path.parent().unwrap_or(Path::new("."));
+            crate::plugins::apply(lua, t, base).map_err(|e| format!("{}: {e}", path.display()))
+        }
+        Value::Nil => lua.create_table().map_err(error),
+        _ => Err(format!(
+            "{}: the config must return a table",
+            path.display()
+        )),
+    }
+}
+
+/// Runs a Lua file in the config environment and returns its value.
+pub(crate) fn eval_file(lua: &Lua, path: &Path) -> Result<Value, String> {
+    let error = |e: mlua::Error| format!("{}: {}", path.display(), tuse_lua::message(&e));
     let canonical = path
         .canonicalize()
         .map_err(|e| format!("{}: {e}", path.display()))?;
@@ -108,14 +124,7 @@ fn read_file(lua: &Lua, path: &Path) -> Result<Table, String> {
         .set_name(format!("@{key}"))
         .eval::<Value>();
     let _ = crate::require::set_loading(lua, &key, false);
-    match eval.map_err(error)? {
-        Value::Table(t) => Ok(t),
-        Value::Nil => lua.create_table().map_err(error),
-        _ => Err(format!(
-            "{}: the config must return a table",
-            path.display()
-        )),
-    }
+    eval.map_err(error)
 }
 
 pub(crate) fn commit(lua: &Lua, config: &Config) -> Result<(), String> {

@@ -5,9 +5,10 @@
 | `TUSE_MODE` | The current front end: `tui` or `json`. Read it with `os.getenv("TUSE_MODE")` or `require("tuse").env.TUSE_MODE`; also set in `sh`/tasks. |
 | `TUSE_SESSION` | The current session ID, set in `sh` and tasks after session startup. |
 | `TUSE_GLOBAL_CONFIG` | Global config: a file, or a module path (`~/x` loads `~/x.lua` or `~/x/init.lua`). Default `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. In Lua and `sh` it is the file found, unset when there is none. |
-| `TUSE_HOME` | Where session data and providers live. Default `~/.tuse`. |
+| `TUSE_HOME` | Where session data, providers and plugin clones (`plugins/`) live. Default `~/.tuse`. |
 | `TUSE_RELEASE_URL` | Release download base for the installer and `tuse update`. Default: GitHub releases. |
 | `TUSE_CURRENT_CONFIG` | Path of the selected config, when there is one; set in `sh` and tasks. |
+| `THIS_PATH` | Lua only: the path of the Lua file that calls `os.getenv("THIS_PATH")`; unset for inline code. |
 | `TUSE_CWD`, `TUSE_MODEL` | The working directory and model of the session; set in `sh` and tasks. |
 
 Every variable here is visible in Lua through `os.getenv(NAME)` and `require("tuse").env.NAME`.

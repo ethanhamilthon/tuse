@@ -6,10 +6,7 @@ use std::fs::{File, TryLockError};
 use std::path::{Path, PathBuf};
 
 pub fn tuse_home() -> PathBuf {
-    match std::env::var_os("TUSE_HOME") {
-        Some(p) => PathBuf::from(p),
-        None => tuse_config::home().join(".tuse"),
-    }
+    tuse_config::tuse_home()
 }
 
 /// `~/.tuse/<id>/`: the lock, `tasks/` logs and pasted `images/`.

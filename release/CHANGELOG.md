@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.3
+
+- **Plugins:** `plugins = { "owner/repo", { "owner/repo/sub/path", opts = {...}, ref = "v1" }, { "name", dir = "..." } }` loads `init.lua` (else `tuse.lua`) from GitHub clones in `~/.tuse/plugins` or local folders. A plugin returns a config table or `function(opts)`; tables merge under the user's config (lists concatenate, named entries must not collide between plugins, plugins cannot set `model`, `provider` or `effort`). Startup never touches the network.
+- `tuse plugins [list | add NAME [--ref REF] | remove NAME | install | update [NAME] | clean] [-c PATH]`; `add` edits the config Tuse would load.
+- `os.getenv("THIS_PATH")` returns the path of the calling Lua file.
+- Bundled plugin `ethanhamilthon/tuse/plugins/welcome`: a startup banner with model, folder, git state and version.
+
 ## 0.8.2
 
 - **Breaking:** Config files and Lua modules (including hooks, commands, and helpers defined in them) must import host functions with `require("tuse")`. Host functions remain globals in the agent's `lua` tool.

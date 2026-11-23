@@ -89,6 +89,7 @@ fn write(lua: &Lua, args: MultiValue) -> mlua::Result<()> {
 /// Starts `bash -c cmd`; returns the key the coroutine then waits on.
 fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64> {
     let h = host(lua);
+    h.action(&cmd);
     let mut cwd = h.cwd();
     let mut env = h.env();
     let mut deadline = with_run(lua, |j| j.stop.deadline).flatten();

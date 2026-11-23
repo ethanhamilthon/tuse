@@ -27,6 +27,12 @@ impl Host for SessionHost {
         self.get().map(|s| s.env()).unwrap_or_default()
     }
 
+    fn action(&self, what: &str) {
+        if let Some(s) = self.get() {
+            action(&s, "running", what);
+        }
+    }
+
     fn task_start(&self, name: &str) -> Result<TaskStart, String> {
         let s = self.get().ok_or("session closed")?;
         let t = s.tasks.create(name)?;
@@ -65,6 +71,12 @@ fn err(e: String) -> mlua::Error {
     mlua::Error::runtime(e)
 }
 
+/// Shows what the agent is doing in the working indicator.
+fn action(s: &Session, verb: &str, what: &str) {
+    let what: String = what.lines().next().unwrap_or("").chars().take(60).collect();
+    s.set_status(format!("{verb} {what}..."));
+}
+
 /// The session functions of the VM: `read`, `write`, `edit`, `grep`, `docs`, `set_title`, `task_*`.
 pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     lua.set_app_data(s);
@@ -74,6 +86,7 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
         "write",
         lua.create_function(|lua, (path, content): (String, String)| {
             let s = session(lua)?;
+            action(&s, "writing", &path);
             let p = tools::resolve(&path, &s.cwd);
             let (msg, diff) = tools::write(&p, &content).map_err(err)?;
             with_run(lua, |j| j.diffs.push((p.display().to_string(), diff)));
@@ -130,6 +143,7 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
 
 fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
     let s = session(lua)?;
+    action(&s, "reading", &path);
     let p = tools::resolve(&path, &s.cwd);
     let opt = |k: &str| -> mlua::Result<Option<usize>> {
         Ok(match &o {
@@ -153,6 +167,7 @@ fn edit(
     (path, old, new, o): (String, String, String, Option<Table>),
 ) -> mlua::Result<String> {
     let s = session(lua)?;
+    action(&s, "editing", &path);
     let p = tools::resolve(&path, &s.cwd);
     let all = match o {
         Some(t) => t.get::<Option<bool>>("all")?.unwrap_or(false),
@@ -165,6 +180,7 @@ fn edit(
 
 fn grep(lua: &Lua, (pattern, o): (String, Option<Table>)) -> mlua::Result<String> {
     let s = session(lua)?;
+    action(&s, "searching", &pattern);
     let o = o.unwrap_or(lua.create_table()?);
     let n = |k: &str| -> mlua::Result<Option<usize>> {
         Ok(o.get::<Option<i64>>(k)?.map(|n| n.max(0) as usize))

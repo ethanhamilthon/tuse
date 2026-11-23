@@ -149,6 +149,10 @@ fn main_loop(mut app: app::App, stop: &std::sync::atomic::AtomicBool) -> std::io
             app.flash = None;
             dirty = true;
         }
+        if app.status.tick() {
+            dirty = true;
+            immediate = true;
+        }
         if app.session.busy() && last_tick.elapsed() >= Duration::from_millis(100) {
             app.tick += 1;
             last_tick = Instant::now();

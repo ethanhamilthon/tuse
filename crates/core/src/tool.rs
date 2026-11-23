@@ -34,7 +34,6 @@ impl Outcome {
 }
 
 impl Session {
-    #[allow(dead_code)] // used again by the action status
     pub(crate) fn set_status(&self, text: String) {
         let mut st = self.state.lock().unwrap();
         if st.status == text {

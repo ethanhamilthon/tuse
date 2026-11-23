@@ -97,6 +97,17 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         "{}",
         tools[1].0
     );
+    assert_eq!(
+        statuses[..6],
+        [
+            "writing a.txt...",
+            "editing a.txt...",
+            "reading a.txt...",
+            "searching 2...",
+            "editing a.txt...",
+            "running sleep 0.3; echo slept..."
+        ]
+    );
     let names: Vec<_> = s
         .tasks
         .list()

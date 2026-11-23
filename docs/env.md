@@ -13,5 +13,5 @@
 Every variable here is visible in Lua through `os.getenv(NAME)` and `require("tuse").env.NAME`.
 
 Tuse chooses `--config PATH` first, then `./tuse.lua`, then the global config. Use
-`include = { require("tuse").env.TUSE_GLOBAL_CONFIG }` or `require("global")` inside a project
-config to load the global one. See [config](config.md) for `require` and the merge rules.
+`require("global")` inside a project config to load the global one. See [config](config.md) for
+`require` lookup rules.

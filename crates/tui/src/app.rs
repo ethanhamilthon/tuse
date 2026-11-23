@@ -58,6 +58,7 @@ pub struct App {
     /// Lines scrolled up from the bottom of the chat.
     pub scroll: usize,
     pub tick: usize,
+    pub status: crate::status::Hold,
     /// Width of the input text area at the last draw; the arrows move by rows of this width.
     pub input_cols: usize,
     /// The queued message whose text is still shown in the input.
@@ -106,6 +107,7 @@ impl App {
             thinking: None,
             scroll: 0,
             tick: 0,
+            status: Default::default(),
             input_cols: 80,
             steering: None,
             quit: false,

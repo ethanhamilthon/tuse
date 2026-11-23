@@ -27,7 +27,10 @@ impl App {
                 self.chat.push(Entry::User { text, images });
                 self.scroll = 0;
             }
-            Event::TurnStart => self.turn_error = None,
+            Event::TurnStart => {
+                self.turn_error = None;
+                self.status.reset();
+            }
             Event::Text(t) => self.stream(t, false),
             Event::Reasoning(t) => self.stream(t, true),
             Event::StreamReset => {
@@ -123,7 +126,7 @@ impl App {
                     *d = diffs;
                 }
             }
-            Event::Status(_) => {}
+            Event::Status(t) => self.status.set(t),
             Event::Flash(t) => self.flash(t),
             Event::Notice(t) => self.notice(t),
             Event::Notification(_) => {}

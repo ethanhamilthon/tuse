@@ -31,6 +31,8 @@ pub trait Host: Send + Sync + 'static {
     fn cwd(&self) -> PathBuf;
     /// Environment of `sh`, on top of the process's own.
     fn env(&self) -> Vec<(String, String)>;
+    /// A command `sh` starts, for the working indicator.
+    fn action(&self, _what: &str) {}
     fn task_start(&self, name: &str) -> Result<TaskStart, String>;
     /// Runs on the VM thread when a task ends.
     fn task_end(&self, id: &str, done: Done);

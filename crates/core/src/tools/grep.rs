@@ -11,34 +11,50 @@ const DEFAULT_LIMIT: usize = 100;
 const LINE_CHARS: usize = 300;
 
 pub struct Opts {
-    pub path: Option<String>,
+    pub paths: Vec<String>,
     pub glob: Option<String>,
     pub ignore_case: bool,
+    pub literal: bool,
     pub context: usize,
     pub limit: Option<usize>,
 }
 
-/// `grep(pattern, {path, glob, ignore_case, context, limit})`; `stopped` ends a long walk.
+/// `grep(pattern, {path, glob, ignore_case, literal, context, limit})`; `stopped` ends a long walk.
 pub fn run(
     pattern: &str,
     o: Opts,
     cwd: &Path,
     stopped: &dyn Fn() -> bool,
 ) -> Result<String, String> {
-    let root = resolve(o.path.as_deref().unwrap_or("."), cwd);
+    let roots: Vec<_> = if o.paths.is_empty() {
+        vec![resolve(".", cwd)]
+    } else {
+        o.paths.iter().map(|p| resolve(p, cwd)).collect()
+    };
     let (glob, ignore_case, context) = (o.glob, o.ignore_case, o.context);
     let limit = o.limit.unwrap_or(DEFAULT_LIMIT).max(1);
-    let re = RegexBuilder::new(pattern)
+    let pat = if o.literal {
+        std::borrow::Cow::Owned(regex::escape(pattern))
+    } else {
+        std::borrow::Cow::Borrowed(pattern)
+    };
+    let re = RegexBuilder::new(&pat)
         .case_insensitive(ignore_case)
         .build()
         .map_err(|e| fail(format!("bad pattern: {e}")))?;
-    if !root.exists() {
-        return Err(fail(format!("{}: no such file or folder", root.display())));
+    for root in &roots {
+        if !root.exists() {
+            return Err(fail(format!("{}: no such file or folder", root.display())));
+        }
     }
-    let mut walk = WalkBuilder::new(&root);
+    let mut walk = WalkBuilder::new(&roots[0]);
+    for root in &roots[1..] {
+        walk.add(root);
+    }
     walk.hidden(false).filter_entry(|e| e.file_name() != ".git");
     if let Some(g) = glob {
-        let mut o = OverrideBuilder::new(&root);
+        let base = if roots.len() == 1 { &roots[0] } else { cwd };
+        let mut o = OverrideBuilder::new(base);
         o.add(&g).map_err(|e| fail(format!("bad glob: {e}")))?;
         walk.overrides(o.build().map_err(|e| fail(e.to_string()))?);
     }
@@ -109,5 +125,39 @@ fn clip(l: &str) -> String {
     match l.char_indices().nth(LINE_CHARS) {
         Some((i, _)) => format!("{}…", &l[..i]),
         None => l.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn searches_multiple_paths_and_literal_patterns() {
+        let dir = std::env::temp_dir().join(format!("tuse-grep-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("a")).unwrap();
+        std::fs::create_dir_all(dir.join("b")).unwrap();
+        std::fs::create_dir_all(dir.join("c")).unwrap();
+        std::fs::write(dir.join("a/one.txt"), "val[0]+(x)\n").unwrap();
+        std::fs::write(dir.join("b/two.txt"), "VAL[0]+(x)\n").unwrap();
+        std::fs::write(dir.join("c/skip.txt"), "val[0]+(x)\n").unwrap();
+        let out = run(
+            "val[0]+(x)",
+            Opts {
+                paths: vec!["a".into(), "b".into()],
+                glob: None,
+                ignore_case: true,
+                literal: true,
+                context: 0,
+                limit: None,
+            },
+            &dir,
+            &|| false,
+        )
+        .unwrap();
+        assert!(out.contains("a/one.txt:1: val[0]+(x)"), "{out}");
+        assert!(out.contains("b/two.txt:1: VAL[0]+(x)"), "{out}");
+        assert!(!out.contains("c/skip.txt"), "{out}");
+        std::fs::remove_dir_all(dir).ok();
     }
 }

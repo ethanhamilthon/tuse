@@ -34,7 +34,7 @@ pub fn run(path: &Path, old: &str, new: &str, all: bool) -> Result<(String, Stri
             .map(|h| h.start.to_string())
             .collect();
         return Err(fail(format!(
-            "`old` was found {} times (lines {}); add context to make it unique or pass replace_all=True",
+            "`old` was found {} times (lines {}); add context to make it unique or pass {{all=true}}",
             at.len(),
             lines.join(", ")
         )));

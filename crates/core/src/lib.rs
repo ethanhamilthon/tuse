@@ -8,6 +8,7 @@ mod helpers;
 mod history;
 mod hooks;
 mod host;
+mod host_fs;
 mod host_tasks;
 mod id;
 mod input;

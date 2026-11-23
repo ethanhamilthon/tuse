@@ -13,7 +13,13 @@ pub struct Read {
     pub image: Option<String>,
 }
 
-pub fn run(path: &Path, offset: usize, limit: usize, max_image: usize) -> Result<Read, String> {
+pub fn run(
+    path: &Path,
+    lines: bool,
+    offset: usize,
+    limit: usize,
+    max_image: usize,
+) -> Result<Read, String> {
     let io = |e: std::io::Error| super::io_fail(path, &e);
     let meta = std::fs::metadata(path).map_err(io)?;
     if meta.is_dir() {
@@ -25,7 +31,11 @@ pub fn run(path: &Path, offset: usize, limit: usize, max_image: usize) -> Result
     if let Some(mime) = crate::input::image_mime(path) {
         return image(path, mime, meta.len() as usize, max_image);
     }
-    let text = text(path, offset, limit).map_err(io)?;
+    let text = if lines {
+        text(path, offset, limit).map_err(io)?
+    } else {
+        raw(path).map_err(io)?
+    };
     Ok(Read { text, image: None })
 }
 
@@ -42,6 +52,15 @@ fn image(path: &Path, mime: &str, size: usize, max: usize) -> Result<Read, Strin
         text: format!("[image: {}, {} KB]", path.display(), size.div_ceil(1024)),
         image: Some(format!("data:{mime};base64,{data}")),
     })
+}
+
+/// Raw file text, keeping binary detection intact.
+fn raw(path: &Path) -> std::io::Result<String> {
+    let bytes = std::fs::read(path)?;
+    if bytes.iter().take(8192).any(|&b| b == 0) {
+        return Ok(format!("[binary file, {} bytes]", bytes.len()));
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Numbered lines `offset..offset + limit`.
@@ -99,17 +118,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pages_through_a_file_and_flags_binary() {
+    fn reads_raw_by_default_pages_with_lines_and_flags_binary() {
         let dir = std::env::temp_dir().join(format!("tuse-read-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("t.txt");
         std::fs::write(&f, "a\nb\nc\nd\n").unwrap();
-        let t = text(&f, 2, 2).unwrap();
+        assert_eq!(run(&f, false, 1, 2, 1024).unwrap().text, "a\nb\nc\nd\n");
+        let t = run(&f, true, 2, 2, 1024).unwrap().text;
         assert_eq!(t, "2\tb\n3\tc\n[lines 2-3 of 4; continue with offset=4]");
         assert!(text(&f, 9, 2).unwrap().contains("past the end"));
         std::fs::write(&f, "").unwrap();
+        assert_eq!(run(&f, false, 1, 2, 1024).unwrap().text, "");
         assert_eq!(text(&f, 1, 2).unwrap(), "[empty file]");
         std::fs::write(&f, b"ab\0cd").unwrap();
+        assert!(
+            run(&f, false, 1, 2, 1024)
+                .unwrap()
+                .text
+                .starts_with("[binary file")
+        );
         assert!(text(&f, 1, 2).unwrap().starts_with("[binary file"));
         std::fs::remove_dir_all(dir).ok();
     }

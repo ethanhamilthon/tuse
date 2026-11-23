@@ -12,6 +12,8 @@ const HOST: &[&str] = &[
     "spawn",
     "read",
     "write",
+    "append",
+    "delete",
     "edit",
     "grep",
     "docs",

@@ -84,12 +84,21 @@ pub fn render(hunks: &[Hunk]) -> String {
 
 /// The diff of a new file: every line added.
 pub fn whole(text: &str) -> String {
+    all_lines(text, '+')
+}
+
+/// The diff of a deleted file: every line removed.
+pub fn removed(text: &str) -> String {
+    all_lines(text, '-')
+}
+
+fn all_lines(text: &str, sign: char) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let mut out: Vec<String> = lines
         .iter()
         .take(MAX_LINES)
         .enumerate()
-        .map(|(i, l)| format!("+ {:>4} | {l}", i + 1))
+        .map(|(i, l)| format!("{sign} {:>4} | {l}", i + 1))
         .collect();
     if lines.len() > MAX_LINES {
         out.push(format!("[{} more lines]", lines.len() - MAX_LINES));

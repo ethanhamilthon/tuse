@@ -5,6 +5,7 @@ use crate::picker::{Kind, Picker, item};
 use crate::style::Palette;
 use tuse_config::EFFORTS;
 
+/// The built-in slash commands; `docs/commands.md` lists each one.
 pub const COMMANDS: [(&str, &str); 9] = [
     ("config", "show the resolved config"),
     ("new", "start a new session"),
@@ -211,5 +212,18 @@ impl App {
         self.editor
             .insert_atom(&format!("@{v}"), AtomKind::File(crate::files::path(v)));
         self.editor.insert(" ");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn docs_and_config_list_every_built_in_command() {
+        let docs = tuse_core::docs(Some("commands"));
+        for (name, _) in super::COMMANDS {
+            assert!(docs.contains(&format!("`/{name}`")), "docs misses /{name}");
+            assert!(tuse_config::BUILTIN_COMMANDS.contains(&name), "/{name}");
+        }
+        assert_eq!(super::COMMANDS.len(), tuse_config::BUILTIN_COMMANDS.len());
     }
 }

@@ -174,6 +174,22 @@ return {
 }
 ```
 
+## Reference
+
+One canonical page per surface (the agent reads the same pages with `docs("<topic>")`):
+
+| Surface | Reference |
+| --- | --- |
+| CLI and slash commands | [docs/commands.md](docs/commands.md) |
+| Lua host functions | [docs/functions.md](docs/functions.md) |
+| JSON-RPC methods and events | [docs/json.md](docs/json.md) |
+| Config keys | [docs/config.md](docs/config.md) |
+| Hooks | [docs/hooks.md](docs/hooks.md) |
+| Plugins | [docs/plugins.md](docs/plugins.md) |
+| Environment variables | [docs/env.md](docs/env.md) |
+
+Tests check that each page lists everything its surface exports.
+
 ## Development
 
 The workspace is split into crates: `config`, `api`, `lua`, `core`, `tui`, `rpc` and

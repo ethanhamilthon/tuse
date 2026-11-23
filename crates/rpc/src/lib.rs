@@ -3,6 +3,7 @@ mod events;
 mod methods;
 mod proto;
 
+pub use methods::METHODS;
 use proto::{Fail, NOT_READY, answer, notify};
 use serde_json::Value;
 use std::io::{BufRead, Write};

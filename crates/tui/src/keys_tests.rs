@@ -226,3 +226,71 @@ fn enter_picks_a_folder_and_tab_completes_it() {
     assert_eq!(refs.files, [std::path::PathBuf::from("some/")]);
     crate::app::cleanup(app);
 }
+
+#[test]
+fn failed_new_keeps_the_session_and_its_next_message() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    crate::app::test_home();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        for mut s in listener.incoming().flatten() {
+            let mut r = BufReader::new(s.try_clone().unwrap());
+            let mut len = 0;
+            loop {
+                let mut line = String::new();
+                r.read_line(&mut line).unwrap();
+                if line.trim().is_empty() {
+                    break;
+                }
+                if let Some(v) = line.to_lowercase().strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap();
+                }
+            }
+            r.read_exact(&mut vec![0; len]).unwrap();
+            let c = r#"{"choices":[{"delta":{"content":"still here"}}]}"#;
+            let _ = write!(
+                s,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {c}\n\ndata: [DONE]\n\n"
+            );
+        }
+    });
+    tuse_core::add_provider(&tuse_config::Connect {
+        name: "switch".into(),
+        base_url: format!("http://{addr}"),
+        api_key: "test".into(),
+    })
+    .unwrap();
+    let dir = std::env::temp_dir().join(format!("tuse-switch-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("tuse.lua");
+    std::fs::write(&cfg, "return {}").unwrap();
+    let session = Session::open(Options {
+        cwd: dir.clone(),
+        config: Some(cfg.clone()),
+        mode: tuse_core::Mode::Tui,
+        resume: None,
+        start: Default::default(),
+    })
+    .unwrap();
+    session.set_model("switch/m", "default");
+    let mut app = App::new(session.clone(), Some(cfg.clone()));
+    std::fs::write(&cfg, "return { typo_key = 1 }").unwrap();
+    app.run_command("new");
+    assert!(std::sync::Arc::ptr_eq(&app.session, &session) && session.is_open());
+    assert!(
+        matches!(app.chat.get_mut(app.chat.len() - 1), Some(crate::chat::Entry::Error(e)) if e.contains("typo_key"))
+    );
+    app.paste("hello");
+    app.key(KeyEvent::from(KeyCode::Enter), 10);
+    loop {
+        match app.events.recv_timeout(Duration::from_secs(10)).unwrap() {
+            Event::Assistant { text } => break assert_eq!(text, "still here"),
+            Event::Error(e) => panic!("{e}"),
+            _ => {}
+        }
+    }
+    session.close();
+    std::fs::remove_dir_all(tuse_core::tuse_home().join(&session.id)).ok();
+    std::fs::remove_dir_all(dir).ok();
+}

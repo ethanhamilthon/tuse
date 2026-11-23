@@ -35,31 +35,27 @@ impl Session {
         Ok(t)
     }
 
-    /// Closes this session and opens a new (`resume: None`) or saved (`resume: Some(id)`) one.
-    /// Fails without closing this session when `resume` is missing, already open, or locked.
+    /// Prepares a new (`resume: None`) or saved (`resume: Some(id)`) session, then closes this
+    /// one and starts it. Any failure (missing or locked session, invalid config) happens
+    /// before the close, so this session stays open and keeps its work.
     pub fn switch(self: &Arc<Self>, resume: Option<String>) -> Result<Arc<Session>, String> {
-        if let Some(id) = &resume {
-            if id == &self.id {
-                return Err(format!("session {id} is already open"));
-            }
-            if crate::store::read_meta(id).is_none() {
-                return Err(format!("no session {id}"));
-            }
-            crate::store::check_unlocked(id)?;
+        if resume.as_deref() == Some(self.id.as_str()) {
+            return Err(format!("session {} is already open", self.id));
         }
         let start = if resume.is_some() {
             Start::Resume
         } else {
             Start::New
         };
-        self.close_for(start.reason());
-        Session::open(Options {
+        let next = Session::prepare(Options {
             cwd: self.cwd.clone(),
             config: self.config_arg.clone(),
             mode: self.mode,
             resume,
             start,
-        })
+        })?;
+        self.close_for(start.reason());
+        Ok(next.start())
     }
 
     pub(crate) fn push(&self, st: &mut State, r: Record) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.6
+
+- `@` picker: Tab completes a folder, Enter attaches the highlighted entry (a folder too) as a token. A folder reaches the model as `<dir path="...">` with its entries.
+- `tuse init` creates `./tuse.lua` that starts from the global config.
+- Steering shows a bouncing dot before `steering…`.
+
 ## 0.8.5
 
 - `/config` starts with the path of the loaded config file. JSON-RPC `config.get` returns it as `path`.

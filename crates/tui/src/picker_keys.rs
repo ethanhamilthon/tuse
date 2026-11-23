@@ -14,6 +14,7 @@ impl App {
             KeyCode::Down => p.moved(1, rows),
             KeyCode::Char('p') if ctrl => p.moved(-1, rows),
             KeyCode::Char('n') if ctrl => p.moved(1, rows),
+            KeyCode::Enter if !shift && p.kind == Kind::File => self.pick_file(),
             KeyCode::Enter if !shift => self.choose(),
             KeyCode::Tab if !shift && !matches!(p.kind, Kind::LuaPicker(_)) => self.choose(),
             KeyCode::Esc => {

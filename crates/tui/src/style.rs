@@ -25,6 +25,17 @@ pub const LABEL_SEP: &str = " · ";
 pub const MORE: &str = "…";
 pub const SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
 pub const STEERING_LABEL: &str = "steering…";
+/// A dot bouncing across 5 cells before `STEERING_LABEL`.
+pub const STEERING_FRAMES: [&str; 8] = [
+    "●····",
+    "·●···",
+    "··●··",
+    "···●·",
+    "····●",
+    "···●·",
+    "··●··",
+    "·●···",
+];
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Style {

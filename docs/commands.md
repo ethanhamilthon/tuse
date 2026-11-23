@@ -8,6 +8,8 @@
 - `tuse connect --base URL --key '$ENV' --name NAME` verifies and saves a provider.
   Quote `$ENV` to store an environment-variable reference rather than passing a literal key.
 - `tuse providers` lists providers; `tuse disconnect NAME` removes one.
+- `tuse init` creates `./tuse.lua` that starts from the global config (`require("global")`).
+- `tuse plugins ...` manages [plugins](plugins.md).
 - `tuse update` updates the binary without touching your config.
 
 ## TUI
@@ -21,8 +23,8 @@
   view the full entry in a scrollable detail panel (`system`, `user`, and `agent` as Markdown;
   `lua` as full syntax-highlighted source; other roles as plain text) and Esc to return to the
   list with your selection intact.
-- `/config` shows a styled, scrollable view of the resolved config grouped into sections
-  (settings, theme, models, system prompts, prompts, functions, hooks, and commands), without
+- `/config` shows a styled, scrollable view of the resolved config: the config file path first,
+  then settings, theme, models, system prompts, prompts, functions, hooks, commands and plugins, without
   provider secrets or Lua function bodies.
 - `/reload` runs config files again (updating custom commands and keeping live `show_markdown`
   blocks and picker/question results); `/quit` exits.

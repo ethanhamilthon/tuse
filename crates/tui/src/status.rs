@@ -1,6 +1,8 @@
 use crate::app::App;
 use crate::render::duration;
-use crate::style::{LABEL_SEP, Palette, SPINNER, STATUS_MIN_MS, STEERING_LABEL, Style};
+use crate::style::{
+    LABEL_SEP, Palette, SPINNER, STATUS_MIN_MS, STEERING_FRAMES, STEERING_LABEL, Style,
+};
 use crate::text::{Line, span};
 use std::time::{Duration, Instant};
 
@@ -51,7 +53,11 @@ pub fn working(app: &App) -> Line {
         return vec![];
     };
     if app.steering.is_some() {
-        return vec![span(STEERING_LABEL, Style::fg(p.muted))];
+        let wave = STEERING_FRAMES[app.tick % STEERING_FRAMES.len()];
+        return vec![
+            span(format!("{wave} "), Style::fg(p.accent)),
+            span(STEERING_LABEL, Style::fg(p.muted)),
+        ];
     }
     let spin = SPINNER[app.tick % SPINNER.len()];
     let mut line = vec![span(

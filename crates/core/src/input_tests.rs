@@ -92,12 +92,23 @@ fn binary_files_have_no_content_and_missing_ones_follow_strict() {
         assert!(c.contains("binary=\"true\"") && c.ends_with("/>"), "{c}");
     }
     let gone = PathBuf::from("/definitely/missing.txt");
-    let dir = std::env::temp_dir();
     let lax = Refs {
-        files: vec![gone.clone(), dir.clone()],
+        files: vec![gone.clone()],
         ..Refs::default()
     };
     assert_eq!(build("x", lax).unwrap().context, "");
+    let dir = tmp("listed", b"").with_extension("d");
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    std::fs::write(dir.join("a.txt"), "a").unwrap();
+    let refs = Refs {
+        files: vec![dir.clone()],
+        ..Refs::default()
+    };
+    let shown = dir.display();
+    assert_eq!(
+        build("x", refs).unwrap().context,
+        format!("<dir path=\"{shown}\">\na.txt\nsub/\n</dir>")
+    );
     let strict = Refs {
         files: vec![gone],
         strict: true,

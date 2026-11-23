@@ -74,7 +74,8 @@ fn editing_withdraws_only_the_waiting_tui_message() {
         api_key: "test".into(),
     })
     .unwrap();
-    std::fs::write(&cfg, "return { model = 'steer/m' }").unwrap();
+    tuse_core::set_state("model", "steer/m").unwrap();
+    std::fs::write(&cfg, "return {}").unwrap();
     let session = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg.clone()),

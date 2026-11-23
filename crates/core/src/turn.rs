@@ -20,24 +20,19 @@ impl Session {
             let Some(mut st) = self.lock_live(generation) else {
                 return;
             };
-            let input = st
-                .queue
-                .iter()
-                .find(|(_, i)| !i.notification)
-                .map(|(_, i)| i.text.clone());
-            if st.meta.title.is_empty()
-                && let Some(input) = &input
-            {
-                st.meta.title = input
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-                    .chars()
-                    .take(80)
-                    .collect();
-                self.save_meta(&mut st);
-            }
+            let auto_title = if st.meta.title.is_empty() {
+                st.queue
+                    .iter()
+                    .find(|(_, i)| !i.notification)
+                    .map(|(_, i)| i.text.lines().next().unwrap_or("").to_string())
+            } else {
+                None
+            };
             st.turn_error = None;
+            drop(st);
+            if let Some(title) = auto_title {
+                let _ = self.set_name(&title);
+            }
         }
         self.emit(Event::TurnStart);
         loop {
@@ -181,13 +176,13 @@ impl Session {
         self.push(&mut st, r);
         st.partial.clear();
         drop(st);
-        if !reply.text.trim().is_empty() {
+        if !reply.text.trim().is_empty() || !calls.is_empty() {
             let status = if calls.is_empty() {
                 "finished"
             } else {
                 "working"
             };
-            self.agent_message_hook(reply.text.clone(), status);
+            self.agent_message_hook(reply.text.clone(), status, &calls);
         }
         self.emit(Event::Assistant { text: reply.text });
         self.emit(Event::Usage);
@@ -207,7 +202,8 @@ impl Session {
         let Some(mut st) = self.lock_live(generation) else {
             return;
         };
-        let threshold = config.compact_at(&st.model);
+        let def = crate::db::model_def(&st.model);
+        let threshold = config.compact_at(def.as_ref());
         if threshold == 0 || st.context < threshold {
             return;
         }

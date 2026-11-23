@@ -19,22 +19,10 @@ pub fn module_candidates(name: &str, base: &Path) -> Vec<PathBuf> {
     lua_files(base.join(name.replace('.', "/")))
 }
 
-/// `$TUSE_GLOBAL_CONFIG` (a file, or a module path like `~/x`), else
 /// `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`.
 pub fn global_candidates() -> Vec<PathBuf> {
-    match std::env::var("TUSE_GLOBAL_CONFIG")
-        .ok()
-        .filter(|v| !v.is_empty())
-    {
-        Some(v) => {
-            let p = resolve_path(&v, &home());
-            if p.is_file() { vec![p] } else { lua_files(p) }
-        }
-        None => {
-            let d = home().join(".config");
-            vec![d.join("tuse.lua"), d.join("tuse/init.lua")]
-        }
-    }
+    let d = home().join(".config");
+    vec![d.join("tuse.lua"), d.join("tuse/init.lua")]
 }
 
 /// The global config file, when one exists.

@@ -1,12 +1,12 @@
 use tuse_api::Usage;
-use tuse_config::Prices;
+use tuse_config::{ModelDef, Prices};
 
 pub fn cost(u: &Usage, p: &Prices) -> f64 {
     let plain = u.input.saturating_sub(u.cached + u.cache_write);
     (plain as f64 * p.input
-        + u.cached as f64 * p.cache
+        + u.cached as f64 * p.cache_read
         + u.cache_write as f64 * p.cache_write
-        + u.output as f64 * p.out)
+        + u.output as f64 * p.output)
         / 1_000_000.0
 }
 
@@ -16,6 +16,7 @@ pub struct Stats {
     pub cost: f64,
     pub priced: bool,
     pub requests: usize,
+    pub steps: usize,
     pub context: u64,
     pub turns: usize,
     pub calls: usize,
@@ -29,18 +30,25 @@ pub fn tokens(n: u64) -> String {
     }
 }
 
+fn find_model<'a>(models: &'a [ModelDef], full: &str) -> Option<&'a ModelDef> {
+    models.iter().find(|m| m.name == full)
+}
+
 impl Stats {
-    /// Adds one record; only `Usage` and `TurnEnd` count.
-    pub(crate) fn add(&mut self, r: &crate::record::Record, config: &tuse_config::Config) {
+    /// Adds one record; `Usage`, `Assistant` (steps), and `TurnEnd` count.
+    pub(crate) fn add(&mut self, r: &crate::record::Record, models: &[ModelDef]) {
         use crate::record::Record;
         match r {
             Record::Usage { model, usage: u } => {
                 self.totals.add(u);
                 self.requests += 1;
-                if let Some(p) = config.model_def(model).and_then(|d| d.prices.as_ref()) {
+                if let Some(p) = find_model(models, model).and_then(|d| d.prices.as_ref()) {
                     self.cost += cost(u, p);
                     self.priced = true;
                 }
+            }
+            Record::Assistant { .. } => {
+                self.steps += 1;
             }
             Record::TurnEnd { calls, .. } => {
                 self.turns += 1;
@@ -50,10 +58,10 @@ impl Stats {
         }
     }
 
-    pub(crate) fn of(records: &[crate::record::Record], config: &tuse_config::Config) -> Stats {
+    pub(crate) fn of(records: &[crate::record::Record], models: &[ModelDef]) -> Stats {
         let mut s = Stats::default();
         for r in records {
-            s.add(r, config);
+            s.add(r, models);
         }
         s
     }

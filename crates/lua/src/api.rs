@@ -98,7 +98,7 @@ fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64
     let h = host(lua);
     h.action(&cmd);
     let mut cwd = h.cwd();
-    let mut env = h.env();
+    let mut env = Vec::new();
     let mut deadline = with_run(lua, |j| j.stop.deadline).flatten();
     if let Some(o) = opts {
         if let Some(t) = o.get::<Option<f64>>("timeout")? {
@@ -147,7 +147,9 @@ fn block(lua: &Lua, (kind, arg): (String, Value)) -> mlua::Result<(bool, Value)>
 fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<String> {
     let h = host(lua);
     let name = name.unwrap_or_default();
-    let t = h.task_start(&name).map_err(mlua::Error::runtime)?;
+    let t = h
+        .task_start(&name, crate::job::is_lua_hook(lua))
+        .map_err(mlua::Error::runtime)?;
     let file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

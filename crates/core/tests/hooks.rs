@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
 
-/// `setup` points `TUSE_HOME` at a folder per test, so the tests of this file take turns.
+/// `setup` points `HOME` at a folder per test, so the tests of this file take turns.
 static ENV: Mutex<()> = Mutex::new(());
 
 fn wait_turn(events: &std::sync::mpsc::Receiver<Event>) {
@@ -31,7 +31,7 @@ fn wait_text(events: &std::sync::mpsc::Receiver<Event>) {
 }
 
 #[test]
-fn hooks_see_process_and_message_events_in_order() {
+fn hooks_emit_event_only_payloads_and_all_lifecycle_events() {
     let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
     let addr = common::provider(vec![
         Reply::Call("lua", json!({"code": "1"}).to_string()),
@@ -54,29 +54,45 @@ local function append(path, line)
   f:close()
 end
 return {{
-  model = "p/m",
   functions = {{
     label = {{ description = "Label the current event", run = function(e) return e.event end }},
   }},
   hooks = {{
     record = {{
-      events = {{"process_start", "process_end", "user_message", "agent_message", "turn_end"}},
+      events = {{"start", "close", "user_message", "agent_message", "model_change", "name_change"}},
       run = function(e)
-        if e.event == "process_start" then n = 0 end
+        -- Event-only payloads: session metadata lives in t.session(), not on `e`.
+        assert(e.session == nil and e.cwd == nil and e.config == nil and e.hook == nil)
+        local s = t.session()
+        assert(s.id ~= nil, "session must be readable during " .. e.event)
+        if e.event == "start" then n = 0 end
         n = n + 1
-        local extra = e.reason
-        if e.event == "user_message" then extra = e.text .. " " .. tostring(e.is_first) end
-        if e.event == "agent_message" then extra = e.text .. " " .. e.status end
+        local extra = ""
+        if e.event == "start" then
+          extra = e.reason .. " " .. tostring(e.is_new) .. " " .. tostring(e.restored)
+        elseif e.event == "close" then
+          extra = e.reason .. " id=" .. (s.id ~= nil and "ok" or "nil")
+        elseif e.event == "user_message" then
+          extra = e.text .. " " .. tostring(e.is_first)
+        elseif e.event == "agent_message" then
+          local tc = e.tool_calls and #e.tool_calls or 0
+          extra = e.text .. " " .. e.status .. " tc=" .. tc
+        elseif e.event == "model_change" then
+          assert(s.model == e.new.model and s.effort == e.new.effort)
+          extra = tostring(e.previous.model) .. "/" .. e.previous.effort .. "->" .. tostring(e.new.model) .. "/" .. e.new.effort
+        elseif e.event == "name_change" then
+          assert(s.name == e.new)
+          extra = tostring(e.previous) .. "->" .. e.new
+        end
         append("{}", label(e) .. " " .. n .. " " .. extra)
-        if e.event == "user_message" and e.is_first then t.set_title("hook " .. e.text) end
       end,
     }},
-    tui_only = os.getenv("TUSE_MODE") == "tui" and {{
-      events = {{"process_start", "process_end", "user_message"}},
+    tui_only = t.session().mode == "tui" and {{
+      events = {{"start", "close", "user_message"}},
       run = function(e) append("{}", e.event) end,
     }} or nil,
-    hl_only = require("tuse").env.TUSE_MODE == "json" and {{
-      events = {{"process_start", "process_end"}},
+    hl_only = t.session().mode == "json" and {{
+      events = {{"start", "close"}},
       run = function(e) append("{}", e.event .. " " .. e.reason) end,
     }} or nil,
   }},
@@ -99,16 +115,8 @@ return {{
         .unwrap()
     };
     let s = open(None, Start::Launch);
-    assert!(
-        s.config()
-            .problems()
-            .iter()
-            .any(|p| p.contains("unknown event `turn_end`")),
-        "{:?}",
-        s.config().problems()
-    );
     let events = s.subscribe();
-    // The hidden context reaches /trace but not the hooks, the title or the UI.
+    s.select_model("p/alt", "high", false).unwrap();
     s.submit(UserInput {
         context: "<prompt name=\"p\">secret</prompt>".into(),
         ..UserInput::text("hi")
@@ -122,6 +130,7 @@ return {{
         });
     assert_eq!(shown.as_deref(), Some("hi"));
     wait_turn(&events);
+    s.set_name("hook hi").unwrap();
     let user = s.trace().into_iter().find(|it| it.role == "user").unwrap();
     assert_eq!(user.text, "hi\n\n<prompt name=\"p\">secret</prompt>");
     s.reload().unwrap();
@@ -134,38 +143,27 @@ return {{
     again.close();
     assert_eq!(
         std::fs::read_to_string(&log).unwrap(),
-        "process_start 1 launch
-user_message 2 hi true
-agent_message 3 done finished
-process_end 4 reload
-process_start 1 reload
+        "start 1 launch true false
+model_change 2 p/m/default->p/alt/high
+name_change 3 nil->hi
+user_message 4 hi true
+agent_message 5  working tc=1
+agent_message 6 done finished tc=0
+name_change 7 hi->hook hi
+close 8 reload id=ok
+start 1 reload false false
 user_message 2 stop me false
-agent_message 3 partial cancelled
-process_end 4 resume
-process_start 1 resume
-process_end 2 exit
+agent_message 3 partial cancelled tc=0
+close 4 resume id=ok
+start 1 resume false true
+close 2 exit id=ok
 "
     );
     assert_eq!(again.title(), "hook hi");
-    // Hook runs are kept in the history and listed in /trace after a resume.
-    let hooks: Vec<_> = again
-        .trace()
-        .into_iter()
-        .filter(|it| it.role == "hook")
-        .map(|it| (it.summary, it.text))
-        .collect();
-    assert!(
-        hooks
-            .iter()
-            .any(|(summary, text)| summary == "record user_message ok"
-                && text.contains("is_first=true\ntext=\"hi\"")),
-        "{hooks:?}"
-    );
     assert!(!tui_log.exists(), "tui_only hook ran in json");
-    assert!(!hooks.iter().any(|(s, _)| s.starts_with("tui_only")));
     assert_eq!(
         std::fs::read_to_string(&hl_log).unwrap(),
-        "process_start launch\nprocess_end reload\nprocess_start reload\nprocess_end resume\nprocess_start resume\nprocess_end exit\n"
+        "start launch\nclose reload\nstart reload\nclose resume\nstart resume\nclose exit\n"
     );
     let tui = Session::open(Options {
         cwd: dir.clone(),
@@ -176,13 +174,6 @@ process_end 2 exit
     })
     .unwrap();
     tui.close();
-    assert_eq!(
-        std::fs::read_to_string(&tui_log).unwrap(),
-        "process_start\nprocess_end\n"
-    );
-    assert_eq!(
-        std::fs::read_to_string(&hl_log).unwrap(),
-        "process_start launch\nprocess_end reload\nprocess_start reload\nprocess_end resume\nprocess_start resume\nprocess_end exit\n"
-    );
+    assert_eq!(std::fs::read_to_string(&tui_log).unwrap(), "start\nclose\n");
     common::cleanup(&dir);
 }

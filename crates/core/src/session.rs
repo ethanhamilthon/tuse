@@ -1,15 +1,15 @@
 use crate::control::{InputId, Subs};
 use crate::history::{self, Bounds};
-use crate::hooks::Data;
 pub use crate::mode::{Mode, Options, Start};
 use crate::record::{Record, UserInput};
 use crate::store::{Meta, SessionDir};
 use crate::tasks::Tasks;
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
-use tuse_config::Config;
+use tuse_config::{Config, ModelDef};
 
 /// One conversation. A process holds at most one open session, and a session
 /// can be open in one process only (`SessionDir` holds a file lock).
@@ -26,12 +26,14 @@ pub struct Session {
     /// The VM of the session: config, the agent's code, hooks and tasks.
     pub(crate) vm: tuse_lua::Vm,
     /// Whether hooks still fire; off once the session closes.
-    pub(crate) hooks_on: std::sync::atomic::AtomicBool,
-    /// Hook runs still going: (hook, event, cancel flag).
+    pub(crate) hooks_on: AtomicBool,
+    /// Hook runs still going: per-hook lane.
     pub(crate) hook_runs: crate::hooks::Runs,
     pub(crate) ui: Mutex<crate::ui::UiState>,
     pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,
     pub(crate) http: tuse_api::HttpAgent,
+    pub(crate) next_lua: AtomicU64,
+    pub(crate) task_lua: Mutex<HashMap<String, (String, Instant)>>,
 }
 
 pub(crate) struct State {
@@ -55,17 +57,18 @@ pub(crate) struct State {
     pub partial: String,
     /// Models the providers have reported.
     pub remote: Vec<String>,
-    /// Totals of `records` and the config whose prices they use.
-    pub stats: (crate::usage::Stats, Arc<Config>),
+    /// Totals of `records` and the DB model defs whose prices they use.
+    pub stats: (crate::usage::Stats, Vec<ModelDef>),
 }
 
 impl Session {
     pub fn open(mut opts: Options) -> Result<Arc<Session>, String> {
+        let restored = opts.resume.is_some();
         let id = opts
             .resume
             .clone()
             .unwrap_or_else(crate::id::new_session_id);
-        let meta = if opts.resume.is_some() {
+        let meta = if restored {
             let meta = crate::store::read_meta(&id).ok_or_else(|| format!("no session {id}"))?;
             let cwd = PathBuf::from(&meta.cwd);
             if cwd.is_dir() {
@@ -80,22 +83,27 @@ impl Session {
                 ..Default::default()
             }
         };
-        let mut dir = SessionDir::open(&id, opts.resume.is_none())?;
+        let mut dir = SessionDir::open(&id, !restored)?;
         let (vm, weak, config) = start_vm(&opts)?;
         let mut records = dir.records();
         for r in history::missing_results(&records) {
             dir.append(&r);
             records.push(r);
         }
-        if opts.resume.is_none() {
-            let r = crate::control::initial_settings(&config);
+        let default_model = crate::db::default_model();
+        let default_effort = crate::db::default_effort();
+        if !restored {
+            let r = Record::Settings {
+                model: default_model.clone(),
+                effort: default_effort.clone(),
+            };
             dir.append(&r);
             records.push(r);
         }
         let mut st = State {
             bounds: Bounds::default(),
-            model: crate::control::or_default(&meta.model, config.default_model()),
-            effort: crate::control::or_default(&meta.effort, config.default_effort()),
+            model: crate::control::or_default(&meta.model, default_model),
+            effort: crate::control::or_default(&meta.effort, default_effort),
             busy: false,
             turn_error: None,
             generation: 0,
@@ -128,9 +136,10 @@ impl Session {
                 _ => {}
             }
         }
-        let config = Arc::new(config);
-        st.stats = (crate::usage::Stats::of(&records, &config), config.clone());
+        let models = crate::db::models();
+        st.stats = (crate::usage::Stats::of(&records, &models), models);
         st.records = records;
+        let config = Arc::new(config);
         let path = dir.path.clone();
         let s = Arc::new_cyclic(|me| {
             *weak.lock().unwrap() = me.clone();
@@ -145,28 +154,26 @@ impl Session {
                 state: Mutex::new(st),
                 subs: Mutex::default(),
                 vm,
-                hooks_on: std::sync::atomic::AtomicBool::new(true),
+                hooks_on: AtomicBool::new(true),
                 hook_runs: Default::default(),
                 ui: Mutex::default(),
                 cmd_runs: Mutex::default(),
                 http: tuse_api::default_agent(),
+                next_lua: AtomicU64::new(0),
+                task_lua: Mutex::default(),
             }
         });
-        for p in s.config().problems() {
-            s.emit(crate::Event::Notice(p));
-        }
-        s.hook(
-            "process_start",
-            Data {
-                reason: Some(opts.start.reason()),
-                ..Default::default()
-            },
-        );
+        s.start_hook(opts.start.reason(), !restored, restored);
         Ok(s)
     }
 
-    /// Stops the turn and tasks, fires `process_end` with `reason` (`exit`, `new`,
-    /// `resume`), waits for those hooks and releases the lock.
+    pub(crate) fn next_lua_id(&self) -> String {
+        let n = self.next_lua.fetch_add(1, Ordering::Relaxed) + 1;
+        format!("lua-{n}")
+    }
+
+    /// Stops the turn and tasks, fires `close` with `reason` (`exit`, `new`, `resume`),
+    /// waits for those hooks while keeping the session readable, and releases the lock.
     pub fn close_for(self: &Arc<Self>, reason: &'static str) {
         if self.dir.lock().unwrap().is_none() {
             return;
@@ -187,8 +194,9 @@ impl Session {
         self.config.read().unwrap().1.clone()
     }
 
-    /// Runs the config file again in the same VM (the agent's globals stay):
-    /// `process_end` runs on the old hooks, then `process_start` on the new ones.
+    /// Runs and validates the config file again in the same VM (agent globals stay):
+    /// if validation fails, the previous config and callbacks stay active.
+    /// Otherwise `close` runs on old hooks, then `start` (`reason = "reload"`) on new hooks.
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
         let c = self
@@ -199,21 +207,10 @@ impl Session {
         let c2 = c.clone();
         self.vm
             .call(move |lua| crate::config_lua::commit(lua, &c2))?;
-        let problems = c.problems();
         self.swap_config(c);
-        for p in problems {
-            self.emit(crate::Event::Notice(p));
-        }
         self.ui_cancel_hooks(false);
-        self.hooks_on
-            .store(true, std::sync::atomic::Ordering::Release);
-        self.hook(
-            "process_start",
-            Data {
-                reason: Some("reload"),
-                ..Default::default()
-            },
-        );
+        self.hooks_on.store(true, Ordering::Release);
+        self.start_hook("reload", false, false);
         Ok(())
     }
 }
@@ -223,16 +220,22 @@ impl Session {
 fn start_vm(opts: &Options) -> Result<(tuse_lua::Vm, crate::host::Slot, Config), String> {
     let slot = crate::host::Slot::default();
     let cwd = opts.cwd.clone();
+    let mode = opts.mode;
     let host = crate::host::SessionHost {
         slot: slot.clone(),
         cwd: cwd.clone(),
-        mode: opts.mode,
     };
     let vm = tuse_lua::Vm::new(Arc::new(host), |_| {});
     let path = tuse_config::find(opts.config.as_deref(), &cwd);
     let s2 = slot.clone();
     let config = vm.call(move |lua| {
         crate::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
+        lua.set_app_data(crate::snapshot::LoadCtx {
+            mode,
+            cwd: cwd.clone(),
+            configpath: path.as_ref().map(|p| p.display().to_string()),
+            loading: false,
+        });
         crate::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
         let config = crate::config_lua::prepare(lua, path.as_deref())?;
         crate::config_lua::commit(lua, &config)?;

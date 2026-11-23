@@ -1,11 +1,45 @@
 # Functions
 
 Available as globals in the agent's `lua` tool. In config files and modules, including hooks,
-commands, and helpers, import them with `require("tuse")`. Errors are Lua errors with a plain message:
-catch them with `pcall`. Options are passed as a table, like `read(path, {lines = true, offset = 40})`.
+commands, `open` handlers, and helpers, import them with `require("tuse")`. Errors are Lua errors
+with a plain message: catch them with `pcall`. Options are passed as a table, like
+`read(path, {lines = true, offset = 40})`.
 
 Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/`delete` for file
 changes so the user sees diffs. Use `sh` for running programs and processing their output.
+
+## `session()`
+
+`require("tuse").session()` (or global `session()` in the `lua` tool) is the single source of
+runtime session data. Every call returns a **fresh snapshot** table (mutating it has no effect on
+Tuse) and never exposes provider credentials or API keys.
+
+| Field | Type | Unit / meaning |
+| --- | --- | --- |
+| `mode` | string | Front end: `"tui"` or `"json"`. Always set. |
+| `configpath` | string \| nil | Path of the loaded config file, or `nil` when running on defaults. |
+| `cwd` | string | Session working directory. Always set. |
+| `home` | string | Tuse state directory (`~/.tuse`). Always set. |
+| `id` | string \| nil | Session ID (`nil` before a session exists). |
+| `name` | string \| nil | Session title/name, or `nil` when unnamed. |
+| `model` | string \| nil | Active model (`provider/model`), or `nil` when unset. |
+| `provider` | string \| nil | Active provider prefix, or `nil` when unset. |
+| `effort` | string \| nil | Reasoning effort (`"default"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`). |
+| `ctx` | integer \| nil | Latest request context size in tokens (`input + output` of the last usage record, or estimated tokens right after compaction). |
+| `ctx_size` | integer \| nil | Context window size in tokens from saved model metadata (`nil` when unknown). |
+| `usage` | table \| nil | Cumulative session totals (including resumed history): `input` (prompt tokens, including cached/cache-write), `output` (completion tokens), `cache_read` (cached prompt tokens read), `cache_write` (prompt tokens written to cache), and `cost` (USD, or `nil` if pricing is unknown). |
+| `model_info` | table \| nil | Saved metadata for the active model (`name`, `display`, `window` in tokens, `compact_at` override in tokens, `prices = {input, output, cache_read, cache_write}` in USD per 1M tokens), or `nil` when unset. |
+| `steps` | integer \| nil | Completed model request/response steps in the session (including resumed history). |
+| `turns` | integer \| nil | Completed user turns in the session (including resumed history). |
+| `trace` | list \| nil | Full session trace in chronological order (`{role, summary, text}`), including resumed history, with no UI truncation. |
+
+**Before a session exists (initial config load and `/reload`):** Top-level config and plugin
+evaluation runs with consistent pre-session semantics on both initial startup and `/reload`:
+`session()` returns `{ mode, configpath, cwd, home }` with `id` and all session-only fields set
+to `nil`. Inside hooks (including `start` and `close`), commands, helpers, `open` handlers, tasks,
+and `lua` tool calls, `session()` returns the full live session snapshot.
+
+## Built-in functions
 
 - `read(path)` / `read(path, {lines=true, offset=1, limit=2000})`: returns raw file text by default
   without line numbers or pagination notes. Pass `{lines=true}` for numbered lines in pages (the
@@ -28,11 +62,11 @@ changes so the user sees diffs. Use `sh` for running programs and processing the
   filter such as `*.rs`. A bad pattern raises an error.
 - `sh(cmd, {timeout=nil, cwd=nil, env={}})`: `bash -c cmd`, stdout and stderr merged. Wrap shell
   commands that contain quotes, backslashes, or regexes in Lua long strings like `sh([=[...]=])`
-  so Lua does not interpret shell escapes. Returns a
-  table with `.out`, `.code` (`nil` when killed), `.ok` (`code == 0`), `.timed_out` and
-  `:lines()`; `tostring(r)` is the output plus an exit note. `TUSE_SESSION`, `TUSE_CWD`,
-  `TUSE_MODEL`, `TUSE_MODE` and `TUSE_CURRENT_CONFIG` are set. At its own timeout or the deadline of the call
-  the process group is killed; Esc kills it too. While it runs, hooks and tasks go on.
+  so Lua does not interpret shell escapes. Returns a table with `.out`, `.code` (`nil` when
+  killed), `.ok` (`code == 0`), `.timed_out` and `:lines()`; `tostring(r)` is the output plus an
+  exit note. Inherits the ordinary process environment plus any explicit `env` entries (Tuse does
+  not inject `TUSE_*` variables). At its own timeout or the deadline of the call the process group
+  is killed; Esc kills it too. While it runs, hooks and tasks go on.
 - `sleep(seconds)`: waits without holding up the other coroutines.
 - `spawn(fn, name)`: runs `fn` as a background task in the same VM, so it sees your globals and
   functions; returns its ID (`t1`, `t2`, ...). Run a server with
@@ -54,8 +88,8 @@ changes so the user sees diffs. Use `sh` for running programs and processing the
   `nil`).
 - Picker and question requests share one FIFO queue, pause the calling coroutine's timeout while
   waiting, and leave a UI-only chat entry when answered (cancelled prompts leave no entry).
-- `set_title(text)` names the session; `docs(topic)`: call `docs()` to list documentation topics,
-  or `docs("<topic>")` to read one.
+- `set_title(text)` names the session (and emits `name_change`); `docs(topic)`: call `docs()` to
+  list documentation topics, or `docs("<topic>")` to read one.
 
 ## Functions from the config
 
@@ -79,7 +113,8 @@ return {
 Each `run` becomes a global of the VM under the function's name. `args` is only the text shown
 to the agent between the parentheses. `show_agent = false` (default `true`) hides a helper from
 the agent: it is left out of the system prompt and of `docs("functions")`, but it stays defined,
-so other helpers, hooks and tasks can call it. Use `os.getenv("TUSE_MODE")` to choose which helpers to define.
+so other helpers, hooks and tasks can call it. Branch on `require("tuse").session().mode` to
+choose which helpers to define.
 
-`/reload` runs the config file again in the same VM: helpers are redefined and the agent's
-globals stay. A deleted helper remains defined until exit.
+`/reload` validates the config first, then runs the config file again in the same VM: helpers are
+redefined and the agent's globals stay.

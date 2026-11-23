@@ -1,7 +1,7 @@
 # Plugins
 
-A plugin is a Lua file in a git repository that returns a config table. Tuse merges the
-tables from your plugins under your own config.
+A plugin is a Lua file in a git repository that returns a config table. Tuse validates each plugin
+individually and merges plugins under your own config.
 
 ```lua
 return {
@@ -42,21 +42,21 @@ end
 
 ## Merging
 
-Plugins load in list order, then your config goes on top.
+Plugins load and validate in list order, then your config goes on top.
 
-- `systems` and `models` are concatenated, plugins first.
-- `prompts`, `functions`, `hooks` and `commands` merge by name. If two plugins use the same
-  name, that is an error. Your config silently overrides a plugin.
+- `systems` is concatenated, plugins first.
+- `prompts`, `functions`, `hooks`, `commands`, and `open` merge by name. If two plugins use the
+  same name, that is an error. Your config silently overrides a plugin.
 - `settings` and `theme` merge deeply, with your values winning.
-- Plugins cannot set `model`, `provider`, `effort` or `plugins`.
+- Plugins cannot set `plugins`, unknown keys, or removed keys (`model`, `provider`, `effort`, `models`).
 
 `/config` lists the loaded plugins with their `ref`, commit (or `local`) and folder; `config.get`
 in `tuse json` returns them as `plugins`.
 
 ## Installing
 
-Clones live in `~/.tuse/plugins` (`$TUSE_HOME/plugins`), one per repository. Starting Tuse
-never touches the network: a missing clone is an error that points to `tuse plugins install`.
+Clones live in `~/.tuse/plugins`, one per repository. Starting Tuse never touches the network: a
+missing clone is an error that points to `tuse plugins install`.
 
 ```
 tuse plugins                        list the plugins of the config and their commits
@@ -67,14 +67,14 @@ tuse plugins update [NAME]          fetch and fast-forward the clones
 tuse plugins clean                  delete clones no plugin uses
 ```
 
-Every subcommand takes `-c/--config PATH`. Without it, the subcommand uses the config Tuse
-would load: `./tuse.lua`, then `$TUSE_GLOBAL_CONFIG`, then `~/.config/tuse.lua`, then
-`~/.config/tuse/init.lua`. `add` creates `~/.config/tuse/init.lua` when no config exists. When
-the config does not return a literal table (for example `return g`), `add` prints the lines to
-paste by hand.
+Every subcommand takes `-c/--config PATH`. Without it, the subcommand uses the config Tuse would
+load: `./tuse.lua`, then `~/.config/tuse.lua`, then `~/.config/tuse/init.lua`. `add` creates
+`~/.config/tuse/init.lua` when no config exists. When the config does not return a literal table
+(for example `return g`), `add` prints the lines to paste by hand.
 
 ## Bundled: welcome
 
-`ethanhamilthon/tuse/plugins/welcome` shows a banner with the model, folder, git state, date,
-config and version when a new TUI session starts. Its options are `title` (the banner text,
-default: the project folder name) and `block` (the `show_markdown` name, default `welcome`).
+`ethanhamilthon/tuse/plugins/welcome` listens to the `start` hook (when `e.is_new` is true) and
+reads `require("tuse").session()` to show a banner with the model, folder, git state, date, config
+path, and version in new TUI sessions. Its options are `title` (the banner text, default: the
+project folder name) and `block` (the `show_markdown` name, default `welcome`).

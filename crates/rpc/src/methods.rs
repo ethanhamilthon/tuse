@@ -12,6 +12,7 @@ pub const METHODS: &[&str] = &[
     "turn.withdraw",
     "turn.cancel",
     "session.info",
+    "session.snapshot",
     "session.records",
     "session.trace",
     "session.stats",
@@ -21,6 +22,9 @@ pub const METHODS: &[&str] = &[
     "model.get",
     "model.set",
     "model.list",
+    "model.meta.list",
+    "model.meta.set",
+    "model.meta.remove",
     "config.get",
     "config.reload",
     "config.set",
@@ -119,6 +123,9 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             Ok(Value::Null)
         }
         "session.info" => Ok(info(s)),
+        "session.snapshot" => {
+            serde_json::to_value(s.snapshot(true)).map_err(|e| Fail::session(e.to_string()))
+        }
         "session.records" => s
             .with_records(|r| serde_json::to_value(r))
             .map_err(|e| Fail::session(e.to_string())),
@@ -159,6 +166,9 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             s.fetch_models();
             Ok(json!(s.available_models()))
         }
+        "model.meta.list" => crate::models::list(),
+        "model.meta.set" => crate::models::set(p),
+        "model.meta.remove" => crate::models::remove(p),
         "config.get" => {
             serde_json::to_value(&*s.config()).map_err(|e| Fail::session(e.to_string()))
         }

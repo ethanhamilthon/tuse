@@ -1,6 +1,7 @@
 use crate::session::Session;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
+use std::time::Instant;
 use tuse_lua::mlua::{self, Lua, Value};
 use tuse_lua::{Done, Host, TaskStart};
 
@@ -11,7 +12,6 @@ pub(crate) type Slot = Arc<Mutex<Weak<Session>>>;
 pub(crate) struct SessionHost {
     pub slot: Slot,
     pub cwd: PathBuf,
-    pub mode: crate::Mode,
 }
 
 impl SessionHost {
@@ -25,37 +25,37 @@ impl Host for SessionHost {
         self.cwd.clone()
     }
 
-    fn env(&self) -> Vec<(String, String)> {
-        self.get().map_or_else(
-            || {
-                let mut env = vec![
-                    ("TUSE_MODE".into(), self.mode.name().into()),
-                    ("TUSE_CWD".into(), self.cwd.display().to_string()),
-                ];
-                if let Some(g) = tuse_config::global_path() {
-                    env.push(("TUSE_GLOBAL_CONFIG".into(), g.display().to_string()));
-                }
-                env
-            },
-            |s| s.env(),
-        )
-    }
-
     fn action(&self, what: &str) {
         if let Some(s) = self.get() {
             action(&s, "running", what);
         }
     }
 
-    fn task_start(&self, name: &str) -> Result<TaskStart, String> {
+    fn task_start(&self, name: &str, from_lua_hook: bool) -> Result<TaskStart, String> {
         let s = self.get().ok_or("session closed")?;
         let t = s.tasks.create(name)?;
+        if !from_lua_hook {
+            let exec_id = s.next_lua_id();
+            let display = if name.is_empty() {
+                t.id.clone()
+            } else {
+                name.to_string()
+            };
+            s.task_lua
+                .lock()
+                .unwrap()
+                .insert(t.id.clone(), (exec_id.clone(), Instant::now()));
+            s.lua_start_hook(exec_id, "task", None, Some(display));
+        }
         s.emit(crate::Event::Tasks);
         Ok(t)
     }
 
     fn task_end(&self, id: &str, d: Done) {
         let Some(s) = self.get() else { return };
+        if let Some((exec_id, started)) = s.task_lua.lock().unwrap().remove(id) {
+            s.lua_end_done(&exec_id, "task", started.elapsed(), &d);
+        }
         let ended = s.tasks.end(id, d.ok);
         s.emit(crate::Event::Tasks);
         if let Some(t) = ended {
@@ -91,7 +91,7 @@ pub(crate) fn action(s: &Session, verb: &str, what: &str) {
     s.set_status(format!("{verb} {what}..."));
 }
 
-/// The session functions of the VM: file helpers, `docs`, `set_title`, `task_*`.
+/// The session functions of the VM: file helpers, `docs`, `set_title`, `session`, `task_*`.
 pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     lua.set_app_data(s);
     let g = lua.globals();
@@ -110,22 +110,11 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     )?;
     g.set(
         "set_title",
-        lua.create_function(|lua, text: String| {
-            let s = session(lua)?;
-            let text: String = text
-                .trim()
-                .replace(['\r', '\n'], " ")
-                .chars()
-                .take(80)
-                .collect();
-            if text.is_empty() {
-                return Err(err("empty title".into()));
-            }
-            let mut st = s.state.lock().unwrap();
-            st.meta.title = text;
-            s.save_meta(&mut st);
-            Ok(())
-        })?,
+        lua.create_function(|lua, text: String| session(lua)?.set_name(&text).map_err(err))?,
+    )?;
+    g.set(
+        "session",
+        lua.create_function(|lua, ()| crate::snapshot::lua_session(lua))?,
     )?;
     crate::host_tasks::install(lua)?;
     crate::host_ui::install(lua)?;
@@ -138,6 +127,7 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
         "grep",
         "docs",
         "set_title",
+        "session",
         "task_get",
         "task_stop",
         "task_list",

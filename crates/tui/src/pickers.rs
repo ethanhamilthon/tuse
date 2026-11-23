@@ -1,12 +1,12 @@
 use crate::app::App;
 use crate::picker::{Item, Kind, Picker, item};
-use tuse_config::{Config, ModelDef};
+use tuse_config::ModelDef;
 
 impl App {
-    /// Every available model the providers reported plus the ones named in `models:`.
+    /// Every available model providers reported plus saved DB models.
     /// The current model stays visible even when its provider has been removed.
     pub fn open_models(&mut self) {
-        let config = self.session.config();
+        let defs = tuse_core::models();
         let (current, _) = self.session.model();
         let mut names = self.session.available_models();
         if !names.contains(&current) {
@@ -15,7 +15,10 @@ impl App {
         names.sort();
         let items: Vec<Item> = names
             .iter()
-            .map(|n| model_item(&config, n, self.session.model_available(n)))
+            .map(|n| {
+                let def = defs.iter().find(|d| d.name == *n);
+                model_item(def, n, self.session.model_available(n))
+            })
             .collect();
         let selected = self
             .picker
@@ -29,8 +32,8 @@ impl App {
     }
 }
 
-fn model_item(config: &Config, name: &str, available: bool) -> Item {
-    let shown = config.display_name(name);
+fn model_item(def: Option<&ModelDef>, name: &str, available: bool) -> Item {
+    let shown = tuse_config::display_name(def, name);
     let mut parts = if shown == name {
         vec![]
     } else {
@@ -39,7 +42,7 @@ fn model_item(config: &Config, name: &str, available: bool) -> Item {
     if !available && !name.is_empty() {
         parts.push("unavailable".to_string());
     }
-    if let Some(m) = config.model_def(name) {
+    if let Some(m) = def {
         parts.extend(details(m));
     }
     item(shown, parts.join(" · "), name)
@@ -51,7 +54,7 @@ fn details(m: &ModelDef) -> Vec<String> {
         out.push(format!("{} ctx", tuse_core::tokens(m.window)));
     }
     if let Some(p) = &m.prices {
-        out.push(format!("${}/${} per 1M", p.input, p.out));
+        out.push(format!("${}/${} per 1M", p.input, p.output));
     }
     out
 }
@@ -62,26 +65,27 @@ mod tests {
 
     #[test]
     fn model_detail_repeats_the_name_only_under_a_display_name() {
-        let def = |name: &str, display: &str| ModelDef {
-            name: name.into(),
-            display: display.into(),
+        let opus = ModelDef {
+            name: "c/opus".into(),
             window: 200_000,
             ..Default::default()
         };
-        let config = Config {
-            models: vec![def("c/opus", ""), def("c/sonnet", "Sonnet")],
+        let sonnet = ModelDef {
+            name: "c/sonnet".into(),
+            display: "Sonnet".into(),
+            window: 200_000,
             ..Default::default()
         };
-        let plain = model_item(&config, "c/opus", true);
+        let plain = model_item(Some(&opus), "c/opus", true);
         assert_eq!(
             (plain.label.as_str(), plain.detail.as_str()),
             ("c/opus", "200.0k ctx")
         );
-        let named = model_item(&config, "c/sonnet", true);
+        let named = model_item(Some(&sonnet), "c/sonnet", true);
         assert_eq!(named.detail, "c/sonnet · 200.0k ctx");
-        assert_eq!(model_item(&config, "c/other", true).detail, "");
+        assert_eq!(model_item(None, "c/other", true).detail, "");
         assert_eq!(
-            model_item(&config, "c/opus", false).detail,
+            model_item(Some(&opus), "c/opus", false).detail,
             "unavailable · 200.0k ctx"
         );
     }

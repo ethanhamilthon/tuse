@@ -150,7 +150,7 @@ impl App {
                 }
                 self.chat.push(Entry::TurnEnd {
                     elapsed,
-                    model: self.session.config().display_name(&model),
+                    model: self.session.display_name(&model),
                     effort,
                     cancelled,
                 });

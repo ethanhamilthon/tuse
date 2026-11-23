@@ -75,15 +75,15 @@ pub fn working(app: &App) -> Line {
 
 /// The model indicator: model, effort, context use and cost.
 pub fn model(app: &App) -> Line {
-    let config = app.session.config();
     let (model, effort) = app.session.model();
+    let def = app.session.model_def(&model);
     let stats = app.session.stats();
-    let window = config.model_def(&model).map_or(0, |d| d.window);
+    let window = def.as_ref().map_or(0, |d| d.window);
     let context = (window > 0 || stats.context > 0).then_some((stats.context, window));
     let cost = stats.priced.then_some(stats.cost);
     model_line(
         &app.palette,
-        &config.display_name(&model),
+        &tuse_config::display_name(def.as_ref(), &model),
         &effort,
         context,
         cost,

@@ -52,62 +52,65 @@ pub(crate) fn file_env(lua: &Lua) -> mlua::Result<Table> {
     lua.named_registry_value(FILE_ENV)
 }
 
-/// Builds the config and stages its Lua functions until `commit`.
+/// Validates and stages the config and its Lua callbacks until `commit`.
+/// On failure, restores previously loaded file modules so active callbacks stay intact.
 pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
-    crate::require::forget(lua).map_err(|e| e.to_string())?;
+    let saved = crate::require::forget(lua).map_err(|e| e.to_string())?;
+    let prev_ctx = lua.app_data_mut::<crate::snapshot::LoadCtx>().map(|mut c| {
+        let old = (c.loading, c.configpath.clone());
+        c.loading = true;
+        c.configpath = path.map(|p| p.display().to_string());
+        old
+    });
+    let res = prepare_inner(lua, path);
+    if let (Some(mut ctx), Some((old_loading, old_path))) =
+        (lua.app_data_mut::<crate::snapshot::LoadCtx>(), prev_ctx)
+    {
+        ctx.loading = old_loading;
+        if res.is_err() {
+            ctx.configpath = old_path;
+        }
+    }
+    if res.is_err() {
+        let _ = crate::require::restore(lua, saved);
+    }
+    res
+}
+
+fn prepare_inner(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     let (table, plugins) = match path {
         Some(p) => read_file(lua, p)?,
         None => (lua.create_table().map_err(|e| e.to_string())?, vec![]),
     };
-    if !matches!(table.raw_get::<Value>("include"), Ok(Value::Nil)) {
-        return Err(format!(
-            "{name}: `include` was removed; use `require(...)` instead"
-        ));
-    }
-    let commands = extract_commands(&table, &name)?;
+    let commands = table_keys(&table, "commands")?;
+    let open = table_keys(&table, "open")?;
     let mut raw = to_json(lua, Value::Table(table.clone()));
     if let Some(obj) = raw.as_object_mut() {
         obj.insert("commands".into(), serde_json::json!(commands));
+        obj.insert("open".into(), serde_json::json!(open));
     }
     let mut config = tuse_config::from_value(raw, &name)?;
     config.plugins = plugins;
     config.path = path.map(|p| p.display().to_string()).unwrap_or_default();
-    for (key, names) in [
-        ("hooks", config.hooks.keys().cloned().collect::<Vec<_>>()),
-        ("functions", config.functions.keys().cloned().collect()),
-    ] {
-        for n in names {
-            if entry(&table, key, &n).is_some_and(|t| t.contains_key("modes").unwrap_or(false)) {
-                return Err(format!(
-                    "{name}: {key}.{n}.modes was removed; branch on os.getenv(\"TUSE_MODE\")"
-                ));
-            }
-            if code(&table, key, &n).is_none() {
-                return Err(format!("{name}: {key}.{n}.run must be a function"));
-            }
-        }
-    }
     lua.set_named_registry_value("tuse.next", table)
         .map_err(|e| e.to_string())?;
-    crate::store::apply_state(&mut config);
+    crate::store::apply_providers(&mut config);
     Ok(config)
 }
 
 type Loaded = (Table, Vec<tuse_config::PluginInfo>);
 
 fn read_file(lua: &Lua, path: &Path) -> Result<Loaded, String> {
-    let error = |e: mlua::Error| format!("{}: {}", path.display(), tuse_lua::message(&e));
+    let source = path.display().to_string();
+    let error = |e: mlua::Error| format!("{source}: {}", tuse_lua::message(&e));
     match eval_file(lua, path)? {
         Value::Table(t) => {
             let base = path.parent().unwrap_or(Path::new("."));
-            crate::plugins::apply(lua, t, base).map_err(|e| format!("{}: {e}", path.display()))
+            crate::plugins::apply(lua, t, &source, base)
         }
         Value::Nil => Ok((lua.create_table().map_err(error)?, vec![])),
-        _ => Err(format!(
-            "{}: the config must return a table",
-            path.display()
-        )),
+        _ => Err(format!("{source}: the config must return a table")),
     }
 }
 
@@ -157,33 +160,28 @@ pub(crate) fn command_of(lua: &Lua, name: &str) -> Option<Function> {
     t.get::<Table>("commands").ok()?.get(name).ok()
 }
 
-fn extract_commands(table: &Table, name: &str) -> Result<Vec<String>, String> {
-    let raw: Value = table.raw_get("commands").map_err(|e| e.to_string())?;
-    let t = match raw {
-        Value::Nil => return Ok(vec![]),
-        Value::Table(t) => t,
-        _ => return Err(format!("{name}: commands must be a table")),
+pub(crate) fn open_of(lua: &Lua, ext: &str) -> Option<Function> {
+    let t: Table = lua.named_registry_value("tuse.config").ok()?;
+    t.get::<Table>("open").ok()?.get(ext).ok()
+}
+
+fn table_keys(table: &Table, key: &str) -> Result<Vec<String>, String> {
+    let Value::Table(t) = table.raw_get::<Value>(key).map_err(|e| e.to_string())? else {
+        return Ok(vec![]);
     };
     let mut names = vec![];
-    for pair in t.pairs::<Value, Value>() {
-        let (k, v) = pair.map_err(|e| format!("{name}: {e}"))?;
-        let Value::String(s) = k else {
-            return Err(format!("{name}: commands keys must be strings"));
-        };
-        let key = s.to_str().map_err(|e| format!("{name}: {e}"))?.to_string();
-        if !matches!(v, Value::Function(_)) {
-            return Err(format!("{name}: commands.{key} must be a function"));
-        }
-        names.push(key);
+    for pair in t.pairs::<String, Value>() {
+        names.push(pair.map_err(|e| e.to_string())?.0);
     }
     names.sort();
     Ok(names)
 }
 
 fn code(t: &Table, key: &str, name: &str) -> Option<Function> {
-    entry(t, key, name)?.get("run").ok()
-}
-
-fn entry(t: &Table, key: &str, name: &str) -> Option<Table> {
-    t.get::<Table>(key).ok()?.get(name).ok()
+    t.get::<Table>(key)
+        .ok()?
+        .get::<Table>(name)
+        .ok()?
+        .get("run")
+        .ok()
 }

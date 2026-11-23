@@ -1,26 +1,23 @@
 use crate::theme::{Theme, UiSettings};
 use serde::Deserialize;
-
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
-    pub model: String,
-    pub provider: String,
-    pub effort: String,
     /// Providers come from the database (`tuse connect`), never from the file.
     #[serde(skip)]
     pub connect: Vec<Connect>,
     pub settings: Settings,
     /// The 10 colors of the UI.
     pub theme: Theme,
-    pub models: Vec<ModelDef>,
     pub systems: Vec<String>,
     pub prompts: BTreeMap<String, String>,
     pub functions: BTreeMap<String, Function>,
     pub hooks: BTreeMap<String, Hook>,
     pub commands: Vec<String>,
+    /// File extensions (without leading dot) handled by `open` callbacks.
+    pub open: Vec<String>,
     /// The config file, empty when there is none; filled by the loader.
     #[serde(skip_deserializing)]
     pub path: String,
@@ -41,7 +38,7 @@ pub struct PluginInfo {
     pub commit: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Connect {
     pub name: String,
@@ -50,7 +47,7 @@ pub struct Connect {
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Settings {
     /// Unset: 60% of the model's `window` when it is known; `0` turns compaction off.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,7 +68,8 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
+/// Model metadata stored in SQLite (`tuse models`).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct ModelDef {
     pub name: String,
@@ -82,18 +80,20 @@ pub struct ModelDef {
 }
 
 /// Prices in dollars per 1M tokens.
-#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Prices {
-    #[serde(rename = "in")]
+    #[serde(alias = "in")]
     pub input: f64,
-    pub out: f64,
-    pub cache: f64,
+    #[serde(alias = "out")]
+    pub output: f64,
+    #[serde(alias = "cache")]
+    pub cache_read: f64,
     pub cache_write: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Function {
     pub args: String,
     pub description: String,
@@ -112,22 +112,26 @@ impl Default for Function {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Hook {
     pub events: Vec<String>,
 }
 
-pub const HOOK_EVENTS: [&str; 4] = [
-    "process_start",
-    "process_end",
+pub const HOOK_EVENTS: [&str; 8] = [
+    "start",
+    "close",
     "user_message",
     "agent_message",
+    "model_change",
+    "name_change",
+    "lua_start",
+    "lua_end",
 ];
 
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
 
 pub const BUILTIN_COMMANDS: [&str; 9] = [
-    "config", "new", "resume", "models", "tasks", "usage", "trace", "reload", "quit",
+    "config", "new", "resume", "models", "tasks", "session", "trace", "reload", "quit",
 ];
 
 impl Config {
@@ -136,65 +140,27 @@ impl Config {
         serde_json::to_string_pretty(self).unwrap_or_default()
     }
 
-    /// The full `provider/model` name of the configured default model.
-    pub fn default_model(&self) -> String {
-        full_model_name(&self.model, &self.provider, &self.connect)
-    }
-
-    /// What is wrong in the config but not fatal: each item is one notice.
-    pub fn problems(&self) -> Vec<String> {
-        let mut out = vec![];
-        if !self.effort.is_empty() && !EFFORTS.contains(&self.effort.as_str()) {
-            out.push(format!(
-                "config: unknown effort `{}`, using `default`; use one of {}",
-                self.effort,
-                EFFORTS.join(", ")
-            ));
-        }
-        for (name, hook) in &self.hooks {
-            for e in hook
-                .events
-                .iter()
-                .filter(|e| !HOOK_EVENTS.contains(&e.as_str()))
-            {
-                out.push(format!(
-                    "hook {name}: unknown event `{e}`; events are {}",
-                    HOOK_EVENTS.join(", ")
-                ));
-            }
-        }
-        out
-    }
-
-    pub fn default_effort(&self) -> String {
-        if EFFORTS.contains(&self.effort.as_str()) {
-            self.effort.clone()
-        } else {
-            "default".into()
-        }
-    }
-
-    pub fn model_def(&self, full: &str) -> Option<&ModelDef> {
-        self.models.iter().rev().find(|m| m.name == full)
-    }
-
     pub fn connect(&self, name: &str) -> Option<&Connect> {
         self.connect.iter().find(|c| c.name == name)
     }
 
     /// The model's `compact_at`, else `settings.compact_at`, else 60% of the model's window.
-    pub fn compact_at(&self, full: &str) -> u64 {
-        let def = self.model_def(full);
-        def.and_then(|m| m.compact_at)
-            .or(self.settings.compact_at)
-            .unwrap_or_else(|| def.map_or(0, |m| m.window * 6 / 10))
+    pub fn compact_at(&self, def: Option<&ModelDef>) -> u64 {
+        compact_at(def, self.settings.compact_at)
     }
+}
 
-    pub fn display_name(&self, full: &str) -> String {
-        match self.model_def(full) {
-            Some(m) if !m.display.is_empty() => m.display.clone(),
-            _ => full.to_string(),
-        }
+/// Effective compaction threshold: model override, else `settings.compact_at`, else 60% of window.
+pub fn compact_at(def: Option<&ModelDef>, setting: Option<u64>) -> u64 {
+    def.and_then(|m| m.compact_at)
+        .or(setting)
+        .unwrap_or_else(|| def.map_or(0, |m| m.window * 6 / 10))
+}
+
+pub fn display_name(def: Option<&ModelDef>, full: &str) -> String {
+    match def {
+        Some(m) if !m.display.is_empty() => m.display.clone(),
+        _ => full.to_string(),
     }
 }
 

@@ -113,9 +113,10 @@ pub fn color(s: &str) -> Option<Color> {
     })
 }
 
-/// The 10 theme colors parsed once per (re)load, plus `settings.ui`.
+/// The 10 theme colors parsed once per (re)load, plus `settings.ui` and session `cwd`.
 pub struct Palette {
     pub ui: UiSettings,
+    pub cwd: std::path::PathBuf,
     pub bg: Option<Color>,
     pub surface: Option<Color>,
     pub fg: Option<Color>,
@@ -139,6 +140,7 @@ impl Palette {
         };
         Self {
             ui: ui.clone(),
+            cwd: std::path::PathBuf::new(),
             bg: c(&t.bg),
             surface: c(&t.surface),
             fg: c(&t.fg),
@@ -154,6 +156,12 @@ impl Palette {
 
     pub fn from_config(cfg: &Config) -> Self {
         Self::new(&cfg.theme, &cfg.settings.ui)
+    }
+
+    pub fn for_session(cfg: &Config, cwd: &std::path::Path) -> Self {
+        let mut p = Self::from_config(cfg);
+        p.cwd = cwd.to_path_buf();
+        p
     }
 }
 

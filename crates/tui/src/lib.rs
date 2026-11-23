@@ -14,6 +14,7 @@ mod fold;
 mod input_view;
 mod keys;
 mod layout_keys;
+mod link_scan;
 mod links;
 mod list;
 mod markdown;
@@ -28,6 +29,7 @@ mod pickers;
 mod render;
 mod selection;
 mod send;
+mod session_view;
 mod status;
 mod style;
 mod syntax;
@@ -35,7 +37,6 @@ mod table;
 mod text;
 mod token_picker;
 mod tool_view;
-mod usage;
 mod watchdog;
 
 use crossterm::event::{

@@ -13,10 +13,7 @@ impl Host for H {
     fn cwd(&self) -> PathBuf {
         std::env::temp_dir()
     }
-    fn env(&self) -> Vec<(String, String)> {
-        vec![("TUSE_X".into(), "42".into())]
-    }
-    fn task_start(&self, name: &str) -> Result<TaskStart, String> {
+    fn task_start(&self, name: &str, _from_lua_hook: bool) -> Result<TaskStart, String> {
         let log = std::env::temp_dir().join(format!("tuse-lua-{}-{name}.log", std::process::id()));
         let _ = std::fs::remove_file(&log);
         Ok(TaskStart {
@@ -52,7 +49,11 @@ fn runs_code_keeps_globals_and_shows_values() {
         "{}",
         d.text
     );
-    let d = vm.run("sh('echo $TUSE_X; exit 3')", "lua", stop(5));
+    let d = vm.run(
+        "sh('echo $MY_X; exit 3', {env = {MY_X = '42'}})",
+        "lua",
+        stop(5),
+    );
     assert_eq!(d.text, "42\n[exit code 3]");
     let d = vm.run("json.encode(json.decode('{\"a\":[1,2]}'))", "lua", stop(5));
     assert_eq!(d.text, "{\"a\":[1,2]}");

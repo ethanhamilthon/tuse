@@ -1,26 +1,42 @@
 # Hooks
 
-A hook is a Lua function called on an event; Tuse does not wait for it, except for
-`process_end`, which Tuse waits for until it ends. There are four events:
+A hook is a Lua function called on an event; Tuse does not wait for it, except for `close`,
+which Tuse waits for until every running hook finishes.
 
-| Event | When | Fields |
+Hook payloads contain **only** `event` and event-specific fields. Call `require("tuse").session()`
+inside the hook for session metadata (`id`, `name`, `cwd`, `model`, `provider`, `effort`, `home`,
+`configpath`, `usage`, `trace`, etc.).
+
+| Event | When | Payload fields |
 | --- | --- | --- |
-| `process_start` | A session opens in this process. | `reason`: `launch` (Tuse started, also with `--resume`), `new` (`/new`), `resume` (`/resume`), `reload` (`/reload`, on the new config). |
-| `process_end` | The session closes. | `reason`: `exit`, `new`, `resume`, `reload` (on the old config, before it is replaced). |
-| `user_message` | The agent takes a message the user typed (not task notifications). | `text`; `is_first`: the first message of the session (`false` after a resume). |
-| `agent_message` | The agent wrote a message. Messages without text (only tool calls) are skipped, except on a cancel. | `text`; `status`: `working` (tool calls follow), `finished` (the turn is over) or `cancelled` (the user stopped the turn; `text` is what streamed so far, maybe empty); `tasks`: this session's running background tasks, a list of `{id, name}`; empty when no tasks run. |
+| `start` | A session opens in this process, or after `/reload` commits a new config. | `event`, `reason` (`"launch"`, `"new"`, `"resume"`, `"reload"`), `is_new` (`true` for fresh launch or `/new`; `false` for `--resume`, `/resume`, `/reload`), `restored` (`true` for `--resume` or `/resume`; `false` otherwise). |
+| `close` | The session closes, or before `/reload` replaces the config. The session remains readable via `tuse.session()` while `close` runs. | `event`, `reason` (`"exit"`, `"new"`, `"resume"`, `"reload"`). |
+| `user_message` | The agent takes a message the user typed (not task notifications). | `event`, `text`, `is_first` (`true` for the first user message of the session, `false` otherwise including after resume). |
+| `agent_message` | The agent produced an assistant message (text and/or tool calls) or was cancelled mid-step. | `event`, `text` (may be `""` when only tool calls were emitted or cancelled early), `status` (`"working"`, `"finished"`, `"cancelled"`), `tool_calls` (list of `{id, name, arguments}` when present, else `nil`). |
+| `model_change` | After the session's model, provider, or effort changes. | `event`, `previous` (`{model, provider, effort}`), `new` (`{model, provider, effort}`). |
+| `name_change` | After the session's name changes (initial auto-title or `set_title`). | `event`, `previous` (previous name or `nil`), `new` (new name). |
+| `lua_start` | A tracked Lua job starts. | `event`, `id` (execution ID, e.g. `"lua-1"`), `kind` (`"tool"`, `"command"`, `"task"`, `"open"`), `code` (source code for `"tool"`, else `nil`), `name` (command/task/extension name for `"command"`/`"task"`/`"open"`, else `nil`). |
+| `lua_end` | A tracked Lua job ends. | `event`, `id` (same execution ID as `lua_start`), `kind`, `status` (`"success"`, `"error"`, `"cancelled"`), `duration_ms` (elapsed milliseconds), `result` (output/return text on `"success"`, else `nil`), `error` (error text on `"error"`, else `nil`). |
 
-The function gets one table `e` with the event's fields and also `event`, `hook` (its name),
-`session` (ID), `cwd`, `model` (`provider/model`) and `config` (path of the config file). Fields
-an event does not set are `nil`. A hook listening to an unknown event shows a notice.
+## Which Lua jobs emit `lua_start` and `lua_end`
+
+Tracked jobs are:
+- **`tool`**: agent `lua(code)` tool calls;
+- **`command`**: custom slash commands from `commands = {...}`;
+- **`task`**: background tasks started with `spawn(fn, name)`;
+- **`open`**: local file opener callbacks from `open = {...}`.
+
+Hook runs themselves never trigger `lua_start` or `lua_end`, and any task spawned from inside a
+`lua_start` or `lua_end` hook is also excluded so hooks cannot recursively trigger themselves.
+Top-level config evaluation on load or `/reload` does not emit `lua_start`/`lua_end`.
 
 ```lua
 local t = require("tuse")
 
 return {
   hooks = {
-    notify = os.getenv("TUSE_MODE") == "tui" and {
-      events = {"agent_message"},
+    notify = t.session().mode == "tui" and {
+      events = { "agent_message" },
       run = function(e)
         if e.status == "finished" then t.sh("say done") end
       end,
@@ -29,9 +45,9 @@ return {
 }
 ```
 
-Hooks run as coroutines in the session's VM and can call configured helpers. Their config
-upvalues survive between events. The events of one hook run in
-emission order; different hooks can run concurrently, and they keep running while the agent
-waits on `sh`. A run has no time limit; Esc stops the runs going on.
-An error produces a `hook NAME: ...` notice. `/reload` runs `process_end` on the old hooks, then
-`process_start` on the new ones. Every run is listed in `/trace` with its fields and time.
+Hooks run as coroutines in the session's VM and can call configured helpers. Their config upvalues
+survive between events. Events for one hook run in emission order; different hooks run
+concurrently and keep running while the agent waits on `sh`. A hook run has no time limit; Esc
+stops running hooks. An error emits a `hook NAME: ...` notice. `/reload` validates the new config
+first, then runs `close` on the old hooks, commits the new config, and runs `start` (`reason =
+"reload"`) on the new hooks. Every hook run is recorded in `/trace` and `tuse.session().trace`.

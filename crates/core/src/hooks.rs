@@ -1,3 +1,4 @@
+use crate::hook_events::compact;
 use crate::record::Record;
 use crate::session::Session;
 use serde_json::{Value, json};
@@ -10,17 +11,6 @@ use tuse_lua::{Done, Job, Out, Stop};
 
 pub use tuse_config::HOOK_EVENTS as EVENTS;
 
-/// The variables of one event; each event sets its own, the rest are `nil`.
-#[derive(Default)]
-pub struct Data {
-    pub text: Option<String>,
-    pub is_first: Option<bool>,
-    pub status: Option<&'static str>,
-    pub reason: Option<&'static str>,
-    /// `agent_message`: running background tasks, `(id, name)`.
-    pub tasks: Option<Vec<[String; 2]>>,
-}
-
 /// Per hook: whether a run is going, the events waiting behind it, and the flag
 /// that stops the running one.
 #[derive(Default)]
@@ -32,45 +22,34 @@ pub(crate) struct Lane {
 
 pub(crate) type Runs = Arc<Mutex<HashMap<String, Lane>>>;
 
-/// Variables every hook gets; the trace lists only the event's own.
-const COMMON: &[&str] = &["event", "hook", "session", "cwd", "model", "config"];
-
 fn listens(hook: &tuse_config::Hook, event: &str) -> bool {
     hook.events.iter().any(|e| e == event)
 }
 
 impl Session {
-    pub(crate) fn hook(self: &Arc<Self>, event: &str, data: Data) {
+    pub(crate) fn hook(self: &Arc<Self>, event: &str, payload: Value) {
         if !self.hooks_on.load(Ordering::Acquire) {
             return;
         }
-        let config = self.config();
-        let config_path = tuse_config::find(self.config_arg.as_deref(), &self.cwd)
-            .map(|p| p.display().to_string());
-        for (name, hook) in &config.hooks {
-            if !listens(hook, event) {
-                continue;
-            }
-            let vars = json!({
-                "event": event,
-                "hook": name,
-                "session": self.id,
-                "cwd": self.cwd.display().to_string(),
-                "model": self.model().0,
-                "config": config_path,
-                "text": data.text,
-                "is_first": data.is_first,
-                "status": data.status,
-                "reason": data.reason,
-                "tasks": data.tasks.as_ref().map(|t| t.iter().map(|[id, name]| json!({"id": id, "name": name})).collect::<Vec<_>>())
-            });
+        let names: Vec<String> = self
+            .config()
+            .hooks
+            .iter()
+            .filter(|(_, h)| listens(h, event))
+            .map(|(n, _)| n.clone())
+            .collect();
+        if names.is_empty() {
+            return;
+        }
+        let payload = compact(payload);
+        for name in names {
             let mut runs = self.hook_runs.lock().unwrap();
             let lane = runs.entry(name.clone()).or_default();
-            lane.queue.push(vars);
+            lane.queue.push(payload.clone());
             if !lane.busy {
                 lane.busy = true;
                 drop(runs);
-                self.next_hook(name.clone());
+                self.next_hook(name);
             }
         }
     }
@@ -89,6 +68,7 @@ impl Session {
             lane.cancel = Arc::default();
             (lane.queue.remove(0), lane.cancel.clone())
         };
+        let is_lua_hook = matches!(vars["event"].as_str(), Some("lua_start" | "lua_end"));
         let stop = Stop::new(cancel, None);
         let weak = Arc::downgrade(self);
         let started = Instant::now();
@@ -113,6 +93,7 @@ impl Session {
                     done,
                 )?;
                 job.is_hook = true;
+                job.is_lua_hook = is_lua_hook;
                 job.start(lua);
                 Ok(())
             };
@@ -149,17 +130,11 @@ impl Session {
         self.next_hook(name.to_string());
     }
 
-    /// Fires `process_end` and waits for every hook run to end, with no time limit.
-    /// No hook fires after this.
+    /// Fires `close` and waits for every hook run to end, with no time limit.
+    /// No hook fires after this. The session stays readable while `close` runs.
     pub(crate) fn finish_hooks(self: &Arc<Self>, reason: &'static str) {
         self.ui_cancel_hooks(true);
-        self.hook(
-            "process_end",
-            Data {
-                reason: Some(reason),
-                ..Default::default()
-            },
-        );
+        self.hook("close", json!({ "event": "close", "reason": reason }));
         self.hooks_on.store(false, Ordering::Release);
         while self.hook_runs.lock().unwrap().values().any(|l| l.busy) {
             std::thread::sleep(Duration::from_millis(10));
@@ -172,37 +147,6 @@ impl Session {
             lane.cancel.store(true, Ordering::Relaxed);
         }
     }
-
-    pub(crate) fn user_message_hook(self: &Arc<Self>, text: String, is_first: bool) {
-        let data = Data {
-            text: Some(text),
-            is_first: Some(is_first),
-            ..Default::default()
-        };
-        self.hook("user_message", data);
-    }
-
-    pub(crate) fn agent_message_hook(self: &Arc<Self>, text: String, status: &'static str) {
-        if !self
-            .config()
-            .hooks
-            .values()
-            .any(|h| listens(h, "agent_message"))
-        {
-            return;
-        }
-        let tasks = (self.tasks.list().into_iter())
-            .filter(|t| t.alive())
-            .map(|t| [t.id, t.name])
-            .collect();
-        let data = Data {
-            text: Some(text),
-            status: Some(status),
-            tasks: Some(tasks),
-            ..Default::default()
-        };
-        self.hook("agent_message", data);
-    }
 }
 
 fn describe(vars: &Value) -> String {
@@ -210,15 +154,10 @@ fn describe(vars: &Value) -> String {
         return String::new();
     };
     m.iter()
-        .filter(|(k, v)| !COMMON.contains(&k.as_str()) && !v.is_null())
-        .map(|(k, v)| {
-            let v = match v {
-                Value::String(s) => format!("{s:?}"),
-                v => v.to_string(),
-            };
-            let short: String = v.chars().take(200).collect();
-            let cut = if short.len() < v.len() { "…" } else { "" };
-            format!("{k}={short}{cut}")
+        .filter(|(k, v)| k.as_str() != "event" && !v.is_null())
+        .map(|(k, v)| match v {
+            Value::String(s) => format!("{k}={s:?}"),
+            v => format!("{k}={v}"),
         })
         .collect::<Vec<_>>()
         .join("\n")

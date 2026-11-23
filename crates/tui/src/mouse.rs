@@ -50,9 +50,12 @@ impl App {
                         if self.selection.drag == Some((a, a)) {
                             self.selection.drag = None;
                             if a == point
-                                && let Some(url) = self.link_at(point).and_then(crate::links::url)
+                                && let Some(t) = self.link_at(point).and_then(crate::links::target)
                             {
-                                crate::links::open(&url);
+                                match t {
+                                    crate::links::LinkTarget::Url(u) => self.session.open_url(&u),
+                                    crate::links::LinkTarget::Path(p) => self.session.open_path(&p),
+                                }
                             }
                         }
                     }
@@ -123,7 +126,7 @@ mod tests {
     #[test]
     fn hover_tracks_the_link_under_the_pointer() {
         let mut app = crate::app::test_app("hover");
-        let id = crate::links::intern("https://hover.example");
+        let id = crate::links::intern_url("https://hover.example");
         app.links = vec![crate::links::LinkBox {
             row: 2,
             start: 4,

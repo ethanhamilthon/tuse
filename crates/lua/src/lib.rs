@@ -9,7 +9,7 @@ mod sh;
 mod vm;
 
 pub use api::{host, to_lua, wrap, yield_wait};
-pub use job::{Done, ExtWait, Job, Out, Stop, add_wait, is_hook, stopped, with_run};
+pub use job::{Done, ExtWait, Job, Out, Stop, add_wait, is_hook, is_lua_hook, stopped, with_run};
 pub use mlua;
 pub use sh::kill_group;
 pub use vm::Vm;
@@ -29,11 +29,9 @@ pub struct TaskStart {
 pub trait Host: Send + Sync + 'static {
     /// The working directory of `sh`.
     fn cwd(&self) -> PathBuf;
-    /// Environment of `sh`, on top of the process's own.
-    fn env(&self) -> Vec<(String, String)>;
     /// A command `sh` starts, for the working indicator.
     fn action(&self, _what: &str) {}
-    fn task_start(&self, name: &str) -> Result<TaskStart, String>;
+    fn task_start(&self, name: &str, from_lua_hook: bool) -> Result<TaskStart, String>;
     /// Runs on the VM thread when a task ends.
     fn task_end(&self, id: &str, done: Done);
 }

@@ -43,9 +43,9 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
   },
   hooks = {
     interactive = {
-      events = {"process_start", "process_end"},
+      events = {"start", "close"},
       run = function(e)
-        if e.event == "process_start" and e.reason == "reload" then return end
+        if e.event == "start" and e.reason == "reload" then return end
         require("tuse").show_question("hook " .. e.event)
       end,
     },
@@ -149,7 +149,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     // Reload keeps markdown blocks (with pin state) and UI entries, updates custom commands.
     std::fs::write(
         &cfg,
-        "return { model = 'p/m', commands = { updated_cmd = function() require('tuse').show_question('still open') end } }",
+        "return { commands = { updated_cmd = function() require('tuse').show_question('still open') end } }",
     )
     .unwrap();
     s.reload().unwrap();
@@ -159,11 +159,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     assert_eq!(after_reload.entries, snap.entries);
 
     // Built-in commands cannot be overridden.
-    std::fs::write(
-        &cfg,
-        "return { model = 'p/m', commands = { reload = function() end } }",
-    )
-    .unwrap();
+    std::fs::write(&cfg, "return { commands = { reload = function() end } }").unwrap();
     assert!(s.reload().unwrap_err().contains("cannot override built-in"));
 
     // Tool call calling show_picker yields so other Lua jobs keep running, then finishes on reply.
@@ -190,7 +186,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     s.close();
     assert!(s.ui_snapshot().active.is_none());
 
-    std::fs::write(&cfg, "return { model = 'p/m' }").unwrap();
+    std::fs::write(&cfg, "return {}").unwrap();
     let resumed = Session::open(Options {
         cwd: dir.clone(),
         config: Some(cfg),

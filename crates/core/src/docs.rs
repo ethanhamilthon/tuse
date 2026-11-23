@@ -12,7 +12,7 @@ const TOPICS: &[(&str, &str, &str)] = &[
     ),
     (
         "functions",
-        "Built-in Lua functions (read, write, append, delete, edit, grep, sh, show_*, task_*, docs)",
+        "Built-in Lua functions (session, read, write, append, delete, edit, grep, sh, show_*, task_*, docs)",
         include_str!("../../../docs/functions.md"),
     ),
     (

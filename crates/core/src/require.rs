@@ -1,6 +1,6 @@
 //! `require` for configs and the agent: `tuse` (the host functions), `global`,
 //! `~/path`, `path/file.lua` and modules relative to the calling file (or `cwd` for inline code);
-//! `os.getenv` with Tuse's variables.
+//! `os.getenv("THIS_PATH")` for the calling Lua file.
 
 use std::path::{Path, PathBuf};
 use tuse_lua::mlua::{self, Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
@@ -18,6 +18,7 @@ const HOST: &[&str] = &[
     "grep",
     "docs",
     "set_title",
+    "session",
     "task_get",
     "task_list",
     "task_stop",
@@ -33,6 +34,11 @@ const FILES: &str = "tuse.modules";
 /// Canonical paths currently executing, to catch cyclic `require` calls.
 const LOADING: &str = "tuse.loading";
 
+/// Saved module state so a failed `/reload` can restore all previously loaded file modules.
+pub(crate) struct SavedModules {
+    files: Vec<(String, Value)>,
+}
+
 pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
     let g = lua.globals();
     let os: Table = g.get("os")?;
@@ -47,24 +53,17 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
                     None => Ok(Value::Nil),
                 };
             }
-            match tuse_lua::host(lua)
-                .env()
-                .into_iter()
-                .find(|(k, _)| *k == name)
-            {
-                Some((_, v)) => Ok(Value::String(lua.create_string(v)?)),
-                None => getenv.call::<Value>(name),
-            }
+            getenv.call::<Value>(name)
         })?,
     )?;
-    // `TUSE_MODE` used to be a global; point old configs at the variable.
+    // Point old configs that read `TUSE_MODE` as a global to `require("tuse").session().mode`.
     let meta = lua.create_table()?;
     meta.set(
         "__index",
         lua.create_function(|_, (_, k): (Value, Value)| {
             if matches!(&k, Value::String(s) if s.as_bytes().as_ref() == b"TUSE_MODE") {
                 return Err::<Value, _>(mlua::Error::runtime(
-                    "TUSE_MODE is an environment variable now: use os.getenv(\"TUSE_MODE\") or require(\"tuse\").env.TUSE_MODE",
+                    "TUSE_MODE was removed; use require(\"tuse\").session().mode",
                 ));
             }
             Ok(Value::Nil)
@@ -88,15 +87,32 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
     tuse_lua::wrap(lua, &g, &["require"])
 }
 
-/// Forgets the modules loaded from files, so `/reload` reads them again.
-pub(crate) fn forget(lua: &Lua) -> mlua::Result<()> {
+/// Forgets file-backed modules so `/reload` reads them again; returns a snapshot to roll back.
+pub(crate) fn forget(lua: &Lua) -> mlua::Result<SavedModules> {
     let files: Table = lua.named_registry_value(FILES)?;
     let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
-    for name in files.pairs::<String, Value>() {
-        loaded.set(name?.0, Value::Nil)?;
+    let mut saved = vec![];
+    for pair in files.pairs::<String, Value>() {
+        let name = pair?.0;
+        let val: Value = loaded.get(name.as_str())?;
+        saved.push((name.clone(), val));
+        loaded.set(name, Value::Nil)?;
     }
     lua.set_named_registry_value(FILES, lua.create_table()?)?;
-    lua.set_named_registry_value(LOADING, lua.create_table()?)
+    lua.set_named_registry_value(LOADING, lua.create_table()?)?;
+    Ok(SavedModules { files: saved })
+}
+
+/// Restores file-backed modules after a failed `/reload`.
+pub(crate) fn restore(lua: &Lua, saved: SavedModules) -> mlua::Result<()> {
+    let _ = forget(lua);
+    let files: Table = lua.named_registry_value(FILES)?;
+    let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
+    for (name, val) in saved.files {
+        files.set(name.as_str(), true)?;
+        loaded.set(name, val)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn set_loading(lua: &Lua, key: &str, active: bool) -> mlua::Result<()> {
@@ -114,17 +130,6 @@ fn tuse_module(lua: &Lua) -> mlua::Result<Table> {
     for name in HOST {
         t.set(*name, g.raw_get::<Value>(*name)?)?;
     }
-    let env = lua.create_table()?;
-    let meta = lua.create_table()?;
-    meta.set(
-        "__index",
-        lua.create_function(|lua, (_, k): (Table, String)| {
-            let os: Table = lua.globals().get("os")?;
-            os.get::<Function>("getenv")?.call::<Value>(k)
-        })?,
-    )?;
-    env.set_metatable(Some(meta))?;
-    t.set("env", env)?;
     Ok(t)
 }
 

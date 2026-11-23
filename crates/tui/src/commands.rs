@@ -11,7 +11,7 @@ pub const COMMANDS: [(&str, &str); 9] = [
     ("resume", "open a session from this folder"),
     ("models", "switch model and effort"),
     ("tasks", "background tasks"),
-    ("usage", "context, tokens and cost"),
+    ("session", "session info, usage and model"),
     ("trace", "everything in this session"),
     ("reload", "run the config file again"),
     ("quit", "exit"),
@@ -34,13 +34,13 @@ impl App {
                 self.session.fetch_models();
             }
             "tasks" => self.open_tasks(),
-            "usage" => {
-                self.panel = Some(crate::usage::panel(&self.session, &self.palette));
+            "session" => {
+                self.panel = Some(crate::session_view::panel(&self.session, &self.palette));
             }
             "trace" => self.open_trace(),
             "reload" => match self.session.reload() {
                 Ok(()) => {
-                    self.palette = Palette::from_config(&self.session.config());
+                    self.palette = Palette::for_session(&self.session.config(), &self.cwd);
                     self.palette_gen += 1;
                     self.chat = crate::chat::Chat::from_session(&self.session);
                     self.streaming = None;

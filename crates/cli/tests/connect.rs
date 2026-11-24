@@ -204,3 +204,146 @@ fn connect_supports_four_apis_and_providers_keeps_two_columns_plus_json() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn connect_key_stdin_atomic_replace_and_default_plugin_probe() {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let dir = std::env::temp_dir().join(format!("tuse-cli-replace-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let (ok_url1, seen1) = mock_models(r#"{"data":[{"id":"m1"}]}"#);
+    let (ok_url2, seen2) = mock_models(r#"{"data":[{"id":"m2"}]}"#);
+
+    let bad_both = tuse(
+        &dir,
+        &[
+            "connect",
+            "--base",
+            &ok_url1,
+            "--key",
+            "k",
+            "--key-stdin",
+            "--name",
+            "sub",
+        ],
+    );
+    assert!(!bad_both.status.success());
+
+    let run_stdin = |args: &[&str], stdin_data: &str| {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_tuse"))
+            .current_dir(&dir)
+            .env("HOME", &dir)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(stdin_data.as_bytes())
+            .unwrap();
+        child.wait_with_output().unwrap()
+    };
+
+    let empty = run_stdin(
+        &[
+            "connect",
+            "--base",
+            &ok_url1,
+            "--key-stdin",
+            "--name",
+            "sub",
+        ],
+        "\n",
+    );
+    assert!(!empty.status.success());
+
+    let saved = run_stdin(
+        &[
+            "connect",
+            "--base",
+            &ok_url1,
+            "--key-stdin",
+            "--name",
+            "sub",
+        ],
+        "stdin-secret-1\n",
+    );
+    assert!(
+        saved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saved.stderr)
+    );
+    assert!(
+        seen1.lock().unwrap()[0]
+            .1
+            .iter()
+            .any(|h| h == "authorization: bearer stdin-secret-1")
+    );
+
+    let fail_replace = run_stdin(
+        &[
+            "connect",
+            "--base",
+            "http://127.0.0.1:1",
+            "--key-stdin",
+            "--name",
+            "sub",
+            "--replace",
+        ],
+        "stdin-secret-bad\n",
+    );
+    assert!(!fail_replace.status.success());
+    let after_fail = String::from_utf8(tuse(&dir, &["providers"]).stdout).unwrap();
+    assert!(
+        after_fail.contains(&format!("sub\t{ok_url1}")),
+        "failed --replace must keep previous provider: {after_fail}"
+    );
+
+    let ok_replace = run_stdin(
+        &[
+            "connect",
+            "--base",
+            &ok_url2,
+            "--key-stdin",
+            "--name",
+            "sub",
+            "--replace",
+        ],
+        "stdin-secret-2\n",
+    );
+    assert!(
+        ok_replace.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok_replace.stderr)
+    );
+    assert!(
+        seen2.lock().unwrap()[0]
+            .1
+            .iter()
+            .any(|h| h == "authorization: bearer stdin-secret-2")
+    );
+    let after_ok = String::from_utf8(tuse(&dir, &["providers"]).stdout).unwrap();
+    assert!(after_ok.contains(&format!("sub\t{ok_url2}")), "{after_ok}");
+
+    let probe = dir.join("probe.lua");
+    std::fs::write(
+        &probe,
+        r#"return { plugins = { { "tuse/default", opts = { theme = false, subs = false } } } }"#,
+    )
+    .unwrap();
+    let res = tuse(&dir, &["models", "-c", probe.to_str().unwrap()]);
+    assert!(
+        res.status.success(),
+        "capability gate must succeed: {}",
+        String::from_utf8_lossy(&res.stderr)
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

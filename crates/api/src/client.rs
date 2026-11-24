@@ -28,6 +28,45 @@ pub fn default_agent() -> ureq::Agent {
         .build()
 }
 
+pub fn probe_get(
+    url: &str,
+    headers: &[(&str, &str)],
+    timeout: Duration,
+) -> Result<(u16, String), String> {
+    let agent = ureq::AgentBuilder::new()
+        .redirects(0)
+        .timeout_connect(timeout)
+        .timeout_read(timeout)
+        .build();
+    let mut req = agent.get(url);
+    for (k, v) in headers {
+        req = req.set(k, v);
+    }
+    match req.call() {
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.into_string().unwrap_or_default();
+            Ok((status, body))
+        }
+        Err(ureq::Error::Status(status, resp)) => {
+            Ok((status, resp.into_string().unwrap_or_default()))
+        }
+        Err(ureq::Error::Transport(t)) => Err(t.to_string()),
+    }
+}
+
+pub fn download_to_file(url: &str, dst: &std::path::Path, timeout: Duration) -> Result<(), String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(timeout)
+        .timeout_read(timeout)
+        .build();
+    let resp = agent.get(url).call().map_err(|e| format!("{url}: {e}"))?;
+    let mut file = std::fs::File::create(dst).map_err(|e| format!("{}: {e}", dst.display()))?;
+    std::io::copy(&mut resp.into_reader(), &mut file)
+        .map_err(|e| format!("{}: {e}", dst.display()))?;
+    Ok(())
+}
+
 impl Client {
     pub fn new(base_url: &str, api_key: &str, api: ApiType) -> Self {
         Self::with_agent(default_agent(), base_url, api_key, api)

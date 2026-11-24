@@ -35,6 +35,23 @@ return {
 }
 ```
 
+### Bundled default theme (`tuse/default`)
+
+Core defaults above remain unchanged when no plugin is enabled (or when `"tuse/default"` is configured with `theme = false`). Enabling `"tuse/default"` with `theme = true` (the default) applies a distinct curated dark palette across all 10 tokens; any token set in your own `theme = { ... }` overrides it:
+
+| Token | `tuse/default` value |
+| --- | --- |
+| `bg` | `#0F1117` |
+| `surface` | `#171B24` |
+| `fg` | `#E6EDF3` |
+| `dim` | `#B1BAC4` |
+| `muted` | `#7D8590` |
+| `border` | `#30363D` |
+| `accent` | `#7EE787` |
+| `ok` | `#56D364` |
+| `err` | `#F85149` |
+| `info` | `#79C0FF` |
+
 ## UI settings (`settings.ui`)
 
 UI behavior and layout live under `settings.ui`, separate from theme colors:

@@ -42,16 +42,19 @@ Starts a single-session JSON-RPC 2.0 server over stdin/stdout (newline-delimited
 
 See [json.md](json.md).
 
-### `tuse connect --base URL --key '$ENV' --name NAME [--api TYPE]`
+### `tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--replace]`
 
 Verifies an API endpoint and saves the provider in `~/.tuse/tuse.db`. See [providers.md](providers.md) for credential storage, protocol details, and API types.
 
-- **Required flags:** `--base`, `--key`, `--name` (all must be non-empty after trimming).
-- **Optional flags:** `--api TYPE` selects the API protocol (`openai-chat`, `openai-responses`, `anthropic-messages`, or `google-gemini`; defaults to `openai-chat`). An invalid value fails before any network request.
+- **Required flags:** `--base`, `--name`, and either `--key` or `--key-stdin` (not both).
+- **Optional flags:**
+  - `--api TYPE` selects the API protocol (`openai-chat`, `openai-responses`, `anthropic-messages`, or `google-gemini`; defaults to `openai-chat`). An invalid value fails before any network request.
+  - `--key-stdin` reads the API key value from stdin (trimmed of trailing `\r`/`\n`) instead of command-line argv so secrets do not appear in shell command strings or process listings.
+  - `--replace` verifies the endpoint first and, only if verification succeeds, atomically updates an existing provider with the same `NAME` (a failed verification leaves the existing provider untouched).
 - **Validation:**
   - `URL` must start with `http://` or `https://`.
-  - `NAME` cannot contain `/` or any whitespace, and must not match an already-saved provider (remove an existing one first with `tuse disconnect NAME`).
-  - If `--key` is `$VAR` or `${VAR}` (where `VAR` contains only ASCII letters, digits, and `_`), Tuse resolves it from the process environment for verification; an unset or empty resolved key fails before any network call. Quote `'$VAR'` in your shell so the reference—not the expanded secret—is stored in SQLite.
+  - `NAME` cannot contain `/` or any whitespace, and must not match an already-saved provider unless `--replace` is passed (without `--replace`, remove an existing one first with `tuse disconnect NAME`).
+  - If the key value is `$VAR` or `${VAR}` (where `VAR` contains only ASCII letters, digits, and `_`), Tuse resolves it from the process environment for verification; an unset or empty resolved key fails before any network call. Quote `'$VAR'` in your shell so the reference—not the expanded secret—is stored in SQLite.
 - **Verification:** Calls the selected adapter's model-listing endpoint (`GET <URL>/models`, with adapter-specific auth headers and pagination). Succeeds on any valid JSON response (even if it yields zero usable model IDs); it checks model listing and does not test generation.
 - **Result:** Persists the provider and prints `Received <N> models. Saved \`<NAME>\`.` to stdout.
 

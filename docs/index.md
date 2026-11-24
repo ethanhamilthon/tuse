@@ -32,7 +32,8 @@ Source of truth for Tuse's observable behavior and public contracts. All baselin
 - [Config](config.md) — Lua config modules, `require` resolution, schema keys, strict validation, and `/reload`.
 - [Environment & Config Lookup](env.md) — Environment variables read by Tuse and config file search order.
 - [Theme & UI Settings](theme.md) — The 10-token color theme and `settings.ui` behavior and layout options.
-- [Plugins](plugins.md) — Git and local plugins, options, merge rules, and bundled plugins.
+- [Plugins](plugins.md) — Git, local, and bundled (`tuse/default`) plugins, options, and merge rules.
+- [Subscription Proxy (`subs`)](subs.md) — Optional `tuse/default` CLIProxyAPI wrapper (`/subs`), loopback proxy lifecycle, and provider wiring.
 
 ## Planned Changes
 
@@ -42,7 +43,6 @@ Specifications for planned (not yet implemented) features and changes. Baseline 
 - [04 — Publish Docs on GitHub Pages](planned/04-github-pages-docs.md)
 - [05 — Simplify the TUI Working Indicator](planned/05-working-indicator.md)
 - [06 — Install and Update Plugins on Reload](planned/06-plugin-sync-on-reload.md)
-- [07 — Bundled Default Plugin: `theme` and `subs`](planned/07-default-plugin-theme-subs.md)
 - [08 — Persist `show`, `pick`, and `ask` in UI History](planned/08-persist-ui-history.md)
 - [09 — Agent-Only, Undiscoverable Configured Functions](planned/09-agent-only-functions.md)
 - [10 — Setup Guide](planned/10-setup-guide.md)

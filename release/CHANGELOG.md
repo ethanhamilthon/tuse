@@ -3,6 +3,7 @@
 ## 0.9.3
 
 - Added support for four provider API types (`openai-chat`, `openai-responses`, `anthropic-messages`, and `google-gemini`) via `tuse connect --api TYPE`, `tuse providers --json`, automatic SQLite migration of existing providers to `openai-chat`, provider-scoped reasoning replay across multi-step tool loops and `/resume`, paginated Anthropic/Gemini model discovery, and fail-fast unsupported-capability reporting.
+- Added the offline bundled default plugin `"tuse/default"` (`theme` palette and opt-in `subs` CLIProxyAPI `v8.1.2` loopback proxy wrapper via `/subs`), plus `--replace` and `--key-stdin` on `tuse connect`.
 
 ## 0.9.2
 

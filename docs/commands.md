@@ -26,7 +26,7 @@ Built-in slash commands run when typed as `/name` with no arguments or selected 
 - `/session` opens a scrollable view of `require("tuse").session()` (all fields except `trace`).
 - `/trace` opens a searchable list of all trace entries (`index  role  first line`); Enter opens the full entry panel and Esc returns to the list with search and selection intact.
 - `/config` opens a scrollable view of the resolved config (without provider secrets or Lua function bodies).
-- `/reload` validates and re-evaluates the config in the same VM (keeping the previous working config on failure).
+- `/reload` synchronizes enabled Git plugins (installing missing checkouts and updating moving refs), validates, and re-evaluates the config in the same VM (keeping the previous working config on failure).
 - `/quit` closes the session and exits.
 
 Custom slash commands from `commands = { name = function() ... end }` appear in `/` autocomplete and run as non-blocking Lua jobs (built-in names cannot be overridden).

@@ -67,10 +67,24 @@ pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String>
             out.push(e);
         }
     }
-    let mut refs: Vec<(&Path, &str, &Option<String>)> = vec![];
+    let mut seen: Vec<(&Path, &str, &Option<String>, &Option<String>)> = vec![];
     for e in &out {
         let p = &e.plugin;
-        if let Some((_, other, r)) = refs.iter().find(|(root, _, r)| {
+        if let Some((_, other, _, _)) = seen.iter().find(|(root, _, u, _)| {
+            *root == p.root
+                && match (u.as_deref(), p.url.as_deref()) {
+                    (Some(a), Some(b)) => {
+                        tuse_config::normalize_url(a) != tuse_config::normalize_url(b)
+                    }
+                    _ => false,
+                }
+        }) {
+            return Err(format!(
+                "plugins: {other} and {} map to the same checkout with different URLs",
+                p.name
+            ));
+        }
+        if let Some((_, other, _, r)) = seen.iter().find(|(root, _, _, r)| {
             *root == p.root && r.is_some() && p.git_ref.is_some() && **r != p.git_ref
         }) {
             return Err(format!(
@@ -80,7 +94,7 @@ pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String>
                 p.git_ref.as_deref().unwrap_or("")
             ));
         }
-        refs.push((&p.root, &p.name, &p.git_ref));
+        seen.push((&p.root, &p.name, &p.url, &p.git_ref));
     }
     Ok(out)
 }
@@ -142,10 +156,15 @@ pub(crate) type Merged = (
     Option<tuse_config::Config>,
 );
 
-pub(crate) fn apply(lua: &Lua, config: Table, source: &str, base: &Path) -> Result<Merged, String> {
+pub(crate) fn apply(
+    lua: &Lua,
+    config: Table,
+    source: &str,
+    base: &Path,
+    sync_plugins: bool,
+) -> Result<Merged, String> {
     let parsed = crate::validate::table(lua, &config, source, false, true)?;
     let list = entries(&config, base).map_err(|e| format!("{source}: {e}"))?;
-    let infos = list.iter().map(|e| e.plugin.info()).collect();
     if list.is_empty() {
         crate::validate::check_disabled_targets(
             &config,
@@ -153,8 +172,12 @@ pub(crate) fn apply(lua: &Lua, config: Table, source: &str, base: &Path) -> Resu
             &std::collections::HashSet::new(),
         )?;
         let _ = config.raw_set("plugins", Value::Nil);
-        return Ok((config, infos, Some(parsed)));
+        return Ok((config, vec![], Some(parsed)));
     }
+    if sync_plugins {
+        crate::plugin_sync::sync_all(&list)?;
+    }
+    let infos = list.iter().map(|e| e.plugin.info()).collect();
     let mut plugin_fns = std::collections::HashSet::new();
     let loaded = lua.create_table().map_err(|e| e.to_string())?;
     for e in list {

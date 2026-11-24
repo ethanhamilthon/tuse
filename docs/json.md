@@ -169,7 +169,7 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
     - `plugins`: `[{ name, dir, ref?, commit? }]` (`ref` and `commit` omitted when absent)
 - **`config.reload`**:
   - Params: `{}`.
-  - Result: `null` (or `-32000` on validation/load failure, leaving the previous config and callbacks active). Emits `reloaded` on success; preserves live UI state, tasks, and active model.
+  - Result: `null` (or `-32000` on plugin sync, load, or validation failure, reporting the failing plugin/path and leaving the previous config and callbacks active). Synchronizes enabled Git plugins (cloning missing checkouts and updating moving refs; see [plugins.md](plugins.md)), emits `reloaded` on success, and preserves live UI state, tasks, and active model.
 - **`config.set`** *(deprecated; prefer `model.set`)*:
   - Params: `{ key: "model" | "effort", value: string }` (any other `key` fails with `-32602`).
   - Equivalent to `model.set` changing only that field with `persist: true` and the same validation rules.

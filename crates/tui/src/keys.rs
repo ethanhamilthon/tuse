@@ -1,13 +1,9 @@
 use crate::app::App;
+use crate::panel::trace_panel;
+use crate::picker::Kind;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 impl App {
-    pub fn picker_rows(&self) -> usize {
-        self.list_rows
-            .min(self.palette.ui.list_max_height.saturating_sub(1).max(1))
-            .max(1)
-    }
-
     pub fn key(&mut self, mut k: KeyEvent, page: usize) {
         let page = page.max(1);
         if k.kind == KeyEventKind::Release {
@@ -177,42 +173,6 @@ impl App {
             _ => return false,
         }
         true
-    }
-
-    pub(super) fn finish_edit(&mut self, before: Option<Vec<char>>) {
-        if self.searching() {
-            let q = self.editor.text();
-            if let Some(p) = &mut self.picker {
-                p.filter(&q);
-            }
-            return;
-        }
-        if self.answering() {
-            return;
-        }
-        if before.is_some_and(|buf| buf != self.editor.buf)
-            && let Some(id) = self.steering.take()
-        {
-            self.session.withdraw_input(id);
-        }
-        self.update_token_picker();
-    }
-
-    pub fn paste(&mut self, s: &str) {
-        self.selection = Default::default();
-        if self.input_disabled() {
-            return;
-        }
-        if s.is_empty() {
-            return self.paste_clipboard();
-        }
-        let before = self.steering.map(|_| self.editor.buf.clone());
-        if self.searching() {
-            self.editor.insert(&s.replace('\n', " "));
-        } else {
-            self.editor.insert(s);
-        }
-        self.finish_edit(before);
     }
 }
 
@@ -512,5 +472,139 @@ mod tests {
         session.close();
         std::fs::remove_dir_all(tuse_core::tuse_home().join(&session.id)).ok();
         std::fs::remove_dir_all(dir).ok();
+    }
+}
+
+impl App {
+    pub(crate) fn picker_key(&mut self, k: KeyEvent, ctrl: bool, shift: bool) -> bool {
+        let rows = self.picker_rows();
+        let Some(p) = &mut self.picker else {
+            return false;
+        };
+        match k.code {
+            KeyCode::Up | KeyCode::Down if shift && p.kind.is_token() => return false,
+            KeyCode::Up => p.moved(-1, rows),
+            KeyCode::Down => p.moved(1, rows),
+            KeyCode::Char('p') if ctrl => p.moved(-1, rows),
+            KeyCode::Char('n') if ctrl => p.moved(1, rows),
+            KeyCode::Enter if !shift && p.kind == Kind::File => self.pick_file(),
+            KeyCode::Enter if !shift => self.choose(),
+            KeyCode::Tab if !shift && !matches!(p.kind, Kind::LuaPicker(_)) => self.choose(),
+            KeyCode::Esc => {
+                let p = self.picker.take().unwrap();
+                match &p.kind {
+                    k if k.is_token() => self.dismissed = Some(self.editor.token().1),
+                    Kind::LuaPicker(id) => {
+                        let id = *id;
+                        self.restore_draft();
+                        let _ = self.session.ui_reply(id, None);
+                    }
+                    Kind::Trace => {
+                        self.trace_items.clear();
+                        self.trace_back = None;
+                        self.restore_draft();
+                    }
+                    _ => self.restore_draft(),
+                }
+            }
+            KeyCode::Char('x') if ctrl && p.kind == Kind::Task => {
+                if let Some(it) = p.current() {
+                    let id = it.value.clone();
+                    let _ = self.session.stop_task(&id);
+                    self.open_tasks();
+                }
+            }
+            _ if p.kind.is_token() => return false,
+            _ if !p.kind.is_searchable() => return true,
+            _ => return !edits_text(k),
+        }
+        true
+    }
+}
+
+fn edits_text(k: KeyEvent) -> bool {
+    let primary = k
+        .modifiers
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER);
+    match k.code {
+        KeyCode::Char(c) => !primary || matches!(c, 'a' | 'e' | 'u' | 'k' | 'w' | 'v' | 'x'),
+        KeyCode::Backspace
+        | KeyCode::Delete
+        | KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::Home
+        | KeyCode::End => true,
+        _ => false,
+    }
+}
+
+impl App {
+    pub(crate) fn panel_key(&mut self, code: KeyCode, mods: KeyModifiers) -> bool {
+        if self.picker.is_some() || self.question.is_some() {
+            return false;
+        }
+        let Some(panel) = &mut self.panel else {
+            return false;
+        };
+        let step = self.palette.ui.scroll_step as isize;
+        match code {
+            KeyCode::Esc => {
+                self.panel = None;
+                self.clear_link_hover();
+                if let Some((mut picker, search)) = self.trace_back.take() {
+                    picker.follow(self.picker_rows());
+                    self.picker = Some(picker);
+                    self.editor = search;
+                }
+            }
+            KeyCode::Up if self.editor.is_empty() => {
+                panel.scroll_by(-step);
+                self.clear_link_hover();
+            }
+            KeyCode::Down if self.editor.is_empty() => {
+                panel.scroll_by(step);
+                self.clear_link_hover();
+            }
+            KeyCode::Left
+                if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
+            {
+                self.step_trace(-1);
+            }
+            KeyCode::Right
+                if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
+            {
+                self.step_trace(1);
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn step_trace(&mut self, delta: isize) {
+        let rows = self.picker_rows();
+        let Some((picker, _)) = &mut self.trace_back else {
+            return;
+        };
+        let Some(next) = picker.selected.checked_add_signed(delta) else {
+            return;
+        };
+        let Some(&item_idx) = picker.shown.get(next) else {
+            return;
+        };
+        let Some(trace_idx) = picker
+            .items
+            .get(item_idx)
+            .and_then(|it| it.value.parse::<usize>().ok())
+        else {
+            return;
+        };
+        let Some(it) = self.trace_items.get(trace_idx) else {
+            return;
+        };
+        picker.selected = next;
+        picker.follow(rows);
+        self.panel = Some(trace_panel(it));
+        self.selection = Default::default();
+        self.clear_link_hover();
     }
 }

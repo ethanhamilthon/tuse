@@ -1,8 +1,6 @@
-use crate::app::App;
 use crate::render::plain;
 use crate::style::{Palette, Style};
 use crate::text::{Line, wrap};
-use crossterm::event::{KeyCode, KeyModifiers};
 
 enum Body {
     Text(String),
@@ -109,83 +107,12 @@ pub(crate) fn trace_panel(it: &tuse_core::TraceItem) -> Panel {
     }
 }
 
-impl App {
-    pub(crate) fn panel_key(&mut self, code: KeyCode, mods: KeyModifiers) -> bool {
-        if self.picker.is_some() || self.question.is_some() {
-            return false;
-        }
-        let Some(panel) = &mut self.panel else {
-            return false;
-        };
-        let step = self.palette.ui.scroll_step as isize;
-        match code {
-            KeyCode::Esc => {
-                self.panel = None;
-                self.clear_link_hover();
-                if let Some((mut picker, search)) = self.trace_back.take() {
-                    picker.follow(self.picker_rows());
-                    self.picker = Some(picker);
-                    self.editor = search;
-                }
-            }
-            KeyCode::Up if self.editor.is_empty() => {
-                panel.scroll_by(-step);
-                self.clear_link_hover();
-            }
-            KeyCode::Down if self.editor.is_empty() => {
-                panel.scroll_by(step);
-                self.clear_link_hover();
-            }
-            KeyCode::Left
-                if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
-            {
-                self.step_trace(-1);
-            }
-            KeyCode::Right
-                if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
-            {
-                self.step_trace(1);
-            }
-            _ => return false,
-        }
-        true
-    }
-
-    fn step_trace(&mut self, delta: isize) {
-        let rows = self.picker_rows();
-        let Some((picker, _)) = &mut self.trace_back else {
-            return;
-        };
-        let Some(next) = picker.selected.checked_add_signed(delta) else {
-            return;
-        };
-        let Some(&item_idx) = picker.shown.get(next) else {
-            return;
-        };
-        let Some(trace_idx) = picker
-            .items
-            .get(item_idx)
-            .and_then(|it| it.value.parse::<usize>().ok())
-        else {
-            return;
-        };
-        let Some(it) = self.trace_items.get(trace_idx) else {
-            return;
-        };
-        picker.selected = next;
-        picker.follow(rows);
-        self.panel = Some(trace_panel(it));
-        self.selection = Default::default();
-        self.clear_link_hover();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::app::App;
     use crate::picker::{Kind, Picker, item};
-    use crossterm::event::KeyEvent;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use tuse_config::{Theme, UiSettings};
     use tuse_core::TraceItem;
 

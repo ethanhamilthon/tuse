@@ -105,6 +105,12 @@ impl App {
         }
     }
 
+    pub fn picker_rows(&self) -> usize {
+        self.list_rows
+            .min(self.palette.ui.list_max_height.saturating_sub(1).max(1))
+            .max(1)
+    }
+
     pub fn scroll_history(&mut self, delta: isize) {
         self.scroll = self.scroll.saturating_add_signed(delta);
         self.clear_link_hover();

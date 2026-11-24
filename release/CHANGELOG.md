@@ -1,20 +1,15 @@
 # Changelog
 
-## 0.9.3
+## 0.10.0
 
-- `/trace`: pressing `Left` or `Right` in a trace detail panel (when the input editor is empty) steps to the previous or next entry in the current filtered `/trace` list without wrapping, resetting scroll to the top and keeping the search query and picker selection in sync.
-- Simplified the TUI working indicator to show only `<spinner> <elapsed>` in `accent`, removing transient per-call activity labels (`reading ...`, `running ...`); steering, flash notices, and JSON-RPC `status` events are unchanged.
-- `settings.ui.diff_line = 0` now hides the entire diff block (header, body, and footer) in TUI chat while keeping stored diffs, `/trace`, and JSON-RPC unchanged; Lua `reload()` now invalidates cached chat entries so updated `settings.ui` and `theme` settings apply immediately at the same terminal width.
-- Interactive links now render in `theme.accent` (underlined) by default and highlight in `theme.fg` (bold, underlined) on hover or press, clearing hover on pointer leave, drag, scroll, or resize with no persistent visited state.
-- `release/install.sh`: added interactive first-run setup after binary installation to optionally enable `"tuse/default"` (`theme` and `subs`) and atomically create `~/.config/tuse/init.lua` without overwriting existing configs, gated on binary capability and skipped automatically in non-interactive, `CI`, `TUSE_NO_SETUP`, or `--no-setup` runs.
-- Added GitHub Pages docs site and landing page builder (`site/build.py`, `site/landing.html`, `site/templates/`, `site/assets/`, `site/redirects.json`, `site/requirements.txt`) and `.github/workflows/pages.yml` to build and offline-verify links, anchors, and assets on every PR and deploy from `main`.
-- Rewrote `README.md` as a concise front door linking to the GitHub Pages site, published `/docs/`, and `docs/index.md`, and updated the `docs("README.md")` topic summary.
-- **Breaking:** Configured `functions` now map names directly to plain Lua functions or `false` (removing `{ run, args, description, show_agent }`), are strictly isolated to the agent's `lua` environment, and are undiscoverable unless documented in `systems`/`prompts`. Built-in host functions can be overridden (delegating to unmodified originals via `require("tuse")`) or disabled with `false` (live-gated across reloads and filtered from the system prompt, `lua` tool description, and `docs()`).
-- Reload (`/reload`, `config.reload`, `reload()`) now automatically installs missing Git plugins and updates moving refs (`ref` tags/branches/default branch) with per-repository advisory locking, non-interactive 60s-bounded Git execution, immutable commit-SHA pins, URL/ref conflict checks, and local-work safety checks; startup and session switches stay offline.
-- Persisted `show()` Markdown blocks and answered `pick()`/`ask()` prompt results in session history (`ui_markdown` and `ui_result` records), restoring them in chat order and pin state across TUI and JSON-RPC resume (before `start` hooks run) while keeping them out of model context, compaction, and `/trace` and never persisting cancelled or pending prompts.
-- Published [docs/setup.md](docs/setup.md) and [docs/plugin-authoring.md](docs/plugin-authoring.md) guides, linked from `docs/index.md`, `docs/config.md`, and `docs/plugins.md`.
-- Added support for four provider API types (`openai-chat`, `openai-responses`, `anthropic-messages`, and `google-gemini`) via `tuse connect --api TYPE`, `tuse providers --json`, automatic SQLite migration of existing providers to `openai-chat`, provider-scoped reasoning replay across multi-step tool loops and `/resume`, paginated Anthropic/Gemini model discovery, and fail-fast unsupported-capability reporting.
-- Added the offline bundled default plugin `"tuse/default"` (`theme` palette and opt-in `subs` CLIProxyAPI `v8.1.2` loopback proxy wrapper via `/subs`), plus `--replace` and `--key-stdin` on `tuse connect`.
+- **Four API types.** Providers can use `openai-chat` (default; existing providers keep working), `openai-responses`, `anthropic-messages`, or `google-gemini`: `tuse connect --api TYPE`. Streaming, tool calls, reasoning replay, usage, and errors are handled per adapter; unsupported capabilities fail early with a clear message. New `tuse connect --replace`/`--key-stdin` and `tuse providers --json`.
+- **Bundled `tuse/default` plugin.** `theme` gives a curated palette (your overrides still win); `subs` wraps CLIProxyAPI v8.1.2 as a loopback-only provider via `/subs`. Install, login, and proxy start are explicit opt-ins.
+- **Breaking: configured `functions`.** `functions = { name = function(...) end }` (the `{ run, args, description, show_agent }` form is removed). They exist only in the agent's `lua` tool and are not listed in the prompt. Override built-ins (originals via `require("tuse")`) or disable them with `false`.
+- **Plugins sync on reload.** `/reload`, `config.reload`, and `reload()` clone missing Git plugins and update moving refs; commit pins stay fixed, local changes are never overwritten, and a failed sync keeps the previous config. Startup stays offline.
+- **UI history.** `show` blocks and answered `pick`/`ask` prompts are saved and restored on resume (TUI and JSON-RPC), outside the model context.
+- **TUI.** Left/Right step through `/trace` entries; the working indicator is just spinner + time; `diff_line = 0` hides the whole diff block; links are `accent` and `fg` on hover.
+- **Installer.** Interactive first-run setup offers `theme` and `subs` and creates `~/.config/tuse/init.lua` without touching existing configs; `CI`, `TUSE_NO_SETUP=1`, `--no-setup`, or no terminal install only the binary.
+- **Docs.** `docs/` is now the full source of truth, with setup and plugin-authoring guides, published at https://ethanhamilthon.github.io/tuse/ with a landing page. README rewritten.
 
 ## 0.9.2
 

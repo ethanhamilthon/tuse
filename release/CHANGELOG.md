@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3
+
+- **Breaking:** Configured `functions` now map names directly to plain Lua functions or `false` (removing `{ run, args, description, show_agent }`), are strictly isolated to the agent's `lua` environment, and are undiscoverable unless documented in `systems`/`prompts`. Built-in host functions can be overridden (delegating to unmodified originals via `require("tuse")`) or disabled with `false` (live-gated across reloads and filtered from the system prompt, `lua` tool description, and `docs()`).
+
 ## 0.9.2
 
 - **Breaking:** Removed `tuse plugins`. Manage plugin checkouts with Git in `~/.tuse/plugins` and declare them in `tuse.lua`; a missing checkout prints the `git clone` to run. Startup stays offline.

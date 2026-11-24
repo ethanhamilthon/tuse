@@ -103,12 +103,9 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
         "docs",
         lua.create_function(|lua, topic: Option<String>| {
             let s = session(lua)?;
-            let mut text = crate::docs::docs(topic.as_deref());
-            let t = topic.unwrap_or_default().trim().to_ascii_lowercase();
-            if t == "functions" || t == "functions.md" {
-                text.push_str(&crate::prompt::listing(&s.config(), true));
-            }
-            Ok(text)
+            let cfg = s.config();
+            let disabled = cfg.disabled_builtins();
+            Ok(crate::docs::docs_for(topic.as_deref(), &disabled))
         })?,
     )?;
     g.set(

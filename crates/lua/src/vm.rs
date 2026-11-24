@@ -67,7 +67,10 @@ impl Vm {
                 },
             );
             match job {
-                Ok(j) => j.start(lua),
+                Ok(mut j) => {
+                    j.is_agent = true;
+                    j.start(lua);
+                }
                 Err(e) => {
                     let _ = tx.send(fail(crate::message(&e)));
                 }
@@ -89,10 +92,15 @@ fn fail(text: String) -> Done {
 }
 
 fn compile(lua: &Lua, code: &str, name: &str) -> mlua::Result<mlua::Function> {
-    lua.load(format!("return {code}"))
-        .set_name(name)
-        .into_function()
-        .or_else(|_| lua.load(code).set_name(name).into_function())
+    let env: Option<mlua::Table> = lua.named_registry_value("tuse.agent_env").ok();
+    let build = |src: &str| {
+        let mut c = lua.load(src).set_name(name);
+        if let Some(e) = &env {
+            c = c.set_environment(e.clone());
+        }
+        c.into_function()
+    };
+    build(&format!("return {code}")).or_else(|_| build(code))
 }
 
 fn run(lua: &Lua, rx: &Receiver<Cmd>) {

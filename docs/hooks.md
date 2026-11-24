@@ -59,7 +59,7 @@ Exclusions (to prevent infinite recursion):
 ## Execution Semantics
 
 - **Per-hook ordering, cross-hook concurrency**: each hook name has its own FIFO queue (lane). Events for one hook run strictly in emission order, one at a time. Different hooks run concurrently as coroutines in the session's VM and keep running while the agent waits on `sh` or the API.
-- **State**: config upvalues survive across events until reload or session close. Hooks run in the file environment (import host functions via `require("tuse")`) and can call configured helpers.
+- **State**: config upvalues survive across events until reload or session close. Hooks run in the trusted environment (import unmodified built-in host functions via `require("tuse")`); configured `functions` are agent-only and not visible to hooks (share logic with `local` functions or `require`d helper modules).
 - **No timeout**: hook runs have no execution deadline. Esc / `turn.cancel` cancels only the **currently running** execution in each hook lane; queued events in that lane are not cleared and still run afterward.
 - **Errors**: an error in a hook does not abort other hooks or the session; it emits a `notice` event (`hook <name>: <first error line>`).
 - **Trace persistence**: every finished hook run is stored as a durable `hook` record (`name`, `event`, `vars` as a newline-separated `key=value` string, `error`, `ms`) and appears in `/trace` and `session().trace`.

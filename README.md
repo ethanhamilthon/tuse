@@ -151,14 +151,10 @@ return {
   },
 
   functions = {
-    checks = {
-      args = "lines",
-      description = "Run project checks and return the last lines.",
-      run = function(lines)
-        local out = t.sh("make check"):lines()
-        return table.concat(out, "\n", math.max(1, #out - (lines or 30) + 1))
-      end,
-    },
+    checks = function(lines)
+      local out = t.sh("make check"):lines()
+      return table.concat(out, "\n", math.max(1, #out - (lines or 30) + 1))
+    end,
   },
 
   hooks = {

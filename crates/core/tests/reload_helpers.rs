@@ -6,11 +6,11 @@ use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
 const PROBE: &str = "local d = docs('functions'); return table.concat({type(drop), keep and keep() or '-', tostring(mine), rebound(), gone(), tostring(d:find('`drop(', 1, true) ~= nil)}, ' ')";
 
 fn config(keep: &str, drop: bool) -> String {
-    let mut f = format!("keep = {{ description = 'k', run = function() return '{keep}' end }},");
-    f.push_str("rebound = { description = 'r', run = function() return 'config' end },");
+    let mut f = format!("keep = function() return '{keep}' end,");
+    f.push_str("rebound = function() return 'config' end,");
     if drop {
-        f.push_str("drop = { description = 'd', run = function() return 'drop' end },");
-        f.push_str("gone = { description = 'g', run = function() return 'gone' end },");
+        f.push_str("drop = function() return 'drop' end,");
+        f.push_str("gone = function() return 'gone' end,");
     }
     format!("return {{ functions = {{ {f} }} }}")
 }
@@ -53,7 +53,7 @@ fn reload_replaces_config_helpers_and_keeps_agent_globals() {
 
     std::fs::write(&cfg, "return { typo_key = 1 }").unwrap();
     assert!(s.reload().is_err());
-    assert_eq!(turn(&s, &rx).trim(), "function v1 42 agent mine true");
+    assert_eq!(turn(&s, &rx).trim(), "function v1 42 agent mine false");
 
     std::fs::write(&cfg, config("v2", false)).unwrap();
     s.reload().unwrap();

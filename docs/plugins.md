@@ -76,7 +76,7 @@ end
 3. Each enabled plugin is loaded and validated strictly in list order (`plugin <name>: <path>: <message>`). Plugins cannot declare `plugins` or unknown keys.
 4. Plugins merge in list order, then the user config merges on top:
    - `systems` and `models`: concatenated, plugins first, then user config. For `models`, the last definition for a given `name` wins.
-   - `prompts`, `functions`, `hooks`, `commands`, `open`: merged by key. If two plugins define the same key, loading fails (`plugins A and B both define <section>.<key>`). The user config silently overrides any plugin entry.
+   - `prompts`, `functions`, `hooks`, `commands`, `open`: merged by key. If two plugins define the same key (including `functions` entries set to either a function or `false`), loading fails (`plugins A and B both define <section>.<key>`). The user config silently overrides any plugin entry (including disabling a plugin's configured function with `false`).
    - `settings` and `theme`: merged deeply table-by-table; later plugins override earlier plugins on overlapping keys, and user config wins over all plugins.
 5. The final merged config is validated before committing.
 

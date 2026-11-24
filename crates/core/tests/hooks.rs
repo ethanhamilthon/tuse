@@ -52,15 +52,18 @@ local function append(path, line)
   f:write(line, "\n")
   f:close()
 end
+local function label(e)
+  return e.event
+end
 return {{
   functions = {{
-    label = {{ description = "Label the current event", run = function(e) return e.event end }},
+    agent_only = function() return "agent" end,
   }},
   hooks = {{
     record = {{
       events = {{"start", "close", "user_message", "agent_message", "model_change", "name_change"}},
       run = function(e)
-        -- Event-only payloads: session metadata lives in t.session(), not on `e`.
+        assert(agent_only == nil)
         assert(e.session == nil and e.cwd == nil and e.config == nil and e.hook == nil)
         local s = t.session()
         assert(s.id ~= nil, "session must be readable during " .. e.event)

@@ -45,7 +45,6 @@ Specifications for planned (not yet implemented) features and changes. Baseline 
 - [06 — Install and Update Plugins on Reload](planned/06-plugin-sync-on-reload.md)
 - [07 — Bundled Default Plugin: `theme` and `subs`](planned/07-default-plugin-theme-subs.md)
 - [08 — Persist `show`, `pick`, and `ask` in UI History](planned/08-persist-ui-history.md)
-- [09 — Agent-Only, Undiscoverable Configured Functions](planned/09-agent-only-functions.md)
 - [10 — Setup Guide](planned/10-setup-guide.md)
 - [10 — Plugin Authoring Guide](planned/10-plugin-authoring-guide.md)
 - [11 — First-Run Setup in the Installer](planned/11-installer-first-run.md)

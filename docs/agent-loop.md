@@ -16,7 +16,7 @@ Each iteration of the turn loop runs one model request and any tool calls it emi
    - User inputs emit `user`, persist a `user` record, and trigger `user_message` hooks (`is_first = true` only for the first `user` record in the session).
    - Task completion notifications emit `notification` and persist a `notification` record (they do not trigger `user_message` hooks and are not displayed in the TUI chat).
 2. **Assemble prompt and messages:**
-   - **System prompt:** Built-in system prompt + visible configured `functions` (up to 30 entries with `show_agent = true`, each description capped at 200 characters, plus an overflow line pointing to `docs("functions")`) + each string in `config.systems` + a compaction explanation note if earlier records were dropped.
+   - **System prompt:** Built-in system prompt (omitting any built-in host functions disabled with `false`) + each string in `config.systems` + a compaction explanation note if earlier records were dropped. Configured `functions` are not listed automatically.
    - **Message history:** Built from durable `records` using the active compaction bounds ([usage.md](usage.md), [providers.md](providers.md)).
    - **Tools:** Always advertises a single function tool: `lua(code)`.
 3. **Resolve provider and call API:**

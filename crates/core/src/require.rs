@@ -3,8 +3,182 @@ use tuse_lua::mlua::{self, Function, IntoLuaMulti, Lua, MultiValue, Table, Value
 
 use tuse_config::HOST_FUNCTIONS as HOST;
 
-const FILES: &str = "tuse.modules";
-const LOADING: &str = "tuse.loading";
+const TRUSTED_FILES: &str = "tuse.modules";
+const TRUSTED_LOADING: &str = "tuse.loading";
+const TRUSTED_PKG: &str = "tuse.trusted_package";
+const AGENT_LOADING: &str = "tuse.agent_loading";
+const AGENT_PKG: &str = "tuse.agent_package";
+
+const STDLIB: &[&str] = &[
+    "_VERSION",
+    "assert",
+    "collectgarbage",
+    "error",
+    "getmetatable",
+    "ipairs",
+    "next",
+    "pairs",
+    "pcall",
+    "print",
+    "rawequal",
+    "rawget",
+    "rawlen",
+    "rawset",
+    "select",
+    "setmetatable",
+    "tonumber",
+    "tostring",
+    "type",
+    "warn",
+    "xpcall",
+    "coroutine",
+    "io",
+    "math",
+    "os",
+    "string",
+    "table",
+    "utf8",
+];
+
+const LOADERS: &str = r#"
+local raw_load, raw_loadfile, env = ...
+function env.load(chunk, name, mode, ...)
+    if select('#', ...) > 0 then return raw_load(chunk, name, mode, ...) end
+    return raw_load(chunk, name, mode, env)
+end
+function env.loadfile(path, mode, ...)
+    if select('#', ...) > 0 then return raw_loadfile(path, mode, ...) end
+    return raw_loadfile(path, mode, env)
+end
+function env.dofile(path)
+    local chunk, err = raw_loadfile(path, nil, env)
+    if not chunk then error(err, 2) end
+    return chunk()
+end
+"#;
+
+const AGENT_CAPS: &str = r#"
+local orig, host_names, agent_env = ...
+local builtins, custom, builtin_proxies, custom_proxies = {}, {}, {}, {}
+local prev_custom = {}
+for _, name in ipairs(host_names) do
+    builtins[name] = orig[name]
+    if name == "json" then
+        local enc = function(...)
+            local j = builtins.json
+            if not j then error("json is disabled", 2) end
+            return j.encode(...)
+        end
+        local dec = function(...)
+            local j = builtins.json
+            if not j then error("json is disabled", 2) end
+            return j.decode(...)
+        end
+        builtin_proxies.json = setmetatable({}, {
+            __index = function(_, k)
+                if not builtins.json then return nil end
+                if k == "encode" then return enc end
+                if k == "decode" then return dec end
+            end,
+            __newindex = function() error("json module is read-only", 2) end,
+            __pairs = function()
+                if not builtins.json then return function() end end
+                local keys, i = { "encode", "decode" }, 0
+                return function()
+                    i = i + 1
+                    local k = keys[i]
+                    if k == "encode" then return k, enc end
+                    if k == "decode" then return k, dec end
+                end
+            end,
+        })
+    else
+        builtin_proxies[name] = function(...)
+            local f = builtins[name]
+            if not f then error(name .. " is disabled", 2) end
+            return f(...)
+        end
+    end
+    rawset(agent_env, name, builtin_proxies[name])
+end
+local agent_tuse = setmetatable({}, {
+    __index = function(_, k)
+        if builtins[k] then return builtin_proxies[k] end
+    end,
+    __newindex = function() error("tuse module is read-only", 2) end,
+    __pairs = function()
+        local i = 0
+        return function()
+            while true do
+                i = i + 1
+                local k = host_names[i]
+                if not k then return end
+                if builtins[k] then return k, builtin_proxies[k] end
+            end
+        end
+    end,
+})
+local function get_custom_proxy(name)
+    local p = custom_proxies[name]
+    if not p then
+        p = function(...)
+            local f = custom[name]
+            if f == false then error(name .. " is disabled", 2) end
+            if not f then error(name .. " is unavailable", 2) end
+            return f(...)
+        end
+        custom_proxies[name] = p
+    end
+    return p
+end
+local function commit(funcs)
+    funcs = funcs or {}
+    for _, name in ipairs(host_names) do
+        local was_disabled = builtins[name] == false
+        local was_override = builtins[name] ~= false and builtins[name] ~= orig[name]
+        local v = funcs[name]
+        local proxy = builtin_proxies[name]
+        if v == false then
+            builtins[name] = false
+            if rawget(agent_env, name) == proxy then
+                rawset(agent_env, name, nil)
+            end
+        elseif type(v) == "function" then
+            builtins[name] = v
+            rawset(agent_env, name, proxy)
+        else
+            builtins[name] = orig[name]
+            if (was_disabled or was_override) and rawget(agent_env, name) == nil then
+                rawset(agent_env, name, proxy)
+            end
+        end
+    end
+    for name in pairs(prev_custom) do
+        if funcs[name] == nil then
+            custom[name] = nil
+            if rawget(agent_env, name) == custom_proxies[name] then
+                rawset(agent_env, name, nil)
+            end
+        end
+    end
+    prev_custom = {}
+    for name, v in pairs(funcs) do
+        if orig[name] == nil then
+            prev_custom[name] = true
+            if v == false then
+                custom[name] = false
+                if custom_proxies[name] and rawget(agent_env, name) == custom_proxies[name] then
+                    rawset(agent_env, name, nil)
+                end
+            elseif type(v) == "function" then
+                custom[name] = v
+                rawset(agent_env, name, get_custom_proxy(name))
+            end
+        end
+    end
+end
+return agent_tuse, commit
+"#;
 
 pub(crate) struct SavedModules {
     files: Vec<(String, Value)>,
@@ -27,26 +201,80 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
             getenv.call::<Value>(name)
         })?,
     )?;
-    crate::config_lua::install_env(lua, HOST)?;
-    let package: Table = g.get("package")?;
-    package.set("path", "")?;
-    package.set("cpath", "")?;
-    package
-        .get::<Table>("loaded")?
-        .set("tuse", tuse_module(lua)?)?;
-    lua.set_named_registry_value(FILES, lua.create_table()?)?;
-    lua.set_named_registry_value(LOADING, lua.create_table()?)?;
+
+    lua.set_named_registry_value(TRUSTED_FILES, lua.create_table()?)?;
+    lua.set_named_registry_value(TRUSTED_LOADING, lua.create_table()?)?;
+    lua.set_named_registry_value(AGENT_LOADING, lua.create_table()?)?;
+
+    let trusted_tuse = tuse_module(lua, false)?;
+    let trusted_env = base_env(lua)?;
+    let trusted_pkg = make_package(lua, trusted_tuse)?;
+    trusted_env.raw_set("package", trusted_pkg.clone())?;
+    lua.set_named_registry_value(TRUSTED_PKG, trusted_pkg)?;
+    lua.set_named_registry_value(crate::config_lua::FILE_ENV, trusted_env.clone())?;
+    install_require(lua, &trusted_env, cwd, true)?;
+
+    let agent_orig = tuse_module(lua, true)?;
+    let agent_env = base_env(lua)?;
+    let names_tbl = lua.create_table()?;
+    for (i, n) in HOST.iter().enumerate() {
+        names_tbl.set(i + 1, *n)?;
+    }
+    let (agent_tuse, commit_fn): (Table, Function) = lua
+        .load(AGENT_CAPS)
+        .set_name("=tuse.env")
+        .call((agent_orig, names_tbl, agent_env.clone()))?;
+    let agent_pkg = make_package(lua, agent_tuse)?;
+    agent_env.raw_set("package", agent_pkg.clone())?;
+    lua.set_named_registry_value(AGENT_PKG, agent_pkg)?;
+    lua.set_named_registry_value(crate::config_lua::AGENT_ENV, agent_env.clone())?;
+    lua.set_named_registry_value(crate::config_lua::COMMIT_AGENT, commit_fn)?;
+    install_require(lua, &agent_env, cwd, false)?;
+    Ok(())
+}
+
+fn base_env(lua: &Lua) -> mlua::Result<Table> {
+    let g = lua.globals();
+    let env = lua.create_table()?;
+    env.raw_set("_G", &env)?;
+    for name in STDLIB {
+        env.raw_set(*name, g.raw_get::<Value>(*name)?)?;
+    }
+    let raw_load: Function = g.get("load")?;
+    let raw_loadfile: Function = g.get("loadfile")?;
+    lua.load(LOADERS)
+        .set_name("=tuse.env")
+        .call::<()>((raw_load, raw_loadfile, env.clone()))?;
+    Ok(env)
+}
+
+fn make_package(lua: &Lua, tuse: Table) -> mlua::Result<Table> {
+    let pkg = lua.create_table()?;
+    pkg.set("path", "")?;
+    pkg.set("cpath", "")?;
+    let loaded = lua.create_table()?;
+    loaded.set("tuse", tuse.clone())?;
+    let preload = lua.create_table()?;
+    preload.set("tuse", lua.create_function(move |_, ()| Ok(tuse.clone()))?)?;
+    pkg.set("loaded", loaded)?;
+    pkg.set("preload", preload)?;
+    Ok(pkg)
+}
+
+fn install_require(lua: &Lua, env: &Table, cwd: &Path, trusted: bool) -> mlua::Result<()> {
     let cwd = cwd.to_path_buf();
-    g.set(
+    env.raw_set(
         "require",
-        lua.create_function(move |lua, name: String| require_module(lua, name, &cwd))?,
+        lua.create_function(move |lua, name: String| require_module(lua, name, &cwd, trusted))?,
     )?;
-    tuse_lua::wrap(lua, &g, &["require"])
+    tuse_lua::wrap(lua, env, &["require"])
 }
 
 pub(crate) fn forget(lua: &Lua) -> mlua::Result<SavedModules> {
-    let files: Table = lua.named_registry_value(FILES)?;
-    let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
+    let files: Table = lua.named_registry_value(TRUSTED_FILES)?;
+    let loaded: Table = lua
+        .named_registry_value::<Table>(TRUSTED_PKG)?
+        .get("loaded")?;
     let mut saved = vec![];
     for pair in files.pairs::<String, Value>() {
         let name = pair?.0;
@@ -54,15 +282,17 @@ pub(crate) fn forget(lua: &Lua) -> mlua::Result<SavedModules> {
         saved.push((name.clone(), val));
         loaded.set(name, Value::Nil)?;
     }
-    lua.set_named_registry_value(FILES, lua.create_table()?)?;
-    lua.set_named_registry_value(LOADING, lua.create_table()?)?;
+    lua.set_named_registry_value(TRUSTED_FILES, lua.create_table()?)?;
+    lua.set_named_registry_value(TRUSTED_LOADING, lua.create_table()?)?;
     Ok(SavedModules { files: saved })
 }
 
 pub(crate) fn restore(lua: &Lua, saved: SavedModules) -> mlua::Result<()> {
     let _ = forget(lua);
-    let files: Table = lua.named_registry_value(FILES)?;
-    let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
+    let files: Table = lua.named_registry_value(TRUSTED_FILES)?;
+    let loaded: Table = lua
+        .named_registry_value::<Table>(TRUSTED_PKG)?
+        .get("loaded")?;
     for (name, val) in saved.files {
         files.set(name.as_str(), true)?;
         loaded.set(name, val)?;
@@ -71,7 +301,7 @@ pub(crate) fn restore(lua: &Lua, saved: SavedModules) -> mlua::Result<()> {
 }
 
 pub(crate) fn set_loading(lua: &Lua, key: &str, active: bool) -> mlua::Result<()> {
-    let loading: Table = lua.named_registry_value(LOADING)?;
+    let loading: Table = lua.named_registry_value(TRUSTED_LOADING)?;
     if active {
         loading.set(key, true)
     } else {
@@ -79,11 +309,15 @@ pub(crate) fn set_loading(lua: &Lua, key: &str, active: bool) -> mlua::Result<()
     }
 }
 
-fn tuse_module(lua: &Lua) -> mlua::Result<Table> {
+fn tuse_module(lua: &Lua, is_agent: bool) -> mlua::Result<Table> {
     let g = lua.globals();
     let t = lua.create_table()?;
     for name in HOST {
-        t.set(*name, g.raw_get::<Value>(*name)?)?;
+        if *name == "spawn" {
+            t.set(*name, tuse_lua::make_spawn(lua, is_agent)?)?;
+        } else {
+            t.set(*name, g.raw_get::<Value>(*name)?)?;
+        }
     }
     Ok(t)
 }
@@ -122,7 +356,7 @@ fn caller_file(lua: &Lua, cwd: &Path) -> Option<PathBuf> {
             break;
         };
         let src = source.as_deref().unwrap_or("");
-        if what == "C" || src == "=prelude" {
+        if what == "C" || src == "=prelude" || src == "=tuse.env" {
             continue;
         }
         let p = Path::new(src.strip_prefix('@')?);
@@ -135,8 +369,19 @@ fn caller_file(lua: &Lua, cwd: &Path) -> Option<PathBuf> {
     None
 }
 
-fn require_module(lua: &Lua, name: String, cwd: &Path) -> mlua::Result<MultiValue> {
-    let package: Table = lua.globals().get("package")?;
+fn require_module(lua: &Lua, name: String, cwd: &Path, trusted: bool) -> mlua::Result<MultiValue> {
+    let pkg_key = if trusted { TRUSTED_PKG } else { AGENT_PKG };
+    let loading_key = if trusted {
+        TRUSTED_LOADING
+    } else {
+        AGENT_LOADING
+    };
+    let env_key = if trusted {
+        crate::config_lua::FILE_ENV
+    } else {
+        crate::config_lua::AGENT_ENV
+    };
+    let package: Table = lua.named_registry_value(pkg_key)?;
     let loaded: Table = package.get("loaded")?;
     let existing: Value = loaded.get(name.as_str())?;
     if is_truthy(&existing) {
@@ -169,7 +414,7 @@ fn require_module(lua: &Lua, name: String, cwd: &Path) -> mlua::Result<MultiValu
     if is_truthy(&cached) {
         return cached.into_lua_multi(lua);
     }
-    let loading: Table = lua.named_registry_value(LOADING)?;
+    let loading: Table = lua.named_registry_value(loading_key)?;
     if is_truthy(&loading.get::<Value>(key.as_str())?) {
         return Err(mlua::Error::runtime(format!("cyclic require: '{key}'")));
     }
@@ -177,7 +422,7 @@ fn require_module(lua: &Lua, name: String, cwd: &Path) -> mlua::Result<MultiValu
         .map_err(|e| mlua::Error::runtime(format!("{key}: {e}")))?;
     let f = lua
         .load(text)
-        .set_environment(crate::config_lua::file_env(lua)?)
+        .set_environment(lua.named_registry_value::<Table>(env_key)?)
         .set_name(format!("@{key}"))
         .into_function()
         .map_err(|e| mlua::Error::runtime(tuse_lua::message(&e)))?;
@@ -186,7 +431,9 @@ fn require_module(lua: &Lua, name: String, cwd: &Path) -> mlua::Result<MultiValu
     loading.set(key.as_str(), Value::Nil)?;
     let val = result.map_err(|e| mlua::Error::runtime(tuse_lua::message(&e)))?;
     let stored = store_loaded(&loaded, &key, val)?;
-    lua.named_registry_value::<Table>(FILES)?
-        .set(key.as_str(), true)?;
+    if trusted {
+        lua.named_registry_value::<Table>(TRUSTED_FILES)?
+            .set(key.as_str(), true)?;
+    }
     (stored, key).into_lua_multi(lua)
 }

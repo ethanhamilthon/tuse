@@ -3,7 +3,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 impl App {
     pub fn picker_rows(&self) -> usize {
-        self.list_rows.max(1)
+        self.list_rows
+            .min(self.palette.ui.list_max_height.saturating_sub(1).max(1))
+            .max(1)
     }
 
     pub fn key(&mut self, mut k: KeyEvent, page: usize) {
@@ -49,7 +51,7 @@ impl App {
         if self.question_key(k.code, shift || alt) {
             return;
         }
-        if self.panel_key(k.code) {
+        if self.panel_key(k.code, k.modifiers) {
             return;
         }
         let before = self.steering.map(|_| self.editor.buf.clone());

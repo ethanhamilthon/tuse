@@ -31,6 +31,8 @@ impl App {
     pub fn run_command(&mut self, name: &str) {
         match name {
             "config" => {
+                self.trace_back = None;
+                self.trace_items.clear();
                 self.panel = Some(crate::config_view::panel(
                     &self.session.config(),
                     &self.palette,
@@ -45,6 +47,8 @@ impl App {
             }
             "tasks" => self.open_tasks(),
             "session" => {
+                self.trace_back = None;
+                self.trace_items.clear();
                 self.panel = Some(crate::session_view::panel(&self.session, &self.palette));
             }
             "trace" => self.open_trace(),
@@ -163,6 +167,8 @@ impl App {
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.tasks.get(&v) {
                     let out = tuse_core::tail(&t.log, 200);
+                    self.trace_back = None;
+                    self.trace_items.clear();
                     self.panel = Some(Panel::new(out));
                 }
             }
@@ -170,11 +176,7 @@ impl App {
                 if let Ok(idx) = v.parse::<usize>()
                     && let Some(it) = self.trace_items.get(idx)
                 {
-                    let panel = match it.role {
-                        "system" | "user" | "agent" => Panel::markdown(it.text.clone()),
-                        "lua" => Panel::lua(it.text.clone()),
-                        _ => Panel::new(it.text.clone()),
-                    };
+                    let panel = crate::panel::trace_panel(it);
                     let search = std::mem::take(&mut self.editor);
                     self.trace_back = Some((p, search));
                     self.panel = Some(panel);

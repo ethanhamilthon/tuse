@@ -24,7 +24,7 @@ Built-in slash commands run when typed as `/name` with no arguments or selected 
 - `/models` opens a two-step picker (model, then reasoning effort) and saves the selection for the active session and as the SQLite default for new sessions.
 - `/tasks` lists background tasks (`spawn()`); Enter views the log (last 200 lines) and `Ctrl+X` stops the selected task.
 - `/session` opens a scrollable view of `require("tuse").session()` (all fields except `trace`).
-- `/trace` opens a searchable list of all trace entries (`index  role  first line`); Enter opens the full entry panel and Esc returns to the list with search and selection intact.
+- `/trace` opens a searchable list of all trace entries (`index  role  first line`); Enter opens the full entry panel, `Left`/`Right` (when input is empty) step to the previous/next filtered entry, and Esc returns to the list with search and selection intact.
 - `/config` opens a scrollable view of the resolved config (without provider secrets or Lua function bodies).
 - `/reload` validates and re-evaluates the config in the same VM (keeping the previous working config on failure).
 - `/quit` closes the session and exits.

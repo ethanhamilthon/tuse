@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3
+
+- `/trace`: pressing `Left` or `Right` in a trace detail panel (when the input editor is empty) steps to the previous or next entry in the current filtered `/trace` list without wrapping, resetting scroll to the top and keeping the search query and picker selection in sync.
+
 ## 0.9.2
 
 - **Breaking:** Removed `tuse plugins`. Manage plugin checkouts with Git in `~/.tuse/plugins` and declare them in `tuse.lua`; a missing checkout prints the `git clone` to run. Startup stays offline.

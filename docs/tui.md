@@ -52,7 +52,7 @@ Shortcuts also work with the Russian keyboard layout when `Ctrl`, `Alt`, or `Sup
 | --- | --- |
 | `Enter` | Send trimmed message or run an exact built-in/custom `/command`; submit answer inside `ask`; choose highlighted item in a picker. |
 | `Shift+Enter`, `Alt+Enter`, `Ctrl+J` | Insert a newline (also inside `ask`). |
-| `Left` / `Right` | Move cursor left/right (steps over `#`/`@`/image atoms whole). |
+| `Left` / `Right` | Move cursor left/right (steps over `#`/`@`/image atoms whole; in a `/trace` detail panel with empty input, step to the previous/next filtered entry). |
 | `Up` / `Down` | Move across visual wrapped rows in the editor (or navigate picker; or scroll open panel/`ask` by `scroll_step` when input is empty). |
 | `Home` / `End`, `Ctrl+E` | Move to start / end of current logical line. |
 | `Ctrl+Left/Right`, `Alt+Left/Right`, `Alt+B`, `Alt+F` | Move by word. |
@@ -69,6 +69,7 @@ Shortcuts also work with the Russian keyboard layout when `Ctrl`, `Alt`, or `Sup
 | Key | Action |
 | --- | --- |
 | `Up` / `Down`, `Ctrl+P` / `Ctrl+N` | Move picker selection (wraps around at top/bottom). |
+| `Left` / `Right` | In a `/trace` detail panel with empty input and no modifiers: open the previous / next entry in the current filtered `/trace` list (stops at the ends, resets scroll to top). |
 | `Enter` | Choose item (in `@` picker: attaches highlighted file or directory as an atom). |
 | `Tab` | In `@` picker: completes a directory (`@dir/`) or attaches a file; in other pickers (except `pick()`): same as `Enter`. |
 | `Esc` | Dismiss token picker (stays suppressed until token text changes), close modal picker (restoring draft), or cancel `pick()` (returning `nil`). |
@@ -98,7 +99,7 @@ All pickers filter item **labels** only (never secondary detail columns) using c
   - `/resume`: other named sessions in the current `cwd` sorted by `updated DESC` (label = title, detail = timestamp). Flashes `No other sessions in this folder.` if none exist.
   - `/models`: lists available models (label = display name or `provider/model`, detail = raw `name` when display differs, `unavailable` if disconnected, window, prices) plus the current model even when unavailable or empty, and triggers a background provider model fetch that refreshes the list live while preserving your query and selection. Selecting an available model opens the Effort picker (`default`, `low`, `medium`, `high`, `xhigh`, `max`).
   - `/tasks`: lists background tasks (label = `<id> <name>`, detail = `<status>`), updating live on task changes. `Enter` opens a scrollable panel with the last 200 log lines; `Ctrl+X` stops the selected task. Flashes `No tasks. The agent starts them with \`spawn()\`.` if empty.
-  - `/trace`: lists `index  role  summary` for every trace entry. `Enter` opens the full entry in a scrollable panel (`system`/`user`/`agent` as Markdown, `lua` as full unfolded syntax-highlighted source, all other roles as plain text). `Esc` returns to the `/trace` picker with the search query and selection preserved; a second `Esc` closes `/trace` and restores your draft.
+  - `/trace`: lists `index  role  summary` for every trace entry. `Enter` opens the full entry in a scrollable panel (`system`/`user`/`agent` as Markdown with interactive links, `lua` as full unfolded syntax-highlighted source, all other roles as plain text). Inside the detail panel, unmodified `Left` and `Right` when the input editor is empty step to the previous or next entry in the current filtered `/trace` list without wrapping (keeping the current entry and scroll position at the ends, resetting scroll to the top on switch, clearing stale mouse selection and link hover, and preserving the search query; typing into the editor or holding modifiers keeps normal editor cursor movement). `Esc` returns to the `/trace` picker with the search query preserved and the last-viewed entry selected and scrolled into view; a second `Esc` closes `/trace` and restores your draft.
 - **Detail panels:**
   - `/session`: scrollable view of `ID`, `Name`, `Mode`, `CWD`, `Home`, `Config`, `Provider`, `Model`, `Effort`, `Model info`, `Context`, `Turns`, `Usage`, and `Cost` (`CWD`, `Home`, `Config` are clickable when present).
   - `/config`: scrollable view of `Config file`, `Settings`, `Theme` (with color swatches `■`), `System prompts`, `Prompts`, `Functions` (marking `show_agent = false` as `[hidden]`), `Hooks`, `Commands`, `Open`, and `Plugins` (`@ref commit` or `local`, with clickable folder paths). Never shows secrets or Lua function bodies.

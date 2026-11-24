@@ -38,7 +38,6 @@ Source of truth for Tuse's observable behavior and public contracts. All baselin
 
 Specifications for planned (not yet implemented) features and changes. Baseline pages above reflect only current behavior until each spec is implemented.
 
-- [01 — Navigate `/trace` Entries with Left and Right](planned/01-trace-arrow-navigation.md)
 - [02 — Support Four API Types](planned/02-api-types.md)
 - [04 — Publish Docs on GitHub Pages](planned/04-github-pages-docs.md)
 - [05 — Simplify the TUI Working Indicator](planned/05-working-indicator.md)

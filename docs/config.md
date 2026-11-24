@@ -1,6 +1,6 @@
 # Config
 
-Tuse configuration is a Lua 5.4 file that returns a table (or `nil`, treated as `{}`). Defaults and the built-in system prompt live in the binary; `tuse update` never modifies user config files.
+Tuse configuration is a Lua 5.4 file that returns a table (or `nil`, treated as `{}`). Defaults and the built-in system prompt live in the binary; `tuse update` never modifies user config files. For a step-by-step walkthrough, see [setup.md](setup.md).
 
 Configuration files execute as Lua code with the user's permissions. Only load project configs and modules you trust.
 

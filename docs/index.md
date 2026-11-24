@@ -29,10 +29,12 @@ Source of truth for Tuse's observable behavior and public contracts. All baselin
 
 ## Configuration & Customization
 
+- [Setup Guide](setup.md) — Step-by-step setup: connecting providers, global and project configs, modular layout, and verifying with `/reload` and `/config`.
 - [Config](config.md) — Lua config modules, `require` resolution, schema keys, strict validation, and `/reload`.
 - [Environment & Config Lookup](env.md) — Environment variables read by Tuse and config file search order.
 - [Theme & UI Settings](theme.md) — The 10-token color theme and `settings.ui` behavior and layout options.
-- [Plugins](plugins.md) — Git and local plugins, options, merge rules, and bundled plugins.
+- [Plugins](plugins.md) — Git and local plugins, options, merge rules, reload sync, and repository plugins.
+- [Plugin Authoring Guide](plugin-authoring.md) — Writing, testing, and publishing Tuse plugins.
 
 ## Planned Changes
 
@@ -43,8 +45,6 @@ Specifications for planned (not yet implemented) features and changes. Baseline 
 - [04 — Publish Docs on GitHub Pages](planned/04-github-pages-docs.md)
 - [05 — Simplify the TUI Working Indicator](planned/05-working-indicator.md)
 - [07 — Bundled Default Plugin: `theme` and `subs`](planned/07-default-plugin-theme-subs.md)
-- [10 — Setup Guide](planned/10-setup-guide.md)
-- [10 — Plugin Authoring Guide](planned/10-plugin-authoring-guide.md)
 - [11 — First-Run Setup in the Installer](planned/11-installer-first-run.md)
 - [12 — Hide Entire Diff Block When `diff_line = 0`](planned/12-diff-line-zero.md)
 - [13 — Rewrite `README.md`](planned/13-readme-rewrite.md)

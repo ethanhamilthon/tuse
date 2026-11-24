@@ -1,6 +1,6 @@
 # Plugins
 
-A plugin is a Lua file (in a local directory or Git checkout) that returns a config table or a function accepting options and returning one. Tuse validates every enabled plugin individually and merges all plugins underneath the user's config.
+A plugin is a Lua file (in a local directory or Git checkout) that returns a config table or a function accepting options and returning one. Tuse validates every enabled plugin individually and merges all plugins underneath the user's config. For a step-by-step guide to building and publishing plugins, see [plugin-authoring.md](plugin-authoring.md).
 
 ## Declaring Plugins
 

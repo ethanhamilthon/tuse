@@ -11,8 +11,16 @@ enum Body {
     Styled(Vec<Line>),
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum PanelKind {
+    Plain,
+    Config,
+    Session,
+}
+
 pub struct Panel {
     body: Body,
+    pub kind: PanelKind,
     pub scroll: usize,
     cache: Option<(usize, Vec<Line>)>,
 }
@@ -21,9 +29,14 @@ impl Panel {
     fn with_body(body: Body) -> Self {
         Self {
             body,
+            kind: PanelKind::Plain,
             scroll: 0,
             cache: None,
         }
+    }
+    pub fn with_kind(mut self, kind: PanelKind) -> Self {
+        self.kind = kind;
+        self
     }
     pub fn new(value: impl Into<String>) -> Self {
         Self::with_body(Body::Text(value.into()))

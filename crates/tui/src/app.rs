@@ -33,7 +33,8 @@ pub struct App {
     pub selection: crate::selection::Selection,
     pub links: Vec<crate::links::LinkBox>,
     pub hover: Option<u32>,
-    pub pressed_link: Option<u32>,
+    pub pointer: Option<(usize, usize)>,
+    pub pressed_link: Option<((usize, usize), u32)>,
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
     pub question: Option<QuestionPrompt>,
@@ -76,6 +77,7 @@ impl App {
             selection: Default::default(),
             links: vec![],
             hover: None,
+            pointer: None,
             pressed_link: None,
             picker: None,
             panel: None,
@@ -110,6 +112,7 @@ impl App {
     pub(crate) fn clear_link_hover(&mut self) {
         self.hover = None;
         self.pressed_link = None;
+        self.pointer = None;
     }
 
     pub fn flash(&mut self, text: impl AsRef<str>) {

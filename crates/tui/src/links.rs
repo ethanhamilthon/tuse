@@ -76,10 +76,11 @@ pub fn resolve_markdown_target(dest: &str, cwd: &Path) -> Option<LinkTarget> {
 }
 
 pub fn styled(dest: &str, st: Style, p: &Palette) -> Style {
+    let link = resolve_markdown_target(dest, &p.cwd).map(intern);
     Style {
-        fg: p.info,
+        fg: if link.is_some() { p.accent } else { p.info },
         underline: true,
-        link: resolve_markdown_target(dest, &p.cwd).map(intern),
+        link,
         ..st
     }
 }
@@ -90,7 +91,7 @@ pub fn path_span(label: impl Into<String>, path: &str, st: Style, p: &Palette) -
         Some(rp) => span(
             label,
             Style {
-                fg: p.info,
+                fg: p.accent,
                 underline: true,
                 link: Some(intern_path(rp.canonicalize().unwrap_or(rp))),
                 ..st
@@ -107,7 +108,7 @@ pub fn spans(text: &str, st: Style, p: &Palette) -> Vec<Span> {
             Some(id) => span(
                 piece,
                 Style {
-                    fg: p.info,
+                    fg: p.accent,
                     underline: true,
                     link: Some(id),
                     ..st
@@ -162,8 +163,9 @@ pub fn highlight(screen: &mut [Line], hover: Option<u32>, color: Option<crosster
     let Some(id) = hover else { return };
     for s in screen.iter_mut().flatten() {
         if s.style.link == Some(id) {
-            s.style.fg = color.or(s.style.fg);
+            s.style.fg = color;
             s.style.bold = true;
+            s.style.underline = true;
         }
     }
 }
@@ -518,14 +520,67 @@ mod tests {
             url_boxes.len() >= 2,
             "expected wrapped url boxes: {boxes:?}"
         );
-        highlight(&mut wrapped, Some(url_id), p.accent);
         assert!(
             wrapped
                 .iter()
                 .flatten()
                 .filter(|s| s.style.link == Some(url_id))
-                .all(|s| s.style.bold && s.style.fg == p.accent)
+                .all(|s| s.style.underline && !s.style.bold && s.style.fg == p.accent)
         );
+        highlight(&mut wrapped, Some(url_id), p.fg);
+        assert!(
+            wrapped
+                .iter()
+                .flatten()
+                .filter(|s| s.style.link == Some(url_id))
+                .all(|s| s.style.underline && s.style.bold && s.style.fg == p.fg)
+        );
+        highlight(&mut wrapped, Some(url_id), None);
+        assert!(
+            wrapped
+                .iter()
+                .flatten()
+                .filter(|s| s.style.link == Some(url_id))
+                .all(|s| s.style.underline && s.style.bold && s.style.fg.is_none())
+        );
+
+        let mut dup = crate::markdown::render(
+            "a https://dup.example b https://dup.example and [sec](#anchor)",
+            80,
+            &p,
+        );
+        let dup_id = intern_url("https://dup.example");
+        let dup_spans: Vec<_> = dup
+            .iter()
+            .flatten()
+            .filter(|s| s.style.link == Some(dup_id))
+            .collect();
+        assert_eq!(dup_spans.len(), 2);
+        assert!(
+            dup_spans
+                .iter()
+                .all(|s| s.style.fg == p.accent && s.style.underline)
+        );
+        let anchor_span = dup
+            .iter()
+            .flatten()
+            .find(|s| s.text == "sec")
+            .expect("anchor span");
+        assert!(
+            anchor_span.style.link.is_none()
+                && anchor_span.style.underline
+                && anchor_span.style.fg == p.info
+        );
+        highlight(&mut dup, Some(dup_id), p.fg);
+        assert!(
+            dup.iter()
+                .flatten()
+                .filter(|s| s.style.link == Some(dup_id))
+                .all(|s| s.style.fg == p.fg && s.style.bold && s.style.underline)
+        );
+
+        let ps = path_span("label", &file.display().to_string(), Style::fg(p.fg), &p);
+        assert!(ps.style.link.is_some() && ps.style.fg == p.accent && ps.style.underline);
 
         let path = "deep/folder/name/example.md";
         let text = format!("[doc]({path}) https://example.com");

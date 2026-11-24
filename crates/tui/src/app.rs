@@ -33,6 +33,7 @@ pub struct App {
     pub selection: crate::selection::Selection,
     pub links: Vec<crate::links::LinkBox>,
     pub hover: Option<u32>,
+    pub pressed_link: Option<u32>,
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
     pub question: Option<QuestionPrompt>,
@@ -75,6 +76,7 @@ impl App {
             selection: Default::default(),
             links: vec![],
             hover: None,
+            pressed_link: None,
             picker: None,
             panel: None,
             question: None,
@@ -102,6 +104,12 @@ impl App {
 
     pub fn scroll_history(&mut self, delta: isize) {
         self.scroll = self.scroll.saturating_add_signed(delta);
+        self.clear_link_hover();
+    }
+
+    pub(crate) fn clear_link_hover(&mut self) {
+        self.hover = None;
+        self.pressed_link = None;
     }
 
     pub fn flash(&mut self, text: impl AsRef<str>) {

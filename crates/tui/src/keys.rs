@@ -40,6 +40,7 @@ impl App {
         if page_delta != 0 {
             if shift && let Some(panel) = self.visible_panel_mut() {
                 panel.scroll_by(page_delta);
+                self.clear_link_hover();
             } else {
                 self.scroll_history(-page_delta);
             }
@@ -165,8 +166,14 @@ impl App {
                 self.restore_draft();
                 let _ = self.session.ui_reply(id, Some(answer));
             }
-            KeyCode::Up if self.editor.is_empty() => q.panel.scroll_by(-step),
-            KeyCode::Down if self.editor.is_empty() => q.panel.scroll_by(step),
+            KeyCode::Up if self.editor.is_empty() => {
+                q.panel.scroll_by(-step);
+                self.clear_link_hover();
+            }
+            KeyCode::Down if self.editor.is_empty() => {
+                q.panel.scroll_by(step);
+                self.clear_link_hover();
+            }
             _ => return false,
         }
         true

@@ -20,14 +20,14 @@ Color validation is case-insensitive (surrounding whitespace ignored):
 | --- | --- | --- |
 | `bg` | `#121212` | Main background, including pickers, panels, and selected text foreground. |
 | `surface` | `#1E1E1E` | Elevated background for user messages in chat (full-width block without `›`). Not used by pickers or panels. |
-| `fg` | `#DEDEDE` | Primary text, plain panel text, code blocks, active input text, `/session` values. |
+| `fg` | `#DEDEDE` | Primary text, plain panel text, code blocks, active input text, `/session` values, hovered/clicked clickable links (bold, underlined). |
 | `dim` | `#BDBDBD` | Secondary text: blockquotes, horizontal rules, table separators/headers in narrow mode, picker details and `no matches`, notices (`✓`), diff context lines, scroll mark (`↑N`), dimmed steering input, `/session` & `/config` secondary labels. |
 | `muted` | `#929292` | Subtle text: tool output, reasoning (`∴`, italic), Lua syntax comments, inactive picker items, turn summary (`✓ 12s · ...`), and status bar labels. |
 | `border` | `#333333` | Input rules, overlay top borders, disabled input `›`, `/session` & `/config` keys, diff file path headers, truncation marks (`…`, `… N more lines`). |
-| `accent` | `#BDDEAB` | Primary highlight: active input `›`, spinner and elapsed time, steering wave, used context count, flash notices, selection background, picked `#`/`@`/image atoms in input, selected picker item, Markdown list markers, Lua numbers, `show` (`◆`) and `pick`/`ask` (`?`) markers, hovered clickable links (bold), `/config` headings. |
+| `accent` | `#BDDEAB` | Primary highlight: active input `›`, spinner and elapsed time, steering wave, used context count, flash notices, selection background, picked `#`/`@`/image atoms in input, selected picker item, Markdown list markers, Lua numbers, `show` (`◆`) and `pick`/`ask` (`?`) markers, clickable links (underlined by default), `/config` headings. |
 | `ok` | `#94B979` | Additions and success: diff `+` lines, inline Markdown `code`, Lua strings, `/session` cost (bold). |
 | `err` | `#E27373` | Errors and deletions: diff `-` lines, error entries (`✗`), failed tool calls, Lua keywords. |
-| `info` | `#97BEDC` | Tools, headings (bold), links (underlined by default, including Markdown links whose destination is not clickable), Lua host and called functions, `/session` mode/effort/window, `/config` hooks/commands/open/plugins. |
+| `info` | `#97BEDC` | Tools, headings (bold), non-clickable Markdown links (underlined, e.g. `#anchor`), Lua host and called functions, `/session` mode/effort/window, `/config` hooks/commands/open/plugins. |
 
 ```lua
 return {

@@ -3,41 +3,6 @@ use crate::kit::style::{LABEL_SEP, Palette, SPINNER, STEERING_FRAMES, STEERING_L
 use crate::kit::text::{Line, span};
 use crate::ui::app::App;
 
-pub fn working(app: &App) -> Line {
-    let p = &app.palette;
-    let Some((elapsed, _)) = app.session.turn_info() else {
-        return vec![];
-    };
-    if app.steering.is_some() {
-        let wave = STEERING_FRAMES[app.tick % STEERING_FRAMES.len()];
-        return vec![
-            span(format!("{wave} "), Style::fg(p.accent)),
-            span(STEERING_LABEL, Style::fg(p.muted)),
-        ];
-    }
-    let spin = SPINNER[app.tick % SPINNER.len()];
-    vec![span(
-        format!("{spin} {}", duration(elapsed)),
-        Style::fg(p.accent),
-    )]
-}
-
-pub fn model(app: &App) -> Line {
-    let (model, effort) = app.session.model();
-    let def = app.session.model_def(&model);
-    let stats = app.session.stats();
-    let window = def.as_ref().map_or(0, |d| d.window);
-    let context = (window > 0 || stats.context > 0).then_some((stats.context, window));
-    let cost = stats.priced.then_some(stats.cost);
-    model_line(
-        &app.palette,
-        &tuse_config::display_name(def.as_ref(), &model),
-        &effort,
-        context,
-        cost,
-    )
-}
-
 pub fn model_line(
     p: &Palette,
     name: &str,
@@ -64,6 +29,43 @@ pub fn model_line(
     }
     line.push(span(text, muted));
     line
+}
+
+impl App {
+    pub(crate) fn working(&self) -> Line {
+        let p = &self.palette;
+        let Some((elapsed, _)) = self.session.turn_info() else {
+            return vec![];
+        };
+        if self.steering.is_some() {
+            let wave = STEERING_FRAMES[self.tick % STEERING_FRAMES.len()];
+            return vec![
+                span(format!("{wave} "), Style::fg(p.accent)),
+                span(STEERING_LABEL, Style::fg(p.muted)),
+            ];
+        }
+        let spin = SPINNER[self.tick % SPINNER.len()];
+        vec![span(
+            format!("{spin} {}", duration(elapsed)),
+            Style::fg(p.accent),
+        )]
+    }
+
+    pub(crate) fn model_label(&self) -> Line {
+        let (model, effort) = self.session.model();
+        let def = self.session.model_def(&model);
+        let stats = self.session.stats();
+        let window = def.as_ref().map_or(0, |d| d.window);
+        let context = (window > 0 || stats.context > 0).then_some((stats.context, window));
+        let cost = stats.priced.then_some(stats.cost);
+        model_line(
+            &self.palette,
+            &tuse_config::display_name(def.as_ref(), &model),
+            &effort,
+            context,
+            cost,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -100,7 +102,7 @@ mod tests {
         .unwrap();
         session.set_model("workind/m", "default");
         let mut app = App::new(session.clone(), Some(cfg));
-        assert!(working(&app).is_empty());
+        assert!(app.working().is_empty());
 
         let (id, _) = session.submit(UserInput::text("go"));
         loop {
@@ -112,7 +114,7 @@ mod tests {
         app.handle_event(Event::Status("reading a.txt...".into()));
         app.handle_event(Event::Status("running cargo test...".into()));
 
-        let line = working(&app);
+        let line = app.working();
         assert_eq!(line.len(), 1);
         assert_eq!(line[0].style, Style::fg(app.palette.accent));
         assert!(line[0].text.starts_with(SPINNER[0]));
@@ -123,10 +125,10 @@ mod tests {
         );
 
         app.tick = 1;
-        assert!(working(&app)[0].text.starts_with(SPINNER[1]));
+        assert!(app.working()[0].text.starts_with(SPINNER[1]));
 
         app.steering = Some(id);
-        let steered = working(&app);
+        let steered = app.working();
         assert_eq!(
             steered,
             [
@@ -138,16 +140,14 @@ mod tests {
             ]
         );
         app.steering = None;
-        assert_eq!(working(&app).len(), 1);
+        assert_eq!(app.working().len(), 1);
 
         app.flash("Copied.");
-        let top =
-            crate::frame::input_view::block(&app, &app.editor.view(40), 40, &[String::new()], 0);
+        let top = app.input_block(&app.editor.view(40), 40, &[String::new()], 0);
         let top_text: String = top[0].iter().map(|s| s.text.as_str()).collect();
         assert!(top_text.contains("Copied.") && !top_text.contains(SPINNER[1]));
         app.flash = None;
-        let top =
-            crate::frame::input_view::block(&app, &app.editor.view(40), 40, &[String::new()], 0);
+        let top = app.input_block(&app.editor.view(40), 40, &[String::new()], 0);
         let top_text: String = top[0].iter().map(|s| s.text.as_str()).collect();
         assert!(top_text.contains(SPINNER[1]));
 

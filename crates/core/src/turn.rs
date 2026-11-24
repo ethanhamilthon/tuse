@@ -122,7 +122,7 @@ impl Session {
         let req = Request {
             model: split_model(&model).1.to_string(),
             messages: messages(&st.records, st.bounds, &system),
-            tools: prompt::tools(),
+            tools: prompt::tools(&config),
             effort: (effort != "default").then_some(effort),
         };
         drop(st);

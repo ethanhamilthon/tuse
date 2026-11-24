@@ -10,21 +10,29 @@ Tuse embeds a Lua 5.4 VM per session. The agent's single tool (`lua`), config fi
 
 ## Execution Environments
 
-The VM runs code in two environments:
+The VM maintains two strictly isolated Lua environments:
 
 ### Agent Environment (`lua` tool)
 
-- Includes the safe Lua 5.4 standard libraries (`string`, `table`, `math`, `utf8`, `io`, `os`, `coroutine`, `package`, `load`, `loadfile`, `dofile`, `require`). The `debug` library is unavailable (`nil`), and `os.exit` is set to `nil`.
-- `package.path` and `package.cpath` are `""`; `require` uses Tuse's path-relative resolver ([config.md](config.md#modules-and-require)).
-- All built-in host functions (canonical reference: [functions.md](functions.md)) are globals and are also exported by `require("tuse")`.
-- Configured `functions` from the config are installed as globals in the same global table.
+- Covers `lua(code)` tool calls, modules `require`d from `lua(code)`, `load`/`loadfile`/`dofile` called from `lua(code)`, and background tasks `spawn`ed by `lua(code)`.
+- Includes the safe Lua 5.4 standard libraries (`string`, `table`, `math`, `utf8`, `io`, `os`, `coroutine`) plus isolated agent-scoped `package`, `require`, `load`, `loadfile`, and `dofile`. The `debug` library is unavailable (`nil`), and `os.exit` is set to `nil`.
+- `package.path` and `package.cpath` are `""`; `require` uses Tuse's path-relative resolver ([config.md](config.md#modules-and-require)) against the agent's own `package.loaded` and `package.preload`, loading files into the agent environment.
+- Live-gated built-in host functions (subject to overrides and `false` disables in `functions`) and live-gated configured custom functions are installed as globals; the agent's own persistent globals live in this table across calls.
+- `require("tuse")` (also `package.loaded.tuse`) returns a live, read-only agent-scoped proxy table whose lookups dynamically read active built-in capabilities (overrides applied, disabled built-ins returning `nil`, custom non-built-in configured functions not exposed on `tuse`).
 
-### File Environment (Configs, Plugins, Modules, Callbacks)
+### Trusted Environment (Configs, Plugins, Trusted Modules, Callbacks)
 
-- Config files, plugins, `require`d Lua modules (even when `require`d from the agent's `lua` tool), and functions defined in them execute with a file environment table whose `_G` points to itself.
-- Built-in host function names resolve to `nil` as globals in this environment; code must import them via `require("tuse")`.
-- `load` and `loadfile` default to this same file environment unless an explicit `env` argument is passed. `dofile(path)` takes only `path` (no explicit environment argument) and always executes in the file environment.
-- Other VM globals (including configured `functions`) remain reachable through lookup on the global table.
+- Covers config files, plugins, modules `require`d by trusted code, hooks, custom `commands`, `open` handlers, configured `functions` bodies themselves, and background tasks spawned via `require("tuse").spawn`.
+- Has its own isolated `_G`/`_ENV`, `package`, `package.loaded`, `package.preload`, `require`, `load`, `loadfile`, `dofile`, and `tuse`. Agent code cannot inspect or mutate trusted `package.loaded`, cannot share module cache entries with trusted code, and cannot obtain the raw trusted `tuse` table.
+- Built-in host function names are **not** globals; code imports the unmodified original built-ins via `require("tuse")`.
+- Configured `functions` are **never** visible here — not as globals, not on `require("tuse")`, and not to other configured functions. Share helper code via `local` functions or `require`d helper modules.
+
+### Callback Provenance and `spawn` vs `t.spawn`
+
+- Every Lua function keeps the lexical `_ENV` where it was defined:
+  - Passing an agent callback `cb` into a configured wrapper `wrap(cb)` runs `wrap` with trusted `_ENV` while `cb` retains agent `_ENV` (cannot see trusted `require("tuse")` or call disabled built-ins).
+  - Returning a trusted closure from a configured wrapper retains its trusted `_ENV`.
+- A task started via the agent's `spawn(fn, name)` runs in the agent job context; a task started via trusted `t.spawn(fn, name)` runs in the trusted job context. In both cases, `fn` retains its lexical `_ENV` (so `t.spawn(cb)` on an agent closure still runs `cb` in agent `_ENV`).
 
 ### Environment Variables (`os.getenv`)
 

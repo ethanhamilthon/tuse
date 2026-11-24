@@ -143,24 +143,32 @@ pub(crate) type Merged = (
 );
 
 pub(crate) fn apply(lua: &Lua, config: Table, source: &str, base: &Path) -> Result<Merged, String> {
-    let parsed = crate::validate::table(lua, &config, source, false)?;
+    let parsed = crate::validate::table(lua, &config, source, false, true)?;
     let list = entries(&config, base).map_err(|e| format!("{source}: {e}"))?;
     let infos = list.iter().map(|e| e.plugin.info()).collect();
     if list.is_empty() {
+        crate::validate::check_disabled_targets(
+            &config,
+            source,
+            &std::collections::HashSet::new(),
+        )?;
         let _ = config.raw_set("plugins", Value::Nil);
         return Ok((config, infos, Some(parsed)));
     }
+    let mut plugin_fns = std::collections::HashSet::new();
     let loaded = lua.create_table().map_err(|e| e.to_string())?;
     for e in list {
         let psrc = format!("plugin {}", e.plugin.name);
         let t = load(lua, &e).map_err(|err| format!("{psrc}: {err}"))?;
-        crate::validate::table(lua, &t, &psrc, true)?;
+        crate::validate::table(lua, &t, &psrc, true, false)?;
+        plugin_fns.extend(crate::validate::function_names(&t));
         let item = lua.create_table().map_err(|e| e.to_string())?;
         item.set("name", e.plugin.name.as_str())
             .map_err(|e| e.to_string())?;
         item.set("config", t).map_err(|e| e.to_string())?;
         loaded.push(item).map_err(|e| e.to_string())?;
     }
+    crate::validate::check_disabled_targets(&config, source, &plugin_fns)?;
     lua.load(MERGE)
         .set_name("=plugins")
         .call::<Table>((loaded, config))

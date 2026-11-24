@@ -79,14 +79,11 @@ fn require_session_validation_and_reload_rollback() {
             settings = { retries = 1, ui = { pad_x = 3 } },
             prompts = { shared = 'kept', rex = rex.tag },
             functions = {
-                from_global = {
-                    description = 'Reads sibling module at runtime',
-                    run = function()
-                        assert(sh == nil and read == nil)
-                        assert(t.session().id ~= nil)
-                        return require('rex').tag
-                    end,
-                },
+                from_global = function()
+                    assert(sh == nil and read == nil)
+                    assert(t.session().id ~= nil)
+                    return require('rex').tag
+                end,
             },
             commands = { ping = function() require('tuse').show('p', require('rex').tag, false) end },
         }

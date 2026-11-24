@@ -22,7 +22,10 @@ pub fn install(lua: &Lua) -> mlua::Result<()> {
     g.set("print", lua.create_function(print)?)?;
     let io: Table = g.get("io")?;
     io.set("write", lua.create_function(write)?)?;
-    g.set("spawn", lua.create_function(spawn)?)?;
+    g.set(
+        "spawn",
+        lua.create_function(|lua, args| spawn_with(lua, args, true))?,
+    )?;
     g.set("json", json(lua)?)?;
     lua.load(PRELUDE)
         .set_name("=prelude")
@@ -137,7 +140,17 @@ fn block(lua: &Lua, (kind, arg): (String, Value)) -> mlua::Result<(bool, Value)>
     }
 }
 
-fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<String> {
+pub fn make_spawn(lua: &Lua, is_agent: bool) -> mlua::Result<Function> {
+    let raw = lua.create_function(move |lua, args| spawn_with(lua, args, is_agent))?;
+    let w: Function = lua.named_registry_value("tuse.wrap")?;
+    w.call(raw)
+}
+
+fn spawn_with(
+    lua: &Lua,
+    (f, name): (Function, Option<String>),
+    is_agent: bool,
+) -> mlua::Result<String> {
     let h = host(lua);
     let name = name.unwrap_or_default();
     let t = h
@@ -149,7 +162,7 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
         .open(&t.log)
         .map_err(|e| mlua::Error::runtime(format!("{}: {e}", t.log.display())))?;
     let id = t.id.clone();
-    let job = Job::new(
+    let mut job = Job::new(
         lua,
         f,
         MultiValue::new(),
@@ -157,6 +170,7 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
         Out::File(file),
         move |_, d: Done| h.task_end(&t.id, d),
     )?;
+    job.is_agent = is_agent;
     job.start(lua);
     Ok(id)
 }

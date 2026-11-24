@@ -68,7 +68,7 @@ local function key_order(a, b)
   return tostring(a) < tostring(b)
 end
 
-function inspect(v, depth, seen)
+local function inspect_val(v, depth, seen)
   depth, seen = depth or 0, seen or {}
   local t = type(v)
   if t == "string" then return depth == 0 and v or string.format("%q", v) end
@@ -79,25 +79,27 @@ function inspect(v, depth, seen)
   if depth > 6 then return "{...}" end
   seen[v] = true
   local parts, n = {}, #v
-  for i = 1, n do parts[#parts + 1] = inspect(v[i], depth + 1, seen) end
+  for i = 1, n do parts[#parts + 1] = inspect_val(v[i], depth + 1, seen) end
   local keys = {}
   for k in pairs(v) do
     if not (math.type(k) == "integer" and k >= 1 and k <= n) then keys[#keys + 1] = k end
   end
   table.sort(keys, key_order)
   for _, k in ipairs(keys) do
-    local name = type(k) == "string" and k:match("^[%a_][%w_]*$") and k or "[" .. inspect(k, depth + 1, seen) .. "]"
-    parts[#parts + 1] = name .. " = " .. inspect(v[k], depth + 1, seen)
+    local name = type(k) == "string" and k:match("^[%a_][%w_]*$") and k or "[" .. inspect_val(k, depth + 1, seen) .. "]"
+    parts[#parts + 1] = name .. " = " .. inspect_val(v[k], depth + 1, seen)
   end
   seen[v] = nil
   return "{" .. table.concat(parts, ", ") .. "}"
 end
 
+inspect = inspect_val
+
 function tuse.render(...)
   local out = {}
   for i = 1, select("#", ...) do
     local v = select(i, ...)
-    if v ~= nil then out[#out + 1] = inspect(v) end
+    if v ~= nil then out[#out + 1] = inspect_val(v) end
   end
   return table.concat(out, "\t")
 end

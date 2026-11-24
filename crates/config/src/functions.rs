@@ -23,15 +23,17 @@ pub const HOST_FUNCTIONS: &[&str] = &[
     "inspect",
 ];
 
-const KEYWORDS: &str = "and break do else elseif end false for function goto if in local nil not or repeat return then true until while print";
+const RESERVED: &str = "and break do else elseif end false for function goto if in local nil not or repeat return then true until while _G _VERSION assert collectgarbage dofile error getmetatable ipairs load loadfile next pairs pcall print rawequal rawget rawlen rawset require select setmetatable tonumber tostring type warn xpcall coroutine io math os package string table utf8";
 
 pub fn check_function_name(name: &str) -> Option<&'static str> {
     let mut chars = name.chars();
-    if !chars.next().is_some_and(|c| c == '_' || c.is_alphabetic())
-        || !chars.all(|c| c == '_' || c.is_alphanumeric())
+    if !chars
+        .next()
+        .is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+        || !chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
     {
         Some("invalid Lua name")
-    } else if KEYWORDS.split_whitespace().any(|r| r == name) || HOST_FUNCTIONS.contains(&name) {
+    } else if RESERVED.split_whitespace().any(|r| r == name) {
         Some("reserved name")
     } else {
         None
@@ -69,20 +71,31 @@ pub fn check_open_ext(ext: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn rejects_invalid_definitions() {
-        for (name, description) in [
-            ("not-valid", "a"),
-            ("end", "a"),
-            ("read", "a"),
-            ("set_title", "a"),
-            ("session", "a"),
-            ("foo", ""),
+    fn validates_function_command_and_open_names() {
+        for bad in [
+            "not-valid",
+            "1abc",
+            "end",
+            "os",
+            "package",
+            "require",
+            "print",
         ] {
-            let v = serde_json::json!({"functions": {name: {"description": description}}});
+            let v = serde_json::json!({"functions": {bad: "custom"}});
             let err = crate::from_value(v, "t").unwrap_err();
-            assert!(err.starts_with("t: functions"), "{err}");
+            assert!(err.starts_with("t: functions"), "{bad}: {err}");
         }
+        for ok in ["websearch", "read", "sh", "set_title", "session"] {
+            assert!(check_function_name(ok).is_none(), "{ok}");
+        }
+        assert!(
+            crate::from_value(serde_json::json!({"functions": {"json": "override"}}), "t").is_err()
+        );
+        assert!(
+            crate::from_value(serde_json::json!({"functions": {"json": "disabled"}}), "t").is_ok()
+        );
         assert!(check_open_ext(".md").is_some());
         assert!(check_open_ext("md").is_none());
         assert!(check_command_name("session").is_some());

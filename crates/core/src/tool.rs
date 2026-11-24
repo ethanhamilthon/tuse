@@ -65,8 +65,15 @@ impl Session {
         } else if call.name == TOOL {
             self.lua_call(&args, cancel)
         } else {
+            let cfg = self.config();
+            let hint = match (!cfg.is_disabled("read"), !cfg.is_disabled("sh")) {
+                (true, true) => "call functions such as `read` or `sh` inside its `code`",
+                (true, false) => "call functions such as `read` inside its `code`",
+                (false, true) => "call functions such as `sh` inside its `code`",
+                (false, false) => "call functions inside its `code`",
+            };
             Outcome::err(format!(
-                "unknown tool `{}`; the only tool is `{TOOL}`: call functions such as `read` or `sh` inside its `code`",
+                "unknown tool `{}`; the only tool is `{TOOL}`: {hint}",
                 call.name
             ))
         };

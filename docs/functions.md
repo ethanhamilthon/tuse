@@ -1,6 +1,6 @@
 # Functions
 
-Built-in host functions are globals in the agent's `lua` tool. In config files, plugins, `require`d modules, hooks, custom commands, `open` handlers, and helpers, import them with `require("tuse")`.
+Built-in host functions are globals in the agent's `lua` tool (and are also available via `require("tuse")`, subject to any overrides or `false` disables configured in `functions`). In config files, plugins, trusted `require`d modules, hooks, custom commands, `open` handlers, and configured `functions` bodies, built-in host functions are not globals—import the unmodified originals with `require("tuse")`.
 
 Errors are plain Lua errors (catchable with `pcall`). Optional settings are passed as a table (for example, `read(path, { lines = true, offset = 40 })`). File paths accept absolute paths, `~/...` (home directory), or paths relative to the session working directory.
 
@@ -114,7 +114,7 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
   - Saves the new session title and emits `name_change` (no-op if unchanged).
 - `docs(topic)`:
   - Call `docs()` (or pass whitespace) to list the built-in embedded topics (`README.md`, `tool`, `functions`, `json`, `commands`, `env`, `config`, `prompts`, `plugins`, `hooks`, `theme`). Only these embedded topics are callable via `docs()`—other files under `docs/` (such as `lua.md` or `tasks.md`) are not embedded topics.
-  - Call `docs("<topic>")` (case-insensitive, optional `.md` suffix) to read a page. `docs("functions")` appends the full list of configured functions with `show_agent = true`.
+  - Call `docs("<topic>")` (case-insensitive, optional `.md` suffix) to read a page. When built-in functions are disabled via `functions = { name = false }`, `docs("functions")` and `docs("tool")` omit those disabled built-ins, and other embedded topics prepend a `Disabled in this session: ...` notice. Configured custom functions are never appended to `docs("functions")`.
   - Unknown topics return an error message followed by the topic list (does not raise a Lua error).
 - `json.encode(value)` / `json.decode(text)`:
   - Encodes a Lua value to compact JSON or decodes JSON to a Lua value (JSON `null` becomes `nil`). Raises a Lua error on invalid JSON or unsupported Lua types.
@@ -123,28 +123,53 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
 
 ## Functions from Config
 
+`functions` maps a Lua identifier to either a plain Lua function or `false` (`nil` is equivalent to omitting the key):
+
 ```lua
 local t = require("tuse")
 
 return {
+  systems = {
+    "You have `websearch(query)` in `lua`: searches the web and returns the body.",
+  },
   functions = {
-    tail_tests = {
-      args = "lines",
-      description = "Run tests and return the last lines of output.",
-      run = function(lines)
-        local out = t.sh("make check"):lines()
-        return table.concat(out, "\n", math.max(1, #out - (lines or 30) + 1))
-      end,
-    },
+    -- Custom agent-only function (undiscoverable unless described in systems/prompts)
+    websearch = function(query)
+      return t.sh('curl -fsSL "$URL"', { env = { URL = "https://example.com/?q=" .. query } }).out
+    end,
+
+    -- Override a built-in for the agent while delegating to the unmodified original
+    sh = function(cmd, opts)
+      opts = opts or {}
+      local env = { CI = "1" }
+      for k, v in pairs(opts.env or {}) do env[k] = v end
+      return t.sh(cmd, { timeout = opts.timeout or 30, cwd = opts.cwd, env = env })
+    end,
+
+    -- Disable a built-in completely for the agent
+    delete = false,
   },
 }
 ```
 
-- **Key rules**: must be a valid Lua identifier and not a Lua keyword, `print`, or any built-in host function name.
-- **Entry fields** (unknown keys rejected):
-  - `run` (required Lua function): installed as a global in the session VM under the function's name.
-  - `description` (required non-empty string).
-  - `args` (optional string, default `""`): display text shown between parentheses in agent-facing listings and `/config`.
-  - `show_agent` (optional boolean, default `true`): when `true`, up to 30 functions (descriptions clipped to 200 characters, with `and N more, see docs("functions")` if more than 30) are appended to the system prompt, and all `show_agent = true` functions are appended to `docs("functions")`. When `false`, the function is omitted from the system prompt and `docs("functions")` (shown with `[hidden]` in `/config`) but remains defined in the VM so hooks, commands, tasks, and other helpers can call it.
+Configured `functions` overrides and disables are capability-scoping and ergonomic controls for cooperative agents, not a hostile-code security sandbox (the agent still runs standard Lua 5.4 libraries such as `os.execute` and `io.open`).
+
+- **Key rules**: must be a valid ASCII Lua identifier (`[_A-Za-z][_A-Za-z0-9]*`) and not a Lua keyword or Lua base/standard-library global (`_G`, `_VERSION`, `assert`, `collectgarbage`, `dofile`, `error`, `getmetatable`, `ipairs`, `load`, `loadfile`, `next`, `pairs`, `pcall`, `print`, `rawequal`, `rawget`, `rawlen`, `rawset`, `require`, `select`, `setmetatable`, `tonumber`, `tostring`, `type`, `warn`, `xpcall`, `coroutine`, `io`, `math`, `os`, `package`, `string`, `table`, `utf8`). All built-in host names (`sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `session`, `task_get`, `task_list`, `task_stop`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`) are allowed.
+- **Value rules**:
+  - Must be a Lua `function` or boolean `false`. Passing any other value (including the removed `{ run, description, args, show_agent }` table form) fails validation.
+  - `json` is a module table (`{ encode, decode }`), not a function: `json = false` disables `json` for the agent, while `json = function(...) ... end` fails validation.
+  - `false` is valid only on a built-in host name or a function name defined by an enabled plugin in the merged config; setting `false` on an unknown name fails validation.
+- **Agent-only and undiscoverable by default**:
+  - Configured functions are exposed **only** in the agent's `lua` environment. They are never visible in top-level config, plugins, trusted `require`d modules, hooks, custom `commands`, `open` handlers, other configured `functions`, or tasks spawned via `require("tuse").spawn`. Share code across trusted callbacks using `local` functions or `require`d helper modules.
+  - Configured functions are **never** listed automatically in the system prompt or `docs("functions")`. Describe any custom agent function explicitly in `systems` or `prompts` if you want the agent to discover it.
+- **Overriding built-ins**:
+  - Setting any function-valued built-in in `functions` replaces both the global `<name>` and `require("tuse").<name>` in the agent environment.
+  - Use `local t = require("tuse")` in trusted config/plugin code to call the unmodified original built-in without recursing (`t.sh(...)`, `t.write(...)`, etc.). Job-scoped side effects (diffs, model images, 120-second deadline, timeout pausing, Esc cancellation) remain bound to the active agent tool call.
+  - Overrides never affect trusted code (config, plugins, hooks, commands, `open` handlers, or trusted tasks).
+- **Disabling built-ins (`false`) and live-gated handles**:
+  - Disabling a built-in sets both the global and `require("tuse").<name>` to `nil` in the agent environment (including `load(...)`, agent-`require`d `.lua` files, and agent-`spawn`ed tasks).
+  - Every built-in function, `json.encode`/`json.decode`, and configured custom function exposed to the agent is wrapped in a live-dispatch proxy. Saved aliases captured before reload (`saved_sh = sh`, `saved_enc = json.encode`, `saved_tuse = require("tuse")`, `saved_fn = plugin_fn`) immediately observe reloads: disabled entries read `nil` on `saved_tuse` and raise `"<name> is disabled"` (or `"<name> is unavailable"` if a custom function was removed) when called; newly installed overrides take effect immediately on saved aliases too.
+  - Disabling `inspect = false`, `json = false`, `sh = false`, etc. never breaks Tuse's private runtime helpers (such as return-value rendering with private `inspect`).
+  - Disabled built-ins are automatically omitted from the system prompt, the `lua` tool description, `docs("functions")`, and `docs("tool")`, and other embedded `docs(topic)` pages prepend a `Disabled in this session: ...` notice. Overridden (not disabled) built-ins remain documented.
 - **Mode filtering**: branch on `require("tuse").session().mode` (`"tui"` or `"json"`) when building the `functions` table.
-- **Reload behavior**: on successful `/reload`, retained functions get their new code, removed functions disappear from Lua globals and `docs("functions")` (unless the agent rebound that global to another value), and all other agent globals stay intact. On failed reload, every existing function remains unchanged.
+- **Reload behavior**: on successful `/reload`, new/updated functions and overrides activate immediately (including through saved aliases), removed custom functions are unbound from the agent global environment unless the agent rebound that global to a different value (and saved handles raise `"<name> is unavailable"`), removed overrides or `false` disables restore original built-ins everywhere (globals, `require("tuse")`, saved aliases, prompt, tool description, and `docs()`), and agent scratch globals stay intact. On failed reload, nothing changes.

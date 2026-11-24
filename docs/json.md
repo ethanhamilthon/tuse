@@ -161,7 +161,7 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
     - `models`: `[{ name, display, window, prices: { input, output, cache_read, cache_write } | null, compact_at: u64 | null }]`
     - `systems`: `string[]`
     - `prompts`: `{ [name]: string }`
-    - `functions`: `{ [name]: { args: string, description: string, show_agent: bool } }`
+    - `functions`: `{ [name]: "custom" | "override" | "disabled" }`
     - `hooks`: `{ [name]: { events: string[] } }`
     - `commands`: `string[]` (sorted custom command names)
     - `open`: `string[]` (sorted file extensions without leading `.`)

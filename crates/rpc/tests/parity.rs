@@ -180,9 +180,28 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
         (json!(s1_id), json!("p/alt"), json!("high"))
     );
     let rui = call(&tx, &out, 18, "ui.state", json!({}))["result"].clone();
+    assert!(rui["active"].is_null(), "{rui}");
+    assert_eq!(rui["entries"].as_array().unwrap().len(), 2);
     assert!(
-        rui["markdowns"].as_array().unwrap().is_empty()
-            && rui["entries"].as_array().unwrap().is_empty()
+        rui["markdowns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["name"] == "m1" && m["pin"] == true)
+    );
+    assert!(
+        rui["markdowns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["name"] == "done" && m["text"] == "b:because:nil")
+    );
+    assert!(
+        rui["markdowns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|m| m["name"] != "drop")
     );
 
     call(&tx, &out, 19, "shutdown", json!({}));

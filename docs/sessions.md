@@ -21,7 +21,7 @@ Tuse persists sessions, conversation history, providers, and global defaults in 
 
 ## Lazy DB materialization and locking
 
-- **New sessions:** Opening a fresh session does not acquire `~/.tuse/<id>/lock` or write rows to SQLite until the first `user` record is appended. Earlier records (such as the initial `settings` record or `start` hook records) and metadata are buffered in memory and flushed together once the first `user` record arrives. Exiting before sending a user message leaves no rows in SQLite (and no lock file), though `~/.tuse/<id>/` itself can already exist on disk if a background task log or pasted clipboard PNG was created earlier.
+- **New sessions:** Opening a fresh session does not acquire `~/.tuse/<id>/lock` or write rows to SQLite until the first `user` record is appended. Earlier records (such as the initial `settings` record, `start` hook records, or `ui_markdown`/`ui_result` records from pre-chat `show()`/`pick()`/`ask()` calls) and metadata are buffered in memory and flushed together in original order once the first `user` record arrives. Exiting before sending a user message leaves no rows in SQLite (and no lock file), even if the user interacted with `show`/`pick`/`ask`, though `~/.tuse/<id>/` itself can already exist on disk if a background task log or pasted clipboard PNG was created earlier.
 - **Live record list:** `session.records` in `tuse json` (and internal session queries) returns the live in-memory record list, which includes records buffered before DB materialization.
 - **Resumed sessions:** Opening an existing session with `--resume`, `/resume`, or `session.resume` immediately acquires `~/.tuse/<id>/lock`.
 - **Single-writer exclusion:** If another Tuse process (TUI or `tuse json`) already holds the lock for `<id>`, opening it fails with `session <id> is open in another tuse process`. Switching to the already-open session fails with `session <id> is already open`.
@@ -43,6 +43,8 @@ Every persisted entry in a session's `records` log is a JSON object tagged by `"
 | `settings` | `model`, `effort` | Model and effort active from this point in the session. |
 | `hook` | `name`, `event`, `vars` (formatted `key=value` lines string), `error`, `ms` | Hook execution log (visible in `/trace`). |
 | `turn_end` | `elapsed_ms`, `calls`, `model`, `effort`, `cancelled` | End-of-turn summary. |
+| `ui_markdown` | `name`, `text`, `pin`, `removed` | Durable `show()` UI Markdown event; restored in chat order on resume, excluded from model context, compaction, and `/trace`. |
+| `ui_result` | `id`, `kind` (`"picker"` \| `"question"`), `prompt`, `value` | Durable answered `pick()`/`ask()` result; restored in chat order on resume, excluded from model context, compaction, and `/trace`. |
 
 ## Session titles and listing
 
@@ -63,9 +65,10 @@ When resuming session `<id>`:
    - Replays `settings` records in order to restore model and effort—falling back to saved metadata and then global SQLite defaults only if no `settings` record exists. The latest `settings` record wins unconditionally, even if its `model` is explicitly `""`.
    - Replays non-`llm` `usage` records to restore the latest reported `context` token count (`input + output`). Note: resume restores this last API-reported count, **not** a post-compaction estimate if compaction happened after the last usage record.
    - Recomputes cumulative usage, cost, turn count, and step count using the current config's `models` metadata.
+   - Replays `ui_markdown` and `ui_result` records in order **before** `start` hooks run, restoring surviving `show()` blocks (with original positions and pin state), answered `pick()`/`ask()` entries, and initializing the UI request ID counter to `max(restored ui_result.id)` with an empty pending prompt queue.
 5. Fires `start` hooks with `reason = "launch"` (CLI `--resume`) or `"resume"` (`/resume` or `session.resume`), `is_new = false`, `restored = true`.
 
-**What is not restored across resume:** Lua VM globals, running background tasks, and transient UI state (`show` blocks, pending or completed `pick`/`ask` prompts).
+**What is not restored across resume:** Lua VM globals, running background tasks, and cancelled or pending (unanswered) `pick`/`ask` prompts.
 
 ## Switching and closing sessions
 

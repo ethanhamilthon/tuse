@@ -78,14 +78,6 @@ pub fn model_name<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
     Ok(s)
 }
 
-pub fn non_empty<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
-    let s = String::deserialize(d)?;
-    if s.trim().is_empty() {
-        return Err(D::Error::custom("must not be empty"));
-    }
-    Ok(s)
-}
-
 pub fn events<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
     let list: Vec<String> = list(d)?;
     if list.is_empty() {
@@ -112,12 +104,18 @@ fn names<E: Error>(list: &[String], check: fn(&str) -> Option<&'static str>) -> 
 
 pub fn functions<'de, D: Deserializer<'de>>(
     d: D,
-) -> Result<BTreeMap<String, crate::Function>, D::Error> {
-    let map = BTreeMap::<String, crate::Function>::deserialize(d)?;
-    names(
-        &map.keys().cloned().collect::<Vec<_>>(),
-        crate::check_function_name,
-    )?;
+) -> Result<BTreeMap<String, crate::FunctionKind>, D::Error> {
+    let map = BTreeMap::<String, crate::FunctionKind>::deserialize(d)?;
+    for (name, kind) in &map {
+        if let Some(reason) = crate::check_function_name(name) {
+            return Err(D::Error::custom(format!("'{name}': {reason}")));
+        }
+        if name == "json" && *kind != crate::FunctionKind::Disabled {
+            return Err(D::Error::custom(
+                "'json' is a table and can only be disabled with false",
+            ));
+        }
+    }
     Ok(map)
 }
 

@@ -1,7 +1,7 @@
 use crate::Host;
 use crate::job::{Done, Job, Out, Stop};
 use crate::sched::{self, Sched};
-use mlua::{Lua, MultiValue};
+use mlua::{Lua, MultiValue, Table};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
@@ -45,11 +45,28 @@ impl Vm {
     }
 
     pub fn run(&self, code: &str, name: &str, stop: Stop) -> Done {
+        self.run_with(code, name, stop, |lua| Ok(lua.globals()))
+    }
+
+    pub fn run_with(
+        &self,
+        code: &str,
+        name: &str,
+        stop: Stop,
+        env: impl FnOnce(&Lua) -> mlua::Result<Table> + Send + 'static,
+    ) -> Done {
         let (tx, rx) = mpsc::channel();
         let (code, name) = (code.to_string(), format!("={name}"));
         self.post(move |lua| {
             let tx2 = tx.clone();
-            let f = match compile(lua, &code, &name) {
+            let env = match env(lua) {
+                Ok(e) => e,
+                Err(e) => {
+                    let _ = tx.send(fail(crate::message(&e)));
+                    return;
+                }
+            };
+            let f = match compile(lua, &code, &name, &env) {
                 Ok(f) => f,
                 Err(e) => {
                     let _ = tx.send(fail(crate::message(&e)));
@@ -88,11 +105,14 @@ fn fail(text: String) -> Done {
     }
 }
 
-fn compile(lua: &Lua, code: &str, name: &str) -> mlua::Result<mlua::Function> {
-    lua.load(format!("return {code}"))
-        .set_name(name)
-        .into_function()
-        .or_else(|_| lua.load(code).set_name(name).into_function())
+fn compile(lua: &Lua, code: &str, name: &str, env: &Table) -> mlua::Result<mlua::Function> {
+    let build = |src: &str| {
+        lua.load(src)
+            .set_name(name)
+            .set_environment(env.clone())
+            .into_function()
+    };
+    build(&format!("return {code}")).or_else(|_| build(code))
 }
 
 fn run(lua: &Lua, rx: &Receiver<Cmd>) {

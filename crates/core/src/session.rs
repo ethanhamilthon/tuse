@@ -170,6 +170,7 @@ impl Prepared {
                 _ => {}
             }
         }
+        let ui = crate::ui::UiState::replay(&records);
         let models = config.models.clone();
         st.stats = (crate::usage::Stats::of(&records, &models), models);
         st.records = records;
@@ -190,7 +191,7 @@ impl Prepared {
                 vm,
                 hooks_on: AtomicBool::new(true),
                 hook_runs: Default::default(),
-                ui: Mutex::default(),
+                ui: Mutex::new(ui),
                 cmd_runs: Mutex::default(),
                 http: tuse_api::default_agent(),
                 next_lua: AtomicU64::new(0),
@@ -235,13 +236,15 @@ impl Session {
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
         let c = self
             .vm
-            .call(move |lua| crate::config_lua::prepare(lua, path.as_deref()))?;
+            .call(move |lua| crate::config_lua::prepare(lua, path.as_deref(), true))?;
         self.finish_hooks("reload");
         let c = Arc::new(c);
-        let c2 = c.clone();
-        self.vm
-            .call(move |lua| crate::config_lua::commit(lua, &c2))?;
-        self.swap_config(c);
+        let (s2, c2) = (self.clone(), c.clone());
+        self.vm.call(move |lua| {
+            crate::config_lua::commit(lua, &c2)?;
+            s2.swap_config(c2);
+            Ok::<_, String>(())
+        })?;
         self.ui_cancel_hooks(false);
         self.hooks_on.store(true, Ordering::Release);
         self.start_hook("reload", false, false);

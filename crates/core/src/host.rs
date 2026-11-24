@@ -70,10 +70,18 @@ impl Host for SessionHost {
                 error_line(&d.text)
             };
             let what = if d.ok { "finished" } else { "failed" };
-            s.submit(crate::UserInput::notification(format!(
-                "<notification>Task {} ({}) {what}. Last line: {last}. Output: `task_get(\"{}\").output`.</notification>",
-                t.id, t.name, t.id
-            )));
+            let msg = if s.config().is_disabled("task_get") {
+                format!(
+                    "<notification>Task {} ({}) {what}. Last line: {last}.</notification>",
+                    t.id, t.name
+                )
+            } else {
+                format!(
+                    "<notification>Task {} ({}) {what}. Last line: {last}. Output: `task_get(\"{}\").output`.</notification>",
+                    t.id, t.name, t.id
+                )
+            };
+            s.submit(crate::UserInput::notification(msg));
         }
     }
 }
@@ -103,12 +111,9 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
         "docs",
         lua.create_function(|lua, topic: Option<String>| {
             let s = session(lua)?;
-            let mut text = crate::docs::docs(topic.as_deref());
-            let t = topic.unwrap_or_default().trim().to_ascii_lowercase();
-            if t == "functions" || t == "functions.md" {
-                text.push_str(&crate::prompt::listing(&s.config(), true));
-            }
-            Ok(text)
+            let cfg = s.config();
+            let disabled = cfg.disabled_builtins();
+            Ok(crate::docs::docs_for(topic.as_deref(), &disabled))
         })?,
     )?;
     g.set(

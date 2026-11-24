@@ -1,6 +1,3 @@
-> [!NOTE]
-> **Planned guide draft (TODO #10).** References target behavior from [06-plugin-sync-on-reload.md](06-plugin-sync-on-reload.md), [07-default-plugin-theme-subs.md](07-default-plugin-theme-subs.md), [09-agent-only-functions.md](09-agent-only-functions.md), and [install.md](../install.md). Remove this note and the Integration Notes section when moving this file into `docs/`.
-
 # Setup Guide
 
 This guide walks from a fresh Tuse install to a clean, maintainable personal and project configuration.
@@ -21,15 +18,11 @@ tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name ope
 
 ## 2. Configure Your Global Config
 
-Interactive installation creates `~/.config/tuse/init.lua` for you (either `return {}` or enabling the bundled default plugin `"tuse/default"`). **Edit that file** to extend it—preserving any `plugins` entry the installer wrote—or create `~/.config/tuse/init.lua` (or `~/.config/tuse.lua`) if you skipped first-run setup:
+Defaults and the built-in system prompt live in the binary, so Tuse runs without any config file. When you want personal settings, model metadata, prompts, hooks, or plugins, create `~/.config/tuse/init.lua` (or `~/.config/tuse.lua`):
 
 ```lua
 -- ~/.config/tuse/init.lua
 return {
-  plugins = {
-    -- Keep this entry if you enabled the bundled default plugin during install
-    { "tuse/default", opts = { theme = true, subs = false } },
-  },
   settings = {
     retries = 5,
   },
@@ -115,7 +108,6 @@ return {
   prompts = require("./prompts"),
   hooks = require("./hooks"),
   plugins = {
-    { "tuse/default", opts = { theme = true, subs = false } },
     -- External Git plugin (add while running and run /reload, or git clone first)
     { "ethanhamilthon/tuse/plugins/welcome", ref = "v0.9.2" },
   },
@@ -164,18 +156,4 @@ Edit your config files while Tuse is running, then apply and inspect without res
 2. Run **`/config`** (or JSON-RPC `config.get`).
    - Verify the loaded config file path, resolved settings, theme swatches, system prompts, `#` prompts, functions, hooks, custom `/` commands, `.ext` openers, and loaded plugins with their refs and commit SHAs.
 
-See [config.md](../config.md) for the complete key reference and [plugins.md](../plugins.md) for plugin options.
-
----
-
-## Integration Notes (remove when publishing)
-
-- **Decision:** Target published path is `docs/setup.md`, linked from the docs index (TODO #3 / #4) and referenced from `docs/config.md`.
-- **Dependencies before moving into `docs/`**:
-  - [06-plugin-sync-on-reload.md](06-plugin-sync-on-reload.md) (for `/reload` syncing Git plugins and offline startup bootstrap).
-  - [07-default-plugin-theme-subs.md](07-default-plugin-theme-subs.md) and [install.md](../install.md) (confirm the final bundled default plugin ID matches `"tuse/default"`).
-  - [09-agent-only-functions.md](09-agent-only-functions.md) (for `functions = { name = function(...) ... end }` syntax and agent-only isolation).
-- **Acceptance checks when publishing**:
-  - Remove top `> [!NOTE]` banner and this Integration Notes section.
-  - Add a link to `setup.md` in `docs/index.md`.
-  - Verify all config examples pass Tuse strict config validation and all relative links resolve.
+See [config.md](config.md) for the complete key reference and [plugins.md](plugins.md) for plugin options.

@@ -121,13 +121,14 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         "Functions",
         cfg.functions
             .iter()
-            .map(|(n, f)| {
-                let suf = if f.show_agent { "" } else { " [hidden]" };
-                kv(
-                    &format!("{n}({})", f.args),
-                    format!("{}{suf}", f.description),
-                    fg,
-                )
+            .map(|(n, kind)| match kind {
+                tuse_config::FunctionKind::Custom => vec![span(format!("  {n}"), fg)],
+                tuse_config::FunctionKind::Override => {
+                    vec![span(format!("  {n}"), fg), span("  [override]", info)]
+                }
+                tuse_config::FunctionKind::Disabled => {
+                    vec![span(format!("  {n}"), fg), span("  [disabled]", dim)]
+                }
             })
             .collect(),
     );
@@ -185,7 +186,7 @@ fn first_line(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuse_config::{Connect, Function, Hook};
+    use tuse_config::{Connect, FunctionKind, Hook};
 
     #[test]
     fn renders_all_sections_without_secrets() {
@@ -208,14 +209,10 @@ mod tests {
             api_key: "sk-secret".into(),
         });
         cfg.prompts.insert("rev".into(), "Review code".into());
-        cfg.functions.insert(
-            "helper".into(),
-            Function {
-                args: "x".into(),
-                description: "Help".into(),
-                show_agent: true,
-            },
-        );
+        cfg.functions.insert("helper".into(), FunctionKind::Custom);
+        cfg.functions.insert("sh".into(), FunctionKind::Override);
+        cfg.functions
+            .insert("delete".into(), FunctionKind::Disabled);
         cfg.hooks.insert(
             "h".into(),
             Hook {
@@ -238,7 +235,13 @@ mod tests {
         {
             assert!(text.contains(s), "missing {s}");
         }
-        assert!(text.contains("/hello") && text.contains("#rev") && text.contains("helper(x)"));
+        assert!(
+            text.contains("/hello")
+                && text.contains("#rev")
+                && text.contains("helper")
+                && text.contains("sh  [override]")
+                && text.contains("delete  [disabled]")
+        );
         assert!(text.contains(".md"));
         assert!(text.contains("Config file") && text.contains("/home/me/.config/tuse/init.lua"));
         assert!(text.contains("me/kit") && text.contains("@v1 abc1234"));

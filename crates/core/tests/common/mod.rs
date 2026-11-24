@@ -83,15 +83,15 @@ pub fn setup(name: &str, addr: &str, extra: &str) -> (PathBuf, PathBuf) {
     unsafe {
         std::env::set_var("HOME", &home);
     }
-    tuse_core::add_provider(&tuse_config::Connect {
+    tuse_core::Providers::add(&tuse_config::Connect {
         name: "p".into(),
         base_url: format!("http://{addr}"),
         api_key: "k".into(),
         ..Default::default()
     })
     .unwrap();
-    tuse_core::set_state("model", "p/m").unwrap();
-    tuse_core::set_state("effort", "default").unwrap();
+    tuse_core::Prefs::set("model", "p/m").unwrap();
+    tuse_core::Prefs::set("effort", "default").unwrap();
     let cfg = dir.join("tuse.lua");
     std::fs::write(&cfg, format!("return {{\n{extra}\n}}\n")).unwrap();
     (dir, cfg)

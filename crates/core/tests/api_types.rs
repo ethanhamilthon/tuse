@@ -69,7 +69,7 @@ fn replay_resume_provider_isolation_truncation_and_migration() {
         "CREATE TABLE providers (name TEXT PRIMARY KEY, base_url TEXT NOT NULL, api_key TEXT NOT NULL);
          INSERT INTO providers VALUES ('legacy', 'http://127.0.0.1:1', 'k');",
     ).unwrap();
-    assert_eq!(tuse_core::providers().unwrap()[0].api, "openai-chat");
+    assert_eq!(tuse_core::Providers::list().unwrap()[0].api, "openai-chat");
 
     let (au, ab) = mock(vec![
         j(
@@ -93,7 +93,7 @@ fn replay_resume_provider_isolation_truncation_and_migration() {
         ("resp", &ru, "openai-responses"),
         ("gem", &ru, "google-gemini"),
     ] {
-        tuse_core::add_provider(&tuse_config::Connect {
+        tuse_core::Providers::add(&tuse_config::Connect {
             name: n.into(),
             base_url: u.clone(),
             api_key: "k".into(),
@@ -101,8 +101,8 @@ fn replay_resume_provider_isolation_truncation_and_migration() {
         })
         .unwrap();
     }
-    tuse_core::set_state("model", "anth/claude-sonnet-4").unwrap();
-    tuse_core::set_state("effort", "high").unwrap();
+    tuse_core::Prefs::set("model", "anth/claude-sonnet-4").unwrap();
+    tuse_core::Prefs::set("effort", "high").unwrap();
     let cfg = dir.join("tuse.lua");
     std::fs::write(&cfg, "return { settings = { retries = 1 } }\n").unwrap();
 

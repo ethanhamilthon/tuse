@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{File, TryLockError};
 use std::path::{Path, PathBuf};
 
-pub fn session_path(id: &str) -> PathBuf {
+fn session_path(id: &str) -> PathBuf {
     tuse_config::tuse_home().join(id)
 }
 
@@ -125,7 +125,7 @@ fn put_meta(m: &Meta) -> Result<(), String> {
     })
 }
 
-pub fn read_records(id: &str) -> Vec<Record> {
+fn read_records(id: &str) -> Vec<Record> {
     db::with(|c| {
         let mut q = c.prepare("SELECT body FROM records WHERE session = ?1 ORDER BY seq")?;
         let rows = q.query_map([id], |r| r.get::<_, String>(0))?;
@@ -135,18 +135,6 @@ pub fn read_records(id: &str) -> Vec<Record> {
             .collect())
     })
     .unwrap_or_default()
-}
-
-pub fn read_meta(id: &str) -> Option<Meta> {
-    let body: Option<String> = db::with(|c| {
-        c.query_row("SELECT meta FROM sessions WHERE id = ?1", [id], |r| {
-            r.get(0)
-        })
-        .optional()
-    })
-    .ok()
-    .flatten();
-    serde_json::from_str(&body?).ok()
 }
 
 fn metas(sql: &str, arg: &str) -> Vec<Meta> {
@@ -161,21 +149,27 @@ fn metas(sql: &str, arg: &str) -> Vec<Meta> {
     .unwrap_or_default()
 }
 
-pub fn list_sessions(cwd: &Path) -> Vec<Meta> {
-    let cwd = cwd.display().to_string();
-    metas(
-        "SELECT meta FROM sessions WHERE cwd = ?1 ORDER BY updated DESC",
-        &cwd,
-    )
-    .into_iter()
-    .filter(|m: &Meta| !m.title.is_empty())
-    .collect()
-}
-
-pub(crate) fn apply_providers(config: &mut tuse_config::Config) -> Result<(), String> {
-    config.connect = db::providers()?;
-    for c in &mut config.connect {
-        c.api_key = tuse_config::env_value(&c.api_key);
+impl Meta {
+    pub(crate) fn read(id: &str) -> Option<Meta> {
+        let body: Option<String> = db::with(|c| {
+            c.query_row("SELECT meta FROM sessions WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .optional()
+        })
+        .ok()
+        .flatten();
+        serde_json::from_str(&body?).ok()
     }
-    Ok(())
+
+    pub fn list(cwd: &Path) -> Vec<Meta> {
+        let cwd = cwd.display().to_string();
+        metas(
+            "SELECT meta FROM sessions WHERE cwd = ?1 ORDER BY updated DESC",
+            &cwd,
+        )
+        .into_iter()
+        .filter(|m: &Meta| !m.title.is_empty())
+        .collect()
+    }
 }

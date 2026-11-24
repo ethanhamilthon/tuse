@@ -183,7 +183,7 @@ impl Session {
     pub(crate) fn save_meta(&self, st: &mut State) {
         st.meta.model = st.model.clone();
         st.meta.effort = st.effort.clone();
-        st.meta.updated = crate::convo::id::now();
+        st.meta.updated = crate::id::now();
         if let Some(d) = self.dir.lock().unwrap().as_mut() {
             d.write_meta(&st.meta);
         }

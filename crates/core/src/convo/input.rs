@@ -30,7 +30,7 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
     }
     let mut next_id = refs.images.iter().map(|(n, _)| *n).max().unwrap_or(0) + 1;
     let image = |input: &mut UserInput, id: usize, path: &Path, bytes: &[u8]| {
-        let mime = image_mime(path).unwrap_or("image/png");
+        let mime = crate::text::image_mime(path).unwrap_or("image/png");
         let data = base64::engine::general_purpose::STANDARD.encode(bytes);
         input.images.push(format!("data:{mime};base64,{data}"));
         format!(
@@ -52,7 +52,7 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
         }
         done.push(path);
         let shown = esc(&path.display().to_string());
-        if image_mime(path).is_some() {
+        if crate::text::image_mime(path).is_some() {
             match std::fs::read(refs.cwd.join(path)) {
                 Ok(bytes) => {
                     blocks.push(image(&mut input, next_id, path, &bytes));
@@ -138,17 +138,6 @@ fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('"', "&quot;")
         .replace('<', "&lt;")
-}
-
-pub(crate) fn image_mime(p: &Path) -> Option<&'static str> {
-    let ext = p.extension()?.to_str()?.to_ascii_lowercase();
-    Some(match ext.as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        _ => return None,
-    })
 }
 
 #[cfg(test)]

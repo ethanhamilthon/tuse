@@ -50,7 +50,7 @@ fn prepare_inner(lua: &Lua, path: Option<&Path>, sync_plugins: bool) -> Result<C
     config.path = path.map(|p| p.display().to_string()).unwrap_or_default();
     lua.set_named_registry_value("tuse.next", table)
         .map_err(|e| e.to_string())?;
-    crate::storage::store::apply_providers(&mut config)?;
+    crate::storage::Providers::apply(&mut config)?;
     Ok(config)
 }
 

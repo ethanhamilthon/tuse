@@ -308,7 +308,7 @@ mod tests {
                 );
             }
         });
-        tuse_core::add_provider(&tuse_config::Connect {
+        tuse_core::Providers::add(&tuse_config::Connect {
             name: "difftest".into(),
             base_url: format!("http://{addr}"),
             api_key: "test".into(),

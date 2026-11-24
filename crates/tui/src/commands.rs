@@ -85,7 +85,7 @@ impl App {
     }
 
     fn open_resume(&mut self) {
-        let items: Vec<_> = tuse_core::list_sessions(&self.cwd)
+        let items: Vec<_> = tuse_core::Meta::list(&self.cwd)
             .into_iter()
             .filter(|m| m.id != self.session.id)
             .map(|m| item(m.title, m.updated.replace('T', " ").replace('Z', ""), m.id))
@@ -196,7 +196,7 @@ impl App {
             }
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.task(&v) {
-                    let out = tuse_core::tail(&t.log, 200);
+                    let out = tuse_core::Tasks::tail(&t.log, 200);
                     self.trace_back = None;
                     self.trace_items.clear();
                     self.panel = Some(Panel::new(out));

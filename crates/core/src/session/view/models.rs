@@ -124,6 +124,6 @@ impl Session {
     }
 
     pub fn save_choice(&self, key: &str, value: &str) -> Result<(), String> {
-        crate::storage::db::set_state(key, value)
+        crate::storage::Prefs::set(key, value)
     }
 }

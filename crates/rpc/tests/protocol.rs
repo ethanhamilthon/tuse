@@ -82,14 +82,14 @@ fn handshake_setters_and_model_refresh() {
     assert_eq!(r["result"], json!(null), "{r}");
     let r = call(&tx, &out, 7, "model.get", json!({}));
     assert_eq!(r["result"], json!({"model": "p/m", "effort": "high"}));
-    assert_eq!(tuse_core::default_effort(), "high");
+    assert_eq!(tuse_core::Prefs::effort(), "high");
 
     let p = json!({"model": "p/cfg", "effort": "low", "persist": false});
     assert_eq!(call(&tx, &out, 8, "model.set", p)["result"], json!(null));
     let r = call(&tx, &out, 9, "model.get", json!({}));
     assert_eq!(r["result"], json!({"model": "p/cfg", "effort": "low"}));
     assert_eq!(
-        tuse_core::default_model(),
+        tuse_core::Prefs::model(),
         "p/m",
         "persist: false keeps the default"
     );

@@ -24,16 +24,6 @@ pub struct Stats {
     pub calls: usize,
 }
 
-pub fn tokens(n: u64) -> String {
-    let (v, unit) = match n {
-        n if n >= 1_000_000 => (n as f64 / 1e6, "m"),
-        n if n >= 1000 => (n as f64 / 1e3, "k"),
-        n => return n.to_string(),
-    };
-    let s = format!("{v:.1}");
-    format!("{}{unit}", s.strip_suffix(".0").unwrap_or(&s))
-}
-
 fn find_model<'a>(models: &'a [ModelDef], full: &str) -> Option<&'a ModelDef> {
     models.iter().rev().find(|m| m.name == full)
 }

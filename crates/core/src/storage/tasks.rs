@@ -30,6 +30,19 @@ pub struct Tasks {
 }
 
 impl Tasks {
+    pub fn tail(log: &str, lines: usize) -> String {
+        let Ok(mut f) = File::open(log) else {
+            return String::new();
+        };
+        let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+        let _ = f.seek(SeekFrom::Start(len.saturating_sub(256 * 1024)));
+        let mut buf = Vec::new();
+        let _ = f.read_to_end(&mut buf);
+        let text = String::from_utf8_lossy(&buf);
+        let all: Vec<&str> = text.lines().collect();
+        all[all.len().saturating_sub(lines)..].join("\n")
+    }
+
     pub fn new(dir: PathBuf) -> Self {
         Self {
             dir,
@@ -52,7 +65,7 @@ impl Tasks {
                 name.to_string()
             },
             status: "running".into(),
-            started: crate::convo::id::now(),
+            started: crate::id::now(),
             ended: String::new(),
             log: log.display().to_string(),
         });
@@ -68,7 +81,7 @@ impl Tasks {
         self.cancels.lock().unwrap().remove(id);
         let mut l = self.list.lock().unwrap();
         let t = l.iter_mut().find(|t| t.id == id)?;
-        t.ended = crate::convo::id::now();
+        t.ended = crate::id::now();
         if t.status == "stopped" {
             return None;
         }
@@ -111,17 +124,4 @@ impl Tasks {
             }
         }
     }
-}
-
-pub fn tail(log: &str, lines: usize) -> String {
-    let Ok(mut f) = File::open(log) else {
-        return String::new();
-    };
-    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
-    let _ = f.seek(SeekFrom::Start(len.saturating_sub(256 * 1024)));
-    let mut buf = Vec::new();
-    let _ = f.read_to_end(&mut buf);
-    let text = String::from_utf8_lossy(&buf);
-    let all: Vec<&str> = text.lines().collect();
-    all[all.len().saturating_sub(lines)..].join("\n")
 }

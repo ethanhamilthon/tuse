@@ -1,8 +1,8 @@
 use crate::convo::compaction;
 use crate::convo::history::{estimate_tokens, messages};
-use crate::convo::id;
 use crate::convo::record::Record;
 use crate::event::Event;
+use crate::id;
 use crate::prompt;
 use crate::session::Session;
 use std::sync::Arc;
@@ -226,8 +226,8 @@ impl Session {
         st.context = estimate_tokens(&system, &messages(&st.records, b));
         let text = format!(
             "Context compacted at {} tokens; now about {}.",
-            crate::convo::usage::tokens(threshold),
-            crate::convo::usage::tokens(st.context)
+            crate::text::tokens(threshold),
+            crate::text::tokens(st.context)
         );
         self.push(&mut st, Record::Notice { text: text.clone() });
         drop(st);

@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS state (
 );
 ";
 
-pub fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, String> {
+pub(super) fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, String> {
     let home = tuse_config::tuse_home();
     let mut all = DB.get_or_init(Mutex::default).lock().unwrap();
     if !all.iter().any(|(h, _)| *h == home) {
@@ -44,38 +44,6 @@ pub fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, 
     }
     let c = &all.iter().find(|(h, _)| *h == home).unwrap().1;
     f(c).map_err(|e| e.to_string())
-}
-
-pub fn get_state(key: &str) -> Option<String> {
-    with(|c| {
-        c.query_row("SELECT value FROM state WHERE key = ?1", [key], |r| {
-            r.get(0)
-        })
-        .optional()
-    })
-    .ok()
-    .flatten()
-}
-
-pub fn set_state(key: &str, value: &str) -> Result<(), String> {
-    with(|c| {
-        c.execute(
-            "INSERT INTO state(key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2",
-            params![key, value],
-        )
-        .map(|_| ())
-    })
-}
-
-pub fn default_model() -> String {
-    get_state("model").unwrap_or_default()
-}
-
-pub fn default_effort() -> String {
-    match get_state("effort") {
-        Some(e) if tuse_config::EFFORTS.contains(&e.as_str()) => e,
-        _ => "default".into(),
-    }
 }
 
 fn migrate(c: &Connection) -> rusqlite::Result<()> {
@@ -102,56 +70,104 @@ fn migrate(c: &Connection) -> rusqlite::Result<()> {
     }
 }
 
-pub fn providers() -> Result<Vec<tuse_config::Connect>, String> {
-    with(|c| {
-        let mut q =
-            c.prepare("SELECT name, base_url, api_key, api FROM providers ORDER BY rowid")?;
-        let rows = q.query_map([], |r| {
-            let mut conn = tuse_config::Connect {
-                name: r.get(0)?,
-                base_url: r.get(1)?,
-                api_key: r.get(2)?,
-                api: r.get(3)?,
-            };
-            conn.api = conn.api_type().to_string();
-            Ok(conn)
-        })?;
-        rows.collect()
-    })
-}
+pub struct Prefs;
 
-pub fn add_provider(p: &tuse_config::Connect) -> Result<(), String> {
-    let api = p.api_type();
-    with(|c| {
-        c.execute(
-            "INSERT INTO providers(name, base_url, api_key, api) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3, api = ?4",
-            params![p.name, p.base_url, p.api_key, api],
-        )
-        .map(|_| ())
-    })
-}
-
-pub fn remove_provider(name: &str) -> Result<bool, String> {
-    with(|c| {
-        c.execute("DELETE FROM providers WHERE name = ?1", [name])
-            .map(|n| n > 0)
-    })
-}
-
-pub fn providers_json() -> Result<String, String> {
-    let rows: Vec<_> = providers()?
-        .into_iter()
-        .map(|p| {
-            let api = p.api_type().to_string();
-            serde_json::json!({
-                "name": p.name,
-                "base_url": p.base_url,
-                "api": api,
-            })
+impl Prefs {
+    pub fn set(key: &str, value: &str) -> Result<(), String> {
+        with(|c| {
+            c.execute(
+                "INSERT INTO state(key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2",
+                params![key, value],
+            )
+            .map(|_| ())
         })
-        .collect();
-    serde_json::to_string_pretty(&rows).map_err(|e| e.to_string())
+    }
+
+    pub fn model() -> String {
+        get_state("model").unwrap_or_default()
+    }
+
+    pub fn effort() -> String {
+        match get_state("effort") {
+            Some(e) if tuse_config::EFFORTS.contains(&e.as_str()) => e,
+            _ => "default".into(),
+        }
+    }
+}
+
+fn get_state(key: &str) -> Option<String> {
+    with(|c| {
+        c.query_row("SELECT value FROM state WHERE key = ?1", [key], |r| {
+            r.get(0)
+        })
+        .optional()
+    })
+    .ok()
+    .flatten()
+}
+
+pub struct Providers;
+
+impl Providers {
+    pub fn list() -> Result<Vec<tuse_config::Connect>, String> {
+        with(|c| {
+            let mut q =
+                c.prepare("SELECT name, base_url, api_key, api FROM providers ORDER BY rowid")?;
+            let rows = q.query_map([], |r| {
+                let mut conn = tuse_config::Connect {
+                    name: r.get(0)?,
+                    base_url: r.get(1)?,
+                    api_key: r.get(2)?,
+                    api: r.get(3)?,
+                };
+                conn.api = conn.api_type().to_string();
+                Ok(conn)
+            })?;
+            rows.collect()
+        })
+    }
+
+    pub fn add(p: &tuse_config::Connect) -> Result<(), String> {
+        let api = p.api_type();
+        with(|c| {
+            c.execute(
+                "INSERT INTO providers(name, base_url, api_key, api) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3, api = ?4",
+                params![p.name, p.base_url, p.api_key, api],
+            )
+            .map(|_| ())
+        })
+    }
+
+    pub fn remove(name: &str) -> Result<bool, String> {
+        with(|c| {
+            c.execute("DELETE FROM providers WHERE name = ?1", [name])
+                .map(|n| n > 0)
+        })
+    }
+
+    pub fn json() -> Result<String, String> {
+        let rows: Vec<_> = Providers::list()?
+            .into_iter()
+            .map(|p| {
+                let api = p.api_type().to_string();
+                serde_json::json!({
+                    "name": p.name,
+                    "base_url": p.base_url,
+                    "api": api,
+                })
+            })
+            .collect();
+        serde_json::to_string_pretty(&rows).map_err(|e| e.to_string())
+    }
+
+    pub(crate) fn apply(config: &mut tuse_config::Config) -> Result<(), String> {
+        config.connect = Self::list()?;
+        for c in &mut config.connect {
+            c.api_key = tuse_config::env_value(&c.api_key);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

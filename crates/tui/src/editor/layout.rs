@@ -9,12 +9,12 @@ pub struct Row {
 }
 
 impl Editor {
-    pub fn layout(&self, cols: usize) -> (Vec<String>, (usize, usize)) {
+    pub(super) fn layout(&self, cols: usize) -> (Vec<String>, (usize, usize)) {
         let (rows, cur) = self.placed(cols);
         (rows.into_iter().map(|r| r.text).collect(), cur)
     }
 
-    pub fn selected_columns(&self, cols: usize) -> Vec<(usize, usize)> {
+    pub(super) fn selected_columns(&self, cols: usize) -> Vec<(usize, usize)> {
         let Some((a, b)) = self.selection_range() else {
             return vec![];
         };
@@ -33,7 +33,7 @@ impl Editor {
             .collect()
     }
 
-    pub fn atom_columns(&self, cols: usize) -> Vec<Vec<(usize, usize)>> {
+    pub(super) fn atom_columns(&self, cols: usize) -> Vec<Vec<(usize, usize)>> {
         self.placed(cols)
             .0
             .iter()
@@ -52,7 +52,7 @@ impl Editor {
             .collect()
     }
 
-    pub fn vertical(&mut self, up: bool, cols: usize) -> bool {
+    pub(super) fn vertical(&mut self, up: bool, cols: usize) -> bool {
         let cols = cols.max(1);
         let (rows, (r, col)) = self.placed(cols);
         let to = if up {
@@ -69,7 +69,7 @@ impl Editor {
         true
     }
 
-    pub fn click(&mut self, row: usize, col: usize, cols: usize) {
+    pub(super) fn click(&mut self, row: usize, col: usize, cols: usize) {
         let cols = cols.max(1);
         let (rows, _) = self.placed(cols);
         if let Some(r) = rows.get(row).or(rows.last()) {

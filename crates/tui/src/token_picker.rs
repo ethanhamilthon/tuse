@@ -8,9 +8,7 @@ impl App {
     }
 
     pub(crate) fn replace_token(&mut self, with: &str) {
-        let (start, _) = self.editor.token();
-        let end = self.editor.cursor;
-        self.editor.replace(start, end, with);
+        self.editor.replace_token(with);
     }
 
     pub fn update_token_picker(&mut self) {

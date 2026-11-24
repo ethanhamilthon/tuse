@@ -14,7 +14,7 @@ impl App {
         if self.answering() {
             return;
         }
-        if before.is_some_and(|buf| buf != self.editor.buf)
+        if before.is_some_and(|buf| self.editor.differs_from(&buf))
             && let Some(id) = self.steering.take()
         {
             self.session.withdraw_input(id);
@@ -30,7 +30,7 @@ impl App {
         if s.is_empty() {
             return self.paste_clipboard();
         }
-        let before = self.steering.map(|_| self.editor.buf.clone());
+        let before = self.steering.map(|_| self.editor.snapshot());
         if self.searching() {
             self.editor.insert(&s.replace('\n', " "));
         } else {
@@ -47,7 +47,7 @@ impl App {
         match crate::clipboard::read(&dir) {
             Ok(Pasted::Image(_)) if self.searching() || self.answering() => {}
             Ok(Pasted::Image(path)) => {
-                let before = self.steering.map(|_| self.editor.buf.clone());
+                let before = self.steering.map(|_| self.editor.snapshot());
                 self.editor.insert_image(path);
                 self.editor.insert(" ");
                 self.finish_edit(before);
@@ -93,13 +93,14 @@ impl App {
     }
 
     pub(crate) fn refs(&self) -> Refs {
+        let refs = self.editor.refs();
         Refs {
             prompts: self
                 .session
-                .resolve_prompts(&self.editor.prompts(), false)
+                .resolve_prompts(&refs.prompts, false)
                 .unwrap_or_default(),
-            images: self.editor.images(),
-            files: self.editor.files(),
+            images: refs.images,
+            files: refs.files,
             strict: false,
             cwd: self.cwd.clone(),
         }

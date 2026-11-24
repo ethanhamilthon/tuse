@@ -40,7 +40,9 @@ impl Renderer {
         let left = crate::text::width(crate::style::INPUT_PREFIX);
         let text_w = inner.saturating_sub(left).max(1);
         app.input_cols = text_w;
-        let (rows, (crow, ccol)) = app.editor.layout(text_w);
+        let view = app.editor.view(text_w);
+        let (crow, ccol) = view.cursor;
+        let rows = view.rows.clone();
         let head = usize::from(h > 1);
         let foot = usize::from(h > 2);
         let editor_room = h.saturating_sub(head + foot).max(1);
@@ -93,7 +95,7 @@ impl Renderer {
         rows.resize_with(rows.len().max(input_h), String::new);
         let shown = &rows[input_top..input_top + input_h];
         screen.extend(
-            input_view::block(app, inner, shown, input_top)
+            input_view::block(app, &view, inner, shown, input_top)
                 .into_iter()
                 .skip(1 - head)
                 .take(head + input_h + foot),

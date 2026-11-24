@@ -221,7 +221,7 @@ mod tests {
 
         app.paste("ab");
         k(&mut app, KeyCode::Left);
-        assert_eq!(app.editor.cursor, 1);
+        assert_eq!(app.editor.cursor(), 1);
         press(&mut app, KeyCode::Right, KeyModifiers::SHIFT);
         assert_eq!(app.editor.selected_text().as_deref(), Some("b"));
         app.editor.clear();

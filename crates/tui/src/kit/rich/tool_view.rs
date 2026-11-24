@@ -286,12 +286,17 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         std::thread::spawn(move || {
-            for (step, mut s) in listener.incoming().flatten().take(2).enumerate() {
+            let mut step = 0;
+            for mut s in listener.incoming().flatten() {
                 let mut r = BufReader::new(s.try_clone().unwrap());
                 let mut len = 0;
+                let mut first = String::new();
                 loop {
                     let mut line = String::new();
                     r.read_line(&mut line).unwrap();
+                    if first.is_empty() {
+                        first = line.clone();
+                    }
                     if line.trim().is_empty() {
                         break;
                     }
@@ -299,8 +304,16 @@ mod tests {
                         len = v.trim().parse().unwrap();
                     }
                 }
+                if first.starts_with("GET") {
+                    let _ = write!(
+                        s,
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{{\"data\":[]}}"
+                    );
+                    continue;
+                }
                 r.read_exact(&mut vec![0; len]).unwrap();
-                let body = if step == 0 {
+                step += 1;
+                let body = if step == 1 {
                     r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"lua","arguments":"{\"code\":\"local t={} for i=0,19 do t[#t+1]='row'..i end write('long.rs', table.concat(t, string.char(10)))\"}"}}]}}]}"#
                 } else {
                     r#"{"choices":[{"delta":{"content":"done"}}]}"#

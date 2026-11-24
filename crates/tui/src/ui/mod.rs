@@ -1,13 +1,17 @@
 pub(crate) mod app;
 pub(crate) mod chat;
 pub(crate) mod commands;
+pub(crate) mod compose;
 pub(crate) mod config_view;
 pub(crate) mod events;
+pub(crate) mod input_view;
 pub(crate) mod keys;
+pub(crate) mod list;
 pub(crate) mod modal;
 pub(crate) mod mouse;
 pub(crate) mod panel;
 pub(crate) mod picker;
 pub(crate) mod send;
 pub(crate) mod session_view;
+pub(crate) mod status;
 pub(crate) mod token_picker;

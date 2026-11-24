@@ -72,7 +72,7 @@ fn spawn_rpc(
 }
 
 fn providers(list: &[(&str, String)]) {
-    for p in tuse_core::providers() {
+    for p in tuse_core::providers().unwrap() {
         tuse_core::remove_provider(&p.name).unwrap();
     }
     for (name, url) in list {

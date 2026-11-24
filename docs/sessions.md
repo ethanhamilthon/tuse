@@ -33,7 +33,7 @@ Every persisted entry in a session's `records` log is a JSON object tagged by `"
 | `"t"` | Fields | Purpose |
 | --- | --- | --- |
 | `user` | `text`, optional `context`, optional `images` (data URLs), `at` | User message and hidden context/images. |
-| `assistant` | `text`, optional `reasoning`, optional `tool_calls`, optional `replay` (`{api, model, items}`), `at` | Model response step and optional provider-scoped reasoning replay items. |
+| `assistant` | `text`, optional `reasoning`, optional `tool_calls`, optional `replay` (`{provider, api, model, items}`), `at` | Model response step and optional provider-scoped reasoning replay items. |
 | `tool` | `id`, `tool`, `input`, `output`, `code`, optional `images`, optional `diffs` (`{path, diff}`), `at` | Tool execution result. |
 | `notification` | `text` | Task notification fed to the model as a user message; hidden from TUI chat. |
 | `notice` | `text` | Informational message shown in chat (for example compaction notices). |

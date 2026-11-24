@@ -1,18 +1,25 @@
 use crate::args::ArgStream;
 use crate::client::{
-    Client, finalize_calls, map_err, parse_data_url, parse_json, parse_json_object, read_body,
-    read_sse, url_encode,
+    Client, check_status, finalize_calls, map_err, parse_data_url, parse_json, parse_json_object,
+    read_body, read_sse, url_encode,
 };
 use crate::types::{ApiType, Delta, Error, Message, Replay, Reply, Request, ToolCall, Usage};
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 
 const MAX_MODEL_PAGES: usize = 10;
+const SKIP_THOUGHT_SIG: &str = "skip_thought_signature_validator";
 
 pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
+    let active_start = req
+        .messages
+        .iter()
+        .rposition(|m| matches!(m, Message::User { .. }))
+        .map_or(0, |i| i + 1);
     let mut contents: Vec<Value> = vec![];
-    for m in &req.messages {
+    let mut wire_ids: HashMap<&str, bool> = HashMap::new();
+    for (idx, m) in req.messages.iter().enumerate() {
         let (role, parts) = match m {
             Message::User { text, images } => {
                 let mut parts = vec![];
@@ -30,24 +37,54 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
                 tool_calls,
                 replay,
             } => {
+                wire_ids.clear();
                 let mut parts = vec![];
                 if let Some(r) = replay
                     .as_ref()
-                    .filter(|r| r.matches(ApiType::GoogleGemini, &req.model))
+                    .filter(|r| r.matches(&req.provider, ApiType::GoogleGemini, &req.model))
                 {
-                    parts.extend(r.items.iter().cloned());
+                    let mut items = r.items.clone();
+                    let has_sig = items.iter().any(|p| p.get("thoughtSignature").is_some());
+                    let mut fc_i = 0usize;
+                    for p in &mut items {
+                        if let Some(fc) = p.get("functionCall") {
+                            let has_id = fc
+                                .get("id")
+                                .and_then(Value::as_str)
+                                .is_some_and(|s| !s.is_empty());
+                            if let Some(tc) = tool_calls.get(fc_i) {
+                                wire_ids.insert(tc.id.as_str(), has_id);
+                            }
+                            if idx >= active_start
+                                && !has_sig
+                                && fc_i == 0
+                                && !req.model.starts_with("gemini-2.5-")
+                                && let Some(obj) = p.as_object_mut()
+                            {
+                                obj.insert("thoughtSignature".into(), json!(SKIP_THOUGHT_SIG));
+                            }
+                            fc_i += 1;
+                        }
+                    }
+                    parts.extend(items);
                 } else {
                     if !text.is_empty() {
                         parts.push(json!({"text": text}));
                     }
                     for c in tool_calls {
-                        parts.push(json!({
-                            "functionCall": {
-                                "id": c.id,
-                                "name": c.name,
-                                "args": parse_json_object(&c.arguments),
-                            }
-                        }));
+                        let mut fc = json!({
+                            "name": c.name,
+                            "args": parse_json_object(&c.arguments),
+                        });
+                        if !c.id.is_empty() {
+                            fc["id"] = json!(c.id);
+                            wire_ids.insert(c.id.as_str(), true);
+                        }
+                        let mut part = json!({"functionCall": fc});
+                        if idx >= active_start {
+                            part["thoughtSignature"] = json!(SKIP_THOUGHT_SIG);
+                        }
+                        parts.push(part);
                     }
                 }
                 ("model", parts)
@@ -58,13 +95,15 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
                 output,
                 images,
             } => {
-                let mut parts = vec![json!({
-                    "functionResponse": {
-                        "id": id,
-                        "name": name,
-                        "response": {"output": output},
-                    }
-                })];
+                let mut fr = json!({
+                    "name": name,
+                    "response": {"output": output},
+                });
+                let send_id = wire_ids.get(id.as_str()).copied().unwrap_or(!id.is_empty());
+                if send_id && !id.is_empty() {
+                    fr["id"] = json!(id);
+                }
+                let mut parts = vec![json!({"functionResponse": fr})];
                 if let Some(im) = images {
                     for url in &im.urls {
                         let (mime, data) =
@@ -133,15 +172,17 @@ pub(crate) fn complete(
         "{}/models/{}:streamGenerateContent?alt=sse",
         client.base_url, req.model
     );
-    let resp = client
-        .agent
-        .post(&url)
-        .set("x-goog-api-key", &client.api_key)
-        .set("Content-Type", "application/json")
-        .send_string(&body.to_string())
-        .map_err(map_err)?;
+    let resp = check_status(
+        client
+            .agent
+            .post(&url)
+            .set("x-goog-api-key", &client.api_key)
+            .set("Content-Type", "application/json")
+            .send_string(&body.to_string())
+            .map_err(map_err)?,
+    )?;
     let streaming = resp.content_type().contains("event-stream");
-    let mut acc = Accumulator::new(&req.model);
+    let mut acc = Accumulator::new(&req.provider, &req.model);
     if !streaming {
         let v = parse_json(&read_body(resp)?)?;
         match v {
@@ -160,6 +201,9 @@ pub(crate) fn complete(
         acc.chunk(&v, on_delta)?;
         Ok(true)
     })?;
+    if acc.reply.finish.is_empty() {
+        return Err(Error::Transport("stream ended before finishReason".into()));
+    }
     Ok(acc.finish())
 }
 
@@ -176,12 +220,14 @@ pub(crate) fn models(client: &Client) -> Result<Vec<String>, Error> {
             ),
             None => format!("{}/models?pageSize=100", client.base_url),
         };
-        let resp = client
-            .agent
-            .get(&url)
-            .set("x-goog-api-key", &client.api_key)
-            .call()
-            .map_err(map_err)?;
+        let resp = check_status(
+            client
+                .agent
+                .get(&url)
+                .set("x-goog-api-key", &client.api_key)
+                .call()
+                .map_err(map_err)?,
+        )?;
         let v = parse_json(&read_body(resp)?)?;
         for m in v["models"].as_array().into_iter().flatten() {
             if let Some(methods) = m
@@ -210,14 +256,16 @@ pub(crate) fn models(client: &Client) -> Result<Vec<String>, Error> {
 }
 
 struct Accumulator {
+    provider: String,
     model: String,
     reply: Reply,
     replay: Vec<Value>,
 }
 
 impl Accumulator {
-    fn new(model: &str) -> Self {
+    fn new(provider: &str, model: &str) -> Self {
         Self {
+            provider: provider.to_string(),
             model: model.to_string(),
             reply: Reply::default(),
             replay: vec![],
@@ -294,6 +342,7 @@ impl Accumulator {
         finalize_calls(&mut self.reply.tool_calls);
         if !self.replay.is_empty() {
             self.reply.replay = Some(Replay {
+                provider: self.provider,
                 api: ApiType::GoogleGemini.as_str().to_string(),
                 model: self.model,
                 items: self.replay,
@@ -333,5 +382,167 @@ fn usage(u: &Value) -> Usage {
         output: n("candidatesTokenCount") + n("thoughtsTokenCount"),
         cached: n("cachedContentTokenCount"),
         cache_write: 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mid_loop_switch_to_gemini_3_adds_migration_signature() {
+        let req = Request {
+            provider: "gem".into(),
+            model: "gemini-3-pro".into(),
+            system: String::new(),
+            messages: vec![
+                Message::User {
+                    text: "old".into(),
+                    images: vec![],
+                },
+                Message::Assistant {
+                    text: String::new(),
+                    tool_calls: vec![ToolCall {
+                        id: "old_tc".into(),
+                        name: "lua".into(),
+                        arguments: r#"{"code":"return 0"}"#.into(),
+                    }],
+                    replay: None,
+                },
+                Message::ToolResult {
+                    id: "old_tc".into(),
+                    name: "lua".into(),
+                    output: "0".into(),
+                    images: None,
+                },
+                Message::Assistant {
+                    text: "done".into(),
+                    tool_calls: vec![],
+                    replay: None,
+                },
+                Message::User {
+                    text: "now".into(),
+                    images: vec![],
+                },
+                Message::Assistant {
+                    text: String::new(),
+                    tool_calls: vec![ToolCall {
+                        id: "tc_foreign".into(),
+                        name: "lua".into(),
+                        arguments: r#"{"code":"return 1"}"#.into(),
+                    }],
+                    replay: Some(Replay {
+                        provider: "anth".into(),
+                        api: "anthropic-messages".into(),
+                        model: "claude".into(),
+                        items: vec![json!({"type": "thinking", "thinking": "x", "signature": "S"})],
+                    }),
+                },
+                Message::ToolResult {
+                    id: "tc_foreign".into(),
+                    name: "lua".into(),
+                    output: "1".into(),
+                    images: None,
+                },
+            ],
+            tools: vec![],
+            effort: Some("high".into()),
+        };
+        let body = encode(&req).unwrap();
+        let contents = body["contents"].as_array().unwrap();
+        assert!(contents[1]["parts"][0].get("thoughtSignature").is_none());
+        let active_call = &contents[5]["parts"][0];
+        assert_eq!(active_call["thoughtSignature"], SKIP_THOUGHT_SIG);
+        assert_eq!(active_call["functionCall"]["id"], "tc_foreign");
+        assert_eq!(
+            contents[6]["parts"][0]["functionResponse"]["id"],
+            "tc_foreign"
+        );
+    }
+
+    #[test]
+    fn idless_sequential_and_parallel_calls_keep_synthetic_ids_local() {
+        let mut a1 = Accumulator::new("gem", "gemini-2.5-pro");
+        a1.chunk(
+            &json!({"candidates":[{"content":{"parts":[
+                {"functionCall":{"name":"lua","args":{"code":"a()"}},"thoughtSignature":"S1"},
+                {"functionCall":{"name":"lua","args":{"code":"b()"}}}
+            ]},"finishReason":"STOP"}]}),
+            &mut |_| {},
+        )
+        .unwrap();
+        let r1 = a1.finish();
+        assert_eq!(
+            (r1.tool_calls[0].id.as_str(), r1.tool_calls[1].id.as_str()),
+            ("call_0", "call_1")
+        );
+
+        let mut a2 = Accumulator::new("gem", "gemini-2.5-pro");
+        a2.chunk(
+            &json!({"candidates":[{"content":{"parts":[
+                {"functionCall":{"name":"lua","args":{"code":"c()"}},"thoughtSignature":"S2"}
+            ]},"finishReason":"STOP"}]}),
+            &mut |_| {},
+        )
+        .unwrap();
+        let r2 = a2.finish();
+
+        let body = encode(&Request {
+            provider: "gem".into(),
+            model: "gemini-2.5-pro".into(),
+            system: String::new(),
+            messages: vec![
+                Message::User {
+                    text: "go".into(),
+                    images: vec![],
+                },
+                Message::Assistant {
+                    text: String::new(),
+                    tool_calls: r1.tool_calls,
+                    replay: r1.replay,
+                },
+                Message::ToolResult {
+                    id: "call_0".into(),
+                    name: "lua".into(),
+                    output: "rA".into(),
+                    images: None,
+                },
+                Message::ToolResult {
+                    id: "call_1".into(),
+                    name: "lua".into(),
+                    output: "rB".into(),
+                    images: None,
+                },
+                Message::Assistant {
+                    text: String::new(),
+                    tool_calls: r2.tool_calls,
+                    replay: r2.replay,
+                },
+                Message::ToolResult {
+                    id: "call_0".into(),
+                    name: "lua".into(),
+                    output: "rC".into(),
+                    images: None,
+                },
+            ],
+            tools: vec![],
+            effort: None,
+        })
+        .unwrap();
+        let c = body["contents"].as_array().unwrap();
+        assert!(c[1]["parts"][0]["functionCall"].get("id").is_none());
+        assert!(c[1]["parts"][1]["functionCall"].get("id").is_none());
+        assert!(c[2]["parts"][0]["functionResponse"].get("id").is_none());
+        assert!(c[2]["parts"][1]["functionResponse"].get("id").is_none());
+        assert_eq!(
+            c[2]["parts"][0]["functionResponse"]["response"]["output"],
+            "rA"
+        );
+        assert_eq!(
+            c[2]["parts"][1]["functionResponse"]["response"]["output"],
+            "rB"
+        );
+        assert!(c[3]["parts"][0]["functionCall"].get("id").is_none());
+        assert!(c[4]["parts"][0]["functionResponse"].get("id").is_none());
     }
 }

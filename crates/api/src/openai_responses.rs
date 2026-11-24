@@ -1,6 +1,6 @@
 use crate::args::ArgStream;
 use crate::client::{
-    Client, finalize_calls, map_err, openai_models, parse_json, read_body, read_sse,
+    Client, check_status, finalize_calls, map_err, openai_models, parse_json, read_body, read_sse,
 };
 use crate::types::{
     ApiType, Delta, Error, Message, Replay, Reply, Request, ToolCall, ToolImage, Usage,
@@ -30,7 +30,7 @@ pub(crate) fn encode(req: &Request) -> Value {
                 flush_images(&mut input, &mut images);
                 if let Some(r) = replay
                     .as_ref()
-                    .filter(|r| r.matches(ApiType::OpenAiResponses, &req.model))
+                    .filter(|r| r.matches(&req.provider, ApiType::OpenAiResponses, &req.model))
                 {
                     input.extend(r.items.iter().cloned());
                 } else {
@@ -122,15 +122,17 @@ pub(crate) fn complete(
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<Reply, Error> {
     let body = encode(req);
-    let resp = client
-        .agent
-        .post(&format!("{}/responses", client.base_url))
-        .set("Authorization", &format!("Bearer {}", client.api_key))
-        .set("Content-Type", "application/json")
-        .send_string(&body.to_string())
-        .map_err(map_err)?;
+    let resp = check_status(
+        client
+            .agent
+            .post(&format!("{}/responses", client.base_url))
+            .set("Authorization", &format!("Bearer {}", client.api_key))
+            .set("Content-Type", "application/json")
+            .send_string(&body.to_string())
+            .map_err(map_err)?,
+    )?;
     let streaming = resp.content_type().contains("event-stream");
-    let mut acc = Accumulator::new(&req.model);
+    let mut acc = Accumulator::new(&req.provider, &req.model);
     if !streaming {
         let v = parse_json(&read_body(resp)?)?;
         acc.fallback(&v, on_delta)?;
@@ -141,6 +143,11 @@ pub(crate) fn complete(
         acc.event(ev, &v, on_delta)?;
         Ok(true)
     })?;
+    if !acc.completed {
+        return Err(Error::Transport(
+            "stream ended before response.completed".into(),
+        ));
+    }
     Ok(acc.finish())
 }
 
@@ -159,19 +166,23 @@ struct Slot {
 }
 
 struct Accumulator {
+    provider: String,
     model: String,
     reply: Reply,
     slots: Vec<Slot>,
     replay: Vec<(usize, Value)>,
+    completed: bool,
 }
 
 impl Accumulator {
-    fn new(model: &str) -> Self {
+    fn new(provider: &str, model: &str) -> Self {
         Self {
+            provider: provider.to_string(),
             model: model.to_string(),
             reply: Reply::default(),
             slots: vec![],
             replay: vec![],
+            completed: false,
         }
     }
 
@@ -260,6 +271,7 @@ impl Accumulator {
                 self.finalize_args(
                     idx,
                     v.get("call_id").and_then(Value::as_str),
+                    (!item_id.is_empty()).then_some(item_id),
                     v.get("name").and_then(Value::as_str),
                     v.get("arguments").and_then(Value::as_str),
                     on_delta,
@@ -275,6 +287,7 @@ impl Accumulator {
                 }
             }
             "response.completed" | "response.incomplete" => {
+                self.completed = true;
                 if let Some(r) = v.get("response") {
                     if let Some(st) = r.get("status").and_then(Value::as_str) {
                         self.reply.finish = st.to_string();
@@ -347,19 +360,26 @@ impl Accumulator {
                 if !item_id.is_empty() {
                     self.slots[idx].item_id = item_id.to_string();
                 }
-                let call_id = item
-                    .get("call_id")
-                    .and_then(Value::as_str)
-                    .filter(|s| !s.is_empty())
-                    .or((!item_id.is_empty()).then_some(item_id));
                 self.finalize_args(
                     idx,
-                    call_id,
+                    item.get("call_id").and_then(Value::as_str),
+                    (!item_id.is_empty()).then_some(item_id),
                     item.get("name").and_then(Value::as_str),
                     item.get("arguments").and_then(Value::as_str),
                     on_delta,
                 );
-                self.replay.push((order, item.clone()));
+                let mut synced = item.clone();
+                if let Some(obj) = synced.as_object_mut() {
+                    let c = &self.slots[idx].call;
+                    if !c.id.is_empty() {
+                        obj.insert("call_id".into(), json!(c.id));
+                    }
+                    if !c.name.is_empty() {
+                        obj.insert("name".into(), json!(c.name));
+                    }
+                    obj.insert("arguments".into(), json!(c.arguments));
+                }
+                self.replay.push((order, synced));
             }
             Some("reasoning") => {
                 if has_encrypted_content(item) {
@@ -374,14 +394,19 @@ impl Accumulator {
     fn finalize_args(
         &mut self,
         idx: usize,
-        call_id: Option<&str>,
+        explicit_call_id: Option<&str>,
+        fallback_id: Option<&str>,
         name: Option<&str>,
         arguments: Option<&str>,
         on_delta: &mut dyn FnMut(Delta),
     ) {
         let s = &mut self.slots[idx];
-        if let Some(cid) = call_id.filter(|c| !c.is_empty()) {
+        if let Some(cid) = explicit_call_id.filter(|c| !c.is_empty()) {
             s.call.id = cid.to_string();
+        } else if s.call.id.is_empty()
+            && let Some(fid) = fallback_id.filter(|c| !c.is_empty())
+        {
+            s.call.id = fid.to_string();
         }
         if let Some(n) = name.filter(|n| !n.is_empty())
             && s.call.name.is_empty()
@@ -459,9 +484,7 @@ impl Accumulator {
                     }
                     self.replay.push((i, item.clone()));
                 }
-                Some("function_call") => {
-                    self.item_done(Some(i), item, on_delta);
-                }
+                Some("function_call") => self.item_done(Some(i), item, on_delta),
                 _ => {}
             }
         }
@@ -474,6 +497,7 @@ impl Accumulator {
         if !self.replay.is_empty() {
             self.replay.sort_by_key(|(i, _)| *i);
             self.reply.replay = Some(Replay {
+                provider: self.provider,
                 api: ApiType::OpenAiResponses.as_str().to_string(),
                 model: self.model,
                 items: self.replay.into_iter().map(|(_, v)| v).collect(),
@@ -519,4 +543,39 @@ fn map_stream_error(e: &Value) -> Error {
         },
     };
     Error::Status(code, e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sparse_done_preserves_call_id_and_reconciles_replay_arguments() {
+        let mut acc = Accumulator::new("resp", "gpt-5");
+        let mut deltas = String::new();
+        let events = [
+            json!({"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_real","name":"lua","arguments":""}}),
+            json!({"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"{\"code\":\"draft\"}"}),
+            json!({"type":"response.function_call_arguments.done","item_id":"fc_1","output_index":0,"arguments":"{\"code\":\"final()\"}"}),
+            json!({"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call"}}),
+            json!({"type":"response.completed","response":{"status":"completed"}}),
+        ];
+        for e in &events {
+            acc.event("", e, &mut |d| {
+                if let Delta::Tool { code, .. } = d {
+                    deltas.push_str(code);
+                }
+            })
+            .unwrap();
+        }
+        let r = acc.finish();
+        assert_eq!(deltas, "draft");
+        assert_eq!(r.tool_calls[0].id, "call_real");
+        assert_eq!(r.tool_calls[0].name, "lua");
+        assert_eq!(r.tool_calls[0].arguments, "{\"code\":\"final()\"}");
+        let item = &r.replay.unwrap().items[0];
+        assert_eq!(item["call_id"], "call_real");
+        assert_eq!(item["name"], "lua");
+        assert_eq!(item["arguments"], "{\"code\":\"final()\"}");
+    }
 }

@@ -89,7 +89,7 @@ fn prepare_inner(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     config.path = path.map(|p| p.display().to_string()).unwrap_or_default();
     lua.set_named_registry_value("tuse.next", table)
         .map_err(|e| e.to_string())?;
-    crate::store::apply_providers(&mut config);
+    crate::store::apply_providers(&mut config)?;
     Ok(config)
 }
 

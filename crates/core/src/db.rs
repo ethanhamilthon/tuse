@@ -79,20 +79,30 @@ pub fn default_effort() -> String {
 }
 
 fn migrate(c: &Connection) -> rusqlite::Result<()> {
-    let mut q = c.prepare("PRAGMA table_info(providers)")?;
-    let cols: Vec<String> = q
-        .query_map([], |r| r.get::<_, String>(1))?
-        .collect::<Result<_, _>>()?;
-    if !cols.iter().any(|col| col == "api") {
-        c.execute(
-            "ALTER TABLE providers ADD COLUMN api TEXT NOT NULL DEFAULT 'openai-chat'",
-            [],
-        )?;
+    c.execute_batch("BEGIN IMMEDIATE")?;
+    let res = (|| {
+        let mut q = c.prepare("PRAGMA table_info(providers)")?;
+        let cols: Vec<String> = q
+            .query_map([], |r| r.get::<_, String>(1))?
+            .collect::<Result<_, _>>()?;
+        if !cols.iter().any(|col| col == "api") {
+            c.execute(
+                "ALTER TABLE providers ADD COLUMN api TEXT NOT NULL DEFAULT 'openai-chat'",
+                [],
+            )?;
+        }
+        Ok(())
+    })();
+    match res {
+        Ok(()) => c.execute_batch("COMMIT"),
+        Err(e) => {
+            let _ = c.execute_batch("ROLLBACK");
+            Err(e)
+        }
     }
-    Ok(())
 }
 
-pub fn providers() -> Vec<tuse_config::Connect> {
+pub fn providers() -> Result<Vec<tuse_config::Connect>, String> {
     with(|c| {
         let mut q =
             c.prepare("SELECT name, base_url, api_key, api FROM providers ORDER BY rowid")?;
@@ -111,7 +121,6 @@ pub fn providers() -> Vec<tuse_config::Connect> {
         })?;
         rows.collect()
     })
-    .unwrap_or_default()
 }
 
 pub fn add_provider(p: &tuse_config::Connect) -> Result<(), String> {
@@ -137,8 +146,8 @@ pub fn remove_provider(name: &str) -> Result<bool, String> {
     })
 }
 
-pub fn providers_json() -> String {
-    let rows: Vec<_> = providers()
+pub fn providers_json() -> Result<String, String> {
+    let rows: Vec<_> = providers()?
         .into_iter()
         .map(|p| {
             let api = p.api_type().to_string();
@@ -149,5 +158,50 @@ pub fn providers_json() -> String {
             })
         })
         .collect();
-    serde_json::to_string_pretty(&rows).unwrap_or_else(|_| "[]".into())
+    serde_json::to_string_pretty(&rows).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn concurrent_migrations_upgrade_legacy_providers_safely() {
+        let dir = std::env::temp_dir().join(format!("tuse-db-mig-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tuse.db");
+        {
+            let c = Connection::open(&path).unwrap();
+            c.execute_batch(
+                "CREATE TABLE providers (name TEXT PRIMARY KEY, base_url TEXT NOT NULL, api_key TEXT NOT NULL);
+                 INSERT INTO providers VALUES ('old', 'http://127.0.0.1:1', 'k');",
+            )
+            .unwrap();
+        }
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let p = path.clone();
+                let b = barrier.clone();
+                std::thread::spawn(move || {
+                    let c = Connection::open(&p).unwrap();
+                    c.busy_timeout(std::time::Duration::from_secs(5)).unwrap();
+                    b.wait();
+                    migrate(&c).unwrap();
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        let c = Connection::open(&path).unwrap();
+        let api: String = c
+            .query_row("SELECT api FROM providers WHERE name = 'old'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(api, "openai-chat");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

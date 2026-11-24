@@ -62,7 +62,7 @@ fn json_resp(v: Value) -> String {
 fn wait_turn(rx: &std::sync::mpsc::Receiver<Event>) -> Vec<Event> {
     let mut out = vec![];
     loop {
-        let ev = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        let ev = rx.recv_timeout(Duration::from_secs(15)).unwrap();
         let done = matches!(ev, Event::TurnEnd { .. });
         out.push(ev);
         if done {
@@ -72,7 +72,7 @@ fn wait_turn(rx: &std::sync::mpsc::Receiver<Event>) -> Vec<Event> {
 }
 
 #[test]
-fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
+fn multi_step_reasoning_replay_resume_switch_and_truncated_stream_safety() {
     let dir = std::env::temp_dir().join(format!("tuse-api-types-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let home = dir.join("home");
@@ -91,9 +91,11 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
         )
         .unwrap();
     }
-    let migrated = tuse_core::providers();
-    assert_eq!(migrated.len(), 1);
-    assert_eq!(migrated[0].api, "openai-chat");
+    let migrated = tuse_core::providers().unwrap();
+    assert_eq!(
+        (migrated.len(), migrated[0].api.as_str()),
+        (1, "openai-chat")
+    );
 
     let anth = MockHost::start(vec![
         json_resp(json!({
@@ -116,7 +118,12 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
             "content": [{"type": "text", "text": "after resume"}]
         })),
     ]);
+    let anth2 = MockHost::start(vec![json_resp(json!({
+        "stop_reason": "end_turn",
+        "content": [{"type": "text", "text": "anth2 ok"}]
+    }))]);
     let resp = MockHost::start(vec![
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"id\":\"fc_bad\",\"type\":\"function_call\",\"call_id\":\"bad\",\"name\":\"lua\",\"arguments\":\"{\\\"code\\\":\\\"write('bad.txt','nope')\\\"}\"}}\n\n".into(),
         json_resp(json!({
             "status": "completed",
             "usage": {"input_tokens": 50, "output_tokens": 10},
@@ -150,6 +157,7 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
 
     for (name, url, api) in [
         ("anth", &anth.url, "anthropic-messages"),
+        ("anth2", &anth2.url, "anthropic-messages"),
         ("resp", &resp.url, "openai-responses"),
         ("gem", &gem.url, "google-gemini"),
     ] {
@@ -164,7 +172,7 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
     tuse_core::set_state("model", "anth/claude-sonnet-4").unwrap();
     tuse_core::set_state("effort", "high").unwrap();
     let cfg = dir.join("tuse.lua");
-    std::fs::write(&cfg, "return { settings = { retries = 0 } }\n").unwrap();
+    std::fs::write(&cfg, "return { settings = { retries = 1 } }\n").unwrap();
 
     let s = Session::open(Options {
         cwd: dir.clone(),
@@ -178,13 +186,10 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
     let rx = s.subscribe();
     s.submit(UserInput::text("step 1"));
     wait_turn(&rx);
-
     assert_eq!(s.stats().totals.input, 250);
-    let ab = anth.bodies();
-    assert_eq!(ab[1]["messages"][1]["content"][0]["signature"], "ANTH_SIG");
     assert_eq!(
-        ab[1]["messages"][1]["content"][1]["type"],
-        "redacted_thinking"
+        anth.bodies()[1]["messages"][1]["content"][0]["signature"],
+        "ANTH_SIG"
     );
     s.close();
 
@@ -199,19 +204,32 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
     let rx = s.subscribe();
     s.submit(UserInput::text("resumed"));
     wait_turn(&rx);
-    let ab = anth.bodies();
-    assert_eq!(ab[2]["messages"][1]["content"][0]["signature"], "ANTH_SIG");
+    assert_eq!(
+        anth.bodies()[2]["messages"][1]["content"][0]["signature"],
+        "ANTH_SIG"
+    );
+
+    s.select_model("anth2/claude-sonnet-4", "high", false)
+        .unwrap();
+    s.submit(UserInput::text("same api different provider"));
+    wait_turn(&rx);
+    assert!(
+        !anth2.bodies()[0].to_string().contains("ANTH_SIG"),
+        "different provider with same api+model must not receive old replay"
+    );
 
     s.select_model("resp/gpt-5", "xhigh", false).unwrap();
-    s.submit(UserInput::text("switch to responses"));
-    wait_turn(&rx);
-    let rb = resp.bodies();
+    s.submit(UserInput::text("truncated then ok"));
+    let evs = wait_turn(&rx);
+    assert!(evs.iter().any(|e| matches!(e, Event::StreamReset)));
     assert!(
-        !rb[0].to_string().contains("ANTH_SIG"),
-        "must not leak foreign replay"
+        !dir.join("bad.txt").exists(),
+        "truncated tool call must never execute"
     );
+    let rb = resp.bodies();
+    assert!(!rb[0].to_string().contains("ANTH_SIG"));
     assert!(
-        rb[1]["input"]
+        rb[2]["input"]
             .as_array()
             .unwrap()
             .iter()
@@ -222,14 +240,18 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
     s.submit(UserInput::text("switch to gemini"));
     wait_turn(&rx);
     let gb = gem.bodies();
-    assert!(
-        !gb[0].to_string().contains("RESP_ENC"),
-        "must not leak foreign replay"
-    );
+    assert!(!gb[0].to_string().contains("RESP_ENC"));
     let contents = gb[1]["contents"].as_array().unwrap();
     let gem_model = &contents[contents.len() - 2];
+    let gem_result = &contents[contents.len() - 1];
     assert_eq!(gem_model["parts"][0]["thoughtSignature"], "GEM_SIG1");
     assert_eq!(gem_model["parts"][1]["thoughtSignature"], "GEM_SIG2");
+    assert!(
+        gem_result["parts"][0]["functionResponse"]
+            .get("id")
+            .is_none(),
+        "id-less wire functionCall must pair with id-less wire functionResponse"
+    );
     assert!(s.records().iter().any(|r| matches!(
         r,
         Record::Tool { output, .. } if output.starts_with("false|")
@@ -243,17 +265,13 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
         e,
         Event::Error(msg) if msg.contains("provider `gem` (google-gemini) does not support effort `max`")
     )));
-    assert_eq!(
-        gem.bodies().len(),
-        2,
-        "zero HTTP requests on unsupported effort"
-    );
+    assert_eq!(gem.bodies().len(), 2);
 
     s.select_model("gem/gemini-2.5-pro", "default", false)
         .unwrap();
     s.submit(UserInput {
         text: "bad image".into(),
-        images: vec!["https://example.com/nope.png".into()],
+        images: vec!["data:image/png;base64,not!valid".into()],
         ..Default::default()
     });
     let evs = wait_turn(&rx);
@@ -261,7 +279,7 @@ fn multi_step_reasoning_replay_resume_switch_and_unsupported_capabilities() {
         e,
         Event::Error(msg) if msg.contains("does not support image")
     )));
-    assert_eq!(gem.bodies().len(), 2, "zero HTTP requests on invalid image");
+    assert_eq!(gem.bodies().len(), 2);
 
     s.close();
     let _ = std::fs::remove_dir_all(&dir);

@@ -116,18 +116,13 @@ fn run(raw: Vec<String>) -> Result<(), String> {
     if let Some(f) = a.unknown(&known) {
         return Err(format!("unknown flag {f}\nusage: {}", cmd.usage));
     }
-    if a.positional.len() != cmd.args {
-        let msg = match a.positional.get(cmd.args) {
-            Some(p) => format!("unexpected argument `{p}`"),
-            None => "missing argument".into(),
-        };
-        return Err(format!("{msg}\nusage: {}", cmd.usage));
-    }
+    a.expect_args(cmd.args)
+        .map_err(|msg| format!("{msg}\nusage: {}", cmd.usage))?;
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let config = tuse_core::config_arg(&cwd, a.value(CONFIG).as_deref());
     match sub {
         "connect" => connect::run(&a),
-        "disconnect" => connect::remove(&a.positional[0]),
+        "disconnect" => connect::remove(a.arg(0)),
         "providers" => connect::list(a.has(&["--json"])),
         "models" => models::run(cwd, config),
         "json" => json(&a, cwd, config),

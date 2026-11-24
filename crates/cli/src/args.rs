@@ -1,5 +1,5 @@
 pub struct Args {
-    pub positional: Vec<String>,
+    positional: Vec<String>,
     flags: Vec<(String, Option<String>)>,
 }
 
@@ -39,6 +39,20 @@ impl Args {
             }
         }
         Ok(a)
+    }
+
+    pub fn arg(&self, i: usize) -> &str {
+        &self.positional[i]
+    }
+
+    pub fn expect_args(&self, n: usize) -> Result<(), String> {
+        match self.positional.len() {
+            len if len == n => Ok(()),
+            _ => Err(match self.positional.get(n) {
+                Some(p) => format!("unexpected argument `{p}`"),
+                None => "missing argument".into(),
+            }),
+        }
     }
 
     pub fn value(&self, names: &[&str]) -> Option<String> {

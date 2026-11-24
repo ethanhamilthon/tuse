@@ -2,7 +2,7 @@ use crate::app::App;
 use crate::render::plain;
 use crate::style::{Palette, Style};
 use crate::text::{Line, wrap};
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 
 enum Body {
     Text(String),
@@ -11,8 +11,16 @@ enum Body {
     Styled(Vec<Line>),
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum PanelKind {
+    Plain,
+    Config,
+    Session,
+}
+
 pub struct Panel {
     body: Body,
+    pub kind: PanelKind,
     pub scroll: usize,
     cache: Option<(usize, Vec<Line>)>,
 }
@@ -21,9 +29,14 @@ impl Panel {
     fn with_body(body: Body) -> Self {
         Self {
             body,
+            kind: PanelKind::Plain,
             scroll: 0,
             cache: None,
         }
+    }
+    pub fn with_kind(mut self, kind: PanelKind) -> Self {
+        self.kind = kind;
+        self
     }
     pub fn new(value: impl Into<String>) -> Self {
         Self::with_body(Body::Text(value.into()))
@@ -88,8 +101,19 @@ impl Panel {
     }
 }
 
+pub(crate) fn trace_panel(it: &tuse_core::TraceItem) -> Panel {
+    match it.role {
+        "system" | "user" | "agent" => Panel::markdown(it.text.clone()),
+        "lua" => Panel::lua(it.text.clone()),
+        _ => Panel::new(it.text.clone()),
+    }
+}
+
 impl App {
-    pub(crate) fn panel_key(&mut self, code: KeyCode) -> bool {
+    pub(crate) fn panel_key(&mut self, code: KeyCode, mods: KeyModifiers) -> bool {
+        if self.picker.is_some() || self.question.is_some() {
+            return false;
+        }
         let Some(panel) = &mut self.panel else {
             return false;
         };
@@ -97,23 +121,105 @@ impl App {
         match code {
             KeyCode::Esc => {
                 self.panel = None;
-                if let Some((picker, search)) = self.trace_back.take() {
+                self.clear_link_hover();
+                if let Some((mut picker, search)) = self.trace_back.take() {
+                    picker.follow(self.picker_rows());
                     self.picker = Some(picker);
                     self.editor = search;
                 }
             }
-            KeyCode::Up if self.editor.is_empty() => panel.scroll_by(-step),
-            KeyCode::Down if self.editor.is_empty() => panel.scroll_by(step),
+            KeyCode::Up if self.editor.is_empty() => {
+                panel.scroll_by(-step);
+                self.clear_link_hover();
+            }
+            KeyCode::Down if self.editor.is_empty() => {
+                panel.scroll_by(step);
+                self.clear_link_hover();
+            }
+            KeyCode::Left
+                if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
+            {
+                self.step_trace(-1);
+            }
+            KeyCode::Right
+                if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
+            {
+                self.step_trace(1);
+            }
             _ => return false,
         }
         true
+    }
+
+    fn step_trace(&mut self, delta: isize) {
+        let rows = self.picker_rows();
+        let Some((picker, _)) = &mut self.trace_back else {
+            return;
+        };
+        let Some(next) = picker.selected.checked_add_signed(delta) else {
+            return;
+        };
+        let Some(&item_idx) = picker.shown.get(next) else {
+            return;
+        };
+        let Some(trace_idx) = picker
+            .items
+            .get(item_idx)
+            .and_then(|it| it.value.parse::<usize>().ok())
+        else {
+            return;
+        };
+        let Some(it) = self.trace_items.get(trace_idx) else {
+            return;
+        };
+        picker.selected = next;
+        picker.follow(rows);
+        self.panel = Some(trace_panel(it));
+        self.selection = Default::default();
+        self.clear_link_hover();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::App;
+    use crate::picker::{Kind, Picker, item};
+    use crossterm::event::KeyEvent;
     use tuse_config::{Theme, UiSettings};
+    use tuse_core::TraceItem;
+
+    fn press(app: &mut App, code: KeyCode, mods: KeyModifiers) {
+        app.key(KeyEvent::new(code, mods), 10);
+    }
+
+    fn open_trace_with(app: &mut App, items: Vec<TraceItem>) {
+        let rows = items
+            .iter()
+            .enumerate()
+            .map(|(i, it)| {
+                item(
+                    format!("{i}  {}  {}", it.role, it.summary),
+                    "",
+                    i.to_string(),
+                )
+            })
+            .collect();
+        app.trace_items = items;
+        app.trace_back = None;
+        app.open_modal(Picker::new(Kind::Trace, rows));
+    }
+
+    fn panel_text(app: &mut App) -> String {
+        app.panel
+            .as_mut()
+            .unwrap()
+            .lines(60, 16, &app.palette)
+            .iter()
+            .flatten()
+            .map(|s| s.text.as_str())
+            .collect()
+    }
 
     #[test]
     fn panel_scrolls_within_its_text_and_fits_the_rows() {
@@ -124,13 +230,129 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
-        let lines = panel.lines(20, 8, &p);
-        assert_eq!(lines.len(), 8);
+        assert_eq!(panel.lines(20, 8, &p).len(), 8);
         panel.scroll_by(1000);
-        let last = panel.lines(20, 8, &p);
-        assert_eq!(panel.scroll, 30 - 7);
-        assert_eq!(last.len(), 8);
-        let short = Panel::new("one").lines(20, 8, &p);
-        assert_eq!(short.len(), 2);
+        assert_eq!(panel.lines(20, 8, &p).len(), 8);
+        assert_eq!(panel.scroll, 23);
+        assert_eq!(Panel::new("one").lines(20, 8, &p).len(), 2);
+    }
+
+    #[test]
+    fn trace_arrows_step_filtered_entries_reset_scroll_clamp_ends_and_gate_editor() {
+        let mut app = crate::app::test_app("trace-arrows");
+        let k = |app: &mut App, c| press(app, c, KeyModifiers::NONE);
+        let mk = |role: &'static str, summary: &str, text: String| TraceItem {
+            role,
+            summary: summary.into(),
+            text,
+        };
+        app.paste("orig draft");
+        let long = (0..25)
+            .map(|i| format!("line-{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let b_long = (0..25)
+            .map(|i| format!("--b-{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let items = vec![
+            mk("system", "sys", format!("# Title\n\n{long}")),
+            mk("output", "out", format!("plain-out\n{long}")),
+            mk("lua", "first lua", format!("local a = 1\n--{long}")),
+            mk("user", "hi", "hello".into()),
+            mk(
+                "lua",
+                "second lua",
+                format!("local b = 2\n--b-body\n{b_long}"),
+            ),
+        ];
+        open_trace_with(&mut app, items.clone());
+        k(&mut app, KeyCode::Enter);
+        app.panel.as_mut().unwrap().scroll_by(5);
+        k(&mut app, KeyCode::Left);
+        assert_eq!(app.panel.as_ref().unwrap().scroll, 5);
+        assert!(panel_text(&mut app).contains("line-5"));
+
+        app.hover = Some(1);
+        k(&mut app, KeyCode::Right);
+        assert_eq!((app.panel.as_ref().unwrap().scroll, app.hover), (0, None));
+        assert!(panel_text(&mut app).contains("plain-out"));
+
+        k(&mut app, KeyCode::Right);
+        assert!(
+            app.panel
+                .as_mut()
+                .unwrap()
+                .lines(60, 16, &app.palette)
+                .iter()
+                .flatten()
+                .any(|s| s.text == "local" && s.style.fg == app.palette.err)
+        );
+        app.panel.as_mut().unwrap().scroll_by(4);
+        k(&mut app, KeyCode::Left);
+        assert_eq!(app.panel.as_ref().unwrap().scroll, 0);
+
+        app.paste("ab");
+        k(&mut app, KeyCode::Left);
+        assert_eq!(app.editor.cursor, 1);
+        press(&mut app, KeyCode::Right, KeyModifiers::SHIFT);
+        assert_eq!(app.editor.selected_text().as_deref(), Some("b"));
+        app.editor.clear();
+        press(&mut app, KeyCode::Right, KeyModifiers::SHIFT);
+        assert!(panel_text(&mut app).contains("plain-out"));
+        k(&mut app, KeyCode::Esc);
+        assert_eq!(app.picker.as_ref().unwrap().selected, 1);
+        k(&mut app, KeyCode::Esc);
+        assert_eq!(app.editor.text(), "orig draft");
+
+        open_trace_with(&mut app, items);
+        for c in "lua".chars() {
+            k(&mut app, KeyCode::Char(c));
+        }
+        k(&mut app, KeyCode::Enter);
+        assert!(panel_text(&mut app).contains("local a = 1"));
+        k(&mut app, KeyCode::Right);
+        assert!(panel_text(&mut app).contains("local b = 2"));
+        app.panel.as_mut().unwrap().scroll_by(6);
+        k(&mut app, KeyCode::Right);
+        assert_eq!(app.panel.as_ref().unwrap().scroll, 6);
+        assert!(panel_text(&mut app).contains("--b-4"));
+        k(&mut app, KeyCode::Esc);
+        assert_eq!(
+            (
+                app.editor.text().as_str(),
+                app.picker.as_ref().unwrap().selected
+            ),
+            ("lua", 1)
+        );
+        k(&mut app, KeyCode::Esc);
+
+        app.run_command("session");
+        k(&mut app, KeyCode::Right);
+        assert!(panel_text(&mut app).contains("ID"));
+        k(&mut app, KeyCode::Esc);
+
+        app.palette.ui.list_max_height = 4;
+        app.list_rows = 3;
+        open_trace_with(
+            &mut app,
+            (0..12)
+                .map(|i| mk("output", &format!("item {i}"), format!("body-{i}")))
+                .collect(),
+        );
+        k(&mut app, KeyCode::Enter);
+        for _ in 0..7 {
+            k(&mut app, KeyCode::Right);
+        }
+        app.open_models();
+        k(&mut app, KeyCode::Right);
+        k(&mut app, KeyCode::Left);
+        k(&mut app, KeyCode::Esc);
+        assert!(panel_text(&mut app).contains("body-7"));
+        k(&mut app, KeyCode::Esc);
+        let p = app.picker.as_ref().unwrap();
+        assert_eq!(p.selected, 7);
+        assert!(p.selected >= p.scroll && p.selected < p.scroll + 3);
+        crate::app::cleanup(app);
     }
 }

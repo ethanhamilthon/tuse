@@ -16,7 +16,7 @@ Loading or reloading the plugin must **never** install software, start a login f
 - **Decision (single reserved offline plugin ID):** Ship the default plugin embedded in the `tuse` binary (source under `plugins/default/`) under **one** reserved built-in plugin ID: `"tuse/default"`.
   - `"tuse/default"` is resolved exclusively from the binary (never cloned from GitHub and never synced over the network by `/reload`).
   - `ref`, `dir`, and `path` are rejected on `"tuse/default"` during validation (clear diagnostic: `plugin tuse/default: bundled plugin does not accept ref, dir, or path`).
-  - **Installer capability gate (for [11-installer-first-run.md](11-installer-first-run.md)):** Running `tuse models -c <temp_config>` with `{ plugins = { { "tuse/default", opts = { theme = false, subs = false } } } }` exits `0` on binaries that bundle `"tuse/default"` and exits non-zero on older binaries (which treat `"tuse/default"` as a missing Git checkout), allowing the installer to gate first-run setup cleanly even when `TUSE_VERSION` pins an older release.
+  - **Installer capability gate (for [install.md](../install.md)):** Running `tuse models -c <temp_config>` with `{ plugins = { { "tuse/default", opts = { theme = false, subs = false } } } }` exits `0` on binaries that bundle `"tuse/default"` and exits non-zero on older binaries (which treat `"tuse/default"` as a missing Git checkout), allowing the installer to gate first-run setup cleanly even when `TUSE_VERSION` pins an older release.
 - **Configuration syntax**:
   ```lua
   return {

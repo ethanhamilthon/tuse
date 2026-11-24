@@ -101,7 +101,7 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
 ## Control, Model, Docs, and Utilities
 
 - `reload()`:
-  - Performs the same config reload as `/reload` and JSON-RPC `config.reload` ([config.md](config.md#reloading-reload-configreload-reload)). In TUI, Lua-triggered `reload()` restyles the palette on the `reloaded` event but does not rebuild already-cached chat entries until resized or `/reload` is run.
+  - Performs the same config reload as `/reload` and JSON-RPC `config.reload` ([config.md](config.md#reloading-reload-configreload-reload)). In TUI, Lua-triggered `reload()` emits `reloaded`, which restyles the palette and invalidates cached chat entries and open panels so updated `theme` and `settings.ui` settings re-render immediately at the same terminal width.
   - Outside hooks: yields (pausing caller timeout) until reload finishes, returns `nil` on success, and raises a Lua error if the config is invalid (keeping the previous config active).
   - Inside hooks: returns `nil` immediately and schedules the reload right after that hook run finishes (since reload waits for `close` hooks); any failure emits an `error` event (`reload: ...`).
 - `llm(prompt, model, effort)` -> `string`:

@@ -1,6 +1,6 @@
 use crate::Host;
 use crate::job::{Done, Job, Out, Stop};
-use crate::sched::{self, Sched};
+use crate::sched::{self, Sched, start};
 use mlua::{Lua, MultiValue, Table};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -19,7 +19,7 @@ impl Vm {
             .name("tuse-lua".into())
             .spawn(move || {
                 let lua = Lua::new();
-                lua.set_app_data(Sched::default());
+                sched::install(&lua);
                 lua.set_app_data(host);
                 if let Err(e) = crate::api::install(&lua) {
                     eprintln!("tuse: lua: {}", crate::message(&e));
@@ -84,7 +84,7 @@ impl Vm {
                 },
             );
             match job {
-                Ok(j) => j.start(lua),
+                Ok(j) => start(lua, j),
                 Err(e) => {
                     let _ = tx.send(fail(crate::message(&e)));
                 }

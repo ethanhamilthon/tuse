@@ -1,50 +1,34 @@
 # Commands
 
+Quick reference for CLI subcommands and TUI slash commands (embedded as the `docs("commands")` topic; linked pages below live in `docs/` and are not all separate `docs()` topics). Canonical specifications live in [cli.md](cli.md) and [tui.md](tui.md).
+
 ## CLI
 
-- `tuse [--config PATH] [--resume ID]` opens the TUI. `--config` (`-c`) picks the config;
-  `--resume` (`-r`) opens a saved session. Tuse prints the session ID on exit.
-- `tuse json [--config PATH] [--resume ID]` serves one session over [JSON-RPC stdio](json.md).
-- `tuse connect --base URL --key '$ENV' --name NAME` verifies and saves a provider.
-  Quote `$ENV` to store an environment-variable reference rather than passing a literal key.
-- `tuse providers` lists providers; `tuse disconnect NAME` removes one.
-- `tuse models [--config PATH]` lists model metadata from the effective Lua config and the default model/effort from SQLite.
-- `tuse init` creates `./tuse.lua` that starts from the global config (`require("global")`).
-- `tuse update` updates the binary without touching your config.
-- `tuse version` (`--version`, `-V`) prints the version; `tuse help` (`--help`, `-h`) prints the
-  usage. `tuse COMMAND --help` prints one command's usage without running it. Unknown flags and
-  extra arguments are errors. `--config PATH` is relative to the current folder; `~/` works.
+- `tuse [-c|--config PATH] [-r|--resume ID]` opens the full-screen TUI. `--config` (`-c`) picks the config file; `--resume` (`-r`) opens a saved session. Normal exit prints `tuse: session <ID>` to stderr.
+- `tuse json [-c|--config PATH] [-r|--resume ID]` serves one session over [JSON-RPC 2.0 stdio](json.md).
+- `tuse connect --base URL --key '$ENV' --name NAME` verifies an OpenAI-compatible provider against `GET <URL>/models` and saves it in SQLite ([providers.md](providers.md)).
+- `tuse providers` lists saved providers; `tuse disconnect NAME` removes one.
+- `tuse models [-c|--config PATH]` prints the saved default model/effort and lists configured model metadata from the effective Lua config.
+- `tuse init` creates `./tuse.lua` extending the global config.
+- `tuse update` downloads, verifies, and replaces the `tuse` binary in place without touching your config ([install.md](install.md)).
+- `tuse version` (`--version`, `-V`) prints the version; `tuse help` (`--help`, `-h`) prints usage; `tuse COMMAND --help` prints one command's usage.
+
+See [cli.md](cli.md) for flag syntax, validation rules, error formats, and exit behavior.
 
 ## TUI
 
-- `/new` starts a session; `/resume` picks a saved session from the current folder.
-- `/models` sets the session model and effort and remembers the pick in SQLite for new sessions.
-  `/reload` and `/resume` do not change an existing session's model.
-- `/tasks` lists tasks; Enter shows the log and Ctrl+X stops the selected task.
-- `/session` shows every field of `require("tuse").session()` except `trace`: ID, name, mode, CWD,
-  home, config path, provider, model, effort, model info, context, turns/steps, usage, and cost.
-- `/trace` opens a selectable list of trace entries (`index  role  first line`). Press Enter to
-  view the full entry in a scrollable detail panel (`system`, `user`, and `agent` as Markdown;
-  `lua` as full syntax-highlighted source; other roles as plain text) and Esc to return to the
-  list with your selection intact.
-- `/config` shows a styled, scrollable view of the resolved config: the config file path first,
-  then settings, theme, system prompts, prompts, functions, hooks, commands, `open` handlers, and
-  plugins, without provider secrets or Lua function bodies.
-- `/reload` validates and runs config files again (if validation fails, the previous working
-  config and callbacks remain active); `/quit` exits.
-- Custom slash commands defined in `commands = { name = function() ... end }` appear in `/`
-  autocomplete and run as non-blocking Lua jobs (so they can call `show`, `pick`,
-  and `ask` through `require("tuse")`). Built-in commands cannot be overridden.
+Built-in slash commands run when typed as `/name` with no arguments or selected from the `/` picker:
 
-Pickers match substrings without regard to case. When a picker uses the input as a search box,
-your draft comes back on close. A message queued during a turn stays dimmed in the input until the
-agent takes it. Editing it withdraws it; Enter sends the edited draft.
+- `/new` starts a fresh session in the current directory.
+- `/resume` opens a searchable picker of other named sessions for the current directory.
+- `/models` opens a two-step picker (model, then reasoning effort) and saves the selection for the active session and as the SQLite default for new sessions.
+- `/tasks` lists background tasks (`spawn()`); Enter views the log (last 200 lines) and `Ctrl+X` stops the selected task.
+- `/session` opens a scrollable view of `require("tuse").session()` (all fields except `trace`).
+- `/trace` opens a searchable list of all trace entries (`index  role  first line`); Enter opens the full entry panel and Esc returns to the list with search and selection intact.
+- `/config` opens a scrollable view of the resolved config (without provider secrets or Lua function bodies).
+- `/reload` validates and re-evaluates the config in the same VM (keeping the previous working config on failure).
+- `/quit` closes the session and exits.
 
-Use the mouse wheel to scroll the chat, click an input cell to place the cursor, and drag to
-select text. Ctrl/Cmd+C copies it. URLs, local file paths (absolute, `~/`, relative, with optional
-`:line[:col]`), and Markdown links are interactive in agent messages, `show` blocks,
-`/config`, `/session`, and the agent, system, and user entries in `/trace`. Lua code, tool output,
-and diffs are not linkified. Hover to highlight and click to open. Local paths use a matching `open.<ext>` Lua callback if configured, otherwise the OS
-default opener (`open` on macOS, `xdg-open` on Linux, `cmd /C start` on Windows); open failures
-are reported in the UI. Shift+movement extends an input selection; Ctrl/Cmd+A selects all and
-Ctrl/Cmd+X cuts.
+Custom slash commands from `commands = { name = function() ... end }` appear in `/` autocomplete and run as non-blocking Lua jobs (built-in names cannot be overridden).
+
+Picker search filters item **labels** (not details) by case-insensitive substring; modal searchable pickers reuse the input as a search box and restore your draft on close. See [tui.md](tui.md) for complete keyboard shortcuts, mouse selection, interactive links, steering, and overlay workflows.

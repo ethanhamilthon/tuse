@@ -413,14 +413,14 @@ mod tests {
             text: "Let me check.".into(),
         });
         let texts = (n..app.chat.len())
-            .filter(|&i| matches!(app.chat.get_mut(i), Some(crate::chat::Entry::Assistant(_))))
+            .filter(|&i| matches!(app.chat.get_mut(i), Some(crate::entry::Entry::Assistant(_))))
             .count();
         assert_eq!(texts, 1);
         app.handle_event(Event::Assistant {
             text: "Done.".into(),
         });
         assert!(
-            matches!(app.chat.get_mut(app.chat.len() - 1), Some(crate::chat::Entry::Assistant(t)) if t == "Done.")
+            matches!(app.chat.get_mut(app.chat.len() - 1), Some(crate::entry::Entry::Assistant(t)) if t == "Done.")
         );
         crate::app::cleanup(app);
     }
@@ -498,7 +498,7 @@ mod tests {
         app.run_command("new");
         assert!(std::sync::Arc::ptr_eq(&app.session, &session) && session.is_open());
         assert!(
-            matches!(app.chat.get_mut(app.chat.len() - 1), Some(crate::chat::Entry::Error(e)) if e.contains("typo_key"))
+            matches!(app.chat.get_mut(app.chat.len() - 1), Some(crate::entry::Entry::Error(e)) if e.contains("typo_key"))
         );
         app.paste("hello");
         app.key(KeyEvent::from(KeyCode::Enter), 10);

@@ -1,4 +1,4 @@
-use crate::chat::Entry;
+use crate::entry::Entry;
 use crate::style::{
     ERROR_PREFIX, INPUT_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style,
     UI_MARKDOWN_PREFIX, UI_RESULT_PREFIX,
@@ -15,21 +15,8 @@ pub fn duration(d: Duration) -> String {
     }
 }
 
-pub(crate) fn clean(text: &str) -> String {
-    text.chars()
-        .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
-        .map(|c| {
-            if c == '\t' {
-                "    ".to_string()
-            } else {
-                c.to_string()
-            }
-        })
-        .collect()
-}
-
 pub fn plain(text: &str, width: usize, style: Style, first: &str, rest: &str) -> Vec<Line> {
-    let text = &clean(text);
+    let text = &crate::text::clean(text);
     let (f, r) = (vec![span(first, style)], vec![span(rest, style)]);
     text.split('\n')
         .enumerate()

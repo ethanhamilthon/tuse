@@ -1,43 +1,9 @@
-use crate::app::App;
+use crate::entry::Entry;
 use crate::render::render;
 use crate::style::Palette;
 use crate::text::Line;
 use std::time::Duration;
-use tuse_core::{FileDiff, Record, Session};
-
-#[derive(Debug, Clone)]
-pub enum Entry {
-    User {
-        text: String,
-        images: usize,
-    },
-    Assistant(String),
-    Reasoning(String),
-    Tool {
-        id: String,
-        input: String,
-        output: Option<String>,
-        code: Option<i32>,
-        diffs: Vec<FileDiff>,
-    },
-    Notice(String),
-    Error(String),
-    TurnEnd {
-        elapsed: Duration,
-        model: String,
-        effort: String,
-        cancelled: bool,
-    },
-    Markdown {
-        name: String,
-        text: String,
-    },
-    UiResult {
-        is_picker: bool,
-        prompt: String,
-        value: String,
-    },
-}
+use tuse_core::{Record, Session};
 
 type Cache = Option<(usize, Vec<Line>)>;
 
@@ -237,36 +203,6 @@ fn push_rev(rev: &mut Vec<Line>, lines: &[Line], need: usize, gap: usize) {
         block = with_gap;
     }
     rev.extend(block);
-}
-
-impl App {
-    pub(super) fn stream(&mut self, t: String, reasoning: bool) {
-        let slot = if reasoning {
-            self.thinking
-        } else {
-            self.streaming
-        };
-        if let Some(i) = slot
-            && let Some(Entry::Assistant(s) | Entry::Reasoning(s)) = self.chat.get_mut(i)
-        {
-            s.push_str(&t);
-            return;
-        }
-        if !reasoning {
-            self.streamed_text = true;
-        }
-        let i = self.chat.len();
-        self.chat.push(if reasoning {
-            Entry::Reasoning(t)
-        } else {
-            Entry::Assistant(t)
-        });
-        if reasoning {
-            self.thinking = Some(i);
-        } else {
-            self.streaming = Some(i);
-        }
-    }
 }
 
 impl Chat {

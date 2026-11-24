@@ -1,3 +1,4 @@
+mod code_block;
 use crate::style::{BULLET, LIST_INDENT, Palette, QUOTE_PREFIX, RULE_CHAR, Style};
 use crate::text::{Line, span, wrap};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};

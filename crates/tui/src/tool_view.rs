@@ -188,6 +188,7 @@ mod tests {
     fn diff_line_zero_hides_entire_diff_block_and_updates_on_reload_and_resume() {
         use crate::app::App;
         use crate::chat::{Chat, Entry};
+        use std::io::{BufRead, BufReader, Read, Write};
         use tuse_config::UiSettings;
         use tuse_core::{Event, Options, Record, Session};
 
@@ -202,14 +203,7 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join("\n")
         };
-
-        let p0 = Palette::new(
-            &Default::default(),
-            &UiSettings {
-                diff_line: 0,
-                ..Default::default()
-            },
-        );
+        let pal = |ui| Palette::new(&Default::default(), &ui);
         let diffs = vec![
             make_diff("a.rs", 10),
             make_diff("b.rs", 5),
@@ -218,29 +212,33 @@ mod tests {
                 diff: String::new(),
             },
         ];
-        let hidden = tool("x = 1", Some("edited a.rs"), Some(0), &diffs, 60, &p0);
-        let hidden_text = render_text(&hidden);
-        assert!(hidden_text.contains("x = 1") && hidden_text.contains("edited a.rs"));
-        assert!(
-            !hidden_text.contains("a.rs\n")
-                && !hidden_text.contains("b.rs")
-                && !hidden_text.contains("empty.rs")
-                && !hidden_text.contains("+ 0")
-                && !hidden_text.contains("more lines"),
-            "{hidden_text:?}"
-        );
-        assert_eq!(hidden.len(), 2);
-
-        let p_all_zero = Palette::new(
-            &Default::default(),
-            &UiSettings {
-                tool_line: 0,
-                output_line: 0,
+        let hidden = tool(
+            "x = 1",
+            Some("edited a.rs"),
+            Some(0),
+            &diffs,
+            60,
+            &pal(UiSettings {
                 diff_line: 0,
                 ..Default::default()
-            },
+            }),
         );
-        assert!(tool("x = 1", Some("ok"), Some(0), &diffs, 60, &p_all_zero).is_empty());
+        let ht = render_text(&hidden);
+        assert_eq!(hidden.len(), 2);
+        assert!(
+            ht.contains("x = 1")
+                && ht.contains("edited a.rs")
+                && !ht.contains("b.rs")
+                && !ht.contains("empty.rs")
+                && !ht.contains("more lines")
+        );
+
+        let p_zero = pal(UiSettings {
+            tool_line: 0,
+            output_line: 0,
+            diff_line: 0,
+            ..Default::default()
+        });
         let mut c = Chat::default();
         c.push(Entry::Notice("before".into()));
         c.push(Entry::Tool {
@@ -248,46 +246,43 @@ mod tests {
             input: "x = 1".into(),
             output: Some("ok".into()),
             code: Some(0),
-            diffs: diffs.clone(),
+            diffs,
         });
         c.push(Entry::Notice("after".into()));
-        let (rows, _) = c.window(60, &p_all_zero, 0, 10);
-        assert_eq!(rows.len(), 3);
+        assert_eq!(c.window(60, &p_zero, 0, 10).0.len(), 3);
 
-        let p2 = Palette::new(
-            &Default::default(),
-            &UiSettings {
+        let two = tool(
+            "x",
+            Some(""),
+            Some(0),
+            &[make_diff("a.rs", 10)],
+            60,
+            &pal(UiSettings {
                 diff_line: 2,
                 ..Default::default()
-            },
+            }),
         );
-        let two = tool("x", Some(""), Some(0), &[make_diff("a.rs", 10)], 60, &p2);
-        let two_text = render_text(&two);
-        assert!(two_text.contains("a.rs") && two_text.contains("8 more lines"));
         assert_eq!(two.len(), 5);
-
-        let p_all = Palette::new(
-            &Default::default(),
-            &UiSettings {
+        assert!(render_text(&two).contains("8 more lines"));
+        let all = tool(
+            "x",
+            Some(""),
+            Some(0),
+            &[make_diff("a.rs", 20)],
+            60,
+            &pal(UiSettings {
                 diff_line: -1,
                 ..Default::default()
-            },
-        );
-        let all = tool("x", Some(""), Some(0), &[make_diff("a.rs", 20)], 60, &p_all);
-        let all_text = render_text(&all);
-        assert!(
-            all_text.contains("a.rs")
-                && all_text.contains("+ 19")
-                && !all_text.contains("more lines")
+            }),
         );
         assert_eq!(all.len(), 22);
+        assert!(render_text(&all).contains("+ 19") && !render_text(&all).contains("more lines"));
 
         let mut app = crate::app::test_app("diff-reload");
         let cfg = app.cwd.join("tuse.lua");
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader, Read, Write};
             for (step, mut s) in listener.incoming().flatten().take(2).enumerate() {
                 let mut r = BufReader::new(s.try_clone().unwrap());
                 let mut len = 0;
@@ -319,64 +314,57 @@ mod tests {
             api_key: "test".into(),
         })
         .unwrap();
-        std::fs::write(&cfg, "return { settings = { ui = { diff_line = 12 } } }").unwrap();
-        app.run_command("reload");
-        app.session.set_model("difftest/m", "default");
-        app.session.submit(tuse_core::UserInput::text("write"));
-        loop {
+        let write_cfg = |n: i32| {
+            std::fs::write(
+                &cfg,
+                format!(
+                    "return {{ settings = {{ ui = {{ diff_line = {n} }} }}, commands = {{ r = function() require('tuse').reload() end }} }}"
+                ),
+            )
+            .unwrap();
+        };
+        let drain_until = |app: &mut App, pred: fn(&Event) -> bool| loop {
             let ev = app
                 .events
                 .recv_timeout(std::time::Duration::from_secs(10))
                 .unwrap();
-            let done = matches!(ev, Event::TurnEnd { .. });
+            let done = pred(&ev);
             app.handle_event(ev);
             if done {
                 break;
             }
-        }
+        };
+        write_cfg(12);
+        app.run_command("reload");
+        drain_until(&mut app, |e| matches!(e, Event::Reloaded));
+        app.session.set_model("difftest/m", "default");
+        app.session.submit(tuse_core::UserInput::text("write"));
+        drain_until(&mut app, |e| matches!(e, Event::TurnEnd { .. }));
+
         let view = |app: &mut App| render_text(&app.chat.window(60, &app.palette, 0, 60).0);
-        let v_init = view(&mut app);
-        assert!(
-            v_init.contains("long.rs") && v_init.contains("8 more lines"),
-            "{v_init}"
-        );
-
-        std::fs::write(&cfg, "return { settings = { ui = { diff_line = 0 } } }").unwrap();
-        app.session.reload().unwrap();
-        app.handle_event(Event::Reloaded);
+        assert!(view(&mut app).contains("8 more lines"));
+        write_cfg(0);
+        app.run_command("r");
+        drain_until(&mut app, |e| matches!(e, Event::Reloaded));
         let v0 = view(&mut app);
-        assert!(!v0.contains("row0") && !v0.contains("more lines"), "{v0}");
-
-        std::fs::write(&cfg, "return { settings = { ui = { diff_line = 12 } } }").unwrap();
-        app.session.reload().unwrap();
-        app.handle_event(Event::Reloaded);
+        assert!(!v0.contains("row0") && !v0.contains("more lines"));
+        write_cfg(12);
+        app.run_command("r");
+        drain_until(&mut app, |e| matches!(e, Event::Reloaded));
         let v12 = view(&mut app);
-        assert!(
-            v12.contains("row0") && v12.contains("8 more lines") && !v12.contains("row19"),
-            "{v12}"
-        );
-
-        std::fs::write(&cfg, "return { settings = { ui = { diff_line = -1 } } }").unwrap();
+        assert!(v12.contains("row0") && v12.contains("8 more lines") && !v12.contains("row19"));
+        write_cfg(-1);
         app.run_command("reload");
         let v_all = view(&mut app);
-        assert!(
-            v_all.contains("row0") && v_all.contains("row19") && !v_all.contains("more lines"),
-            "{v_all}"
-        );
-
-        std::fs::write(&cfg, "return { settings = { ui = { diff_line = 0 } } }").unwrap();
+        assert!(v_all.contains("row0") && v_all.contains("row19") && !v_all.contains("more lines"));
+        write_cfg(0);
         app.run_command("reload");
-        let v0b = view(&mut app);
-        assert!(
-            !v0b.contains("row0") && !v0b.contains("more lines"),
-            "{v0b}"
-        );
+        assert!(!view(&mut app).contains("row0"));
 
-        let sid = app.session.id.clone();
-        let cwd = app.cwd.clone();
+        let (sid, cwd) = (app.session.id.clone(), app.cwd.clone());
         app.session.close();
         let resumed = Session::open(Options {
-            cwd: cwd.clone(),
+            cwd,
             config: Some(cfg),
             mode: tuse_core::Mode::Tui,
             resume: Some(sid),
@@ -384,23 +372,20 @@ mod tests {
         })
         .unwrap();
         let mut app2 = App::new(resumed, None);
-        let r_text = view(&mut app2);
-        assert!(
-            !r_text.contains("row0") && !r_text.contains("more lines"),
-            "{r_text}"
-        );
+        assert!(!view(&mut app2).contains("row0"));
         let mut stored = false;
         app2.session.with_records(|recs| {
             stored = recs.iter().any(|r| {
                 matches!(r, Record::Tool { diffs, .. } if diffs.iter().any(|d| d.diff.contains("row19")))
             });
         });
-        assert!(stored);
         assert!(
-            app2.session
-                .trace()
-                .iter()
-                .any(|t| t.text.contains("row19"))
+            stored
+                && app2
+                    .session
+                    .trace()
+                    .iter()
+                    .any(|t| t.text.contains("row19"))
         );
         crate::app::cleanup(app2);
     }

@@ -107,28 +107,21 @@ pub fn providers() -> Result<Vec<tuse_config::Connect>, String> {
         let mut q =
             c.prepare("SELECT name, base_url, api_key, api FROM providers ORDER BY rowid")?;
         let rows = q.query_map([], |r| {
-            let api: String = r.get(3)?;
-            Ok(tuse_config::Connect {
+            let mut conn = tuse_config::Connect {
                 name: r.get(0)?,
                 base_url: r.get(1)?,
                 api_key: r.get(2)?,
-                api: if api.trim().is_empty() {
-                    tuse_config::DEFAULT_API.to_string()
-                } else {
-                    api
-                },
-            })
+                api: r.get(3)?,
+            };
+            conn.api = conn.api_type().to_string();
+            Ok(conn)
         })?;
         rows.collect()
     })
 }
 
 pub fn add_provider(p: &tuse_config::Connect) -> Result<(), String> {
-    let api = if p.api.trim().is_empty() {
-        tuse_config::DEFAULT_API
-    } else {
-        p.api.as_str()
-    };
+    let api = p.api_type();
     with(|c| {
         c.execute(
             "INSERT INTO providers(name, base_url, api_key, api) VALUES (?1, ?2, ?3, ?4)

@@ -1,5 +1,5 @@
 use std::path::Path;
-use tuse_config::Plugin;
+use tuse_config::{Plugin, Spec};
 use tuse_lua::mlua::{Lua, Table, Value};
 
 const MERGE: &str = include_str!("plugin_merge.lua");
@@ -51,7 +51,7 @@ pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String>
         let idx = format!("plugins[{i}]");
         let e = match v {
             Value::String(s) => Entry {
-                plugin: Plugin::new(&s.to_string_lossy(), None, None, base)
+                plugin: Plugin::new(&s.to_string_lossy(), Spec::enabled(), base)
                     .map_err(|e| format!("{idx}: {e}"))?,
                 opts: None,
             },
@@ -63,41 +63,14 @@ pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String>
                 ));
             }
         };
-        if e.plugin.enabled {
+        if e.plugin.is_enabled() {
             out.push(e);
         }
     }
-    let mut seen: Vec<(&Path, &str, &Option<String>, &Option<String>)> = vec![];
-    for e in &out {
-        let p = &e.plugin;
-        if p.bundled {
-            continue;
+    for (i, later) in out.iter().enumerate().skip(1) {
+        for earlier in &out[..i] {
+            earlier.plugin.conflict_with(&later.plugin)?;
         }
-        if let Some((_, other, _, _)) = seen.iter().find(|(root, _, u, _)| {
-            *root == p.root
-                && match (u.as_deref(), p.url.as_deref()) {
-                    (Some(a), Some(b)) => {
-                        tuse_config::normalize_url(a) != tuse_config::normalize_url(b)
-                    }
-                    _ => false,
-                }
-        }) {
-            return Err(format!(
-                "plugins: {other} and {} map to the same checkout with different URLs",
-                p.name
-            ));
-        }
-        if let Some((_, other, _, r)) = seen.iter().find(|(root, _, _, r)| {
-            *root == p.root && r.is_some() && p.git_ref.is_some() && **r != p.git_ref
-        }) {
-            return Err(format!(
-                "plugins: {other} and {} have conflicting ref {:?} vs {:?} for one repository",
-                p.name,
-                r.as_deref().unwrap_or(""),
-                p.git_ref.as_deref().unwrap_or("")
-            ));
-        }
-        seen.push((&p.root, &p.name, &p.url, &p.git_ref));
     }
     Ok(out)
 }
@@ -124,18 +97,7 @@ fn entry(t: &Table, idx: &str, base: &Path) -> Result<Entry, String> {
     let dir = text(t, "dir", idx)?;
     let path = text(t, "path", idx)?;
     let git_ref = text(t, "ref", idx)?;
-    if name == tuse_config::BUNDLED_DEFAULT
-        && (dir.is_some() || path.is_some() || git_ref.is_some())
-    {
-        return Err(format!(
-            "plugin {}: bundled plugin does not accept ref, dir, or path",
-            tuse_config::BUNDLED_DEFAULT
-        ));
-    }
-    let mut plugin = Plugin::new(&name, dir.as_deref(), path.as_deref(), base)
-        .map_err(|e| format!("{idx}: {e}"))?;
-    plugin.git_ref = git_ref;
-    plugin.enabled = match t.raw_get::<Value>("enabled").map_err(|e| e.to_string())? {
+    let enabled = match t.raw_get::<Value>("enabled").map_err(|e| e.to_string())? {
         Value::Nil => true,
         Value::Boolean(b) => b,
         other => {
@@ -145,6 +107,13 @@ fn entry(t: &Table, idx: &str, base: &Path) -> Result<Entry, String> {
             ));
         }
     };
+    let spec = Spec {
+        dir,
+        path,
+        git_ref,
+        enabled,
+    };
+    let plugin = Plugin::new(&name, spec, base).map_err(|e| format!("{idx}: {e}"))?;
     let opts = match t.raw_get::<Value>("opts").map_err(|e| e.to_string())? {
         Value::Nil => None,
         Value::Table(o) => Some(o),
@@ -189,12 +158,12 @@ pub(crate) fn apply(
     let mut plugin_fns = std::collections::HashSet::new();
     let loaded = lua.create_table().map_err(|e| e.to_string())?;
     for e in list {
-        let psrc = format!("plugin {}", e.plugin.name);
+        let psrc = format!("plugin {}", e.plugin.name());
         let t = load(lua, &e).map_err(|err| format!("{psrc}: {err}"))?;
         crate::validate::table(lua, &t, &psrc, true, false)?;
         plugin_fns.extend(crate::validate::function_names(&t));
         let item = lua.create_table().map_err(|e| e.to_string())?;
-        item.set("name", e.plugin.name.as_str())
+        item.set("name", e.plugin.name())
             .map_err(|e| e.to_string())?;
         item.set("config", t).map_err(|e| e.to_string())?;
         loaded.push(item).map_err(|e| e.to_string())?;
@@ -209,24 +178,10 @@ pub(crate) fn apply(
 
 fn load(lua: &Lua, e: &Entry) -> Result<Table, String> {
     let p = &e.plugin;
-    if p.bundled {
+    if p.is_bundled() {
         return crate::subs::load_default_plugin(lua, e.opts.clone());
     }
-    let Some(file) = p.entry() else {
-        return Err(if p.url.is_some() && !p.root.exists() {
-            format!(
-                "not checked out; run `git clone {} {}`{}, see docs(\"plugins\")",
-                p.url.as_deref().unwrap_or_default(),
-                p.root.display(),
-                p.git_ref
-                    .as_deref()
-                    .map(|r| format!(" and `git -C {} checkout {r}`", p.root.display()))
-                    .unwrap_or_default()
-            )
-        } else {
-            format!("no init.lua or tuse.lua in {}", p.dir().display())
-        });
-    };
+    let file = p.entry_file()?;
     let value = crate::config_lua::eval_file(lua, &file)?;
     let value = match value {
         Value::Function(f) => {

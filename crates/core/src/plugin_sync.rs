@@ -35,18 +35,20 @@ impl Drop for CleanDir {
 pub(crate) fn sync_all(entries: &[crate::plugins::Entry]) -> Result<(), String> {
     let mut repos: Vec<RepoSpec> = vec![];
     for e in entries {
-        let Some(url) = &e.plugin.url else { continue };
-        if let Some(existing) = repos.iter_mut().find(|r| r.root == e.plugin.root) {
-            if existing.git_ref.is_none() && e.plugin.git_ref.is_some() {
-                existing.git_ref = e.plugin.git_ref.clone();
+        let Some(repo) = e.plugin.repo() else {
+            continue;
+        };
+        if let Some(existing) = repos.iter_mut().find(|r| r.root == repo.root()) {
+            if existing.git_ref.is_none() && repo.git_ref().is_some() {
+                existing.git_ref = repo.git_ref().map(String::from);
             }
             continue;
         }
         repos.push(RepoSpec {
-            name: e.plugin.name.clone(),
-            url: url.clone(),
-            root: e.plugin.root.clone(),
-            git_ref: e.plugin.git_ref.clone(),
+            name: e.plugin.name().to_string(),
+            url: repo.url().to_string(),
+            root: repo.root().to_path_buf(),
+            git_ref: repo.git_ref().map(String::from),
         });
     }
     for r in repos {

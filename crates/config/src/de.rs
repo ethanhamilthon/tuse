@@ -1,5 +1,4 @@
 use serde::de::{Deserialize, Deserializer, Error};
-use std::collections::BTreeMap;
 
 pub fn list<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Vec<T>, D::Error> {
     struct V<T>(std::marker::PhantomData<T>);
@@ -57,76 +56,4 @@ pub fn price<'de, D: Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
         return Err(D::Error::custom("expected a finite non-negative number"));
     }
     Ok(n)
-}
-
-pub fn color<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
-    let s = String::deserialize(d)?;
-    if !crate::theme::valid_color(&s) {
-        return Err(D::Error::custom(format!("invalid color `{s}`")));
-    }
-    Ok(s)
-}
-
-pub fn model_name<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
-    let s = String::deserialize(d)?;
-    let (provider, id) = crate::split_model(&s);
-    if provider.is_empty() || id.is_empty() || s.chars().any(char::is_whitespace) {
-        return Err(D::Error::custom(format!(
-            "expected a provider/model name, got `{s}`"
-        )));
-    }
-    Ok(s)
-}
-
-pub fn events<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-    let list: Vec<String> = list(d)?;
-    if list.is_empty() {
-        return Err(D::Error::custom("must contain at least one event"));
-    }
-    if let Some(e) = list
-        .iter()
-        .find(|e| !crate::HOOK_EVENTS.contains(&e.as_str()))
-    {
-        return Err(D::Error::custom(format!(
-            "unknown event `{e}`; events are {}",
-            crate::HOOK_EVENTS.join(", ")
-        )));
-    }
-    Ok(list)
-}
-
-fn names<E: Error>(list: &[String], check: fn(&str) -> Option<&'static str>) -> Result<(), E> {
-    match list.iter().find_map(|n| check(n).map(|r| (n, r))) {
-        Some((n, reason)) => Err(E::custom(format!("`{n}`: {reason}"))),
-        None => Ok(()),
-    }
-}
-
-pub fn functions<'de, D: Deserializer<'de>>(
-    d: D,
-) -> Result<BTreeMap<String, crate::FunctionKind>, D::Error> {
-    let map = BTreeMap::<String, crate::FunctionKind>::deserialize(d)?;
-    for (name, kind) in &map {
-        if let Some(reason) = crate::check_function_name(name) {
-            return Err(D::Error::custom(format!("'{name}': {reason}")));
-        }
-        if name == "json" && *kind != crate::FunctionKind::Disabled {
-            return Err(D::Error::custom(
-                "'json' is a table and can only be disabled with false",
-            ));
-        }
-    }
-    Ok(map)
-}
-
-pub fn commands<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-    let list: Vec<String> = list(d)?;
-    names(&list, crate::check_command_name)?;
-    Ok(list)
-}
-
-pub fn open<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-    let list: Vec<String> = list(d)?;
-    names(&list, crate::check_open_ext)?;
-    Ok(list)
 }

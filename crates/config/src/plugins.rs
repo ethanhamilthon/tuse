@@ -1,4 +1,4 @@
-use crate::load::resolve_path;
+use crate::modules::resolve_path;
 use std::path::{Path, PathBuf};
 
 pub fn tuse_home() -> PathBuf {
@@ -17,26 +17,66 @@ pub fn normalize_url(url: &str) -> String {
 
 pub const BUNDLED_DEFAULT: &str = "tuse/default";
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Plugin {
-    pub name: String,
-    pub url: Option<String>,
-    pub root: PathBuf,
-    pub sub: String,
+#[derive(Default)]
+pub struct Spec {
+    pub dir: Option<String>,
+    pub path: Option<String>,
     pub git_ref: Option<String>,
     pub enabled: bool,
-    pub bundled: bool,
+}
+
+impl Spec {
+    pub fn enabled() -> Spec {
+        Spec {
+            enabled: true,
+            ..Spec::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Plugin {
+    name: String,
+    url: Option<String>,
+    root: PathBuf,
+    sub: String,
+    git_ref: Option<String>,
+    enabled: bool,
+    bundled: bool,
+}
+
+pub struct Repo<'a> {
+    url: &'a str,
+    root: &'a Path,
+    git_ref: Option<&'a str>,
+}
+
+impl<'a> Repo<'a> {
+    pub fn url(&self) -> &'a str {
+        self.url
+    }
+
+    pub fn root(&self) -> &'a Path {
+        self.root
+    }
+
+    pub fn git_ref(&self) -> Option<&'a str> {
+        self.git_ref
+    }
 }
 
 impl Plugin {
-    pub fn new(
-        name: &str,
-        dir: Option<&str>,
-        path: Option<&str>,
-        base: &Path,
-    ) -> Result<Plugin, String> {
+    pub fn new(name: &str, spec: Spec, base: &Path) -> Result<Plugin, String> {
+        let Spec {
+            dir,
+            path,
+            git_ref,
+            enabled,
+        } = spec;
+        let dir = dir.as_deref();
+        let path = path.as_deref();
         if name == BUNDLED_DEFAULT {
-            if dir.is_some() || path.is_some() {
+            if dir.is_some() || path.is_some() || git_ref.is_some() {
                 return Err(format!(
                     "plugin {BUNDLED_DEFAULT}: bundled plugin does not accept ref, dir, or path"
                 ));
@@ -47,7 +87,7 @@ impl Plugin {
                 root: PathBuf::new(),
                 sub: String::new(),
                 git_ref: None,
-                enabled: true,
+                enabled,
                 bundled: true,
             });
         }
@@ -57,8 +97,8 @@ impl Plugin {
             url: None,
             root: PathBuf::new(),
             sub: String::new(),
-            git_ref: None,
-            enabled: true,
+            git_ref,
+            enabled,
             bundled: false,
         };
         if let Some(d) = dir {
@@ -110,7 +150,70 @@ impl Plugin {
         Ok(p)
     }
 
-    pub fn dir(&self) -> PathBuf {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub fn is_bundled(&self) -> bool {
+        self.bundled
+    }
+
+    pub fn repo(&self) -> Option<Repo<'_>> {
+        self.url.as_deref().map(|url| Repo {
+            url,
+            root: &self.root,
+            git_ref: self.git_ref.as_deref(),
+        })
+    }
+
+    pub fn conflict_with(&self, later: &Plugin) -> Result<(), String> {
+        if self.bundled || later.bundled || self.root != later.root {
+            return Ok(());
+        }
+        if let (Some(a), Some(b)) = (&self.url, &later.url)
+            && normalize_url(a) != normalize_url(b)
+        {
+            return Err(format!(
+                "plugins: {} and {} map to the same checkout with different URLs",
+                self.name, later.name
+            ));
+        }
+        if self.git_ref.is_some() && later.git_ref.is_some() && self.git_ref != later.git_ref {
+            return Err(format!(
+                "plugins: {} and {} have conflicting ref {:?} vs {:?} for one repository",
+                self.name,
+                later.name,
+                self.git_ref.as_deref().unwrap_or(""),
+                later.git_ref.as_deref().unwrap_or("")
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn entry_file(&self) -> Result<PathBuf, String> {
+        if let Some(file) = self.entry() {
+            return Ok(file);
+        }
+        Err(if self.url.is_some() && !self.root.exists() {
+            format!(
+                "not checked out; run `git clone {} {}`{}, see docs(\"plugins\")",
+                self.url.as_deref().unwrap_or_default(),
+                self.root.display(),
+                self.git_ref
+                    .as_deref()
+                    .map(|r| format!(" and `git -C {} checkout {r}`", self.root.display()))
+                    .unwrap_or_default()
+            )
+        } else {
+            format!("no init.lua or tuse.lua in {}", self.dir().display())
+        })
+    }
+
+    fn dir(&self) -> PathBuf {
         if self.sub.is_empty() {
             self.root.clone()
         } else {
@@ -135,7 +238,7 @@ impl Plugin {
         }
     }
 
-    pub fn commit(&self) -> Option<String> {
+    fn commit(&self) -> Option<String> {
         let git = self.root.join(".git");
         let head = std::fs::read_to_string(git.join("HEAD")).ok()?;
         let head = head.trim();
@@ -152,7 +255,7 @@ impl Plugin {
         Some(full.get(..7)?.to_string())
     }
 
-    pub fn entry(&self) -> Option<PathBuf> {
+    fn entry(&self) -> Option<PathBuf> {
         let d = self.dir();
         [d.join("init.lua"), d.join("tuse.lua")]
             .into_iter()
@@ -168,22 +271,48 @@ mod tests {
     fn names_map_to_clones() {
         let b = Path::new("/cfg");
         let root = plugins_root();
-        let p = Plugin::new("me/tuse/plugins/rex", None, None, b).unwrap();
+        let p = Plugin::new("me/tuse/plugins/rex", Spec::enabled(), b).unwrap();
         assert_eq!(p.url.as_deref(), Some("https://github.com/me/tuse.git"));
         assert_eq!(
             (p.root.clone(), p.sub.as_str()),
             (root.join("me/tuse"), "plugins/rex")
         );
         assert_eq!(p.dir(), root.join("me/tuse/plugins/rex"));
-        let p = Plugin::new("https://gitlab.com/a/b.git", None, Some("x"), b).unwrap();
+        let p = Plugin::new(
+            "https://gitlab.com/a/b.git",
+            Spec {
+                path: Some("x".into()),
+                ..Spec::enabled()
+            },
+            b,
+        )
+        .unwrap();
         assert_eq!((p.root, p.sub.as_str()), (root.join("gitlab.com/a/b"), "x"));
-        let p = Plugin::new("git@github.com:a/b.git", None, None, b).unwrap();
+        let p = Plugin::new("git@github.com:a/b.git", Spec::enabled(), b).unwrap();
         assert_eq!(p.root, root.join("github.com/a/b"));
-        let p = Plugin::new("dev", Some("w"), None, b).unwrap();
+        let p = Plugin::new(
+            "dev",
+            Spec {
+                dir: Some("w".into()),
+                ..Spec::enabled()
+            },
+            b,
+        )
+        .unwrap();
         assert_eq!((p.url, p.root), (None, PathBuf::from("/cfg/w")));
         for bad in ["rex", "a//b", "a/../b"] {
-            assert!(Plugin::new(bad, None, None, b).is_err(), "{bad}");
+            assert!(Plugin::new(bad, Spec::enabled(), b).is_err(), "{bad}");
         }
-        assert!(Plugin::new("a/b", None, Some("../x"), b).is_err());
+        assert!(
+            Plugin::new(
+                "a/b",
+                Spec {
+                    path: Some("../x".into()),
+                    ..Spec::enabled()
+                },
+                b
+            )
+            .is_err()
+        );
     }
 }

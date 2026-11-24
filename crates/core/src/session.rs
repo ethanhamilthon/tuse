@@ -235,7 +235,7 @@ impl Session {
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
         let c = self
             .vm
-            .call(move |lua| crate::config_lua::prepare(lua, path.as_deref()))?;
+            .call(move |lua| crate::config_lua::prepare(lua, path.as_deref(), true))?;
         self.finish_hooks("reload");
         let c = Arc::new(c);
         let (s2, c2) = (self.clone(), c.clone());

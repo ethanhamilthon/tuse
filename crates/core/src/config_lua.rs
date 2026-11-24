@@ -16,7 +16,11 @@ pub(crate) fn agent_env(lua: &Lua) -> mlua::Result<Table> {
     lua.named_registry_value(AGENT_ENV)
 }
 
-pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
+pub(crate) fn prepare(
+    lua: &Lua,
+    path: Option<&Path>,
+    sync_plugins: bool,
+) -> Result<Config, String> {
     let saved = crate::require::forget(lua).map_err(|e| e.to_string())?;
     let prev_ctx = lua.app_data_mut::<crate::snapshot::LoadCtx>().map(|mut c| {
         let old = (c.loading, c.configpath.clone());
@@ -24,7 +28,7 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
         c.configpath = path.map(|p| p.display().to_string());
         old
     });
-    let res = prepare_inner(lua, path);
+    let res = prepare_inner(lua, path, sync_plugins);
     if let (Some(mut ctx), Some((old_loading, old_path))) =
         (lua.app_data_mut::<crate::snapshot::LoadCtx>(), prev_ctx)
     {
@@ -39,10 +43,10 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
     res
 }
 
-fn prepare_inner(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
+fn prepare_inner(lua: &Lua, path: Option<&Path>, sync_plugins: bool) -> Result<Config, String> {
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     let (table, plugins, parsed) = match path {
-        Some(p) => read_file(lua, p)?,
+        Some(p) => read_file(lua, p, sync_plugins)?,
         None => (lua.create_table().map_err(|e| e.to_string())?, vec![], None),
     };
     let mut config = match parsed {
@@ -57,13 +61,13 @@ fn prepare_inner(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     Ok(config)
 }
 
-fn read_file(lua: &Lua, path: &Path) -> Result<crate::plugins::Merged, String> {
+fn read_file(lua: &Lua, path: &Path, sync_plugins: bool) -> Result<crate::plugins::Merged, String> {
     let source = path.display().to_string();
     let error = |e: mlua::Error| format!("{source}: {}", tuse_lua::message(&e));
     match eval_file(lua, path)? {
         Value::Table(t) => {
             let base = path.parent().unwrap_or(Path::new("."));
-            crate::plugins::apply(lua, t, &source, base)
+            crate::plugins::apply(lua, t, &source, base, sync_plugins)
         }
         Value::Nil => Ok((lua.create_table().map_err(error)?, vec![], None)),
         _ => Err(format!("{source}: the config must return a table")),
@@ -164,7 +168,7 @@ pub(crate) fn start_vm(
             loading: false,
         });
         crate::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
-        let config = crate::config_lua::prepare(lua, path.as_deref())?;
+        let config = crate::config_lua::prepare(lua, path.as_deref(), false)?;
         crate::config_lua::commit(lua, &config)?;
         Ok::<_, String>(config)
     })?;

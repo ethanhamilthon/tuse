@@ -3,6 +3,7 @@
 ## 0.9.3
 
 - **Breaking:** Configured `functions` now map names directly to plain Lua functions or `false` (removing `{ run, args, description, show_agent }`), are strictly isolated to the agent's `lua` environment, and are undiscoverable unless documented in `systems`/`prompts`. Built-in host functions can be overridden (delegating to unmodified originals via `require("tuse")`) or disabled with `false` (live-gated across reloads and filtered from the system prompt, `lua` tool description, and `docs()`).
+- Reload (`/reload`, `config.reload`, `reload()`) now automatically installs missing Git plugins and updates moving refs (`ref` tags/branches/default branch) with per-repository advisory locking, non-interactive 60s-bounded Git execution, immutable commit-SHA pins, URL/ref conflict checks, and local-work safety checks; startup and session switches stay offline.
 
 ## 0.9.2
 

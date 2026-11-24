@@ -192,8 +192,8 @@ Compaction thresholds resolve as: per-model `compact_at` (which overrides `setti
 Reloads are serialized so only one reload runs at a time. Each reload follows this sequence:
 
 1. Re-resolves the config file path from the original `--config` argument (if any) and session `cwd`.
-2. Clears cached file modules, evaluates the config and plugins under pre-session `session()` semantics, validates everything, and reloads providers from SQLite.
-3. **On failure**: restores the previous module cache and leaves the previous config, helpers, hooks, commands, and `open` handlers active (though any arbitrary side effects already performed during Lua evaluation cannot be undone). TUI shows `Reload failed: <reason>`; JSON-RPC returns `-32000`; Lua `reload()` raises an error (or emits an `error` event when deferred from a hook).
+2. Clears cached trusted file modules, evaluates the user config under pre-session `session()` semantics, validates user keys and `plugins` entries (including URL and `ref` conflict checks), synchronizes enabled Git plugins (cloning missing checkouts and updating moving refs while respecting immutable commit pins and local-work safety; see [plugins.md](plugins.md)), loads and validates all plugins and the merged result, and reloads providers from SQLite.
+3. **On failure**: restores the previous trusted module cache and leaves the previous config, helpers, hooks, commands, and `open` handlers active (already-synced sibling Git repositories on disk are not reverted so concurrent Tuse sessions are unaffected, and arbitrary top-level Lua side effects cannot be undone). TUI shows `Reload failed: <reason>`; JSON-RPC returns `-32000`; Lua `reload()` raises an error (or emits an `error` event when deferred from a hook).
 4. **On success**:
    - Cancels pending interactive UI requests from hooks and denies new hook UI requests during the transition.
    - Runs `close` (`reason = "reload"`) on the old hooks and waits for all running hook coroutines to finish.

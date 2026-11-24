@@ -9,6 +9,12 @@ pub fn plugins_root() -> PathBuf {
     tuse_home().join("plugins")
 }
 
+pub fn normalize_url(url: &str) -> String {
+    let s = url.trim().trim_end_matches('/');
+    let s = s.strip_suffix(".git").unwrap_or(s);
+    s.trim_end_matches('/').to_string()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plugin {
     pub name: String,
@@ -38,17 +44,22 @@ impl Plugin {
         if let Some(d) = dir {
             p.root = resolve_path(d, base);
         } else if name.contains("://") || name.starts_with("git@") {
-            let tail = name.rsplit(['/', ':']).take(2).collect::<Vec<_>>();
+            let trimmed = name.trim_end_matches('/');
+            let tail = trimmed.rsplit(['/', ':']).take(2).collect::<Vec<_>>();
             let [repo, owner] = tail[..] else {
                 return Err(bad());
             };
             let repo = repo.trim_end_matches(".git");
-            let host = name.split("://").nth(1).unwrap_or(name);
+            if repo.is_empty() || owner.is_empty() {
+                return Err(bad());
+            }
+            let host = trimmed.split("://").nth(1).unwrap_or(trimmed);
             let host = host
                 .trim_start_matches("git@")
                 .split(['/', ':'])
                 .next()
                 .unwrap_or("git");
+            let host = if host.is_empty() { "file" } else { host };
             p.url = Some(name.to_string());
             p.root = plugins_root().join(host).join(owner).join(repo);
         } else {

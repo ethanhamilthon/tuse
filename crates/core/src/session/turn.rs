@@ -1,8 +1,10 @@
+use crate::convo::compaction;
+use crate::convo::history::{estimate_tokens, messages};
+use crate::convo::id;
+use crate::convo::record::Record;
 use crate::event::Event;
-use crate::history::{estimate_tokens, messages};
-use crate::record::Record;
-use crate::session::{Session, State};
-use crate::{compaction, id, prompt};
+use crate::prompt;
+use crate::session::Session;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tuse_api::{ApiType, Client, Request};
@@ -75,11 +77,6 @@ impl Session {
             cancelled: false,
         });
         true
-    }
-
-    pub(crate) fn lock_live(&self, generation: u64) -> Option<std::sync::MutexGuard<'_, State>> {
-        let st = self.state.lock().unwrap();
-        (st.generation == generation).then_some(st)
     }
 
     fn step(self: &Arc<Self>, generation: u64, cancel: &Arc<AtomicBool>) -> Step {
@@ -229,8 +226,8 @@ impl Session {
         st.context = estimate_tokens(&system, &messages(&st.records, b));
         let text = format!(
             "Context compacted at {} tokens; now about {}.",
-            crate::usage::tokens(threshold),
-            crate::usage::tokens(st.context)
+            crate::convo::usage::tokens(threshold),
+            crate::convo::usage::tokens(st.context)
         );
         self.push(&mut st, Record::Notice { text: text.clone() });
         drop(st);

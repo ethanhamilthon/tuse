@@ -1,5 +1,4 @@
-use crate::event::Event;
-use crate::subs_proc::{self, ProcHandle, ProcShared};
+use crate::scripting::subs_proc::{self, ProcHandle, ProcShared};
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -8,10 +7,10 @@ use std::time::Duration;
 use tuse_lua::mlua::{self, Lua, MultiValue, Table, Value};
 use tuse_lua::{ExtWait, add_wait, yield_wait};
 
-const THEME_LUA: &str = include_str!("../../../plugins/default/theme.lua");
-const UTIL_LUA: &str = include_str!("../../../plugins/default/subs_util.lua");
-const SUBS_LUA: &str = include_str!("../../../plugins/default/subs.lua");
-const INIT_LUA: &str = include_str!("../../../plugins/default/init.lua");
+const THEME_LUA: &str = include_str!("../../../../plugins/default/theme.lua");
+const UTIL_LUA: &str = include_str!("../../../../plugins/default/subs_util.lua");
+const SUBS_LUA: &str = include_str!("../../../../plugins/default/subs.lua");
+const INIT_LUA: &str = include_str!("../../../../plugins/default/init.lua");
 
 #[derive(Clone)]
 struct Owner {
@@ -41,7 +40,7 @@ pub(crate) fn begin_prepare(lua: &Lua) {
     }
 }
 
-pub(crate) fn reconcile(lua: &Lua) {
+pub(crate) fn reconcile(lua: &Lua) -> Option<String> {
     ensure_state(lua);
     let stop = {
         let mut st = lua.app_data_mut::<SubsState>().unwrap();
@@ -51,17 +50,11 @@ pub(crate) fn reconcile(lua: &Lua) {
             _ => None,
         }
     };
-    if let Some(owner) = stop {
-        if let Some(p) = owner.proc.and_then(|w| w.upgrade()) {
-            p.kill();
-        }
-        if let Ok(s) = crate::host::session(lua) {
-            let _ = s.stop_task(&owner.task_id);
-            s.emit(Event::Notice(
-                "Stopped previous managed subs proxy (subs disabled or settings changed). Run /subs -> start to launch a new one.".into(),
-            ));
-        }
+    let owner = stop?;
+    if let Some(p) = owner.proc.and_then(|w| w.upgrade()) {
+        p.kill();
     }
+    Some(owner.task_id)
 }
 
 pub(crate) fn stop_all(lua: &Lua) {
@@ -83,7 +76,7 @@ pub(crate) fn stop_all(lua: &Lua) {
 pub(crate) fn load_default_plugin(lua: &Lua, opts: Option<Table>) -> Result<Table, String> {
     ensure_state(lua);
     let m = |e: mlua::Error| tuse_lua::message(&e);
-    let env = crate::registry::file_env(lua).map_err(&m)?;
+    let env = crate::scripting::registry::file_env(lua).map_err(&m)?;
     let store = match lua
         .named_registry_value::<Value>("tuse_subs_store")
         .map_err(&m)?

@@ -1,17 +1,10 @@
 use crate::session::Session;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use tuse_api::ToolCall;
 use tuse_config::split_model;
 use tuse_lua::Done;
-
-pub(crate) fn compact(mut v: Value) -> Value {
-    if let Value::Object(m) = &mut v {
-        m.retain(|_, val| !val.is_null());
-    }
-    v
-}
 
 fn non_empty(s: &str) -> Option<&str> {
     (!s.is_empty()).then_some(s)
@@ -58,7 +51,9 @@ impl Session {
     pub(crate) fn model_change_hook(self: &Arc<Self>, pm: &str, pe: &str, nm: &str, ne: &str) {
         let side = |m: &str, e: &str| {
             let (p, _) = split_model(m);
-            compact(json!({"model": non_empty(m), "provider": non_empty(p), "effort": e}))
+            crate::text::compact(
+                json!({"model": non_empty(m), "provider": non_empty(p), "effort": e}),
+            )
         };
         self.hook(
             "model_change",

@@ -1,4 +1,5 @@
-use crate::{Event, Session};
+use crate::Event;
+use crate::Session;
 use tuse_api::Delta;
 impl Session {
     pub(crate) fn on_delta(&self, d: Delta) {
@@ -9,7 +10,7 @@ impl Session {
                 name,
                 code,
             } => {
-                if name == crate::tool::TOOL {
+                if name == crate::session::tool::TOOL {
                     self.emit(Event::ToolDelta {
                         index,
                         id: id.into(),

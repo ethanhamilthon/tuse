@@ -68,7 +68,7 @@ pub enum Event {
         id: String,
         output: String,
         code: Option<i32>,
-        diffs: Vec<crate::record::FileDiff>,
+        diffs: Vec<crate::convo::record::FileDiff>,
     },
     Status(String),
     Notice(String),

@@ -1,5 +1,4 @@
-use crate::hook_events::compact;
-use crate::record::Record;
+use crate::convo::record::Record;
 use crate::session::Session;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -39,7 +38,7 @@ impl Session {
         if names.is_empty() {
             return;
         }
-        let payload = compact(payload);
+        let payload = crate::text::compact(payload);
         for name in names {
             let mut runs = self.hook_runs.lock().unwrap();
             let lane = runs.entry(name.clone()).or_default();
@@ -78,7 +77,7 @@ impl Session {
                 }
             };
             let start = || -> tuse_lua::mlua::Result<()> {
-                let f: Function = crate::registry::code_of(lua, "hooks", &name)
+                let f: Function = crate::scripting::registry::code_of(lua, "hooks", &name)
                     .ok_or_else(|| tuse_lua::mlua::Error::runtime("run is gone"))?;
                 let arg = tuse_lua::to_lua(lua, &vars)?;
                 let job = Job::new(

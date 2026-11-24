@@ -52,7 +52,7 @@ impl Tasks {
                 name.to_string()
             },
             status: "running".into(),
-            started: crate::id::now(),
+            started: crate::convo::id::now(),
             ended: String::new(),
             log: log.display().to_string(),
         });
@@ -68,7 +68,7 @@ impl Tasks {
         self.cancels.lock().unwrap().remove(id);
         let mut l = self.list.lock().unwrap();
         let t = l.iter_mut().find(|t| t.id == id)?;
-        t.ended = crate::id::now();
+        t.ended = crate::convo::id::now();
         if t.status == "stopped" {
             return None;
         }

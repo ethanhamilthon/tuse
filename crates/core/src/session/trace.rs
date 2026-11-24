@@ -1,5 +1,5 @@
+use crate::convo::record::Record;
 use crate::prompt;
-use crate::record::Record;
 use crate::session::Session;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -10,7 +10,7 @@ pub struct TraceItem {
 }
 
 fn role_of(tool: &str) -> &'static str {
-    if tool == crate::tool::TOOL {
+    if tool == crate::session::tool::TOOL {
         "lua"
     } else {
         "tool"
@@ -33,7 +33,7 @@ fn item(role: &'static str, text: String) -> TraceItem {
     }
 }
 
-use crate::history::join_context;
+use crate::convo::history::join_context;
 
 impl Session {
     pub fn trace(&self) -> Vec<TraceItem> {

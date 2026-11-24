@@ -1,6 +1,6 @@
 use crate::mode::Mode;
 use crate::session::Session;
-use crate::trace::TraceItem;
+use crate::session::trace::TraceItem;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tuse_config::{ModelDef, Prices, split_model};
@@ -169,37 +169,4 @@ impl Session {
             trace,
         }
     }
-}
-
-pub(crate) fn lua_session(lua: &Lua) -> mlua::Result<Value> {
-    let pre = lua.app_data_ref::<LoadCtx>().and_then(|ctx| {
-        if ctx.loading {
-            Some(SessionSnapshot::pre_session(
-                ctx.mode,
-                ctx.configpath.clone(),
-                &ctx.cwd,
-                &tuse_config::tuse_home(),
-            ))
-        } else {
-            None
-        }
-    });
-    if let Some(snap) = pre {
-        return snap.to_lua(lua);
-    }
-    if let Ok(s) = crate::host::session(lua) {
-        return s.snapshot(true).to_lua(lua);
-    }
-    let snap = lua
-        .app_data_ref::<LoadCtx>()
-        .map(|ctx| {
-            SessionSnapshot::pre_session(
-                ctx.mode,
-                ctx.configpath.clone(),
-                &ctx.cwd,
-                &tuse_config::tuse_home(),
-            )
-        })
-        .ok_or_else(|| mlua::Error::runtime("session closed"))?;
-    snap.to_lua(lua)
 }

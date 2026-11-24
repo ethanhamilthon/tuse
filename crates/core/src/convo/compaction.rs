@@ -1,5 +1,5 @@
-use crate::history::{Bounds, estimate_tokens, messages};
-use crate::record::Record;
+use crate::convo::history::{Bounds, estimate_tokens, messages};
+use crate::convo::record::Record;
 
 pub fn bounds(records: &[Record], threshold: u64, prev: Bounds) -> Option<Bounds> {
     let (fresh, middle) = (threshold / 4, threshold / 2);

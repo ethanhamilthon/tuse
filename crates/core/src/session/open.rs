@@ -80,7 +80,7 @@ impl Session {
                 }
             };
             let start = || -> mlua::Result<()> {
-                let f = crate::registry::open_of(lua, &ext)
+                let f = crate::scripting::registry::open_of(lua, &ext)
                     .ok_or_else(|| mlua::Error::runtime("open handler is gone"))?;
                 let arg = Value::String(lua.create_string(&path_str)?);
                 let job = Job::new(

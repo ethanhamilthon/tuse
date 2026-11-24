@@ -1,4 +1,4 @@
-use crate::record::Record;
+use crate::convo::record::Record;
 use tuse_api::{Message, ToolImage};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -134,7 +134,7 @@ pub fn missing_results(records: &[Record]) -> Vec<Record> {
             code: None,
             images: vec![],
             diffs: vec![],
-            at: crate::id::now(),
+            at: crate::convo::id::now(),
         })
         .collect()
 }

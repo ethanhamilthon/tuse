@@ -39,8 +39,8 @@ fn find_model<'a>(models: &'a [ModelDef], full: &str) -> Option<&'a ModelDef> {
 }
 
 impl Stats {
-    pub(crate) fn add(&mut self, r: &crate::record::Record, models: &[ModelDef]) {
-        use crate::record::Record;
+    pub(crate) fn add(&mut self, r: &crate::convo::record::Record, models: &[ModelDef]) {
+        use crate::convo::record::Record;
         match r {
             Record::Usage {
                 model,
@@ -73,7 +73,7 @@ impl Stats {
         }
     }
 
-    pub(crate) fn of(records: &[crate::record::Record], models: &[ModelDef]) -> Stats {
+    pub(crate) fn of(records: &[crate::convo::record::Record], models: &[ModelDef]) -> Stats {
         let mut s = Stats::default();
         for r in records {
             s.add(r, models);

@@ -1,11 +1,29 @@
-use crate::control::Subs;
+pub(crate) mod bus;
+pub(crate) mod commands;
+pub(crate) mod config_lua;
+pub(crate) mod control;
+pub(crate) mod hook_events;
+pub(crate) mod hooks;
+pub(crate) mod host;
+pub(crate) mod meta;
+pub(crate) mod models;
+pub(crate) mod open;
+pub(crate) mod snapshot;
+pub(crate) mod state;
+pub(crate) mod stream;
+pub(crate) mod tool;
+pub(crate) mod trace;
+pub(crate) mod turn;
+pub(crate) mod ui;
+
+use crate::convo::history::{self, Bounds};
+use crate::convo::record::{Record, UserInput};
 use crate::event::Event;
 use crate::event::InputId;
-use crate::history::{self, Bounds};
 pub use crate::mode::{Mode, Options, Start};
-use crate::record::{Record, UserInput};
-use crate::store::{Meta, SessionDir};
-use crate::tasks::{TaskInfo, Tasks};
+use crate::session::bus::Subs;
+use crate::storage::store::{Meta, SessionDir};
+use crate::storage::tasks::{TaskInfo, Tasks};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -25,8 +43,8 @@ pub struct Session {
     pub(crate) subs: Mutex<Subs>,
     pub(crate) vm: tuse_lua::Vm,
     pub(crate) hooks_on: AtomicBool,
-    pub(crate) hook_runs: crate::hooks::Runs,
-    pub(crate) ui: Mutex<crate::ui::UiState>,
+    pub(crate) hook_runs: crate::session::hooks::Runs,
+    pub(crate) ui: Mutex<crate::session::ui::UiState>,
     pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,
     pub(crate) http: tuse_api::HttpAgent,
     pub(crate) next_lua: AtomicU64,
@@ -53,7 +71,7 @@ pub(crate) struct State {
     pub meta: Meta,
     pub partial: String,
     pub remote: Vec<String>,
-    pub stats: (crate::usage::Stats, Vec<ModelDef>),
+    pub stats: (crate::convo::usage::Stats, Vec<ModelDef>),
 }
 
 pub(crate) struct Prepared {
@@ -62,7 +80,7 @@ pub(crate) struct Prepared {
     meta: Meta,
     dir: SessionDir,
     vm: tuse_lua::Vm,
-    weak: crate::host::Slot,
+    weak: crate::session::host::Slot,
     config: Config,
 }
 
@@ -71,11 +89,11 @@ impl Session {
         &self.cwd
     }
 
-    pub fn tasks(&self) -> Vec<crate::tasks::TaskInfo> {
+    pub fn tasks(&self) -> Vec<crate::storage::tasks::TaskInfo> {
         self.tasks.list()
     }
 
-    pub fn task(&self, id: &str) -> Option<crate::tasks::TaskInfo> {
+    pub fn task(&self, id: &str) -> Option<crate::storage::tasks::TaskInfo> {
         self.tasks.get(id)
     }
 
@@ -88,9 +106,10 @@ impl Session {
         let id = opts
             .resume
             .clone()
-            .unwrap_or_else(crate::id::new_session_id);
+            .unwrap_or_else(crate::convo::id::new_session_id);
         let meta = if restored {
-            let meta = crate::store::read_meta(&id).ok_or_else(|| format!("no session {id}"))?;
+            let meta =
+                crate::storage::store::read_meta(&id).ok_or_else(|| format!("no session {id}"))?;
             let cwd = PathBuf::from(&meta.cwd);
             if cwd.is_dir() {
                 opts.cwd = cwd;
@@ -100,12 +119,12 @@ impl Session {
             Meta {
                 id: id.clone(),
                 cwd: opts.cwd.display().to_string(),
-                created: crate::id::now(),
+                created: crate::convo::id::now(),
                 ..Default::default()
             }
         };
         let dir = SessionDir::open(&id, !restored)?;
-        let (vm, weak, config) = crate::config_lua::start_vm(&opts)?;
+        let (vm, weak, config) = crate::session::config_lua::start_vm(&opts)?;
         Ok(Prepared {
             opts,
             id,
@@ -135,8 +154,8 @@ impl Prepared {
             dir.append(&r);
             records.push(r);
         }
-        let default_model = crate::db::default_model();
-        let default_effort = crate::db::default_effort();
+        let default_model = crate::storage::db::default_model();
+        let default_effort = crate::storage::db::default_effort();
         if !restored {
             let r = Record::Settings {
                 model: default_model.clone(),
@@ -147,8 +166,8 @@ impl Prepared {
         }
         let mut st = State {
             bounds: Bounds::default(),
-            model: crate::control::or_default(&meta.model, default_model),
-            effort: crate::control::or_default(&meta.effort, default_effort),
+            model: crate::session::state::or_default(&meta.model, default_model),
+            effort: crate::session::state::or_default(&meta.effort, default_effort),
             busy: false,
             turn_error: None,
             generation: 0,
@@ -183,9 +202,9 @@ impl Prepared {
                 _ => {}
             }
         }
-        let ui = crate::ui::UiState::replay(&records);
+        let ui = crate::session::ui::UiState::replay(&records);
         let models = config.models.clone();
-        st.stats = (crate::usage::Stats::of(&records, &models), models);
+        st.stats = (crate::convo::usage::Stats::of(&records, &models), models);
         st.records = records;
         let config = Arc::new(config);
         let path = dir.path.clone();
@@ -232,7 +251,7 @@ impl Session {
         self.stop_commands();
         self.cancel_turn();
         self.tasks.stop_all();
-        self.vm.call(crate::subs::stop_all);
+        self.vm.call(crate::scripting::subs::stop_all);
         self.finish_hooks(reason);
         self.dir.lock().unwrap().take();
     }
@@ -250,12 +269,12 @@ impl Session {
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
         let c = self
             .vm
-            .call(move |lua| crate::config_lua::prepare(lua, path.as_deref(), true))?;
+            .call(move |lua| crate::session::config_lua::prepare(lua, path.as_deref(), true))?;
         self.finish_hooks("reload");
         let c = Arc::new(c);
         let (s2, c2) = (self.clone(), c.clone());
         self.vm.call(move |lua| {
-            crate::config_lua::commit(lua, &c2)?;
+            crate::session::config_lua::commit(lua, &c2)?;
             s2.swap_config(c2);
             Ok::<_, String>(())
         })?;
@@ -326,7 +345,7 @@ impl Session {
     pub(crate) fn save_meta(&self, st: &mut State) {
         st.meta.model = st.model.clone();
         st.meta.effort = st.effort.clone();
-        st.meta.updated = crate::id::now();
+        st.meta.updated = crate::convo::id::now();
         if let Some(d) = self.dir.lock().unwrap().as_mut() {
             d.write_meta(&st.meta);
         }

@@ -1,3 +1,5 @@
+use serde_json::Value;
+
 pub(crate) fn error_line(text: &str) -> String {
     match text.find("\nstack traceback:") {
         Some(i) => last_line(&text[..i]),
@@ -12,4 +14,11 @@ pub(crate) fn last_line(text: &str) -> String {
         .find(|l| !l.is_empty())
         .unwrap_or("failed")
         .to_string()
+}
+
+pub(crate) fn compact(mut v: Value) -> Value {
+    if let Value::Object(m) = &mut v {
+        m.retain(|_, val| !val.is_null());
+    }
+    v
 }

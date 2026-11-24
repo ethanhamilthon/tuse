@@ -29,7 +29,6 @@ impl App {
             }
             Event::TurnStart => {
                 self.turn_error = None;
-                self.status.reset();
             }
             Event::Text(t) => self.stream(t, false),
             Event::Reasoning(t) => self.stream(t, true),
@@ -126,7 +125,7 @@ impl App {
                     *d = diffs;
                 }
             }
-            Event::Status(t) => self.status.set(t),
+            Event::Status(_) => {}
             Event::Flash(t) => self.flash(t),
             Event::Notice(t) => self.notice(t),
             Event::Notification(_) => {}

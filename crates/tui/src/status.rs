@@ -1,46 +1,7 @@
 use crate::app::App;
 use crate::render::duration;
-use crate::style::{
-    LABEL_SEP, Palette, SPINNER, STATUS_MIN_MS, STEERING_FRAMES, STEERING_LABEL, Style,
-};
+use crate::style::{LABEL_SEP, Palette, SPINNER, STEERING_FRAMES, STEERING_LABEL, Style};
 use crate::text::{Line, span};
-use std::time::{Duration, Instant};
-
-pub struct Hold {
-    shown: String,
-    since: Instant,
-    latest: String,
-}
-
-impl Default for Hold {
-    fn default() -> Self {
-        Self {
-            shown: String::new(),
-            since: Instant::now(),
-            latest: String::new(),
-        }
-    }
-}
-
-impl Hold {
-    pub fn set(&mut self, text: String) {
-        self.latest = text;
-    }
-
-    pub fn reset(&mut self) {
-        *self = Self::default();
-    }
-
-    pub fn tick(&mut self) -> bool {
-        let old = self.since.elapsed() >= Duration::from_millis(STATUS_MIN_MS);
-        if self.shown == self.latest || !(old || self.shown.is_empty()) {
-            return false;
-        }
-        self.shown = self.latest.clone();
-        self.since = Instant::now();
-        true
-    }
-}
 
 pub fn working(app: &App) -> Line {
     let p = &app.palette;
@@ -55,17 +16,10 @@ pub fn working(app: &App) -> Line {
         ];
     }
     let spin = SPINNER[app.tick % SPINNER.len()];
-    let mut line = vec![span(
+    vec![span(
         format!("{spin} {}", duration(elapsed)),
         Style::fg(p.accent),
-    )];
-    if !app.status.shown.is_empty() {
-        line.push(span(
-            format!("{LABEL_SEP}{}", app.status.shown),
-            Style::fg(p.muted),
-        ));
-    }
-    line
+    )]
 }
 
 pub fn model(app: &App) -> Line {
@@ -117,16 +71,87 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_action_stays_for_the_minimum_time() {
-        let mut h = Hold::default();
-        h.set("reading a...".into());
-        assert!(h.tick());
-        assert_eq!(h.shown, "reading a...");
-        h.set("writing b...".into());
-        assert!(!h.tick(), "too early to replace");
-        h.since -= Duration::from_millis(STATUS_MIN_MS);
-        assert!(h.tick());
-        assert_eq!(h.shown, "writing b...");
+    fn working_indicator_omits_transient_actions_and_keeps_steering_and_flash() {
+        use std::net::TcpListener;
+        use std::time::Duration;
+        use tuse_core::{Event, Options, Session, UserInput};
+
+        crate::app::test_home();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let dir = std::env::temp_dir().join(format!("tuse-work-ind-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("tuse.lua");
+        let addr = listener.local_addr().unwrap();
+        tuse_core::add_provider(&tuse_config::Connect {
+            name: "workind".into(),
+            base_url: format!("http://{addr}"),
+            api_key: "test".into(),
+        })
+        .unwrap();
+        std::fs::write(&cfg, "return {}").unwrap();
+        let session = Session::open(Options {
+            cwd: dir.clone(),
+            config: Some(cfg.clone()),
+            mode: tuse_core::Mode::Tui,
+            resume: None,
+            start: Default::default(),
+        })
+        .unwrap();
+        session.set_model("workind/m", "default");
+        let mut app = App::new(session.clone(), Some(cfg));
+        assert!(working(&app).is_empty());
+
+        let (id, _) = session.submit(UserInput::text("go"));
+        loop {
+            if matches!(app.events.recv_timeout(Duration::from_secs(5)).unwrap(), Event::User { id: got, .. } if got == id)
+            {
+                break;
+            }
+        }
+        app.handle_event(Event::Status("reading a.txt...".into()));
+        app.handle_event(Event::Status("running cargo test...".into()));
+
+        let line = working(&app);
+        assert_eq!(line.len(), 1);
+        assert_eq!(line[0].style, Style::fg(app.palette.accent));
+        assert!(line[0].text.starts_with(SPINNER[0]));
+        assert!(
+            !line[0].text.contains("·")
+                && !line[0].text.contains("reading")
+                && !line[0].text.contains("running")
+        );
+
+        app.tick = 1;
+        assert!(working(&app)[0].text.starts_with(SPINNER[1]));
+
+        app.steering = Some(id);
+        let steered = working(&app);
+        assert_eq!(
+            steered,
+            [
+                span(
+                    format!("{} ", STEERING_FRAMES[1]),
+                    Style::fg(app.palette.accent)
+                ),
+                span(STEERING_LABEL, Style::fg(app.palette.muted)),
+            ]
+        );
+        app.steering = None;
+        assert_eq!(working(&app).len(), 1);
+
+        app.flash("Copied.");
+        let top = crate::input_view::block(&app, 40, &[String::new()], 0);
+        let top_text: String = top[0].iter().map(|s| s.text.as_str()).collect();
+        assert!(top_text.contains("Copied.") && !top_text.contains(SPINNER[1]));
+        app.flash = None;
+        let top = crate::input_view::block(&app, 40, &[String::new()], 0);
+        let top_text: String = top[0].iter().map(|s| s.text.as_str()).collect();
+        assert!(top_text.contains(SPINNER[1]));
+
+        session.close();
+        drop(listener);
+        std::fs::remove_dir_all(tuse_core::tuse_home().join(&session.id)).ok();
+        std::fs::remove_dir_all(dir).ok();
     }
     #[test]
     fn model_line_colors_only_the_used_context() {

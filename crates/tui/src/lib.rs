@@ -121,6 +121,9 @@ fn main_loop(
     loop {
         dog.set_session(&app.session);
         while let Ok(e) = app.events.try_recv() {
+            if matches!(e, Event::Status(_)) {
+                continue;
+            }
             let stream = matches!(
                 e,
                 Event::Text(_) | Event::Reasoning(_) | Event::ToolDelta { .. }
@@ -138,10 +141,6 @@ fn main_loop(
         {
             app.flash = None;
             dirty = true;
-        }
-        if app.status.tick() {
-            dirty = true;
-            immediate = true;
         }
         if app.session.busy() && last_tick.elapsed() >= Duration::from_millis(100) {
             app.tick += 1;

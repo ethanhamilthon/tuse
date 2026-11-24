@@ -83,15 +83,15 @@ impl Session {
                 let f = crate::config_lua::open_of(lua, &ext)
                     .ok_or_else(|| mlua::Error::runtime("open handler is gone"))?;
                 let arg = Value::String(lua.create_string(&path_str)?);
-                Job::new(
+                let job = Job::new(
                     lua,
                     f,
                     MultiValue::from_vec(vec![arg]),
                     stop,
                     Out::Buf(String::new()),
                     done,
-                )?
-                .start(lua);
+                )?;
+                tuse_lua::start(lua, job);
                 Ok(())
             };
             if let Err(e) = start() {

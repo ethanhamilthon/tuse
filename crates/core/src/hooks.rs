@@ -81,17 +81,16 @@ impl Session {
                 let f: Function = crate::config_lua::code_of(lua, "hooks", &name)
                     .ok_or_else(|| tuse_lua::mlua::Error::runtime("run is gone"))?;
                 let arg = tuse_lua::to_lua(lua, &vars)?;
-                let mut job = Job::new(
+                let job = Job::new(
                     lua,
                     f,
                     MultiValue::from_vec(vec![arg]),
                     stop,
                     Out::Buf(String::new()),
                     done,
-                )?;
-                job.is_hook = true;
-                job.is_lua_hook = is_lua_hook;
-                job.start(lua);
+                )?
+                .hooked(is_lua_hook);
+                tuse_lua::start(lua, job);
                 Ok(())
             };
             if let Err(e) = start()

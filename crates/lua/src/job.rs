@@ -1,4 +1,3 @@
-use crate::sched::Sched;
 use mlua::{Lua, MultiValue, Thread, Value};
 use std::io::Write;
 use std::sync::Arc;
@@ -8,12 +7,26 @@ use std::time::{Duration, Instant};
 #[derive(Clone, Default)]
 pub struct Stop {
     pub cancel: Arc<AtomicBool>,
-    pub deadline: Option<Instant>,
+    deadline: Option<Instant>,
 }
 
 impl Stop {
     pub fn new(cancel: Arc<AtomicBool>, deadline: Option<Instant>) -> Self {
         Self { cancel, deadline }
+    }
+
+    pub fn deadline(&self) -> Option<Instant> {
+        self.deadline
+    }
+
+    fn resume_after(&mut self, rem: Duration) {
+        self.deadline = Some(Instant::now() + rem);
+    }
+
+    fn pause(&mut self) -> Option<Duration> {
+        self.deadline
+            .take()
+            .map(|d| d.saturating_duration_since(Instant::now()))
     }
 
     pub fn reason(&self) -> Option<&'static str> {
@@ -57,25 +70,18 @@ pub struct ExtWait {
     pub on_cancel: Option<Box<dyn FnOnce() + Send>>,
 }
 
-pub(crate) enum Wait {
-    Ready(MultiValue),
-    Sleep(Instant),
-    Sh(u64),
-    Ext { key: u64, paused: Option<Duration> },
-}
-
 pub type OnDone = Box<dyn FnOnce(&Lua, Done)>;
 
 pub struct Job {
-    pub stop: Stop,
-    pub out: Out,
-    pub diffs: Vec<(String, String)>,
-    pub images: Vec<String>,
-    pub is_hook: bool,
-    pub is_lua_hook: bool,
-    pub(crate) thread: Thread,
-    pub(crate) wait: Wait,
-    pub(crate) done: Option<OnDone>,
+    stop: Stop,
+    out: Out,
+    diffs: Vec<(String, String)>,
+    images: Vec<String>,
+    is_hook: bool,
+    is_lua_hook: bool,
+    thread: Thread,
+    args: MultiValue,
+    done: Option<OnDone>,
 }
 
 impl Job {
@@ -95,15 +101,62 @@ impl Job {
             is_hook: false,
             is_lua_hook: false,
             thread: lua.create_thread(f)?,
-            wait: Wait::Ready(args),
+            args,
             done: Some(Box::new(done)),
         })
     }
 
-    pub fn start(self, lua: &Lua) {
-        if let Some(mut s) = lua.app_data_mut::<Sched>() {
-            s.add(self);
+    pub fn hooked(mut self, lua_hook: bool) -> Self {
+        self.is_hook = true;
+        self.is_lua_hook = lua_hook;
+        self
+    }
+
+    pub fn print(&mut self, s: &str) {
+        self.out.put(s);
+    }
+
+    pub fn add_diff(&mut self, path: String, diff: String) {
+        self.diffs.push((path, diff));
+    }
+
+    pub fn add_image(&mut self, url: String) {
+        self.images.push(url);
+    }
+
+    pub fn is_hook(&self) -> bool {
+        self.is_hook
+    }
+
+    pub fn is_lua_hook(&self) -> bool {
+        self.is_lua_hook
+    }
+
+    pub fn stop(&self) -> Stop {
+        self.stop.clone()
+    }
+
+    pub(crate) fn thread(&self) -> Thread {
+        self.thread.clone()
+    }
+
+    pub(crate) fn take_args(&mut self) -> MultiValue {
+        std::mem::replace(&mut self.args, MultiValue::new())
+    }
+
+    pub(crate) fn wake(&mut self, args: MultiValue, paused: Option<Duration>) {
+        if let Some(rem) = paused {
+            self.stop.resume_after(rem);
         }
+        self.args = args;
+    }
+
+    pub(crate) fn stop_reason(&self) -> Option<&'static str> {
+        self.stop.reason()
+    }
+
+    pub(crate) fn pause_timeout(&mut self) -> Option<Duration> {
+        self.stop.pause()
     }
 
     pub(crate) fn finish(mut self, lua: &Lua, r: Result<MultiValue, String>) {
@@ -151,28 +204,4 @@ fn render(lua: &Lua, vals: MultiValue) -> String {
     let f: Option<mlua::Function> = lua.named_registry_value("tuse.render").ok();
     f.and_then(|f| f.call::<String>(vals).ok())
         .unwrap_or_default()
-}
-
-pub fn with_run<R>(lua: &Lua, f: impl FnOnce(&mut Job) -> R) -> Option<R> {
-    let mut s = lua.app_data_mut::<Sched>()?;
-    s.current_job().map(f)
-}
-
-pub fn stopped(lua: &Lua) -> Option<&'static str> {
-    lua.app_data_ref::<Sched>()?.current_stop()?.reason()
-}
-
-pub fn is_hook(lua: &Lua) -> bool {
-    with_run(lua, |j| j.is_hook).unwrap_or(false)
-}
-
-pub fn is_lua_hook(lua: &Lua) -> bool {
-    with_run(lua, |j| j.is_lua_hook).unwrap_or(false)
-}
-
-pub fn add_wait(lua: &Lua, w: ExtWait) -> mlua::Result<u64> {
-    let mut s = lua
-        .app_data_mut::<Sched>()
-        .ok_or_else(|| mlua::Error::runtime("scheduler is gone"))?;
-    Ok(s.add_wait(w))
 }

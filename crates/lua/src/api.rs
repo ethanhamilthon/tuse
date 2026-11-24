@@ -1,7 +1,8 @@
 use crate::Host;
-use crate::job::{Done, Job, Out, Stop, stopped, with_run};
-use crate::sched::{Sched, sh_value};
+use crate::job::{Done, Job, Out, Stop};
+use crate::sched::{add_proc, is_lua_hook, start, stopped, take_proc, with_run};
 use crate::sh::Proc;
+use crate::value::{sh_value, to_lua};
 use mlua::{Function, HookTriggers, Lua, LuaSerdeExt, MultiValue, Table, Value, VmState};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -71,7 +72,7 @@ fn text_of(lua: &Lua, args: MultiValue, sep: &str) -> mlua::Result<String> {
 }
 
 fn emit(lua: &Lua, s: &str) {
-    if with_run(lua, |j| j.out.put(s)).is_none() {
+    if with_run(lua, |j| j.print(s)).is_none() {
         eprint!("{s}");
     }
 }
@@ -94,7 +95,7 @@ fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64
     h.action(&cmd);
     let mut cwd = h.cwd();
     let mut env = Vec::new();
-    let mut deadline = with_run(lua, |j| j.stop.deadline).flatten();
+    let mut deadline = with_run(lua, |j| j.stop().deadline()).flatten();
     if let Some(o) = opts {
         if let Some(t) = o.get::<Option<f64>>("timeout")? {
             let own = Instant::now() + Duration::from_secs_f64(t.max(0.0));
@@ -110,11 +111,11 @@ fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64
         }
     }
     let p = Proc::start(&cmd, &cwd, &env, deadline).map_err(mlua::Error::runtime)?;
-    Ok(lua.app_data_mut::<Sched>().unwrap().add_proc(p))
+    Ok(add_proc(lua, p))
 }
 
 fn block(lua: &Lua, (kind, arg): (String, Value)) -> mlua::Result<(bool, Value)> {
-    let stop = with_run(lua, |j| j.stop.clone()).unwrap_or_default();
+    let stop = with_run(lua, |j| j.stop()).unwrap_or_default();
     match kind.as_str() {
         "sleep" => {
             let until =
@@ -129,7 +130,7 @@ fn block(lua: &Lua, (kind, arg): (String, Value)) -> mlua::Result<(bool, Value)>
         }
         _ => {
             let key = arg.as_integer().unwrap_or(0) as u64;
-            let p = lua.app_data_mut::<Sched>().unwrap().take_proc(key);
+            let p = take_proc(lua, key);
             let p = p.ok_or_else(|| mlua::Error::runtime("no such process"))?;
             let out = p.wait(|| stop.reason().is_some());
             Ok((true, sh_value(lua, out)))
@@ -141,7 +142,7 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
     let h = host(lua);
     let name = name.unwrap_or_default();
     let t = h
-        .task_start(&name, crate::job::is_lua_hook(lua))
+        .task_start(&name, is_lua_hook(lua))
         .map_err(mlua::Error::runtime)?;
     let file = std::fs::OpenOptions::new()
         .create(true)
@@ -157,15 +158,8 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
         Out::File(file),
         move |_, d: Done| h.task_end(&t.id, d),
     )?;
-    job.start(lua);
+    start(lua, job);
     Ok(id)
-}
-
-pub fn to_lua(lua: &Lua, v: &serde_json::Value) -> mlua::Result<Value> {
-    let o = mlua::serde::SerializeOptions::new()
-        .serialize_none_to_null(false)
-        .serialize_unit_to_null(false);
-    lua.to_value_with(v, o)
 }
 
 fn json(lua: &Lua) -> mlua::Result<Table> {

@@ -205,7 +205,7 @@ fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
     );
     let r = tools::read(&p, lines, offset, limit, max_image_bytes).map_err(err)?;
     if let Some(url) = r.image {
-        with_run(lua, |j| j.images.push(url));
+        with_run(lua, |j| j.add_image(url));
     }
     Ok(r.text)
 }
@@ -215,7 +215,7 @@ fn write(lua: &Lua, (path, content): (String, String)) -> mlua::Result<String> {
     action(&s, "writing", &path);
     let p = tools::resolve(&path, &s.cwd);
     let (msg, diff) = tools::write(&p, &content).map_err(err)?;
-    with_run(lua, |j| j.diffs.push((p.display().to_string(), diff)));
+    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
     Ok(msg)
 }
 
@@ -224,7 +224,7 @@ fn append(lua: &Lua, (path, text): (String, String)) -> mlua::Result<String> {
     action(&s, "appending", &path);
     let p = tools::resolve(&path, &s.cwd);
     let (msg, diff) = tools::append(&p, &text).map_err(err)?;
-    with_run(lua, |j| j.diffs.push((p.display().to_string(), diff)));
+    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
     Ok(msg)
 }
 
@@ -233,7 +233,7 @@ fn delete(lua: &Lua, path: String) -> mlua::Result<String> {
     action(&s, "deleting", &path);
     let p = tools::resolve(&path, &s.cwd);
     let (msg, diff) = tools::delete(&p).map_err(err)?;
-    with_run(lua, |j| j.diffs.push((p.display().to_string(), diff)));
+    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
     Ok(msg)
 }
 
@@ -249,7 +249,7 @@ fn edit(
         None => false,
     };
     let (msg, diff) = tools::edit(&p, &old, &new, all).map_err(err)?;
-    with_run(lua, |j| j.diffs.push((p.display().to_string(), diff)));
+    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
     Ok(msg)
 }
 
@@ -447,15 +447,15 @@ impl Session {
             let start = || -> mlua::Result<()> {
                 let f = crate::config_lua::command_of(lua, &cmd)
                     .ok_or_else(|| mlua::Error::runtime("command is gone"))?;
-                Job::new(
+                let job = Job::new(
                     lua,
                     f,
                     MultiValue::new(),
                     stop,
                     Out::Buf(String::new()),
                     done,
-                )?
-                .start(lua);
+                )?;
+                tuse_lua::start(lua, job);
                 Ok(())
             };
             if let Err(e) = start() {

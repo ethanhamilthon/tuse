@@ -2,12 +2,15 @@ mod api;
 mod job;
 mod sched;
 mod sh;
+mod value;
 mod vm;
 
-pub use api::{host, to_lua, wrap, yield_wait};
-pub use job::{Done, ExtWait, Job, Out, Stop, add_wait, is_hook, is_lua_hook, stopped, with_run};
+pub use api::{host, wrap, yield_wait};
+pub use job::{Done, ExtWait, Job, Out, Stop};
 pub use mlua;
+pub use sched::{add_wait, is_hook, is_lua_hook, start, stopped, with_run};
 pub use sh::{kill_group, setsid};
+pub use value::to_lua;
 pub use vm::Vm;
 
 use std::path::PathBuf;

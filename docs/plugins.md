@@ -104,7 +104,7 @@ Initial startup (`tuse`, `tuse json`), session switches (`/new`, `/resume`, `ses
 
 `"tuse/default"` is a reserved built-in plugin embedded directly in the `tuse` binary (source under `plugins/default/`). It loads completely offline without Git or network access and exposes two optional parts:
 
-- **`theme`** (default `true`) — applies Tuse's curated 10-token color palette ([theme.md](theme.md#bundled-default-theme)); user `theme` overrides still win token-by-token.
+- **`theme`** (default `true`) — applies Tuse's curated 10-token color palette ([theme.md](theme.md#bundled-default-theme-tusedefault)); user `theme` overrides still win token-by-token.
 - **`subs`** (default `false`) — registers the `/subs` command wrapping CLIProxyAPI as a loopback-only local provider ([subs.md](subs.md)). All setup, login, proxy, and provider actions are explicit user opt-ins; loading or reloading never performs side effects.
 
 ```lua

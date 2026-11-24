@@ -2,6 +2,8 @@
 
 This guide walks from a fresh Tuse install to a clean, maintainable personal and project configuration.
 
+If you installed with `release/install.sh` interactively, it may already have created `~/.config/tuse/init.lua` with the bundled `tuse/default` plugin (see [install.md](install.md) and [plugins.md](plugins.md)). Extend that file instead of replacing it.
+
 ## 1. Connect a Provider Using Environment Variables
 
 Providers and API keys are stored in `~/.tuse/tuse.db`, never in `tuse.lua`. Store an environment variable reference instead of a literal secret by single-quoting `'$VAR'`:

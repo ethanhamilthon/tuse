@@ -1,6 +1,6 @@
 # Tuse Documentation
 
-Source of truth for Tuse's observable behavior and public contracts. All baseline pages below describe how Tuse works today; upcoming specifications live separately under [Planned Changes](#planned-changes).
+Source of truth for Tuse's observable behavior and public contracts. Pages describe how Tuse works today. Planned changes are specified in `docs/` first, then implemented.
 
 ## Getting Started & Interfaces
 

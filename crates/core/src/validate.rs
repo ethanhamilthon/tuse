@@ -42,9 +42,16 @@ fn validate_functions(
     let Ok(raw) = t.raw_get::<Value>("functions") else {
         return Ok(());
     };
-    let Value::Table(_) = raw else {
-        return Ok(());
-    };
+    match raw {
+        Value::Table(_) => {}
+        Value::Nil => return Ok(()),
+        other => {
+            return Err(format!(
+                "{source}: functions: expected table, got {}",
+                other.type_name()
+            ));
+        }
+    }
     let mut list = entries(t, "functions");
     list.sort_by(|a, b| a.0.cmp(&b.0));
     for (name, v) in list {

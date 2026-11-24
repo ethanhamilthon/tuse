@@ -2,8 +2,6 @@
 
 This guide walks from a fresh Tuse install to a clean, maintainable personal and project configuration.
 
-If you installed with `release/install.sh` interactively, it may already have created `~/.config/tuse/init.lua` with the bundled `tuse/default` plugin (see [install.md](install.md) and [plugins.md](plugins.md)). Extend that file instead of replacing it.
-
 ## 1. Connect a Provider Using Environment Variables
 
 Providers and API keys are stored in `~/.tuse/tuse.db`, never in `tuse.lua`. Store an environment variable reference instead of a literal secret by single-quoting `'$VAR'`:
@@ -20,7 +18,7 @@ tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name ope
 
 ## 2. Configure Your Global Config
 
-Defaults and the built-in system prompt live in the binary, so Tuse runs without any config file. When you want personal settings, model metadata, prompts, hooks, or plugins, create `~/.config/tuse/init.lua` (or `~/.config/tuse.lua`):
+Defaults and the built-in system prompt live in the binary, so Tuse runs without any config file. When you want personal settings, model metadata, prompts, or hooks, create `~/.config/tuse/init.lua` (or `~/.config/tuse.lua`):
 
 ```lua
 -- ~/.config/tuse/init.lua
@@ -109,10 +107,6 @@ return {
   models = require("./models"),
   prompts = require("./prompts"),
   hooks = require("./hooks"),
-  plugins = {
-    -- External Git plugin (add while running and run /reload, or git clone first)
-    { "ethanhamilthon/tuse/plugins/welcome", ref = "v0.9.2" },
-  },
   systems = {
     interactive and "Keep answers concise and actionable." or "Output plain text.",
     "You have `checks(lines)` in `lua`: runs project tests and returns the tail.",
@@ -131,15 +125,6 @@ return {
 }
 ```
 
-### Adding External Git Plugins Cleanly
-
-Startup is offline so launching Tuse stays fast and predictable; `/reload` clones and updates enabled Git plugins automatically. When adding a new external Git plugin:
-
-- **In a running session**: add the entry to `plugins` and run `/reload` (Tuse clones the repository and checks out `ref` automatically).
-- **Before launching Tuse (offline bootstrap)**: clone it once into `~/.tuse/plugins/...` first—for example, `git clone https://github.com/ethanhamilthon/tuse ~/.tuse/plugins/ethanhamilthon/tuse`—then launch `tuse`.
-
-Use a full 40-character commit SHA as `ref` for an immutable pin (skipped on `/reload` once checked out), a release tag such as `v0.9.2` to follow a named release (checked on `/reload` in case it moved), or omit `ref` to track the default branch on `/reload`.
-
 ### Key Habits That Prevent Surprises
 
 - **Use `require("tuse")` in config files and modules**: host functions are not globals outside the agent's `lua` tool.
@@ -152,10 +137,10 @@ Use a full 40-character commit SHA as `ref` for an immutable pin (skipped on `/r
 Edit your config files while Tuse is running, then apply and inspect without restarting the session:
 
 1. Run **`/reload`** (or JSON-RPC `config.reload`).
-   - Tuse re-reads all modified Lua modules, syncs enabled Git plugins, and strictly validates every key, type, range, and color before switching.
+   - Tuse re-reads all modified Lua modules and strictly validates every key, type, range, and color before switching.
    - If anything is invalid, Tuse reports the exact file and key path (for example, `init.lua: models[1].prices.input: expected a finite non-negative number`) and keeps your previous working config, hooks, and helpers active.
    - A successful reload updates settings, theme, prompts, hooks, commands, `open` handlers, functions, and model metadata while keeping your session history, active model, and running background tasks intact.
 2. Run **`/config`** (or JSON-RPC `config.get`).
-   - Verify the loaded config file path, resolved settings, theme swatches, system prompts, `#` prompts, functions, hooks, custom `/` commands, `.ext` openers, and loaded plugins with their refs and commit SHAs.
+   - Verify the loaded config file path, resolved settings, theme swatches, system prompts, `#` prompts, functions, hooks, custom `/` commands, and `.ext` openers.
 
-See [config.md](config.md) for the complete key reference and [plugins.md](plugins.md) for plugin options.
+See [config.md](config.md) for the complete key reference.

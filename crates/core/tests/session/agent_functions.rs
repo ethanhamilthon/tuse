@@ -52,17 +52,14 @@ assert(other_fn() == "no-secret")
 package.loaded["trusted_mod"] = { val = "tampered" }
 assert(read_trusted_mod() == "original")
 assert(wrap_cb(function() return tostring(sh == require("tuse").sh) .. ":" .. tostring(type(my_secret_fn)) end) == "true:function")
-assert(plug_fn() == "from-plugin")
 saved_sh = sh
 saved_enc = json.encode
 saved_tuse = require("tuse")
-saved_plug = plug_fn
 saved_ws = my_secret_fn
 return { b = 2, a = 1 }
 "#;
 
     let probe_after_failed_reload = r#"
-assert(saved_plug() == "from-plugin")
 assert(saved_ws("still") == "res:still")
 assert(saved_sh("echo still").out == "wrapped:echo still")
 assert(trusted_stdlib_ok() == "ok")
@@ -71,18 +68,16 @@ return "still-v1"
 
     let probe2 = r#"
 assert(sh == nil and _G.sh == nil and require("tuse").sh == nil and package.loaded.tuse.sh == nil)
-assert(read == nil and json == nil and inspect == nil and plug_fn == nil and docs == nil and task_get == nil)
+assert(read == nil and json == nil and inspect == nil and docs == nil and task_get == nil)
 assert(saved_tuse.sh == nil and saved_tuse.json == nil and saved_tuse.docs == nil)
 assert(load("return sh")() == nil)
 assert(require("agent_check") == "all-nil")
 local ok1, e1 = pcall(saved_sh, "echo x")
 local ok2, e2 = pcall(saved_enc, { a = 1 })
-local ok3, e3 = pcall(saved_plug)
-local ok4, e4 = pcall(saved_ws, "q")
+local ok3, e3 = pcall(saved_ws, "q")
 assert(not ok1 and tostring(e1):find("sh is disabled", 1, true), tostring(e1))
 assert(not ok2 and tostring(e2):find("json is disabled", 1, true), tostring(e2))
-assert(not ok3 and tostring(e3):find("plug_fn is disabled", 1, true), tostring(e3))
-assert(not ok4 and tostring(e4):find("my_secret_fn is unavailable", 1, true), tostring(e4))
+assert(not ok3 and tostring(e3):find("my_secret_fn is unavailable", 1, true), tostring(e3))
 local cb_res = wrap_cb(function() return tostring(sh) .. ":" .. tostring(require("tuse").sh) end)
 assert(cb_res == "nil:nil", cb_res)
 local t1 = spawn(function() return tostring(sh) .. ":" .. tostring(require("tuse").sh) end, "ag")
@@ -130,27 +125,11 @@ return "ok3"
         "return (sh == nil and read == nil and json == nil and inspect == nil) and 'all-nil' or 'leaked'",
     )
     .unwrap();
-    let p1 = dir.join("p1");
-    let p2 = dir.join("p2");
-    fs::create_dir_all(&p1).unwrap();
-    fs::create_dir_all(&p2).unwrap();
-    fs::write(
-        p1.join("init.lua"),
-        "assert(my_secret_fn == nil)\nreturn { functions = { plug_fn = function() return 'from-plugin' end } }",
-    )
-    .unwrap();
-    fs::write(
-        p2.join("init.lua"),
-        "return { functions = { plug_fn = function() return 'dup' end } }",
-    )
-    .unwrap();
-
     let cfg_v1 = r#"
 local t = require("tuse")
 local tm = require("trusted_mod")
 assert(my_secret_fn == nil)
 return {
-  plugins = { { "p1", dir = "p1" } },
   functions = {
     my_secret_fn = function(q)
       assert(my_secret_fn == nil)
@@ -225,7 +204,6 @@ return {
     let cfg_json = serde_json::to_value(s.config().as_ref()).unwrap();
     assert_eq!(cfg_json["functions"]["my_secret_fn"], "custom");
     assert_eq!(cfg_json["functions"]["sh"], "override");
-    assert_eq!(cfg_json["functions"]["plug_fn"], "custom");
 
     let rx = s.subscribe();
     let (out1, diffs1) = run_lua(&s, &rx);
@@ -253,13 +231,12 @@ return {
             .any(|m| m.name == "opened" && m.text.starts_with("open-ok:"))
     );
 
-    fs::write(
-        &cfg,
-        r#"return { plugins = { { "p1", dir = "p1" }, { "p2", dir = "p2" } } }"#,
-    )
-    .unwrap();
+    fs::write(&cfg, "return { functions = { typo = false } }").unwrap();
     let err = s.reload().unwrap_err();
-    assert!(err.contains("both define functions.plug_fn"), "{err}");
+    assert!(
+        err.contains("functions.typo: cannot disable unknown function"),
+        "{err}"
+    );
 
     let (out1b, _) = run_lua(&s, &rx);
     assert_eq!(out1b.trim(), "still-v1");
@@ -267,7 +244,6 @@ return {
     let cfg_v2 = r#"
 local t = require("tuse")
 return {
-  plugins = { { "p1", dir = "p1" } },
   functions = {
     sh = false,
     read = false,
@@ -276,7 +252,6 @@ return {
     inspect = false,
     docs = false,
     task_get = false,
-    plug_fn = false,
     wrap_cb = function(cb)
       assert(t.sh("printf still-trusted").out == "still-trusted")
       return cb()
@@ -301,7 +276,6 @@ return {
     s.reload().unwrap();
     let cfg_json2 = serde_json::to_value(s.config().as_ref()).unwrap();
     assert_eq!(cfg_json2["functions"]["sh"], "disabled");
-    assert_eq!(cfg_json2["functions"]["plug_fn"], "disabled");
 
     let (out2, _) = run_lua(&s, &rx);
     assert_eq!(out2.trim(), "{a = 1}");

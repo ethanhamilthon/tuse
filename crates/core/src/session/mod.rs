@@ -103,7 +103,6 @@ impl Session {
         self.stop_commands();
         self.cancel_turn();
         self.tasks.stop_all();
-        self.vm.call(crate::scripting::subs::stop_all);
         self.finish_hooks(reason);
         self.dir.lock().unwrap().take();
     }
@@ -119,23 +118,17 @@ impl Session {
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
         let _one = self.reload_lock.lock().unwrap();
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
-        let c = self.vm.call(move |lua| {
-            crate::session::lua::config_lua::prepare(lua, path.as_deref(), true)
-        })?;
+        let c = self
+            .vm
+            .call(move |lua| crate::session::lua::config_lua::prepare(lua, path.as_deref()))?;
         self.finish_hooks("reload");
         let c = Arc::new(c);
         let (s2, c2) = (self.clone(), c.clone());
-        let stopped = self.vm.call(move |lua| {
-            let stopped = crate::session::lua::config_lua::commit(lua)?;
+        self.vm.call(move |lua| {
+            crate::session::lua::config_lua::commit(lua)?;
             s2.swap_config(c2);
-            Ok::<_, String>(stopped)
+            Ok::<_, String>(())
         })?;
-        if let Some(task) = stopped {
-            let _ = self.stop_task(&task);
-            self.emit(Event::Notice(
-                "Stopped previous managed subs proxy (subs disabled or settings changed). Run /subs -> start to launch a new one.".into(),
-            ));
-        }
         self.ui_cancel_hooks(false);
         self.hooks_on.store(true, Ordering::Release);
         self.start_hook("reload", false, false);

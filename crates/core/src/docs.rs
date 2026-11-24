@@ -91,6 +91,10 @@ mod tests {
             assert!(index.contains(&format!("- {name} —")), "missing {name}");
         }
         assert_eq!(index, docs(Some("  ")));
+        for topic in ["plugins", "plugin-authoring", "subs"] {
+            assert!(!index.contains(&format!("- {topic} —")));
+            assert!(docs(Some(topic)).starts_with("Unknown docs topic"));
+        }
         let hooks = docs(Some("hooks"));
         assert!(hooks.starts_with("# Hooks"));
         assert_eq!(hooks, docs(Some(" HOOKS ")));

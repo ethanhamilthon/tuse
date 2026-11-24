@@ -34,7 +34,4 @@ Source of truth for Tuse's observable behavior and public contracts. Pages descr
 - [Config](config.md) — Lua config modules, `require` resolution, schema keys, strict validation, and `/reload`.
 - [Environment & Config Lookup](env.md) — Environment variables read by Tuse and config file search order.
 - [Theme & UI Settings](theme.md) — The 10-token color theme and `settings.ui` behavior and layout options.
-- [Plugins](plugins.md) — Git, local, and bundled (`tuse/default`) plugins, options, merge rules, and reload sync.
-- [Plugin Authoring Guide](plugin-authoring.md) — Writing, testing, and publishing Tuse plugins.
-- [Subscription Proxy (`subs`)](subs.md) — Optional `tuse/default` CLIProxyAPI wrapper (`/subs`), loopback proxy lifecycle, and provider wiring.
 

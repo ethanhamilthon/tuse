@@ -40,18 +40,6 @@ name = "reload_helpers"
 path = "tests/lua/helpers.rs"
 
 [[test]]
-name = "plugins"
-path = "tests/plugins/loading.rs"
-
-[[test]]
-name = "plugin_sync"
-path = "tests/plugins/sync.rs"
-
-[[test]]
-name = "default_plugin"
-path = "tests/plugins/default.rs"
-
-[[test]]
 name = "agent_flow"
 path = "tests/session/agent_flow.rs"
 

@@ -1,6 +1,6 @@
 # Functions
 
-Built-in host functions are globals in the agent's `lua` tool (and are also available via `require("tuse")`, subject to any overrides or `false` disables configured in `functions`). In config files, plugins, trusted `require`d modules, hooks, custom commands, `open` handlers, and configured `functions` bodies, built-in host functions are not globals—import the unmodified originals with `require("tuse")`.
+Built-in host functions are globals in the agent's `lua` tool (and are also available via `require("tuse")`, subject to any overrides or `false` disables configured in `functions`). In config files, trusted `require`d modules, hooks, custom commands, `open` handlers, and configured `functions` bodies, built-in host functions are not globals—import the unmodified originals with `require("tuse")`.
 
 Errors are plain Lua errors (catchable with `pcall`). Optional settings are passed as a table (for example, `read(path, { lines = true, offset = 40 })`). File paths accept absolute paths, `~/...` (home directory), or paths relative to the session working directory.
 
@@ -29,7 +29,7 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
 | `turns` | integer \| nil | Completed or cancelled user turns in the session (including resumed history). |
 | `trace` | list \| nil | Full chronological session trace (`{ role, summary, text }`), including resumed history, with no UI truncation. |
 
-**Pre-session semantics (startup and `/reload`):** During top-level config and plugin evaluation, `session()` returns `{ mode, configpath, cwd, home }` with `id` and all session-only fields set to `nil`. Inside hooks (including `start` and `close`), commands, helpers, `open` handlers, tasks, and `lua` tool calls, `session()` returns the full live session snapshot.
+**Pre-session semantics (startup and `/reload`):** During top-level config evaluation, `session()` returns `{ mode, configpath, cwd, home }` with `id` and all session-only fields set to `nil`. Inside hooks (including `start` and `close`), commands, helpers, `open` handlers, tasks, and `lua` tool calls, `session()` returns the full live session snapshot.
 
 ## File Functions
 
@@ -113,7 +113,7 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
   - Trims whitespace, replaces newlines with spaces, and truncates to 80 characters. Raises `"empty title"` if empty.
   - Saves the new session title and emits `name_change` (no-op if unchanged).
 - `docs(topic)`:
-  - Call `docs()` (or pass whitespace) to list the built-in embedded topics (`README.md`, `tool`, `functions`, `json`, `commands`, `env`, `config`, `prompts`, `plugins`, `hooks`, `theme`). Only these embedded topics are callable via `docs()`—other files under `docs/` (such as `lua.md` or `tasks.md`) are not embedded topics.
+  - Call `docs()` (or pass whitespace) to list the built-in topics: `README.md` and each page under `docs/` except the index. Topic names for those pages omit the `.md` extension.
   - Call `docs("<topic>")` (case-insensitive, optional `.md` suffix) to read a page. When built-in functions are disabled via `functions = { name = false }`, `docs("functions")` and `docs("tool")` omit those disabled built-ins, and other embedded topics prepend a `Disabled in this session: ...` notice. Configured custom functions are never appended to `docs("functions")`.
   - Unknown topics return an error message followed by the topic list (does not raise a Lua error).
 - `json.encode(value)` / `json.decode(text)`:
@@ -158,17 +158,17 @@ Configured `functions` overrides and disables are capability-scoping and ergonom
 - **Value rules**:
   - Must be a Lua `function` or boolean `false`. Passing any other value (including the removed `{ run, description, args, show_agent }` table form) fails validation.
   - `json` is a module table (`{ encode, decode }`), not a function: `json = false` disables `json` for the agent, while `json = function(...) ... end` fails validation.
-  - `false` is valid only on a built-in host name or a function name defined by an enabled plugin in the merged config; setting `false` on an unknown name fails validation.
+  - `false` is valid only on a built-in host name; setting `false` on an unknown name fails validation.
 - **Agent-only and undiscoverable by default**:
-  - Configured functions are exposed **only** in the agent's `lua` environment. They are never visible in top-level config, plugins, trusted `require`d modules, hooks, custom `commands`, `open` handlers, other configured `functions`, or tasks spawned via `require("tuse").spawn`. Share code across trusted callbacks using `local` functions or `require`d helper modules.
+  - Configured functions are exposed **only** in the agent's `lua` environment. They are never visible in top-level config, trusted `require`d modules, hooks, custom `commands`, `open` handlers, other configured `functions`, or tasks spawned via `require("tuse").spawn`. Share code across trusted callbacks using `local` functions or `require`d helper modules.
   - Configured functions are **never** listed automatically in the system prompt or `docs("functions")`. Describe any custom agent function explicitly in `systems` or `prompts` if you want the agent to discover it.
 - **Overriding built-ins**:
   - Setting any function-valued built-in in `functions` replaces both the global `<name>` and `require("tuse").<name>` in the agent environment.
-  - Use `local t = require("tuse")` in trusted config/plugin code to call the unmodified original built-in without recursing (`t.sh(...)`, `t.write(...)`, etc.). Job-scoped side effects (diffs, model images, 120-second deadline, timeout pausing, Esc cancellation) remain bound to the active agent tool call.
-  - Overrides never affect trusted code (config, plugins, hooks, commands, `open` handlers, or trusted tasks).
+  - Use `local t = require("tuse")` in trusted config code to call the unmodified original built-in without recursing (`t.sh(...)`, `t.write(...)`, etc.). Job-scoped side effects (diffs, model images, 120-second deadline, timeout pausing, Esc cancellation) remain bound to the active agent tool call.
+  - Overrides never affect trusted code (config, hooks, commands, `open` handlers, or trusted tasks).
 - **Disabling built-ins (`false`) and live-gated handles**:
   - Disabling a built-in sets both the global and `require("tuse").<name>` to `nil` in the agent environment (including `load(...)`, agent-`require`d `.lua` files, and agent-`spawn`ed tasks).
-  - Every built-in function, `json.encode`/`json.decode`, and configured custom function exposed to the agent is wrapped in a live-dispatch proxy. Saved aliases captured before reload (`saved_sh = sh`, `saved_enc = json.encode`, `saved_tuse = require("tuse")`, `saved_fn = plugin_fn`) immediately observe reloads: disabled entries read `nil` on `saved_tuse` and raise `"<name> is disabled"` (or `"<name> is unavailable"` if a custom function was removed) when called; newly installed overrides take effect immediately on saved aliases too.
+  - Every built-in function, `json.encode`/`json.decode`, and configured custom function exposed to the agent is wrapped in a live-dispatch proxy. Saved aliases captured before reload (`saved_sh = sh`, `saved_enc = json.encode`, `saved_tuse = require("tuse")`, `saved_fn = custom_fn`) immediately observe reloads: disabled entries read `nil` on `saved_tuse` and raise `"<name> is disabled"` (or `"<name> is unavailable"` if a custom function was removed) when called; newly installed overrides take effect immediately on saved aliases too.
   - Disabling `inspect = false`, `json = false`, `sh = false`, etc. never breaks Tuse's private runtime helpers (such as return-value rendering with private `inspect`).
   - Disabled built-ins are automatically omitted from the system prompt, the `lua` tool description, `docs("functions")`, and `docs("tool")`, and other embedded `docs(topic)` pages prepend a `Disabled in this session: ...` notice. Overridden (not disabled) built-ins remain documented.
 - **Mode filtering**: branch on `require("tuse").session().mode` (`"tui"` or `"json"`) when building the `functions` table.

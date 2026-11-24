@@ -4,7 +4,7 @@ use std::fs;
 use tuse_core::{Mode, Options, Session, Start};
 
 #[test]
-fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
+fn validates_config_and_preserves_state_on_failed_reload() {
     let addr = common::provider(vec![]);
     let (dir, cfg) = common::setup("validation", &addr, "");
     let open = || {
@@ -18,6 +18,11 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
     };
 
     let bad_cases = [
+        ("return { plugins = {} }", "plugins: unknown key"),
+        (
+            "return { plugins = function() end }",
+            "plugins: unknown key",
+        ),
         ("return { include = { 'x.lua' } }", "include: unknown key"),
         ("return { model = 'p/m' }", "model: unknown key"),
         (
@@ -127,20 +132,6 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
         );
     }
 
-    let p1 = dir.join("p1");
-    let p2 = dir.join("p2");
-    fs::create_dir_all(&p1).unwrap();
-    fs::create_dir_all(&p2).unwrap();
-    fs::write(
-        p1.join("init.lua"),
-        "return { open = { md = function() end } }",
-    )
-    .unwrap();
-    fs::write(
-        p2.join("init.lua"),
-        "return { open = { md = function() end } }",
-    )
-    .unwrap();
     fs::write(
         &cfg,
         r#"return {
@@ -150,13 +141,9 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
     )
     .unwrap();
     let s = open().unwrap();
-    fs::write(
-        &cfg,
-        r#"return { plugins = { { "a", dir = "p1" }, { "b", dir = "p2" } } }"#,
-    )
-    .unwrap();
+    fs::write(&cfg, r#"return { plugins = { "tuse/default" } }"#).unwrap();
     let err = s.reload().unwrap_err();
-    assert!(err.contains("both define open.md"), "{err}");
+    assert!(err.contains("plugins: unknown key"), "{err}");
     assert_eq!(s.config().prompts["keep"], "alive");
     s.run_command("ok").unwrap();
     let dl = std::time::Instant::now() + std::time::Duration::from_secs(3);

@@ -1,5 +1,9 @@
 use std::path::{Path, PathBuf};
 
+pub fn tuse_home() -> PathBuf {
+    std::env::home_dir().unwrap_or_default().join(".tuse")
+}
+
 pub fn resolve_path(p: &str, dir: &Path) -> PathBuf {
     if let Some(rest) = p.strip_prefix("~/") {
         return std::env::home_dir().unwrap_or_default().join(rest);

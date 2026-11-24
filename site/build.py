@@ -29,7 +29,6 @@ PROTECTED_DIRS = (
     ROOT / ".github",
     ROOT / "crates",
     ROOT / "release",
-    ROOT / "plugins",
 )
 
 

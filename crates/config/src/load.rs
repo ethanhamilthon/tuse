@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 pub fn find(explicit: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
-    find_in(explicit, cwd, crate::global_path())
+    find_in(explicit, cwd, crate::modules::global_path())
 }
 
 pub(crate) fn find_in(
@@ -48,18 +48,6 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
             format!("{name}: {path}: {msg}")
         }
     })
-}
-
-pub fn resolve_path(p: &str, dir: &Path) -> PathBuf {
-    if let Some(rest) = p.strip_prefix("~/") {
-        return std::env::home_dir().unwrap_or_default().join(rest);
-    }
-    let p = Path::new(p);
-    if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        dir.join(p)
-    }
 }
 
 #[cfg(test)]

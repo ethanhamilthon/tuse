@@ -1,5 +1,16 @@
-use crate::load::resolve_path;
 use std::path::{Path, PathBuf};
+
+pub fn resolve_path(p: &str, dir: &Path) -> PathBuf {
+    if let Some(rest) = p.strip_prefix("~/") {
+        return std::env::home_dir().unwrap_or_default().join(rest);
+    }
+    let p = Path::new(p);
+    if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        dir.join(p)
+    }
+}
 
 pub fn module_candidates(name: &str, base: &Path) -> Vec<PathBuf> {
     if name == "global" {

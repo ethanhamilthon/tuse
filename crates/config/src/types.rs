@@ -1,3 +1,4 @@
+use crate::names::{FunctionKind, HOST_FUNCTIONS};
 use crate::theme::{Theme, UiSettings};
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -14,12 +15,12 @@ pub struct Config {
     #[serde(deserialize_with = "crate::de::list")]
     pub systems: Vec<String>,
     pub prompts: BTreeMap<String, String>,
-    #[serde(deserialize_with = "crate::de::functions")]
+    #[serde(deserialize_with = "crate::names::functions")]
     pub functions: BTreeMap<String, FunctionKind>,
     pub hooks: BTreeMap<String, Hook>,
-    #[serde(deserialize_with = "crate::de::commands")]
+    #[serde(deserialize_with = "crate::names::commands")]
     pub commands: Vec<String>,
-    #[serde(deserialize_with = "crate::de::open")]
+    #[serde(deserialize_with = "crate::names::open")]
     pub open: Vec<String>,
     #[serde(skip_deserializing)]
     pub path: String,
@@ -59,7 +60,7 @@ impl Default for Connect {
 
 impl Connect {
     pub fn api_type(&self) -> &str {
-        if self.api.is_empty() {
+        if self.api.trim().is_empty() {
             DEFAULT_API
         } else {
             &self.api
@@ -96,7 +97,7 @@ impl Default for Settings {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelDef {
-    #[serde(deserialize_with = "crate::de::model_name")]
+    #[serde(deserialize_with = "crate::names::model_name")]
     pub name: String,
     #[serde(default)]
     pub display: String,
@@ -121,39 +122,16 @@ pub struct Prices {
     pub cache_write: f64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum FunctionKind {
-    Custom,
-    Override,
-    Disabled,
-}
-
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Hook {
-    #[serde(deserialize_with = "crate::de::events")]
+    #[serde(deserialize_with = "crate::names::events")]
     pub events: Vec<String>,
 }
 
-pub const HOOK_EVENTS: [&str; 8] = [
-    "start",
-    "close",
-    "user_message",
-    "agent_message",
-    "model_change",
-    "name_change",
-    "lua_start",
-    "lua_end",
-];
-
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
 
-pub const DEFAULT_API: &str = "openai-chat";
-
-pub const BUILTIN_COMMANDS: [&str; 9] = [
-    "config", "new", "resume", "models", "tasks", "session", "trace", "reload", "quit",
-];
+const DEFAULT_API: &str = "openai-chat";
 
 impl Config {
     pub fn to_json(&self) -> String {
@@ -177,7 +155,7 @@ impl Config {
     }
 
     pub fn disabled_builtins(&self) -> Vec<&'static str> {
-        crate::HOST_FUNCTIONS
+        HOST_FUNCTIONS
             .iter()
             .copied()
             .filter(|n| self.is_disabled(n))
@@ -196,10 +174,6 @@ pub fn display_name(def: Option<&ModelDef>, full: &str) -> String {
         Some(m) if !m.display.is_empty() => m.display.clone(),
         _ => full.to_string(),
     }
-}
-
-pub fn split_model(full: &str) -> (&str, &str) {
-    full.split_once('/').unwrap_or(("", full))
 }
 
 pub fn env_value(v: &str) -> String {

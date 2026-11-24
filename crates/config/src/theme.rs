@@ -1,27 +1,28 @@
 use serde::Deserialize;
+use serde::de::{Deserializer, Error};
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Theme {
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub bg: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub surface: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub fg: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub dim: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub muted: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub border: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub accent: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub ok: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub err: String,
-    #[serde(deserialize_with = "crate::de::color")]
+    #[serde(deserialize_with = "color")]
     pub info: String,
 }
 
@@ -127,4 +128,12 @@ impl Default for UiSettings {
 
 pub fn limit(setting: i32, len: usize) -> usize {
     usize::try_from(setting).map_or(len, |n| n.min(len))
+}
+
+pub fn color<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    let s = String::deserialize(d)?;
+    if !valid_color(&s) {
+        return Err(D::Error::custom(format!("invalid color `{s}`")));
+    }
+    Ok(s)
 }

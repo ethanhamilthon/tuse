@@ -1,4 +1,4 @@
-use crate::event::Event;
+use crate::event::{Event, InputId};
 use crate::history;
 use crate::record::{Record, UserInput};
 use crate::session::Session;
@@ -7,18 +7,6 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InputId(pub(crate) u64);
-
-impl InputId {
-    pub fn number(self) -> u64 {
-        self.0
-    }
-    pub fn from_number(n: u64) -> Self {
-        InputId(n)
-    }
-}
 
 pub(crate) enum Subs {
     Pending(Vec<Event>),

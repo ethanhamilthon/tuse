@@ -1,4 +1,3 @@
-use crate::host::to_json;
 use std::collections::HashSet;
 use tuse_lua::mlua::{Lua, Table, Value};
 
@@ -172,4 +171,10 @@ pub(crate) fn key_str(v: &Value) -> String {
 
 pub(crate) fn kind(v: &Value) -> &'static str {
     v.type_name()
+}
+
+fn to_json(lua: &Lua, v: Value) -> serde_json::Value {
+    use tuse_lua::mlua::LuaSerdeExt;
+    let o = tuse_lua::mlua::serde::DeserializeOptions::new().deny_unsupported_types(false);
+    lua.from_value_with(v, o).unwrap_or(serde_json::Value::Null)
 }

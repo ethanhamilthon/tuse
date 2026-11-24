@@ -78,7 +78,7 @@ impl Session {
                 }
             };
             let start = || -> tuse_lua::mlua::Result<()> {
-                let f: Function = crate::config_lua::code_of(lua, "hooks", &name)
+                let f: Function = crate::registry::code_of(lua, "hooks", &name)
                     .ok_or_else(|| tuse_lua::mlua::Error::runtime("run is gone"))?;
                 let arg = tuse_lua::to_lua(lua, &vars)?;
                 let job = Job::new(
@@ -109,7 +109,7 @@ impl Session {
     }
 
     fn hook_done(self: &Arc<Self>, name: &str, vars: &Value, d: Done, started: Instant) {
-        let error = (!d.ok).then(|| crate::host::error_line(&d.text));
+        let error = (!d.ok).then(|| crate::text::error_line(&d.text));
         if let Some(e) = &error {
             self.emit(crate::Event::Notice(format!("hook {name}: {e}")));
         }

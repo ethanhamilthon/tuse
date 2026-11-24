@@ -263,7 +263,7 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
     let trusted_pkg = make_package(lua, Value::Table(trusted_tuse))?;
     trusted_env.raw_set("package", trusted_pkg.clone())?;
     lua.set_named_registry_value(TRUSTED_PKG, trusted_pkg)?;
-    lua.set_named_registry_value(crate::config_lua::FILE_ENV, trusted_env.clone())?;
+    lua.set_named_registry_value(crate::registry::FILE_ENV, trusted_env.clone())?;
     install_require(lua, &trusted_env, cwd, true)?;
 
     let agent_orig = tuse_module(lua)?;
@@ -299,7 +299,7 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
     let agent_pkg = make_package(lua, Value::UserData(agent_tuse.clone()))?;
     agent_env.raw_set("package", agent_pkg.clone())?;
     lua.set_named_registry_value(AGENT_PKG, agent_pkg.clone())?;
-    lua.set_named_registry_value(crate::config_lua::AGENT_ENV, agent_env.clone())?;
+    lua.set_named_registry_value(crate::registry::AGENT_ENV, agent_env.clone())?;
     let commit_wrap = lua.create_function(move |_, funcs: Value| {
         commit_fn.call::<()>(funcs)?;
         if let Ok(loaded) = agent_pkg.get::<Table>("loaded") {
@@ -307,7 +307,7 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
         }
         Ok(())
     })?;
-    lua.set_named_registry_value(crate::config_lua::COMMIT_AGENT, commit_wrap)?;
+    lua.set_named_registry_value(crate::registry::COMMIT_AGENT, commit_wrap)?;
     install_require(lua, &agent_env, cwd, false)?;
     Ok(())
 }
@@ -468,9 +468,9 @@ fn require_module(lua: &Lua, name: String, cwd: &Path, trusted: bool) -> mlua::R
         AGENT_LOADING
     };
     let env_key = if trusted {
-        crate::config_lua::FILE_ENV
+        crate::registry::FILE_ENV
     } else {
-        crate::config_lua::AGENT_ENV
+        crate::registry::AGENT_ENV
     };
     let package: Table = lua.named_registry_value(pkg_key)?;
     let loaded: Table = package.get("loaded")?;

@@ -1,5 +1,6 @@
-use crate::control::{InputId, Subs};
+use crate::control::Subs;
 use crate::event::Event;
+use crate::event::InputId;
 use crate::history::{self, Bounds};
 pub use crate::mode::{Mode, Options, Start};
 use crate::record::{Record, UserInput};

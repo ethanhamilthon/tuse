@@ -65,9 +65,9 @@ impl Host for SessionHost {
         s.emit(crate::Event::Tasks);
         if let Some(t) = ended {
             let last = if d.ok {
-                last_line(&d.text)
+                crate::text::last_line(&d.text)
             } else {
-                error_line(&d.text)
+                crate::text::error_line(&d.text)
             };
             let what = if d.ok { "finished" } else { "failed" };
             let msg = if s.config().is_disabled("task_get") {
@@ -142,28 +142,6 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
         "task_list",
     ];
     tuse_lua::wrap(lua, &g, &names)
-}
-
-pub(crate) fn error_line(text: &str) -> String {
-    match text.find("\nstack traceback:") {
-        Some(i) => last_line(&text[..i]),
-        None => last_line(text),
-    }
-}
-
-pub(crate) fn last_line(text: &str) -> String {
-    text.lines()
-        .rev()
-        .map(str::trim)
-        .find(|l| !l.is_empty())
-        .unwrap_or("failed")
-        .to_string()
-}
-
-pub(crate) fn to_json(lua: &Lua, v: Value) -> serde_json::Value {
-    use mlua::LuaSerdeExt;
-    let o = mlua::serde::DeserializeOptions::new().deny_unsupported_types(false);
-    lua.from_value_with(v, o).unwrap_or(serde_json::Value::Null)
 }
 
 fn install_fs(lua: &Lua) -> mlua::Result<()> {
@@ -439,13 +417,13 @@ impl Session {
                     if !d.ok && d.stop != Some("cancelled") {
                         s.emit(Event::Error(format!(
                             "/{c2}: {}",
-                            crate::host::error_line(&d.text)
+                            crate::text::error_line(&d.text)
                         )));
                     }
                 }
             };
             let start = || -> mlua::Result<()> {
-                let f = crate::config_lua::command_of(lua, &cmd)
+                let f = crate::registry::command_of(lua, &cmd)
                     .ok_or_else(|| mlua::Error::runtime("command is gone"))?;
                 let job = Job::new(
                     lua,

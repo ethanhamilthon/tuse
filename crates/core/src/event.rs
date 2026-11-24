@@ -41,7 +41,7 @@ pub struct UiSnapshot {
 pub enum Event {
     Notification(String),
     User {
-        id: crate::control::InputId,
+        id: InputId,
         text: String,
         images: usize,
     },
@@ -96,4 +96,16 @@ pub enum Event {
         id: u64,
     },
     UiResult(UiEntry),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InputId(pub(crate) u64);
+
+impl InputId {
+    pub fn number(self) -> u64 {
+        self.0
+    }
+    pub fn from_number(n: u64) -> Self {
+        InputId(n)
+    }
 }

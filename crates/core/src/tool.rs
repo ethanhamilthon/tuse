@@ -116,7 +116,7 @@ impl Session {
         self.lua_start_hook(exec_id.clone(), "tool", Some(code.to_string()), None);
         let d = self
             .vm
-            .run_with(code, "lua", stop, crate::config_lua::agent_env);
+            .run_with(code, "lua", stop, crate::registry::agent_env);
         self.lua_end_done(&exec_id, "tool", started.elapsed(), &d);
         Outcome {
             code: match (d.ok, d.stop) {

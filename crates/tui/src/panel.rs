@@ -98,6 +98,9 @@ pub(crate) fn trace_panel(it: &tuse_core::TraceItem) -> Panel {
 
 impl App {
     pub(crate) fn panel_key(&mut self, code: KeyCode, mods: KeyModifiers) -> bool {
+        if self.picker.is_some() || self.question.is_some() {
+            return false;
+        }
         let Some(panel) = &mut self.panel else {
             return false;
         };
@@ -350,6 +353,33 @@ mod tests {
         let p = app.picker.as_ref().unwrap();
         assert_eq!(p.selected, 7);
         assert!(p.selected >= p.scroll && p.selected < p.scroll + 3);
+        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+
+        open_trace_with(
+            &mut app,
+            vec![
+                TraceItem {
+                    role: "output",
+                    summary: "first".into(),
+                    text: "entry-zero".into(),
+                },
+                TraceItem {
+                    role: "output",
+                    summary: "second".into(),
+                    text: "entry-one".into(),
+                },
+            ],
+        );
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert!(panel_text(&mut app).contains("entry-zero"));
+        app.open_models();
+        assert!(app.picker.is_some() && app.editor.is_empty());
+        press(&mut app, KeyCode::Right, KeyModifiers::NONE);
+        press(&mut app, KeyCode::Left, KeyModifiers::NONE);
+        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+        assert!(app.picker.is_none());
+        assert!(panel_text(&mut app).contains("entry-zero"));
+        assert_eq!(app.trace_back.as_ref().unwrap().0.selected, 0);
         crate::app::cleanup(app);
     }
 }

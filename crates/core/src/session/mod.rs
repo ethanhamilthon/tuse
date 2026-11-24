@@ -36,7 +36,7 @@ pub struct Session {
     pub(crate) subs: Mutex<Subs>,
     pub(crate) vm: tuse_lua::Vm,
     pub(crate) hooks_on: AtomicBool,
-    pub(crate) hook_runs: crate::session::hooks::hooks::Runs,
+    pub(crate) hook_runs: crate::session::hooks::lanes::Runs,
     pub(crate) ui: Mutex<crate::session::ui::UiState>,
     pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,
     pub(crate) http: tuse_api::HttpAgent,

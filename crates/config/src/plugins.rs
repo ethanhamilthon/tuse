@@ -5,11 +5,11 @@ pub fn tuse_home() -> PathBuf {
     std::env::home_dir().unwrap_or_default().join(".tuse")
 }
 
-pub fn plugins_root() -> PathBuf {
+fn plugins_root() -> PathBuf {
     tuse_home().join("plugins")
 }
 
-pub fn normalize_url(url: &str) -> String {
+fn normalize_url(url: &str) -> String {
     let s = url.trim().trim_end_matches('/');
     let s = s.strip_suffix(".git").unwrap_or(s);
     s.trim_end_matches('/').to_string()
@@ -52,6 +52,14 @@ pub struct Repo<'a> {
 }
 
 impl<'a> Repo<'a> {
+    pub fn lock_dir() -> PathBuf {
+        plugins_root().join(".locks")
+    }
+
+    pub fn same_origin(url: &str, other: &str) -> bool {
+        normalize_url(url) == normalize_url(other)
+    }
+
     pub fn url(&self) -> &'a str {
         self.url
     }

@@ -237,51 +237,6 @@ impl App {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn model_detail_repeats_the_name_only_under_a_display_name() {
-        let opus = ModelDef {
-            name: "c/opus".into(),
-            window: 200_000,
-            ..Default::default()
-        };
-        let sonnet = ModelDef {
-            name: "c/sonnet".into(),
-            display: "Sonnet".into(),
-            window: 200_000,
-            ..Default::default()
-        };
-        let plain = model_item(Some(&opus), "c/opus", true);
-        assert_eq!(
-            (plain.label.as_str(), plain.detail.as_str()),
-            ("c/opus", "200k ctx")
-        );
-        let named = model_item(Some(&sonnet), "c/sonnet", true);
-        assert_eq!(named.detail, "c/sonnet · 200k ctx");
-        assert_eq!(model_item(None, "c/other", true).detail, "");
-        assert_eq!(
-            model_item(Some(&opus), "c/opus", false).detail,
-            "unavailable · 200k ctx"
-        );
-    }
-
-    #[test]
-    fn docs_and_config_list_every_built_in_command() {
-        let docs = tuse_core::docs(Some("commands"));
-        for (name, _) in crate::ui::picker::COMMANDS {
-            assert!(docs.contains(&format!("`/{name}`")), "docs misses /{name}");
-            assert!(tuse_config::BUILTIN_COMMANDS.contains(&name), "/{name}");
-        }
-        assert_eq!(
-            crate::ui::picker::COMMANDS.len(),
-            tuse_config::BUILTIN_COMMANDS.len()
-        );
-    }
-}
-
 impl App {
     pub fn open_models(&mut self) {
         let config = self.session.config();
@@ -334,4 +289,49 @@ fn details(m: &ModelDef) -> Vec<String> {
         out.push(format!("${}/${} per 1M", p.input, p.output));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_detail_repeats_the_name_only_under_a_display_name() {
+        let opus = ModelDef {
+            name: "c/opus".into(),
+            window: 200_000,
+            ..Default::default()
+        };
+        let sonnet = ModelDef {
+            name: "c/sonnet".into(),
+            display: "Sonnet".into(),
+            window: 200_000,
+            ..Default::default()
+        };
+        let plain = model_item(Some(&opus), "c/opus", true);
+        assert_eq!(
+            (plain.label.as_str(), plain.detail.as_str()),
+            ("c/opus", "200k ctx")
+        );
+        let named = model_item(Some(&sonnet), "c/sonnet", true);
+        assert_eq!(named.detail, "c/sonnet · 200k ctx");
+        assert_eq!(model_item(None, "c/other", true).detail, "");
+        assert_eq!(
+            model_item(Some(&opus), "c/opus", false).detail,
+            "unavailable · 200k ctx"
+        );
+    }
+
+    #[test]
+    fn docs_and_config_list_every_built_in_command() {
+        let docs = tuse_core::docs(Some("commands"));
+        for (name, _) in crate::ui::picker::COMMANDS {
+            assert!(docs.contains(&format!("`/{name}`")), "docs misses /{name}");
+            assert!(tuse_config::BUILTIN_COMMANDS.contains(&name), "/{name}");
+        }
+        assert_eq!(
+            crate::ui::picker::COMMANDS.len(),
+            tuse_config::BUILTIN_COMMANDS.len()
+        );
+    }
 }

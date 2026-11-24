@@ -16,10 +16,10 @@ USAGE
                                                  (its ID is printed to stderr on exit)
   tuse json [-c|--config PATH] [-r|--resume ID]  a JSON-RPC 2.0 session over stdin/stdout,
                                                  one message per line (see docs/json.md)
-  tuse connect --base URL --key '$ENV' --name NAME
+  tuse connect --base URL --key '$ENV' --name NAME [--api TYPE]
                                                  verify and save an API provider
   tuse disconnect NAME                           remove a provider
-  tuse providers                                 list the providers
+  tuse providers [--json]                        list the providers
   tuse models [-c|--config PATH]                 list configured model metadata and the
                                                  saved default
   tuse init                                      create ./tuse.lua that extends the global config
@@ -51,12 +51,17 @@ fn spec(sub: &str) -> Option<Cmd> {
         "" => cmd("tuse [-c|--config PATH] [-r|--resume ID]", SESSION, 0),
         "json" => cmd("tuse json [-c|--config PATH] [-r|--resume ID]", SESSION, 0),
         "connect" => cmd(
-            "tuse connect --base URL --key '$ENV' --name NAME",
-            &["--base", "--key", "--name"],
+            "tuse connect --base URL --key '$ENV' --name NAME [--api TYPE]",
+            &["--base", "--key", "--name", "--api"],
             0,
         ),
         "disconnect" => cmd("tuse disconnect NAME", &[], 1),
-        "providers" => cmd("tuse providers", &[], 0),
+        "providers" => Cmd {
+            usage: "tuse providers [--json]",
+            valued: &[],
+            plain: &["--json"],
+            args: 0,
+        },
         "models" => cmd("tuse models [-c|--config PATH]", CONFIG, 0),
         "init" => cmd("tuse init", &[], 0),
         "update" => cmd("tuse update", &[], 0),
@@ -122,10 +127,7 @@ fn run(raw: Vec<String>) -> Result<(), String> {
     match sub {
         "connect" => connect::run(&a),
         "disconnect" => connect::remove(&a.positional[0]),
-        "providers" => {
-            connect::list();
-            Ok(())
-        }
+        "providers" => connect::list(a.has(&["--json"])),
         "models" => models::run(cwd, config),
         "json" => json(&a, cwd, config),
         "init" => init::run(&cwd),

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
-use tuse_api::{Client, Request};
+use tuse_api::{ApiType, Client, Message, Request};
 use tuse_config::split_model;
 use tuse_lua::mlua::{self, Lua, MultiValue, Table, Value};
 use tuse_lua::{Done, ExtWait, Host, Job, Out, Stop, TaskStart, with_run};
@@ -535,12 +535,22 @@ impl Session {
             .connect(provider)
             .ok_or_else(|| format!("llm: no provider `{provider}` for model `{model}`"))?;
         let req = Request {
+            provider: provider.to_string(),
             model: name.to_string(),
-            messages: vec![serde_json::json!({"role": "user", "content": prompt})],
+            system: String::new(),
+            messages: vec![Message::User {
+                text: prompt.to_string(),
+                images: vec![],
+            }],
             tools: vec![],
             effort: (effort != "default").then(|| effort.to_string()),
         };
-        let client = Client::with_agent(self.http.clone(), &conn.base_url, &conn.api_key);
+        let client = Client::with_agent(
+            self.http.clone(),
+            &conn.base_url,
+            &conn.api_key,
+            ApiType::from_stored(conn.api_type()),
+        );
         let reply = client
             .complete(
                 &req,

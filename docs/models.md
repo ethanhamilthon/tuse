@@ -17,7 +17,7 @@ A model is considered **available** if and only if its provider prefix exists in
 The available model list (shown in `/models` and returned by JSON-RPC `model.list`) is the sorted, deduplicated union of:
 
 1. Configured `models[].name` entries whose provider is in the session's loaded provider snapshot.
-2. Remote model IDs previously fetched via `GET <base_url>/models` from each loaded provider, prefixed with `<provider>/` and cached in memory until reload.
+2. Remote model IDs previously fetched via each loaded provider's model-listing endpoint (`GET <base_url>/models`, paginated for `anthropic-messages` and `google-gemini`; see [providers.md](providers.md)), prefixed with `<provider>/` and cached in memory until reload.
 
 Background discovery:
 
@@ -60,9 +60,14 @@ return {
 
 Valid effort levels are: `"default"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`.
 
-- `"default"` omits `reasoning_effort` from API requests.
-- Any other level sends `"reasoning_effort": "<effort>"` on `/chat/completions` requests (including `llm()` calls).
-- Invalid effort strings are rejected by `model.set` and `llm()`.
+- `"default"` omits effort/thinking parameters from API requests across all four API types.
+- Non-default effort levels are mapped per provider API type ([providers.md](providers.md#capability-matrix)):
+  - `openai-chat`: `low`, `medium`, `high`, `xhigh`, `max`
+  - `openai-responses`: `low`, `medium`, `high`, `xhigh` (`max` unsupported)
+  - `anthropic-messages`: `low`, `medium`, `high`, `max` (`xhigh` unsupported)
+  - `google-gemini`: `low`, `medium`, `high` (`xhigh`, `max` unsupported)
+- The full 6-value effort set stays available in `/models` (annotating unsupported levels when the provider's API type is known) and in `model.set`; unsupported combinations fail fast before any HTTP request on agent turns and `llm()`.
+- Invalid effort strings outside the 6-value set are rejected immediately by `model.set` and `llm()`.
 
 ## Selection, persistence, and scoping
 

@@ -37,12 +37,34 @@ pub struct PluginInfo {
     pub commit: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Connect {
     pub name: String,
     pub base_url: String,
     pub api_key: String,
+    pub api: String,
+}
+
+impl Default for Connect {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            base_url: String::new(),
+            api_key: String::new(),
+            api: DEFAULT_API.to_string(),
+        }
+    }
+}
+
+impl Connect {
+    pub fn api_type(&self) -> &str {
+        if self.api.is_empty() {
+            DEFAULT_API
+        } else {
+            &self.api
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
@@ -143,6 +165,24 @@ pub const HOOK_EVENTS: [&str; 8] = [
 ];
 
 pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
+
+pub const DEFAULT_API: &str = "openai-chat";
+
+pub const API_TYPES: [&str; 4] = [
+    "openai-chat",
+    "openai-responses",
+    "anthropic-messages",
+    "google-gemini",
+];
+
+pub fn supported_efforts(api: &str) -> &'static [&'static str] {
+    match api {
+        "openai-responses" => &["default", "low", "medium", "high", "xhigh"],
+        "anthropic-messages" => &["default", "low", "medium", "high", "max"],
+        "google-gemini" => &["default", "low", "medium", "high"],
+        _ => &EFFORTS,
+    }
+}
 
 pub const BUILTIN_COMMANDS: [&str; 9] = [
     "config", "new", "resume", "models", "tasks", "session", "trace", "reload", "quit",

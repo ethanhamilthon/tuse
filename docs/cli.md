@@ -42,21 +42,22 @@ Starts a single-session JSON-RPC 2.0 server over stdin/stdout (newline-delimited
 
 See [json.md](json.md).
 
-### `tuse connect --base URL --key '$ENV' --name NAME`
+### `tuse connect --base URL --key '$ENV' --name NAME [--api TYPE]`
 
-Verifies an OpenAI-compatible API endpoint and saves the provider in `~/.tuse/tuse.db`. See [providers.md](providers.md) for credential storage and resolution details.
+Verifies an API endpoint and saves the provider in `~/.tuse/tuse.db`. See [providers.md](providers.md) for credential storage, protocol details, and API types.
 
 - **Required flags:** `--base`, `--key`, `--name` (all must be non-empty after trimming).
+- **Optional flags:** `--api TYPE` selects the API protocol (`openai-chat`, `openai-responses`, `anthropic-messages`, or `google-gemini`; defaults to `openai-chat`). An invalid value fails before any network request.
 - **Validation:**
   - `URL` must start with `http://` or `https://`.
   - `NAME` cannot contain `/` or any whitespace, and must not match an already-saved provider (remove an existing one first with `tuse disconnect NAME`).
   - If `--key` is `$VAR` or `${VAR}` (where `VAR` contains only ASCII letters, digits, and `_`), Tuse resolves it from the process environment for verification; an unset or empty resolved key fails before any network call. Quote `'$VAR'` in your shell so the reference—not the expanded secret—is stored in SQLite.
-- **Verification:** Sends `GET <URL>/models` (trailing `/` stripped from `URL`) with `Authorization: Bearer <resolved-key>`. Succeeds on any valid JSON response (even if `data` is missing or contains zero usable model IDs); it checks `/models` reachability and does not test `/chat/completions`.
+- **Verification:** Calls the selected adapter's model-listing endpoint (`GET <URL>/models`, with adapter-specific auth headers and pagination). Succeeds on any valid JSON response (even if it yields zero usable model IDs); it checks model listing and does not test generation.
 - **Result:** Persists the provider and prints `Received <N> models. Saved \`<NAME>\`.` to stdout.
 
-### `tuse providers`
+### `tuse providers [--json]`
 
-Lists all saved providers from SQLite in insertion order, one per line as `<NAME>\t<BASE_URL>`. Prints nothing if no providers are saved. Never prints API keys or key references.
+Lists all saved providers from SQLite in insertion order. Without flags, prints one line per provider as `<NAME>\t<BASE_URL>` (strictly two columns; prints nothing if empty). With `--json`, prints a JSON array `[{"name": "...", "base_url": "...", "api": "..."}]`. Never prints API keys or key references.
 
 ### `tuse disconnect NAME`
 

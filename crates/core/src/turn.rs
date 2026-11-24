@@ -5,7 +5,7 @@ use crate::session::{Session, State};
 use crate::{compaction, id, prompt};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use tuse_api::{Client, Request};
+use tuse_api::{ApiType, Client, Request};
 use tuse_config::split_model;
 
 enum Step {
@@ -119,21 +119,28 @@ impl Session {
         let Some(st) = self.lock_live(generation) else {
             return Step::Stale;
         };
+        let (provider, raw_model) = split_model(&model);
         let req = Request {
-            model: split_model(&model).1.to_string(),
-            messages: messages(&st.records, st.bounds, &system),
+            provider: provider.to_string(),
+            model: raw_model.to_string(),
+            system,
+            messages: messages(&st.records, st.bounds),
             tools: prompt::tools(),
             effort: (effort != "default").then_some(effort),
         };
         drop(st);
-        let (provider, _) = split_model(&model);
         let Some(conn) = config.connect(provider) else {
             return self.fail(
                 generation,
                 format!("no `connect` entry named `{provider}` for model `{model}`"),
             );
         };
-        let client = Client::with_agent(self.http.clone(), &conn.base_url, &conn.api_key);
+        let client = Client::with_agent(
+            self.http.clone(),
+            &conn.base_url,
+            &conn.api_key,
+            ApiType::from_stored(conn.api_type()),
+        );
         let result = client.complete(
             &req,
             config.settings.retries,
@@ -171,6 +178,7 @@ impl Session {
             text: reply.text.clone(),
             reasoning: reply.reasoning,
             tool_calls: calls.clone(),
+            replay: reply.replay,
             at: id::now(),
         };
         self.push(&mut st, r);
@@ -218,7 +226,7 @@ impl Session {
             },
         );
         let system = prompt::system_prompt(config, true);
-        st.context = estimate_tokens(&messages(&st.records, b, &system));
+        st.context = estimate_tokens(&system, &messages(&st.records, b));
         let text = format!(
             "Context compacted at {} tokens; now about {}.",
             crate::usage::tokens(threshold),

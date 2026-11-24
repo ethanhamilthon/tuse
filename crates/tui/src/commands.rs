@@ -151,7 +151,26 @@ impl App {
             }
             (Kind::Model, Some(v)) => {
                 let (_, effort) = self.session.model();
-                let items = EFFORTS.iter().map(|e| item(*e, "", *e)).collect();
+                let cfg = self.session.config();
+                let provider = tuse_config::split_model(&v).0;
+                let supported = cfg
+                    .connect(provider)
+                    .map(|c| tuse_config::supported_efforts(c.api_type()))
+                    .unwrap_or(&EFFORTS);
+                let items = EFFORTS
+                    .iter()
+                    .map(|e| {
+                        item(
+                            *e,
+                            if supported.contains(e) {
+                                ""
+                            } else {
+                                "unsupported"
+                            },
+                            *e,
+                        )
+                    })
+                    .collect();
                 let ep = Picker::new(Kind::Effort(v.clone()), items);
                 self.open_modal(ep).select(&effort);
             }

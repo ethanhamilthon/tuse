@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3
+
+- Added support for four provider API types (`openai-chat`, `openai-responses`, `anthropic-messages`, and `google-gemini`) via `tuse connect --api TYPE`, `tuse providers --json`, automatic SQLite migration of existing providers to `openai-chat`, provider-scoped reasoning replay across multi-step tool loops and `/resume`, paginated Anthropic/Gemini model discovery, and fail-fast unsupported-capability reporting.
+
 ## 0.9.2
 
 - **Breaking:** Removed `tuse plugins`. Manage plugin checkouts with Git in `~/.tuse/plugins` and declare them in `tuse.lua`; a missing checkout prints the `git clone` to run. Startup stays offline.

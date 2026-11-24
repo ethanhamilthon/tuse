@@ -80,6 +80,7 @@ fn providers(list: &[(&str, String)]) {
             name: name.to_string(),
             base_url: url.clone(),
             api_key: "k".into(),
+            ..Default::default()
         })
         .unwrap();
     }

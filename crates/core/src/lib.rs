@@ -32,7 +32,10 @@ mod validate;
 
 pub use config_lua::{config_arg, configured_models};
 pub use control::InputId;
-pub use db::{add_provider, default_effort, default_model, providers, remove_provider, set_state};
+pub use db::{
+    add_provider, default_effort, default_model, providers, providers_json, remove_provider,
+    set_state,
+};
 pub use docs::docs;
 pub use event::{Event, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 pub use hooks::EVENTS;

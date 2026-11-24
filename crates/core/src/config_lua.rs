@@ -76,6 +76,7 @@ pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> 
 }
 
 fn prepare_inner(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
+    crate::subs::begin_prepare(lua);
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     let (table, plugins, parsed) = match path {
         Some(p) => read_file(lua, p)?,
@@ -153,6 +154,7 @@ pub(crate) fn commit(lua: &Lua, config: &Config) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
         }
     }
+    crate::subs::reconcile(lua);
     Ok(())
 }
 

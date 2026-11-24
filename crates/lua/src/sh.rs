@@ -123,6 +123,13 @@ impl Drop for Proc {
     }
 }
 
+pub fn setsid() -> std::io::Result<()> {
+    if unsafe { libc::setsid() } == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 pub fn kill_group(pid: u32) {
     if let Ok(pid) = libc::pid_t::try_from(pid) {
         unsafe {

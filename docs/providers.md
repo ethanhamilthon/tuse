@@ -2,7 +2,7 @@
 
 Canonical reference for Tuse's provider configuration, secret handling, four API protocol adapters (`openai-chat`, `openai-responses`, `anthropic-messages`, `google-gemini`), model discovery, streaming, reasoning replay, usage accounting, errors, and retries.
 
-For model metadata (`models` in Lua config), selection UX, and session scoping, see [models.md](models.md); for cost calculation, display, and 50/25/25 context compaction, see [usage.md](usage.md); for Lua config keys, see [config.md](config.md).
+For model metadata (`models` in Lua config), selection UX, and session scoping, see [models.md](models.md); for cost calculation, display, and 50/25/25 context compaction, see [usage.md](usage.md); for Lua config keys, see [config.md](config.md); for using existing AI subscriptions via a local loopback proxy, see [subs.md](subs.md).
 
 ## Storage, Snapshots, and Secrets
 
@@ -30,9 +30,11 @@ tuse disconnect openai
 
 ### `tuse connect`
 
-`tuse connect --base URL --key '$ENV' --name NAME [--api TYPE]`
+`tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--replace]`
 
-- `--base`, `--key`, and `--name` are required and must be non-blank for all four API types (no hidden default hostnames).
+- `--base`, `--name`, and either `--key` or `--key-stdin` (not both) are required for all four API types (no hidden default hostnames).
+- `--key-stdin` reads the API key from stdin (trailing `\r`/`\n` trimmed) so secrets do not appear in argv.
+- `--replace` verifies the endpoint first and, only if verification succeeds, atomically updates an existing provider row (a failed verification leaves the previous row intact).
 - `--api` is optional and defaults to `openai-chat`. Valid values are:
   - `openai-chat` — OpenAI-compatible Chat Completions
   - `openai-responses` — OpenAI Responses API

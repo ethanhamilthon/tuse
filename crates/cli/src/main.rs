@@ -16,7 +16,7 @@ USAGE
                                                  (its ID is printed to stderr on exit)
   tuse json [-c|--config PATH] [-r|--resume ID]  a JSON-RPC 2.0 session over stdin/stdout,
                                                  one message per line (see docs/json.md)
-  tuse connect --base URL --key '$ENV' --name NAME [--api TYPE]
+  tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--replace]
                                                  verify and save an API provider
   tuse disconnect NAME                           remove a provider
   tuse providers [--json]                        list the providers
@@ -50,11 +50,12 @@ fn spec(sub: &str) -> Option<Cmd> {
     Some(match sub {
         "" => cmd("tuse [-c|--config PATH] [-r|--resume ID]", SESSION, 0),
         "json" => cmd("tuse json [-c|--config PATH] [-r|--resume ID]", SESSION, 0),
-        "connect" => cmd(
-            "tuse connect --base URL --key '$ENV' --name NAME [--api TYPE]",
-            &["--base", "--key", "--name", "--api"],
-            0,
-        ),
+        "connect" => Cmd {
+            usage: "tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--replace]",
+            valued: &["--base", "--key", "--name", "--api"],
+            plain: &["--replace", "--key-stdin"],
+            args: 0,
+        },
         "disconnect" => cmd("tuse disconnect NAME", &[], 1),
         "providers" => Cmd {
             usage: "tuse providers [--json]",

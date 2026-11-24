@@ -70,6 +70,9 @@ pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String>
     let mut refs: Vec<(&Path, &str, &Option<String>)> = vec![];
     for e in &out {
         let p = &e.plugin;
+        if p.bundled {
+            continue;
+        }
         if let Some((_, other, r)) = refs.iter().find(|(root, _, r)| {
             *root == p.root && r.is_some() && p.git_ref.is_some() && **r != p.git_ref
         }) {
@@ -105,14 +108,19 @@ fn entry(t: &Table, idx: &str, base: &Path) -> Result<Entry, String> {
         }
     }
     let dir = text(t, "dir", idx)?;
-    let mut plugin = Plugin::new(
-        &name,
-        dir.as_deref(),
-        text(t, "path", idx)?.as_deref(),
-        base,
-    )
-    .map_err(|e| format!("{idx}: {e}"))?;
-    plugin.git_ref = text(t, "ref", idx)?;
+    let path = text(t, "path", idx)?;
+    let git_ref = text(t, "ref", idx)?;
+    if name == tuse_config::BUNDLED_DEFAULT
+        && (dir.is_some() || path.is_some() || git_ref.is_some())
+    {
+        return Err(format!(
+            "plugin {}: bundled plugin does not accept ref, dir, or path",
+            tuse_config::BUNDLED_DEFAULT
+        ));
+    }
+    let mut plugin = Plugin::new(&name, dir.as_deref(), path.as_deref(), base)
+        .map_err(|e| format!("{idx}: {e}"))?;
+    plugin.git_ref = git_ref;
     plugin.enabled = match t.raw_get::<Value>("enabled").map_err(|e| e.to_string())? {
         Value::Nil => true,
         Value::Boolean(b) => b,
@@ -170,6 +178,9 @@ pub(crate) fn apply(lua: &Lua, config: Table, source: &str, base: &Path) -> Resu
 
 fn load(lua: &Lua, e: &Entry) -> Result<Table, String> {
     let p = &e.plugin;
+    if p.bundled {
+        return crate::subs::load_default_plugin(lua, e.opts.clone());
+    }
     let Some(file) = p.entry() else {
         return Err(if p.url.is_some() && !p.root.exists() {
             format!(

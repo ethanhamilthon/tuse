@@ -21,6 +21,7 @@ mod session;
 mod snapshot;
 mod store;
 mod stream;
+mod subs;
 mod tasks;
 mod tool;
 mod tools;

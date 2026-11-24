@@ -22,6 +22,7 @@ pub struct Retry<'a> {
 
 pub fn default_agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
+        .redirects(0)
         .timeout_connect(Duration::from_secs(30))
         .timeout_read(Duration::from_secs(600))
         .build()
@@ -128,6 +129,15 @@ fn validate_effort(api: ApiType, req: &Request) -> Result<(), Error> {
     )))
 }
 
+pub(crate) fn check_status(resp: ureq::Response) -> Result<ureq::Response, Error> {
+    let code = resp.status();
+    if (300..400).contains(&code) {
+        let loc = resp.header("location").unwrap_or("(unknown)");
+        return Err(Error::Status(code, format!("unexpected redirect to {loc}")));
+    }
+    Ok(resp)
+}
+
 pub(crate) fn parse_data_url<'a>(
     url: &'a str,
     provider: &str,
@@ -145,11 +155,42 @@ pub(crate) fn parse_data_url<'a>(
     if mime.is_empty()
         || !mime.contains('/')
         || mime.chars().any(char::is_whitespace)
-        || data.is_empty()
+        || !valid_base64(data)
     {
         return Err(fail());
     }
     Ok((mime, data))
+}
+
+fn valid_base64(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.is_empty() || !bytes.len().is_multiple_of(4) {
+        return false;
+    }
+    let pad = bytes.iter().rev().take_while(|&&b| b == b'=').count();
+    if pad > 2 {
+        return false;
+    }
+    let body = &bytes[..bytes.len() - pad];
+    if body.is_empty() || body.iter().any(|&b| b64_val(b).is_none()) {
+        return false;
+    }
+    match pad {
+        1 => b64_val(body[body.len() - 1]).is_some_and(|v| v & 0x03 == 0),
+        2 => b64_val(body[body.len() - 1]).is_some_and(|v| v & 0x0f == 0),
+        _ => true,
+    }
+}
+
+fn b64_val(b: u8) -> Option<u8> {
+    match b {
+        b'A'..=b'Z' => Some(b - b'A'),
+        b'a'..=b'z' => Some(b - b'a' + 26),
+        b'0'..=b'9' => Some(b - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
 }
 
 pub(crate) fn parse_json_object(raw: &str) -> Value {
@@ -163,7 +204,7 @@ pub(crate) fn read_sse(
     reader: impl Read,
     cancel: &AtomicBool,
     mut on_event: impl FnMut(&str, &str) -> Result<bool, Error>,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let mut event = String::new();
     for line in BufReader::new(reader).lines() {
         if cancel.load(Ordering::Relaxed) {
@@ -183,16 +224,16 @@ pub(crate) fn read_sse(
         };
         let data = data.trim();
         if data == "[DONE]" {
-            break;
+            return Ok(true);
         }
         if data.is_empty() {
             continue;
         }
         if !on_event(&event, data)? {
-            break;
+            return Ok(true);
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 pub(crate) fn read_body(resp: ureq::Response) -> Result<String, Error> {
@@ -238,12 +279,14 @@ pub(crate) fn url_encode(s: &str) -> String {
 }
 
 pub(crate) fn openai_models(client: &Client) -> Result<Vec<String>, Error> {
-    let resp = client
-        .agent
-        .get(&format!("{}/models", client.base_url))
-        .set("Authorization", &format!("Bearer {}", client.api_key))
-        .call()
-        .map_err(map_err)?;
+    let resp = check_status(
+        client
+            .agent
+            .get(&format!("{}/models", client.base_url))
+            .set("Authorization", &format!("Bearer {}", client.api_key))
+            .call()
+            .map_err(map_err)?,
+    )?;
     let v = parse_json(&read_body(resp)?)?;
     Ok(v["data"]
         .as_array()
@@ -259,12 +302,13 @@ mod tests {
     use crate::types::Message;
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
+    use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
 
-    fn mock(responses: Vec<String>) -> (String, std::sync::Arc<AtomicUsize>) {
+    fn mock(responses: Vec<String>) -> (String, Arc<AtomicUsize>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = format!("http://{}", listener.local_addr().unwrap());
-        let hits = std::sync::Arc::new(AtomicUsize::new(0));
+        let hits = Arc::new(AtomicUsize::new(0));
         let h = hits.clone();
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
@@ -309,6 +353,102 @@ mod tests {
             }],
             tools: vec![],
             effort: None,
+        }
+    }
+
+    #[test]
+    fn base64_data_url_validation_rejects_malformed_payloads() {
+        for good in [
+            "data:image/png;base64,QUFB",
+            "data:image/jpeg;base64,AA==",
+            "data:image/webp;base64,AAA=",
+        ] {
+            assert!(
+                parse_data_url(good, "p", ApiType::AnthropicMessages).is_ok(),
+                "{good}"
+            );
+        }
+        for bad in [
+            "https://example.com/a.png",
+            "data:image/png;base64,",
+            "data:image/png;base64,ABC",
+            "data:image/png;base64,not!base",
+            "data:image/png;base64,A===",
+            "data:image/png;base64,AB==",
+            "data:image/png;base64,AAB=",
+            "data:image/png;base64,QU=B",
+        ] {
+            assert!(
+                matches!(
+                    parse_data_url(bad, "p", ApiType::GoogleGemini),
+                    Err(Error::Unsupported(_))
+                ),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn redirects_are_blocked_without_leaking_credentials() {
+        let (sink_url, sink_hits) = mock(vec![
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}"
+                .into();
+            16
+        ]);
+        let redir = format!(
+            "HTTP/1.1 307 Temporary Redirect\r\nLocation: {sink_url}/steal\r\nConnection: close\r\n\r\n"
+        );
+        let (front_url, _) = mock(vec![redir; 16]);
+        let cancel = AtomicBool::new(false);
+        for api in [
+            ApiType::OpenAiChat,
+            ApiType::OpenAiResponses,
+            ApiType::AnthropicMessages,
+            ApiType::GoogleGemini,
+        ] {
+            let client = Client::new(&front_url, "secret-key", api);
+            let m_err = client.models().unwrap_err();
+            assert!(matches!(m_err, Error::Status(307, _)), "{api:?}: {m_err}");
+            assert!(!m_err.retryable());
+            let c_err = client
+                .complete(&simple_req(), 0, &cancel, &mut |_| {}, &mut |_| {})
+                .unwrap_err();
+            assert!(matches!(c_err, Error::Status(307, _)), "{api:?}: {c_err}");
+            assert!(!c_err.retryable());
+        }
+        assert_eq!(sink_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn truncated_sse_streams_fail_as_retryable_transport_errors() {
+        let cases = [
+            (
+                ApiType::OpenAiChat,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"lua\",\"arguments\":\"{\\\"code\\\":\\\"x()\\\"}\"}}]}}]}\n\n",
+            ),
+            (
+                ApiType::OpenAiResponses,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"id\":\"fc_1\",\"type\":\"function_call\",\"call_id\":\"c1\",\"name\":\"lua\",\"arguments\":\"{\\\"code\\\":\\\"x()\\\"}\"}}\n\n",
+            ),
+            (
+                ApiType::AnthropicMessages,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"tu_1\",\"name\":\"lua\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"code\\\":\\\"x()\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+            ),
+            (
+                ApiType::GoogleGemini,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"lua\",\"args\":{\"code\":\"x()\"}}}]}}]}\n\n",
+            ),
+        ];
+        let cancel = AtomicBool::new(false);
+        for (api, raw) in cases {
+            let (url, _) = mock(vec![raw.into()]);
+            let err = Client::new(&url, "k", api)
+                .complete(&simple_req(), 0, &cancel, &mut |_| {}, &mut |_| {})
+                .unwrap_err();
+            assert!(
+                matches!(err, Error::Transport(_)) && err.retryable(),
+                "{api:?}: {err}"
+            );
         }
     }
 

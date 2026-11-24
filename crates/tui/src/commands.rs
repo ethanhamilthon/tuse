@@ -155,7 +155,7 @@ impl App {
                 let provider = tuse_config::split_model(&v).0;
                 let supported = cfg
                     .connect(provider)
-                    .map(|c| tuse_config::supported_efforts(c.api_type()))
+                    .map(|c| tuse_core::supported_efforts(c.api_type()))
                     .unwrap_or(&EFFORTS);
                 let items = EFFORTS
                     .iter()

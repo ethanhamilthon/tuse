@@ -1,7 +1,7 @@
 use crate::args::ArgStream;
 use crate::client::{
-    Client, finalize_calls, map_err, parse_data_url, parse_json, parse_json_object, read_body,
-    read_sse, url_encode,
+    Client, check_status, finalize_calls, map_err, parse_data_url, parse_json, parse_json_object,
+    read_body, read_sse, url_encode,
 };
 use crate::types::{ApiType, Delta, Error, Message, Replay, Reply, Request, ToolCall, Usage};
 use serde_json::{Value, json};
@@ -36,7 +36,7 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
                 let mut blocks = vec![];
                 if let Some(r) = replay
                     .as_ref()
-                    .filter(|r| r.matches(ApiType::AnthropicMessages, &req.model))
+                    .filter(|r| r.matches(&req.provider, ApiType::AnthropicMessages, &req.model))
                 {
                     blocks.extend(r.items.iter().cloned());
                 } else {
@@ -166,7 +166,7 @@ fn unfinished_loop_missing_thinking(req: &Request) -> bool {
             return false;
         }
         !replay.as_ref().is_some_and(|r| {
-            r.matches(ApiType::AnthropicMessages, &req.model)
+            r.matches(&req.provider, ApiType::AnthropicMessages, &req.model)
                 && r.items.first().is_some_and(|b| {
                     matches!(
                         b.get("type").and_then(Value::as_str),
@@ -184,16 +184,18 @@ pub(crate) fn complete(
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<Reply, Error> {
     let body = encode(req)?;
-    let resp = client
-        .agent
-        .post(&format!("{}/messages", client.base_url))
-        .set("x-api-key", &client.api_key)
-        .set("anthropic-version", ANTHROPIC_VERSION)
-        .set("Content-Type", "application/json")
-        .send_string(&body.to_string())
-        .map_err(map_err)?;
+    let resp = check_status(
+        client
+            .agent
+            .post(&format!("{}/messages", client.base_url))
+            .set("x-api-key", &client.api_key)
+            .set("anthropic-version", ANTHROPIC_VERSION)
+            .set("Content-Type", "application/json")
+            .send_string(&body.to_string())
+            .map_err(map_err)?,
+    )?;
     let streaming = resp.content_type().contains("event-stream");
-    let mut acc = Accumulator::new(&req.model);
+    let mut acc = Accumulator::new(&req.provider, &req.model);
     if !streaming {
         let v = parse_json(&read_body(resp)?)?;
         acc.fallback(&v, on_delta)?;
@@ -203,6 +205,9 @@ pub(crate) fn complete(
         let v = parse_json(data)?;
         acc.event(ev, &v, on_delta)
     })?;
+    if !acc.stopped || !acc.active.is_empty() {
+        return Err(Error::Transport("stream ended before message_stop".into()));
+    }
     Ok(acc.finish())
 }
 
@@ -219,13 +224,15 @@ pub(crate) fn models(client: &Client) -> Result<Vec<String>, Error> {
             ),
             None => format!("{}/models?limit=100", client.base_url),
         };
-        let resp = client
-            .agent
-            .get(&url)
-            .set("x-api-key", &client.api_key)
-            .set("anthropic-version", ANTHROPIC_VERSION)
-            .call()
-            .map_err(map_err)?;
+        let resp = check_status(
+            client
+                .agent
+                .get(&url)
+                .set("x-api-key", &client.api_key)
+                .set("anthropic-version", ANTHROPIC_VERSION)
+                .call()
+                .map_err(map_err)?,
+        )?;
         let v = parse_json(&read_body(resp)?)?;
         out.extend(
             v["data"]
@@ -298,23 +305,27 @@ impl RawUsage {
 }
 
 struct Accumulator {
+    provider: String,
     model: String,
     reply: Reply,
     usage: RawUsage,
     args: Vec<ArgStream>,
     active: BTreeMap<usize, Block>,
     finalized: BTreeMap<usize, Value>,
+    stopped: bool,
 }
 
 impl Accumulator {
-    fn new(model: &str) -> Self {
+    fn new(provider: &str, model: &str) -> Self {
         Self {
+            provider: provider.to_string(),
             model: model.to_string(),
             reply: Reply::default(),
             usage: RawUsage::default(),
             args: vec![],
             active: BTreeMap::new(),
             finalized: BTreeMap::new(),
+            stopped: false,
         }
     }
 
@@ -371,7 +382,10 @@ impl Accumulator {
                     self.usage.merge(u);
                 }
             }
-            "message_stop" => return Ok(false),
+            "message_stop" => {
+                self.stopped = true;
+                return Ok(false);
+            }
             _ => {}
         }
         Ok(true)
@@ -604,13 +618,11 @@ impl Accumulator {
     }
 
     fn finish(mut self) -> Reply {
-        for (idx, b) in std::mem::take(&mut self.active) {
-            self.finalize_block(idx, b);
-        }
         self.reply.usage = self.usage.normalize();
         finalize_calls(&mut self.reply.tool_calls);
         if !self.finalized.is_empty() {
             self.reply.replay = Some(Replay {
+                provider: self.provider,
                 api: ApiType::AnthropicMessages.as_str().to_string(),
                 model: self.model,
                 items: self.finalized.into_values().collect(),

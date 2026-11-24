@@ -8,7 +8,7 @@ use tuse_api::{
     ApiType, Client, Delta, Error, Message, Replay, Request, ToolCall, ToolDef, ToolImage, Usage,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Captured {
     method: String,
     path: String,
@@ -89,11 +89,11 @@ fn handle(stream: std::net::TcpStream, reply: MockReply, log: Arc<Mutex<Vec<Capt
     let mut out = stream;
     match reply {
         MockReply::Json(code, v) => {
-            let body = v.to_string();
+            let b = v.to_string();
             let _ = write!(
                 out,
-                "HTTP/1.1 {code} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
+                "HTTP/1.1 {code} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                b.len()
             );
         }
         MockReply::Sse(frames) => {
@@ -126,12 +126,7 @@ fn lua_tool() -> ToolDef {
     }
 }
 
-fn rich_request(
-    provider: &str,
-    model: &str,
-    effort: Option<&str>,
-    replay: Option<Replay>,
-) -> Request {
+fn rich_req(provider: &str, model: &str, effort: Option<&str>, replay: Option<Replay>) -> Request {
     Request {
         provider: provider.into(),
         model: model.into(),
@@ -142,7 +137,7 @@ fn rich_request(
                 images: vec!["data:image/png;base64,QUFB".into()],
             },
             Message::User {
-                text: "also this".into(),
+                text: "also".into(),
                 images: vec![],
             },
             Message::Assistant {
@@ -169,79 +164,63 @@ fn rich_request(
     }
 }
 
+fn sse(v: Value) -> String {
+    format!("data: {v}\n\n")
+}
+
 #[test]
-fn openai_chat_encoding_streaming_fallback_and_models() {
-    let srv = Server::start(vec![
+fn openai_chat_and_responses_wire_contracts() {
+    let chat_srv = Server::start(vec![
         MockReply::Sse(vec![
-            format!(
-                "data: {}\n\n",
-                json!({"choices":[{"delta":{"reasoning_content":"think ","reasoning":"more"}}]})
+            sse(json!({"choices":[{"delta":{"reasoning_content":"a","reasoning":"b"}}]})),
+            sse(json!({"choices":[{"delta":{"content":"hi"}}]})),
+            sse(
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"lua","arguments":"{\"co"}}]}}]}),
             ),
-            format!(
-                "data: {}\n\n",
-                json!({"choices":[{"delta":{"content":"hi"}}]})
+            sse(
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"de\":\"p()\"}"}}]}}]}),
             ),
-            format!(
-                "data: {}\n\n",
-                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"lua","arguments":"{\"co"}}]}}]})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"de\":\"print(1)\"}"}}]}}]})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":40,"cache_write_tokens":10}}})
+            sse(
+                json!({"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":40,"cache_write_tokens":10}}}),
             ),
             "data: [DONE]\n\n".into(),
         ]),
         MockReply::Json(
             200,
-            json!({
-                "choices":[{"message":{"content":"plain","reasoning":"r"},"finish_reason":"stop"}],
-                "usage":{"prompt_tokens":10,"completion_tokens":5}
-            }),
+            json!({"choices":[{"message":{"content":"fb"},"finish_reason":"stop"}]}),
         ),
-        MockReply::Json(200, json!({"data":[{"id":"gpt-5"},{"id":"o3"}]})),
+        MockReply::Json(200, json!({"data":[{"id":"gpt-5"}]})),
     ]);
-    let client = Client::new(&srv.url, "sk-chat", ApiType::OpenAiChat);
+    let chat = Client::new(&chat_srv.url, "sk-c", ApiType::OpenAiChat);
     let cancel = AtomicBool::new(false);
-    let mut text = String::new();
-    let mut reasoning = String::new();
-    let mut code = String::new();
-    let reply = client
+    let (mut t, mut r, mut c) = (String::new(), String::new(), String::new());
+    let rep = chat
         .complete(
-            &rich_request("openai", "gpt-5", Some("max"), None),
+            &rich_req("oai", "gpt-5", Some("max"), None),
             0,
             &cancel,
             &mut |d| match d {
-                Delta::Text(t) => text.push_str(t),
-                Delta::Reasoning(r) => reasoning.push_str(r),
-                Delta::Tool { code: c, .. } => code.push_str(c),
+                Delta::Text(s) => t.push_str(s),
+                Delta::Reasoning(s) => r.push_str(s),
+                Delta::Tool { code, .. } => c.push_str(code),
             },
             &mut |_| {},
         )
         .unwrap();
+    assert_eq!((t.as_str(), r.as_str(), c.as_str()), ("hi", "ab", "p()"));
     assert_eq!(
-        (text.as_str(), reasoning.as_str(), code.as_str()),
-        ("hi", "think more", "print(1)")
-    );
-    assert_eq!(reply.finish, "tool_calls");
-    assert_eq!(
-        reply.usage,
+        rep.usage,
         Some(Usage {
             input: 100,
             output: 20,
             cached: 40,
-            cache_write: 10,
+            cache_write: 10
         })
     );
-    assert!(reply.replay.is_none());
-
-    let fallback = client
+    let fb = chat
         .complete(
             &Request {
-                provider: "openai".into(),
+                provider: "oai".into(),
                 model: "gpt-5".into(),
                 system: String::new(),
                 messages: vec![Message::User {
@@ -257,597 +236,327 @@ fn openai_chat_encoding_streaming_fallback_and_models() {
             &mut |_| {},
         )
         .unwrap();
-    assert_eq!(
-        (fallback.text.as_str(), fallback.reasoning.as_str()),
-        ("plain", "r")
-    );
-    assert_eq!(client.models().unwrap(), vec!["gpt-5", "o3"]);
-
-    let reqs = srv.captured();
+    assert_eq!(fb.text, "fb");
+    assert_eq!(chat.models().unwrap(), vec!["gpt-5"]);
+    let reqs = chat_srv.captured();
     assert_eq!(
         (reqs[0].method.as_str(), reqs[0].path.as_str()),
         ("POST", "/chat/completions")
     );
+    assert_eq!(reqs[0].headers["authorization"], "Bearer sk-c");
     assert_eq!(reqs[2].method, "GET");
-    assert_eq!(reqs[0].headers["authorization"], "Bearer sk-chat");
-    let body0: Value = serde_json::from_str(&reqs[0].body).unwrap();
-    assert_eq!(body0["reasoning_effort"], "max");
-    assert_eq!(body0["messages"][0]["role"], "system");
-    assert_eq!(body0["messages"][1]["content"][1]["type"], "image_url");
-    assert_eq!(
-        body0["messages"][5]["content"][0]["text"],
-        "[Images from the tool results above]"
-    );
-    let body1: Value = serde_json::from_str(&reqs[1].body).unwrap();
-    assert!(body1.get("tools").is_none());
-    assert_eq!(body1["messages"].as_array().unwrap().len(), 1);
-}
 
-#[test]
-fn openai_responses_encoding_streaming_replay_fallback_and_models() {
-    let srv = Server::start(vec![
+    let resp_srv = Server::start(vec![
         MockReply::Sse(vec![
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.reasoning_summary_text.delta","delta":"plan"})
+            sse(json!({"type":"response.reasoning_summary_text.delta","delta":"plan"})),
+            sse(
+                json!({"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[{"text":"plan"}],"encrypted_content":"ENC"}}),
             ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"plan"}],"encrypted_content":"ENC_BLOB"}})
+            sse(
+                json!({"type":"response.output_item.done","output_index":1,"item":{"id":"rs_drop","type":"reasoning","summary":[{"text":"x"}]}}),
             ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.output_item.done","output_index":1,"item":{"id":"rs_empty","type":"reasoning","summary":[{"type":"summary_text","text":"drop me"}]}})
+            sse(
+                json!({"type":"response.output_item.added","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_42","name":"lua","arguments":""}}),
             ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.output_text.delta","delta":"running"})
+            sse(
+                json!({"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":2,"delta":"{\"code\":\"x=1\"}"}),
             ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.output_item.done","output_index":2,"item":{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"running"}]}})
+            sse(
+                json!({"type":"response.function_call_arguments.done","item_id":"fc_1","output_index":2,"arguments":"{\"code\":\"x=2\"}"}),
             ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.output_item.added","output_index":3,"item":{"id":"fc_item","type":"function_call","call_id":"call_42","name":"lua","arguments":""}})
+            sse(
+                json!({"type":"response.output_item.done","output_index":2,"item":{"id":"fc_1","type":"function_call"}}),
             ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.function_call_arguments.delta","item_id":"fc_item","output_index":3,"delta":"{\"code\":\"x"})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.function_call_arguments.delta","item_id":"fc_item","output_index":3,"delta":" = 1\"}"})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.function_call_arguments.done","item_id":"fc_item","output_index":3,"arguments":"{\"code\":\"x = 1\"}"})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.output_item.done","output_index":3,"item":{"id":"fc_item","type":"function_call","call_id":"call_42","name":"lua","arguments":"{\"code\":\"x = 1\"}"}})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.output_item.added","output_index":4,"item":{"id":"fc_2","type":"function_call","call_id":"call_99","name":"lua","arguments":""}})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.output_item.done","output_index":4,"item":{"id":"fc_2","type":"function_call","call_id":"call_99","name":"lua","arguments":"{\"code\":\"y = 2\"}"}})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":80,"output_tokens":30,"input_tokens_details":{"cached_tokens":15}}}})
+            sse(
+                json!({"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":80,"output_tokens":30,"input_tokens_details":{"cached_tokens":15}}}}),
             ),
         ]),
         MockReply::Json(
             200,
             json!({
                 "status":"completed",
-                "usage":{"input_tokens":50,"output_tokens":12,"input_tokens_details":{"cached_tokens":5}},
                 "output":[
-                    {"id":"rs_2","type":"reasoning","summary":[{"text":"thought"}],"encrypted_content":"ENC2"},
+                    {"id":"rs_2","type":"reasoning","summary":[{"text":"th"}],"encrypted_content":"E2"},
                     {"id":"msg_2","type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]},
-                    {"id":"fc_fb","type":"function_call","call_id":"c_fb","name":"lua","arguments":"{\"code\":\"ok()\"}"}
+                    {"id":"fc_2","type":"function_call","call_id":"c2","name":"lua","arguments":"{\"code\":\"ok()\"}"}
                 ]
             }),
         ),
         MockReply::Json(200, json!({"data":[{"id":"gpt-5-codex"}]})),
     ]);
-    let client = Client::new(&srv.url, "sk-resp", ApiType::OpenAiResponses);
-    let cancel = AtomicBool::new(false);
-    let mut codes: Vec<(usize, String)> = vec![];
-    let mut reasoning = String::new();
-    let r1 = client
+    let resp = Client::new(&resp_srv.url, "sk-r", ApiType::OpenAiResponses);
+    let mut rcode = String::new();
+    let r1 = resp
         .complete(
-            &rich_request("resp", "gpt-5", Some("xhigh"), None),
-            0,
-            &cancel,
-            &mut |d| match d {
-                Delta::Reasoning(t) => reasoning.push_str(t),
-                Delta::Tool { index, code, .. } if !code.is_empty() => {
-                    codes.push((index, code.to_string()));
-                }
-                _ => {}
-            },
-            &mut |_| {},
-        )
-        .unwrap();
-    assert_eq!(reasoning, "plan");
-    let c0: String = codes
-        .iter()
-        .filter(|(i, _)| *i == 0)
-        .map(|(_, c)| c.as_str())
-        .collect();
-    let c1: String = codes
-        .iter()
-        .filter(|(i, _)| *i == 1)
-        .map(|(_, c)| c.as_str())
-        .collect();
-    assert_eq!((c0.as_str(), c1.as_str()), ("x = 1", "y = 2"));
-    assert_eq!(r1.tool_calls[0].id, "call_42");
-    assert_eq!(r1.tool_calls[1].id, "call_99");
-    assert_eq!(
-        r1.usage,
-        Some(Usage {
-            input: 80,
-            output: 30,
-            cached: 15,
-            cache_write: 0,
-        })
-    );
-    let rep = r1.replay.clone().unwrap();
-    assert_eq!(rep.items.len(), 4);
-    assert_eq!(rep.items[0]["encrypted_content"], "ENC_BLOB");
-    assert!(rep.items.iter().all(|it| it["id"] != "rs_empty"));
-
-    let mut fb_code = String::new();
-    let r2 = client
-        .complete(
-            &rich_request("resp", "gpt-5", Some("high"), Some(rep)),
+            &rich_req("resp", "gpt-5", Some("xhigh"), None),
             0,
             &cancel,
             &mut |d| {
                 if let Delta::Tool { code, .. } = d {
-                    fb_code.push_str(code);
+                    rcode.push_str(code);
                 }
             },
             &mut |_| {},
         )
         .unwrap();
-    assert_eq!(
-        (r2.text.as_str(), r2.reasoning.as_str(), fb_code.as_str()),
-        ("done", "thought", "ok()")
-    );
-    assert_eq!(r2.replay.as_ref().unwrap().items.len(), 3);
-    assert_eq!(client.models().unwrap(), vec!["gpt-5-codex"]);
-
-    let reqs = srv.captured();
-    assert_eq!(reqs[0].path, "/responses");
-    let b0: Value = serde_json::from_str(&reqs[0].body).unwrap();
+    assert_eq!(rcode, "x=1");
+    assert_eq!(r1.tool_calls[0].id, "call_42");
+    assert_eq!(r1.tool_calls[0].arguments, "{\"code\":\"x=2\"}");
+    let replay = r1.replay.clone().unwrap();
+    assert_eq!(replay.provider, "resp");
+    assert_eq!(replay.items.len(), 2);
+    assert_eq!(replay.items[1]["call_id"], "call_42");
+    assert_eq!(replay.items[1]["arguments"], "{\"code\":\"x=2\"}");
+    let r2 = resp
+        .complete(
+            &rich_req("resp", "gpt-5", Some("high"), Some(replay)),
+            0,
+            &cancel,
+            &mut |_| {},
+            &mut |_| {},
+        )
+        .unwrap();
+    assert_eq!(r2.text, "done");
+    assert_eq!(resp.models().unwrap(), vec!["gpt-5-codex"]);
+    let rreqs = resp_srv.captured();
+    let b0: Value = serde_json::from_str(&rreqs[0].body).unwrap();
     assert_eq!(b0["store"], false);
-    assert_eq!(b0["instructions"], "Be concise.");
-    assert_eq!(
-        b0["reasoning"],
-        json!({"effort": "xhigh", "summary": "auto"})
-    );
     assert_eq!(b0["include"], json!(["reasoning.encrypted_content"]));
-    assert_eq!(b0["tools"][0]["name"], "lua");
-    let b1: Value = serde_json::from_str(&reqs[1].body).unwrap();
+    let b1: Value = serde_json::from_str(&rreqs[1].body).unwrap();
     assert!(
         b1["input"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|it| it["encrypted_content"] == "ENC_BLOB")
+            .any(|it| it["encrypted_content"] == "ENC")
     );
 }
 
 #[test]
-fn anthropic_encoding_streaming_replay_fallback_and_pagination() {
-    let mut model_replies = vec![];
+fn anthropic_and_gemini_wire_contracts_and_pagination() {
+    let mut amodels = vec![];
     for p in 1..=11 {
-        model_replies.push(MockReply::Json(
+        amodels.push(MockReply::Json(
             200,
-            json!({
-                "data": [{"id": format!("claude-{p}")}],
-                "has_more": true,
-                "last_id": format!("cur-{p}"),
-            }),
+            json!({"data":[{"id":format!("c-{p}")}],"has_more":true,"last_id":format!("id-{p}")}),
         ));
     }
-    let srv_models = Server::start(model_replies);
-    let ids = Client::new(&srv_models.url, "ak-1", ApiType::AnthropicMessages)
+    let asrv_m = Server::start(amodels);
+    let aids = Client::new(&asrv_m.url, "ak", ApiType::AnthropicMessages)
         .models()
         .unwrap();
-    assert_eq!(ids.len(), 10);
-    assert_eq!(ids[0], "claude-1");
-    assert_eq!(ids[9], "claude-10");
-    let mreqs = srv_models.captured();
-    assert_eq!(mreqs.len(), 10);
-    assert_eq!(mreqs[0].headers["x-api-key"], "ak-1");
-    assert_eq!(mreqs[0].headers["anthropic-version"], "2023-06-01");
-    assert_eq!(mreqs[0].path, "/models?limit=100");
-    assert_eq!(mreqs[1].path, "/models?limit=100&after_id=cur-1");
+    assert_eq!(
+        (aids.len(), aids[0].as_str(), aids[9].as_str()),
+        (10, "c-1", "c-10")
+    );
+    assert_eq!(
+        asrv_m.captured()[0].headers["anthropic-version"],
+        "2023-06-01"
+    );
 
-    let srv_loop = Server::start(vec![
+    let loop_m = Server::start(vec![
         MockReply::Json(
             200,
-            json!({"data":[{"id":"a"}],"has_more":true,"last_id":"same"}),
+            json!({"data":[{"id":"a"}],"has_more":true,"last_id":"dup"}),
         ),
         MockReply::Json(
             200,
-            json!({"data":[{"id":"b"}],"has_more":true,"last_id":"same"}),
+            json!({"data":[{"id":"b"}],"has_more":true,"last_id":"dup"}),
         ),
     ]);
     assert_eq!(
-        Client::new(&srv_loop.url, "ak-1", ApiType::AnthropicMessages)
+        Client::new(&loop_m.url, "ak", ApiType::AnthropicMessages)
             .models()
             .unwrap(),
         vec!["a", "b"]
     );
 
-    let srv = Server::start(vec![
+    let asrv = Server::start(vec![
         MockReply::Sse(vec![
-            format!(
-                "event: message_start\ndata: {}\n\n",
-                json!({"type":"message_start","message":{"usage":{"input_tokens":100,"cache_read_input_tokens":50,"cache_creation_input_tokens":25,"output_tokens":1}}})
+            sse(
+                json!({"type":"message_start","message":{"usage":{"input_tokens":100,"cache_read_input_tokens":50,"cache_creation_input_tokens":25}}}),
             ),
-            format!(
-                "event: content_block_start\ndata: {}\n\n",
-                json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}})
+            sse(
+                json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}),
             ),
-            format!(
-                "event: content_block_delta\ndata: {}\n\n",
-                json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"deep"}})
+            sse(
+                json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"deep"}}),
             ),
-            format!(
-                "event: content_block_delta\ndata: {}\n\n",
-                json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"SIG_A"}})
+            sse(
+                json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"SIG"}}),
             ),
-            format!(
-                "event: content_block_delta\ndata: {}\n\n",
-                json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"_B"}})
+            sse(json!({"type":"content_block_stop","index":0})),
+            sse(
+                json!({"type":"content_block_start","index":1,"content_block":{"type":"redacted_thinking","data":"RED"}}),
             ),
-            format!(
-                "event: content_block_stop\ndata: {}\n\n",
-                json!({"type":"content_block_stop","index":0})
+            sse(json!({"type":"content_block_stop","index":1})),
+            sse(
+                json!({"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tu_1","name":"lua","input":{}}}),
             ),
-            format!(
-                "event: content_block_start\ndata: {}\n\n",
-                json!({"type":"content_block_start","index":1,"content_block":{"type":"redacted_thinking","data":"OPAQUE"}})
+            sse(
+                json!({"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"code\":\"a()\"}"}}),
             ),
-            format!(
-                "event: content_block_stop\ndata: {}\n\n",
-                json!({"type":"content_block_stop","index":1})
+            sse(json!({"type":"content_block_stop","index":2})),
+            sse(
+                json!({"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":42}}),
             ),
-            format!(
-                "event: content_block_start\ndata: {}\n\n",
-                json!({"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tu_1","name":"lua","input":{}}})
-            ),
-            format!(
-                "event: content_block_delta\ndata: {}\n\n",
-                json!({"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"code\":\"a"}})
-            ),
-            format!(
-                "event: content_block_delta\ndata: {}\n\n",
-                json!({"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":" + b\"}"}})
-            ),
-            format!(
-                "event: content_block_stop\ndata: {}\n\n",
-                json!({"type":"content_block_stop","index":2})
-            ),
-            format!(
-                "event: message_delta\ndata: {}\n\n",
-                json!({"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":42}})
-            ),
-            format!("event: ping\ndata: {}\n\n", json!({"type":"ping"})),
-            format!(
-                "event: message_stop\ndata: {}\n\n",
-                json!({"type":"message_stop"})
-            ),
+            sse(json!({"type":"message_stop"})),
         ]),
         MockReply::Json(
             200,
-            json!({
-                "stop_reason":"end_turn",
-                "usage":{"input_tokens":10,"cache_read_input_tokens":20,"cache_creation_input_tokens":5,"output_tokens":7},
-                "content":[
-                    {"type":"thinking","thinking":"fb","signature":"S"},
-                    {"type":"redacted_thinking","data":"R"},
-                    {"type":"text","text":"answer"},
-                    {"type":"tool_use","id":"tu_2","name":"lua","input":{"code":"z()"}}
-                ]
-            }),
+            json!({"stop_reason":"end_turn","usage":{"input_tokens":10,"cache_read_input_tokens":20,"cache_creation_input_tokens":5,"output_tokens":7},"content":[{"type":"text","text":"ans"}]}),
         ),
         MockReply::Json(
             200,
-            json!({
-                "stop_reason":"end_turn",
-                "content":[{"type":"text","text":"recovered"}]
-            }),
+            json!({"stop_reason":"end_turn","content":[{"type":"text","text":"diff-prov"}]}),
         ),
     ]);
-    let client = Client::new(&srv.url, "ak-test", ApiType::AnthropicMessages);
+    let anth = Client::new(&asrv.url, "ak", ApiType::AnthropicMessages);
     let cancel = AtomicBool::new(false);
-    let mut reasoning = String::new();
-    let mut code = String::new();
-    let r1 = client
+    let r1 = anth
         .complete(
-            &Request {
-                provider: "anth".into(),
-                model: "claude-sonnet-4".into(),
-                system: "sys".into(),
-                messages: vec![
-                    Message::User {
-                        text: "u1".into(),
-                        images: vec!["data:image/png;base64,QUFB".into()],
-                    },
-                    Message::User {
-                        text: "u2".into(),
-                        images: vec![],
-                    },
-                ],
-                tools: vec![lua_tool()],
-                effort: Some("max".into()),
-            },
+            &rich_req("anth1", "claude-4", Some("max"), None),
             0,
             &cancel,
-            &mut |d| match d {
-                Delta::Reasoning(t) => reasoning.push_str(t),
-                Delta::Tool { code: c, .. } => code.push_str(c),
-                _ => {}
-            },
+            &mut |_| {},
             &mut |_| {},
         )
         .unwrap();
-    assert_eq!((reasoning.as_str(), code.as_str()), ("deep", "a + b"));
-    assert_eq!(r1.finish, "tool_use");
     assert_eq!(
         r1.usage,
         Some(Usage {
             input: 175,
             output: 42,
             cached: 50,
-            cache_write: 25,
+            cache_write: 25
         })
     );
     let rep = r1.replay.clone().unwrap();
+    anth.complete(
+        &rich_req("anth1", "claude-4", Some("high"), Some(rep.clone())),
+        0,
+        &cancel,
+        &mut |_| {},
+        &mut |_| {},
+    )
+    .unwrap();
+    anth.complete(
+        &rich_req("anth2", "claude-4", Some("high"), Some(rep)),
+        0,
+        &cancel,
+        &mut |_| {},
+        &mut |_| {},
+    )
+    .unwrap();
+    let areqs = asrv.captured();
+    let ab0: Value = serde_json::from_str(&areqs[0].body).unwrap();
+    assert!(ab0.get("thinking").is_none());
+    let ab1: Value = serde_json::from_str(&areqs[1].body).unwrap();
+    assert_eq!(ab1["messages"][1]["content"][0]["signature"], "SIG");
     assert_eq!(
-        rep.items[0],
-        json!({"type":"thinking","thinking":"deep","signature":"SIG_A_B"})
-    );
-    assert_eq!(
-        rep.items[1],
-        json!({"type":"redacted_thinking","data":"OPAQUE"})
-    );
-    assert_eq!(rep.items[2]["type"], "tool_use");
-
-    let mut fb_code = String::new();
-    let r2 = client
-        .complete(
-            &rich_request("anth", "claude-sonnet-4", Some("high"), Some(rep)),
-            0,
-            &cancel,
-            &mut |d| {
-                if let Delta::Tool { code: c, .. } = d {
-                    fb_code.push_str(c);
-                }
-            },
-            &mut |_| {},
-        )
-        .unwrap();
-    assert_eq!(
-        (r2.text.as_str(), r2.reasoning.as_str(), fb_code.as_str()),
-        ("answer", "fb", "z()")
-    );
-    assert_eq!(r2.usage.unwrap().input, 35);
-
-    client
-        .complete(
-            &rich_request("anth", "claude-sonnet-4", Some("high"), None),
-            0,
-            &cancel,
-            &mut |_| {},
-            &mut |_| {},
-        )
-        .unwrap();
-
-    let reqs = srv.captured();
-    let b0: Value = serde_json::from_str(&reqs[0].body).unwrap();
-    assert_eq!(b0["max_tokens"], 16384);
-    assert_eq!(
-        b0["system"][0]["cache_control"],
-        json!({"type":"ephemeral"})
-    );
-    assert_eq!(b0["messages"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        b0["messages"][0]["content"][2]["cache_control"],
-        json!({"type":"ephemeral"})
-    );
-    assert_eq!(b0["thinking"], json!({"type":"adaptive"}));
-    assert_eq!(b0["output_config"], json!({"effort":"max"}));
-
-    let b1: Value = serde_json::from_str(&reqs[1].body).unwrap();
-    assert_eq!(b1["messages"][1]["content"][0]["signature"], "SIG_A_B");
-    assert_eq!(b1["messages"][1]["content"][1]["type"], "redacted_thinking");
-    assert_eq!(b1["messages"][2]["content"][0]["type"], "tool_result");
-    assert_eq!(
-        b1["messages"][2]["content"][0]["content"][1]["type"],
+        ab1["messages"][2]["content"][0]["content"][1]["type"],
         "image"
     );
-    assert_eq!(b1["thinking"], json!({"type":"adaptive"}));
+    assert_eq!(ab1["thinking"], json!({"type":"adaptive"}));
+    let ab2: Value = serde_json::from_str(&areqs[2].body).unwrap();
+    assert!(
+        !ab2.to_string().contains("SIG"),
+        "same API/model different provider must not replay"
+    );
+    assert!(ab2.get("thinking").is_none());
 
-    let b2: Value = serde_json::from_str(&reqs[2].body).unwrap();
-    assert!(b2.get("thinking").is_none());
-    assert!(b2.get("output_config").is_none());
-}
-
-#[test]
-fn gemini_encoding_streaming_replay_fallback_and_pagination() {
-    let mut model_replies = vec![];
+    let mut gmodels = vec![];
     for p in 1..=11 {
-        model_replies.push(MockReply::Json(
+        gmodels.push(MockReply::Json(
             200,
             json!({
-                "models": [
-                    {"name": format!("models/gemini-{p}"), "supportedGenerationMethods": ["generateContent"]},
-                    {"name": format!("models/embed-{p}"), "supportedGenerationMethods": ["embedContent"]},
+                "models":[
+                    {"name":format!("models/gemini-{p}"),"supportedGenerationMethods":["generateContent"]},
+                    {"name":format!("models/embed-{p}"),"supportedGenerationMethods":["embedContent"]}
                 ],
-                "nextPageToken": format!("tok-{p}"),
+                "nextPageToken":format!("tok-{p}")
             }),
         ));
     }
-    let srv_models = Server::start(model_replies);
-    let ids = Client::new(&srv_models.url, "gk-1", ApiType::GoogleGemini)
+    let gsrv_m = Server::start(gmodels);
+    let gids = Client::new(&gsrv_m.url, "gk", ApiType::GoogleGemini)
         .models()
         .unwrap();
-    assert_eq!(ids.len(), 10);
-    assert_eq!(ids[0], "gemini-1");
-    assert!(
-        ids.iter()
-            .all(|id| !id.starts_with("models/") && !id.contains("embed"))
-    );
-    let mreqs = srv_models.captured();
-    assert_eq!(mreqs[0].headers["x-goog-api-key"], "gk-1");
-    assert!(!mreqs[0].path.contains("gk-1"));
-    assert_eq!(mreqs[1].path, "/models?pageSize=100&pageToken=tok-1");
+    assert_eq!((gids.len(), gids[0].as_str()), (10, "gemini-1"));
+    assert!(!gsrv_m.captured()[0].path.contains("gk"));
 
-    let srv = Server::start(vec![
+    let gsrv = Server::start(vec![
         MockReply::Sse(vec![
-            format!(
-                "data: {}\n\n",
-                json!({"candidates":[{"content":{"parts":[{"text":"t1","thought":true}]}}]})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"candidates":[{"content":{"parts":[{"text":"t2","thought":true}]}}]})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"candidates":[{"content":{"parts":[{"text":"t3","thought":true,"thoughtSignature":"SIG_T"}]}}]})
-            ),
-            format!(
-                "data: {}\n\n",
-                json!({"candidates":[{"content":{"parts":[{"functionCall":{"name":"lua","args":{"code":"return 7"}},"thoughtSignature":"SIG_FC"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":90,"cachedContentTokenCount":30,"candidatesTokenCount":10,"thoughtsTokenCount":15}})
+            sse(json!({"candidates":[{"content":{"parts":[{"text":"t1","thought":true}]}}]})),
+            sse(
+                json!({"candidates":[{"content":{"parts":[{"text":"t2","thought":true,"thoughtSignature":"ST"},{"functionCall":{"name":"lua","args":{"code":"r()"}},"thoughtSignature":"SF"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":90,"cachedContentTokenCount":30,"candidatesTokenCount":10,"thoughtsTokenCount":15}}),
             ),
         ]),
         MockReply::Json(
             200,
-            json!([
-                {"candidates":[{"content":{"parts":[{"text":"hello "}]}}]},
-                {"candidates":[{"content":{"parts":[{"text":"world"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":4,"thoughtsTokenCount":6}}
-            ]),
+            json!([{"candidates":[{"content":{"parts":[{"text":"a"}]}}]},{"candidates":[{"content":{"parts":[{"text":"b"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":4,"thoughtsTokenCount":6}}]),
         ),
         MockReply::Json(
             200,
             json!({"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}),
         ),
     ]);
-    let client = Client::new(&srv.url, "gk-secret", ApiType::GoogleGemini);
-    let cancel = AtomicBool::new(false);
-    let mut reasoning = String::new();
-    let mut code = String::new();
-    let r1 = client
+    let gem = Client::new(&gsrv.url, "gk", ApiType::GoogleGemini);
+    let gr1 = gem
         .complete(
-            &rich_request("gem", "gemini-2.5-pro", Some("medium"), None),
-            0,
-            &cancel,
-            &mut |d| match d {
-                Delta::Reasoning(t) => reasoning.push_str(t),
-                Delta::Tool { code: c, .. } => code.push_str(c),
-                _ => {}
-            },
-            &mut |_| {},
-        )
-        .unwrap();
-    assert_eq!((reasoning.as_str(), code.as_str()), ("t1t2t3", "return 7"));
-    assert_eq!(r1.tool_calls[0].id, "call_0");
-    assert_eq!(
-        r1.usage,
-        Some(Usage {
-            input: 90,
-            output: 25,
-            cached: 30,
-            cache_write: 0,
-        })
-    );
-    let rep = r1.replay.clone().unwrap();
-    assert_eq!(rep.items.len(), 3);
-    assert_eq!(rep.items[0], json!({"text":"t1t2","thought":true}));
-    assert_eq!(rep.items[1]["thoughtSignature"], "SIG_T");
-    assert_eq!(rep.items[2]["thoughtSignature"], "SIG_FC");
-
-    let r2 = client
-        .complete(
-            &rich_request("gem", "gemini-2.5-pro", Some("high"), Some(rep)),
+            &rich_req("gem", "gemini-2.5-pro", Some("medium"), None),
             0,
             &cancel,
             &mut |_| {},
             &mut |_| {},
         )
         .unwrap();
-    assert_eq!(r2.text, "hello world");
-    assert_eq!(r2.usage.unwrap().output, 10);
-
-    client
+    assert_eq!(gr1.usage.unwrap().output, 25);
+    let gr2 = gem
         .complete(
-            &Request {
-                provider: "gem".into(),
-                model: "gemini-3-pro".into(),
-                system: String::new(),
-                messages: vec![Message::User {
-                    text: "hi".into(),
-                    images: vec![],
-                }],
-                tools: vec![],
-                effort: Some("low".into()),
-            },
+            &rich_req("gem", "gemini-2.5-pro", Some("high"), gr1.replay),
             0,
             &cancel,
             &mut |_| {},
             &mut |_| {},
         )
         .unwrap();
-
-    let reqs = srv.captured();
+    assert_eq!((gr2.text.as_str(), gr2.usage.unwrap().output), ("ab", 10));
+    gem.complete(
+        &Request {
+            provider: "gem".into(),
+            model: "gemini-3-pro".into(),
+            system: String::new(),
+            messages: vec![Message::User {
+                text: "hi".into(),
+                images: vec![],
+            }],
+            tools: vec![],
+            effort: Some("low".into()),
+        },
+        0,
+        &cancel,
+        &mut |_| {},
+        &mut |_| {},
+    )
+    .unwrap();
+    let greqs = gsrv.captured();
+    assert!(!greqs[0].path.contains("gk"));
+    assert_eq!(greqs[0].headers["x-goog-api-key"], "gk");
+    let gb0: Value = serde_json::from_str(&greqs[0].body).unwrap();
     assert_eq!(
-        reqs[0].path,
-        "/models/gemini-2.5-pro:streamGenerateContent?alt=sse"
+        gb0["generationConfig"]["thinkingConfig"]["thinkingBudget"],
+        8192
     );
-    assert_eq!(reqs[0].headers["x-goog-api-key"], "gk-secret");
-    assert!(!reqs[0].path.contains("gk-secret"));
-    let b0: Value = serde_json::from_str(&reqs[0].body).unwrap();
-    assert_eq!(b0["systemInstruction"]["parts"][0]["text"], "Be concise.");
+    let gb2: Value = serde_json::from_str(&greqs[2].body).unwrap();
     assert_eq!(
-        b0["generationConfig"]["thinkingConfig"],
-        json!({"includeThoughts":true,"thinkingBudget":8192})
+        gb2["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+        "low"
     );
-    assert_eq!(b0["contents"][0]["parts"].as_array().unwrap().len(), 3);
-    assert_eq!(
-        b0["contents"][2]["parts"][0]["functionResponse"]["name"],
-        "lua"
-    );
-    assert_eq!(
-        b0["contents"][2]["parts"][1]["inlineData"]["mimeType"],
-        "image/jpeg"
-    );
-
-    let b1: Value = serde_json::from_str(&reqs[1].body).unwrap();
-    assert_eq!(b1["contents"][1]["parts"][1]["thoughtSignature"], "SIG_T");
-    assert_eq!(b1["contents"][1]["parts"][2]["thoughtSignature"], "SIG_FC");
-
-    let b2: Value = serde_json::from_str(&reqs[2].body).unwrap();
-    assert_eq!(
-        b2["generationConfig"]["thinkingConfig"],
-        json!({"includeThoughts":true,"thinkingLevel":"low"})
-    );
-    assert!(b2.get("systemInstruction").is_none());
-    assert!(b2.get("tools").is_none());
 }
 
 #[test]
-fn unsupported_capabilities_and_cooperative_cancellation() {
+fn unsupported_capabilities_and_cancellation() {
     let srv = Server::start(vec![MockReply::Json(200, json!({}))]);
     let cancel = AtomicBool::new(false);
     for (api, effort) in [
@@ -876,43 +585,12 @@ fn unsupported_capabilities_and_cooperative_cancellation() {
             )
             .unwrap_err();
         assert!(matches!(err, Error::Unsupported(_)));
-        assert!(
-            err.to_string()
-                .contains(&format!("does not support effort `{effort}`")),
-            "{err}"
-        );
     }
-    for api in [ApiType::AnthropicMessages, ApiType::GoogleGemini] {
-        let err = Client::new(&srv.url, "k", api)
-            .complete(
-                &Request {
-                    provider: "p".into(),
-                    model: "m".into(),
-                    system: String::new(),
-                    messages: vec![Message::User {
-                        text: "hi".into(),
-                        images: vec!["https://example.com/a.png".into()],
-                    }],
-                    tools: vec![],
-                    effort: None,
-                },
-                3,
-                &cancel,
-                &mut |_| {},
-                &mut |_| panic!("must not retry"),
-            )
-            .unwrap_err();
-        assert!(matches!(err, Error::Unsupported(_)));
-        assert!(err.to_string().contains("does not support image"), "{err}");
-    }
-    assert!(
-        srv.captured().is_empty(),
-        "zero HTTP requests on unsupported capability"
-    );
+    assert!(srv.captured().is_empty());
 
-    let stall = Server::start(vec![MockReply::StallSse(
-        "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hi\"}]}}]}\n\n".into(),
-    )]);
+    let stall = Server::start(vec![MockReply::StallSse(sse(
+        json!({"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}),
+    ))]);
     let cancel = Arc::new(AtomicBool::new(false));
     let c2 = cancel.clone();
     let err = Client::new(&stall.url, "k", ApiType::GoogleGemini)

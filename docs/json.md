@@ -101,7 +101,7 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
   - Params: `{}`.
   - Result: the session's live in-memory record list in chronological order (including records buffered before a new session materializes in SQLite on the first user message, such as the initial `settings` record and `start` hook records). Canonical record schemas, tagged by `"t"`:
     - `"user"`: `{ t, text, context?, images?, at }`
-    - `"assistant"`: `{ t, text, reasoning?, tool_calls?: [{ id, name, arguments }], replay?: { api, model, items }, at }` (`replay` is omitted when absent/empty)
+    - `"assistant"`: `{ t, text, reasoning?, tool_calls?: [{ id, name, arguments }], replay?: { provider, api, model, items }, at }` (`replay` is omitted when absent/empty)
     - `"tool"`: `{ t, id, tool, input, output, code: int | null, images?, diffs?: [{ path, diff }], at }`
     - `"notification"`: `{ t, text }`
     - `"notice"`: `{ t, text }`

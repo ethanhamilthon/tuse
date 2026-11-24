@@ -21,7 +21,7 @@ pub fn run(args: &Args) -> Result<(), String> {
     if name.contains('/') || name.chars().any(char::is_whitespace) {
         return Err("the name can't contain `/` or whitespace".into());
     }
-    if tuse_core::providers().iter().any(|p| p.name == name) {
+    if tuse_core::providers()?.iter().any(|p| p.name == name) {
         return Err(format!(
             "`{name}` already exists; `tuse disconnect {name}` removes it"
         ));
@@ -53,9 +53,9 @@ pub fn remove(name: &str) -> Result<(), String> {
 
 pub fn list(as_json: bool) -> Result<(), String> {
     if as_json {
-        println!("{}", tuse_core::providers_json());
+        println!("{}", tuse_core::providers_json()?);
     } else {
-        for p in tuse_core::providers() {
+        for p in tuse_core::providers()? {
             println!("{}\t{}", p.name, p.base_url);
         }
     }

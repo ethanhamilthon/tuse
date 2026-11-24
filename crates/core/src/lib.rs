@@ -51,3 +51,7 @@ pub use trace::TraceItem;
 pub use tuse_config::HOST_FUNCTIONS;
 pub use tuse_config::tuse_home;
 pub use usage::{Stats, tokens};
+
+pub fn supported_efforts(api: &str) -> &'static [&'static str] {
+    tuse_api::ApiType::from_stored(api).supported_efforts()
+}

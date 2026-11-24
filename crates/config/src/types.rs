@@ -168,22 +168,6 @@ pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "ma
 
 pub const DEFAULT_API: &str = "openai-chat";
 
-pub const API_TYPES: [&str; 4] = [
-    "openai-chat",
-    "openai-responses",
-    "anthropic-messages",
-    "google-gemini",
-];
-
-pub fn supported_efforts(api: &str) -> &'static [&'static str] {
-    match api {
-        "openai-responses" => &["default", "low", "medium", "high", "xhigh"],
-        "anthropic-messages" => &["default", "low", "medium", "high", "max"],
-        "google-gemini" => &["default", "low", "medium", "high"],
-        _ => &EFFORTS,
-    }
-}
-
 pub const BUILTIN_COMMANDS: [&str; 9] = [
     "config", "new", "resume", "models", "tasks", "session", "trace", "reload", "quit",
 ];

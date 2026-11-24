@@ -52,6 +52,7 @@ mod tests {
                     arguments: "{}".into(),
                 }],
                 replay: Some(Replay {
+                    provider: "resp".into(),
                     api: "openai-responses".into(),
                     model: "m".into(),
                     items: vec![

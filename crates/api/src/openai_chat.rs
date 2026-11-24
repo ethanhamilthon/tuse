@@ -1,6 +1,6 @@
 use crate::args::ArgStream;
 use crate::client::{
-    Client, finalize_calls, map_err, openai_models, parse_json, read_body, read_sse,
+    Client, check_status, finalize_calls, map_err, openai_models, parse_json, read_body, read_sse,
 };
 use crate::types::{Delta, Error, Message, Reply, Request, ToolCall, ToolImage, Usage};
 use serde_json::{Value, json};
@@ -115,13 +115,15 @@ pub(crate) fn complete(
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<Reply, Error> {
     let body = encode(req);
-    let resp = client
-        .agent
-        .post(&format!("{}/chat/completions", client.base_url))
-        .set("Authorization", &format!("Bearer {}", client.api_key))
-        .set("Content-Type", "application/json")
-        .send_string(&body.to_string())
-        .map_err(map_err)?;
+    let resp = check_status(
+        client
+            .agent
+            .post(&format!("{}/chat/completions", client.base_url))
+            .set("Authorization", &format!("Bearer {}", client.api_key))
+            .set("Content-Type", "application/json")
+            .send_string(&body.to_string())
+            .map_err(map_err)?,
+    )?;
     let streaming = resp.content_type().contains("event-stream");
     let mut acc = Accumulator::default();
     if !streaming {
@@ -130,12 +132,15 @@ pub(crate) fn complete(
         acc.chunk(&v, on_delta);
         return Ok(acc.finish());
     }
-    read_sse(resp.into_reader(), cancel, |_, data| {
+    let done = read_sse(resp.into_reader(), cancel, |_, data| {
         let v = parse_json(data)?;
         check_error(&v)?;
         acc.chunk(&v, on_delta);
         Ok(true)
     })?;
+    if !done {
+        return Err(Error::Transport("stream ended before [DONE]".into()));
+    }
     Ok(acc.finish())
 }
 

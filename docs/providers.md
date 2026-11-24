@@ -104,16 +104,20 @@ Both agent turns and Lua `llm(prompt, model, effort)` build a protocol-agnostic 
 
 Modern reasoning APIs require unmodified reasoning artifacts to be echoed back in exact order across multi-step tool loops and across `/resume`:
 
-- Persisted `assistant` records carry an optional `replay` object (omitted when absent/empty):
+- **HTTP timeouts & redirects**: 30 seconds connect timeout, 600 seconds read timeout. HTTP redirects (`3xx`) are never followed on provider requests so credentials (`Authorization`, `x-api-key`, `x-goog-api-key`) cannot leak across hosts.
+- **Persisted `assistant` records** carry an optional `replay` object (omitted when absent/empty):
   ```json
   {
+    "provider": "<provider name>",
     "api": "anthropic-messages | openai-responses | google-gemini",
     "model": "<raw model id>",
     "items": [ ... ]
   }
   ```
-- **Same-API and same-model replay**: when an assistant step's `replay.api` and `replay.model` match the active request's API type and raw model ID (and the record is outside the dropped prefix), the adapter replays `replay.items` verbatim instead of reconstructing plain text + tool calls.
-- **Cross-provider / cross-model fallback**: foreign `replay.items` are never sent to a different `api` or `model`. Adapters fall back cleanly to plain `text` + tool calls. On `anthropic-messages`, prior completed turns serialize as plain `text` + `tool_use`; if an **unfinished** tool loop (an assistant step with tool calls after the latest user message, such as after a crash/resume or mid-loop provider switch) lacks valid Anthropic `thinking` / `redacted_thinking` replay blocks for the active model, Tuse omits `thinking` and `output_config` on that recovery request rather than failing with HTTP 400.
+- **Same-provider, same-API, and same-model replay**: when an assistant step's `replay.provider`, `replay.api`, and `replay.model` all match the active request (and the record is outside the dropped prefix), the adapter replays `replay.items` verbatim instead of reconstructing plain text + tool calls.
+- **Cross-provider / cross-model fallback**: foreign `replay.items` are never sent to a different `provider`, `api`, or `model`. Adapters fall back cleanly to plain `text` + tool calls:
+  - On `anthropic-messages`, prior completed turns serialize as plain `text` + `tool_use`; if an **unfinished** tool loop (an assistant step with tool calls after the latest user message, such as after a crash/resume or mid-loop provider switch) lacks valid Anthropic `thinking` / `redacted_thinking` replay blocks for the active provider/model, Tuse omits `thinking` and `output_config` on that recovery request rather than failing with HTTP 400.
+  - On `google-gemini`, reconstructed unsigned `functionCall` parts in the active turn attach Gemini's documented `"thoughtSignature": "skip_thought_signature_validator"` migration sentinel so mid-loop switches to Gemini 3 succeed cleanly; and when a replayed wire `functionCall` carried no `id`, Tuse keeps its synthetic local ID (`call_<index>`) internal and omits `id` on the corresponding wire `functionResponse`.
 
 ## Per-Adapter Protocol Contracts
 
@@ -127,7 +131,7 @@ Modern reasoning APIs require unmodified reasoning artifacts to be echoed back i
   - `tools`: omitted when empty; otherwise `[{"type": "function", "function": {"name", "description", "parameters"}}]`.
   - `reasoning_effort`: omitted when effort is `"default"`; otherwise set to `"low"`, `"medium"`, `"high"`, `"xhigh"`, or `"max"`.
 - **Streaming SSE & non-streaming fallback**:
-  - SSE (`Content-Type` contains `event-stream`): reads `data:` lines until `data: [DONE]` or EOF; other `Content-Type` parses the body as a single JSON object.
+  - SSE (`Content-Type` contains `event-stream`): reads `data:` lines until `data: [DONE]`; premature EOF before `data: [DONE]` fails as a retryable transport error so partial replies or tool calls are never executed or persisted. Other `Content-Type` parses the body as a single JSON object.
   - Non-null top-level `error` fails with `HTTP <error.code or 500>`.
   - `usage` updates reply usage; `choices[0]` provides `finish_reason`, `delta` (falling back to `message`), `reasoning_content` and `reasoning` deltas, `content` deltas, and `tool_calls` accumulated by slot (`index`, else non-empty `id` opens a slot, else last slot) with incremental `"code"` JSON extraction emitting `tool_delta` for `lua`.
   - On finish, drops calls with empty `name` and assigns `call_<index>` for empty `id`.
@@ -154,7 +158,7 @@ Modern reasoning APIs require unmodified reasoning artifacts to be echoed back i
     - `response.function_call_arguments.delta`: matches slot by `item_id` (falling back to `output_index`), appends `delta`, and streams `"code"` via `tool_delta`.
     - `response.function_call_arguments.done` and `response.output_item.done` (`function_call`): backfills missing `call_id`/`name`; a non-empty `arguments` string on `done` is authoritative for the stored call (feeding the `"code"` extractor once only if no arguments were streamed earlier, avoiding duplicate `tool_delta` characters).
   - Replay capture: `response.output_item.done` records completed `reasoning` (only when `encrypted_content` is present and non-empty), `message`, and `function_call` items in `output_index` order into `replay.items`.
-  - `response.completed` / `response.incomplete` -> records `finish` (`response.status`) and `response.usage`.
+  - `response.completed` / `response.incomplete` -> records `finish` (`response.status`) and `response.usage`. Premature EOF before `response.completed` / `response.incomplete` fails as a retryable transport error.
   - `response.failed` / top-level `error` -> maps `rate_limit_exceeded` (429), `server_error` (500), `service_unavailable` (503), and numeric `429` / `>= 500` to retryable status errors; maps client/validation codes (`invalid_request_error`, `context_length_exceeded`, `invalid_api_key`, etc.) to non-retryable `400`/`401`.
 - **Non-SSE JSON fallback**:
   - Fails on non-null `error` or `status == "failed"` with the same retryability mapping; records `finish = status` and `usage`; walks `output[]` in order, emitting `reasoning` (`summary[].text`), `message` (`output_text`), and `function_call` (single-shot `tool_delta`) while capturing `replay.items` (including `reasoning` only when `encrypted_content` is present).
@@ -181,7 +185,7 @@ Modern reasoning APIs require unmodified reasoning artifacts to be echoed back i
   - `content_block_delta` -> `text_delta` (`text`), `thinking_delta` (`reasoning`), `signature_delta` (appends `signature` to active `thinking` block, no UI delta), `input_json_delta` (`partial_json` -> tool arguments + incremental `"code"` extractor -> `tool_delta`).
   - `content_block_stop` -> finalizes block at `index` into ordered `replay.items`.
   - `message_delta` -> updates `stop_reason` and final usage fields without clobbering earlier input/cache counters.
-  - `ping` ignored; `message_stop` ends stream.
+  - `ping` ignored; `message_stop` ends stream. Premature EOF before `message_stop` (or with unclosed blocks) fails as a retryable transport error.
   - `error` event -> maps `rate_limit_error` (429), `overloaded_error` (529), `api_error` (500) to retryable status errors; `invalid_request_error` (400), `authentication_error` (401), `permission_error` (403) to non-retryable status errors.
 - **Non-SSE JSON fallback**:
   - Fails on `type == "error"` or non-null `error`; records `finish = stop_reason` and normalized usage; walks `content[]` in order emitting `thinking`, `text`, and `tool_use` (single-shot `tool_delta`) while preserving `thinking`, `redacted_thinking`, `text`, and `tool_use` in `replay.items`.
@@ -213,7 +217,7 @@ Modern reasoning APIs require unmodified reasoning artifacts to be echoed back i
     - Preserves received part objects into ordered `replay.items`, merging contiguous plain/thought text chunks only when neither part carries `thoughtSignature` (never dropping or moving a `thoughtSignature` across parts).
     - `thought == true` text -> `reasoning` delta; plain text -> `text` delta.
     - `functionCall` (`{id?, name, args}`) -> serializes `args` to JSON, assigns `call_<index>` when `id` is absent, and emits `tool_delta` once for `lua`.
-  - `candidates[0].finishReason` -> `finish`.
+  - `candidates[0].finishReason` -> `finish`. Premature SSE EOF before receiving a `finishReason` fails as a retryable transport error.
   - Non-null top-level `error` -> `HTTP <error.code or 500>`.
 - **Usage**:
   - `input <- usageMetadata.promptTokenCount`

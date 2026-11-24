@@ -244,6 +244,7 @@ mod tests {
     fn messages_keep_tool_results_with_their_calls_and_respect_replay_zones() {
         let png = vec!["data:image/png;base64,AA".to_string()];
         let rep = Some(Replay {
+            provider: "anth".into(),
             api: "anthropic-messages".into(),
             model: "claude".into(),
             items: vec![

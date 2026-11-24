@@ -105,14 +105,20 @@ pub struct Request {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Replay {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub provider: String,
     pub api: String,
     pub model: String,
     pub items: Vec<Value>,
 }
 
 impl Replay {
-    pub fn matches(&self, api: ApiType, model: &str) -> bool {
-        self.api == api.as_str() && self.model == model && !self.items.is_empty()
+    pub fn matches(&self, provider: &str, api: ApiType, model: &str) -> bool {
+        !self.provider.is_empty()
+            && self.provider == provider
+            && self.api == api.as_str()
+            && self.model == model
+            && !self.items.is_empty()
     }
 }
 

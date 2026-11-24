@@ -14,9 +14,9 @@ use tuse_config::{Config, ModelDef};
 
 pub struct Session {
     pub id: String,
-    pub cwd: PathBuf,
+    pub(crate) cwd: PathBuf,
     pub(crate) mode: Mode,
-    pub tasks: Tasks,
+    pub(crate) tasks: Tasks,
     pub(crate) dir: Mutex<Option<SessionDir>>,
     pub(crate) config: RwLock<(u64, Arc<Config>)>,
     pub(crate) config_arg: Option<PathBuf>,
@@ -66,6 +66,18 @@ pub(crate) struct Prepared {
 }
 
 impl Session {
+    pub fn cwd(&self) -> &std::path::Path {
+        &self.cwd
+    }
+
+    pub fn tasks(&self) -> Vec<crate::tasks::TaskInfo> {
+        self.tasks.list()
+    }
+
+    pub fn task(&self, id: &str) -> Option<crate::tasks::TaskInfo> {
+        self.tasks.get(id)
+    }
+
     pub fn open(opts: Options) -> Result<Arc<Session>, String> {
         Ok(Session::prepare(opts)?.start())
     }

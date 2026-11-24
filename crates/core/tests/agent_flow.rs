@@ -121,12 +121,7 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
             "running sleep 0.3; echo slept..."
         ]
     );
-    let names: Vec<_> = s
-        .tasks
-        .list()
-        .into_iter()
-        .map(|t| (t.name, t.status))
-        .collect();
+    let names: Vec<_> = s.tasks().into_iter().map(|t| (t.name, t.status)).collect();
     assert_eq!(
         names,
         [

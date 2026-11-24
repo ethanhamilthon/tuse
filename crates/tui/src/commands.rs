@@ -118,8 +118,7 @@ impl App {
     pub fn open_tasks(&mut self) {
         let items: Vec<_> = self
             .session
-            .tasks
-            .list()
+            .tasks()
             .into_iter()
             .map(|t| item(format!("{} {}", t.id, t.name), t.status, t.id))
             .collect();
@@ -196,7 +195,7 @@ impl App {
                 }
             }
             (Kind::Task, Some(v)) => {
-                if let Some(t) = self.session.tasks.get(&v) {
+                if let Some(t) = self.session.task(&v) {
                     let out = tuse_core::tail(&t.log, 200);
                     self.trace_back = None;
                     self.trace_items.clear();

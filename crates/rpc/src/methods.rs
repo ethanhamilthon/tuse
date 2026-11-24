@@ -42,7 +42,7 @@ fn info(s: &Session) -> Value {
     json!({
         "id": s.id,
         "title": s.title(),
-        "cwd": s.cwd.display().to_string(),
+        "cwd": s.cwd().display().to_string(),
         "busy": s.busy(),
         "turn": turn,
     })
@@ -86,7 +86,7 @@ fn submit(s: &Arc<Session>, p: &Value) -> Reply {
         prompts,
         images: (1..).zip(paths.into_iter().map(Into::into)).collect(),
         files: str_list(p, "files")?.into_iter().map(Into::into).collect(),
-        cwd: s.cwd.clone(),
+        cwd: s.cwd().to_path_buf(),
         strict: true,
     };
     let mut input: UserInput = tuse_core::build_input(&text, refs).map_err(Fail::session)?;
@@ -154,7 +154,9 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             .collect()),
         "session.stats" => Ok(stats(s)),
         "session.list" => {
-            let cwd = p["cwd"].as_str().map_or_else(|| s.cwd.clone(), Into::into);
+            let cwd = p["cwd"]
+                .as_str()
+                .map_or_else(|| s.cwd().to_path_buf(), Into::into);
             serde_json::to_value(tuse_core::list_sessions(&cwd))
                 .map_err(|e| Fail::session(e.to_string()))
         }
@@ -200,14 +202,11 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
                 _ => Err(Fail::params("`key` must be `model` or `effort`")),
             }
         }
-        "tasks.list" => {
-            serde_json::to_value(s.tasks.list()).map_err(|e| Fail::session(e.to_string()))
-        }
+        "tasks.list" => serde_json::to_value(s.tasks()).map_err(|e| Fail::session(e.to_string())),
         "tasks.get" => {
             let id = str_param(p, "id")?;
             let t = s
-                .tasks
-                .get(&id)
+                .task(&id)
                 .ok_or_else(|| Fail::session(format!("no task {id}")))?;
             let lines = p["lines"].as_u64().unwrap_or(50) as usize;
             let mut v = serde_json::to_value(&t).map_err(|e| Fail::session(e.to_string()))?;

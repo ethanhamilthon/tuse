@@ -80,10 +80,9 @@ fn a_client_drives_a_session() {
     );
     assert!(snap["trace"].as_array().unwrap().len() >= 4);
     assert_eq!(snap["ctx_size"], 50000);
-    assert_eq!(
-        call(62, "config.get", json!({}))["result"]["models"][0]["display"],
-        "M"
-    );
+    let config = call(62, "config.get", json!({}))["result"].clone();
+    assert_eq!(config["models"][0]["display"], "M");
+    assert!(config.get("plugins").is_none());
     let records = call(7, "session.records", json!({}))["result"].clone();
     assert!(records.as_array().unwrap().iter().any(|r| r["t"] == "tool"));
     assert_eq!(

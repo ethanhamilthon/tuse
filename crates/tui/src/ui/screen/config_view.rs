@@ -153,25 +153,6 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             .map(|ext| vec![span(format!("  .{ext}"), info)])
             .collect(),
     );
-    sec(
-        "Plugins",
-        cfg.plugins
-            .iter()
-            .map(|pl| {
-                let r = pl
-                    .git_ref
-                    .as_deref()
-                    .map(|r| format!("@{r} "))
-                    .unwrap_or_default();
-                let at = pl.commit.as_deref().unwrap_or("local");
-                vec![
-                    span(format!("  {}", pl.name), info),
-                    span(format!("  {r}{at}  "), fg),
-                    crate::kit::links::path_span(&pl.dir, &pl.dir, dim, p),
-                ]
-            })
-            .collect(),
-    );
     Panel::styled(lines).with_kind(crate::ui::panel::PanelKind::Config)
 }
 
@@ -195,12 +176,6 @@ mod tests {
             commands: vec!["hello".into()],
             open: vec!["md".into()],
             path: "/home/me/.config/tuse/init.lua".into(),
-            plugins: vec![tuse_config::PluginInfo {
-                name: "me/kit".into(),
-                dir: "/p/kit".into(),
-                git_ref: Some("v1".into()),
-                commit: Some("abc1234".into()),
-            }],
             ..Default::default()
         };
         cfg.connect.push(Connect {
@@ -231,9 +206,7 @@ mod tests {
             .flatten()
             .map(|s| s.text)
             .collect();
-        for s in
-            "Settings|Theme|System prompts|Prompts|Functions|Hooks|Commands|Open|Plugins".split('|')
-        {
+        for s in "Settings|Theme|System prompts|Prompts|Functions|Hooks|Commands|Open".split('|') {
             assert!(text.contains(s), "missing {s}");
         }
         assert!(
@@ -245,7 +218,6 @@ mod tests {
         );
         assert!(text.contains(".md"));
         assert!(text.contains("Config file") && text.contains("/home/me/.config/tuse/init.lua"));
-        assert!(text.contains("me/kit") && text.contains("@v1 abc1234"));
         assert!(!text.contains("sk-secret"));
     }
 }

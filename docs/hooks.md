@@ -54,7 +54,7 @@ Exclusions (to prevent infinite recursion):
 
 - Hook runs themselves never emit `lua_start` or `lua_end`.
 - Tasks spawned directly inside a `lua_start` or `lua_end` hook never emit `lua_start` or `lua_end`.
-- Top-level config and plugin evaluation on startup or reload never emits `lua_start` or `lua_end`.
+- Top-level config evaluation on startup or reload never emits `lua_start` or `lua_end`.
 
 ## Execution Semantics
 

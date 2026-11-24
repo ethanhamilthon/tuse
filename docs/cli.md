@@ -72,7 +72,7 @@ Inspects the saved global default model/effort and the model metadata from the e
 
 - First line: `Default: <model or (none)> (effort: <effort>)`.
 - If no models are defined in the effective config: prints `No models configured.`.
-- Otherwise: prints one line per distinct model `name` in alphabetical order (when duplicate `name` entries exist in config/plugins, the last definition wins):
+- Otherwise: prints one line per distinct model `name` in alphabetical order (when duplicate `name` entries exist in config, the last definition wins):
   `<name>\t<parts joined by " · ">`
   where parts include (when set): display name, `<window> ctx`, `compact <threshold>` or `compact off`, and `$<in>/$<out> (cache $<cache_read>/$<cache_write>) per 1M`.
 

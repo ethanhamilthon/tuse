@@ -28,7 +28,7 @@ Background discovery:
 
 ## Model metadata (`models` in Lua config)
 
-Context windows, display names, per-model compaction thresholds, and token pricing are declared in the `models` list of your Lua config (or plugins):
+Context windows, display names, per-model compaction thresholds, and token pricing are declared in the `models` list of your Lua config:
 
 ```lua
 return {
@@ -52,7 +52,7 @@ return {
 | `compact_at` | no | unset | Per-model compaction threshold in tokens; overrides `settings.compact_at` in both directions (a positive value overrides global `0`, and `0` disables compaction for this model even if global `settings.compact_at` is positive). |
 | `prices` | no | unset | Table of finite non-negative USD rates per 1,000,000 tokens: `input`, `output`, `cache_read`, `cache_write` (each defaults to `0`). |
 
-- **Precedence:** Plugin `models` lists come first, then your config's `models`. When multiple entries share the same `name`, the **last** entry wins.
+- **Precedence:** When multiple entries in `models` share the same `name`, the **last** entry wins.
 - **Inspecting metadata:** Run `tuse models [-c PATH]` from the CLI or `/session` inside the TUI.
 - **On reload:** Updated metadata takes effect immediately (display name, `ctx_size`, `compact_at`, and recalculated historical session costs) and the cached remote model list is cleared.
 

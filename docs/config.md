@@ -39,12 +39,12 @@ return g
 
 ## Execution Environment
 
-Config files, plugins, trusted `require`d modules, and callbacks defined in them run in Tuse's trusted Lua environment (see [lua.md](lua.md)):
+Config files, trusted `require`d modules, and callbacks defined in them run in Tuse's trusted Lua environment (see [lua.md](lua.md)):
 
 - Built-in host functions are **not** globals; import the unmodified originals with `require("tuse")`.
 - Configured `functions` are agent-only and are never visible in trusted code (share code via `local` functions or `require`d helper modules).
 - `os.exit` and the `debug` library are unavailable (`nil`). `os.getenv("THIS_PATH")` returns the calling Lua file's path. Other environment variables come straight from the process environment.
-- During top-level config and plugin evaluation (both on startup and on `/reload`), `require("tuse").session()` returns a pre-session snapshot containing `{ mode, configpath, cwd, home }` with `id` and all session-only fields set to `nil`.
+- During top-level config evaluation (both on startup and on `/reload`), `require("tuse").session()` returns a pre-session snapshot containing `{ mode, configpath, cwd, home }` with `id` and all session-only fields set to `nil`.
 - **Startup vs reload**: on initial startup, no session exists yet, so session-dependent host functions (`write`, `append`, `delete`, `edit`, `grep`, `spawn`, `task_*`, `show`, `pick`, `ask`, `llm`, `reload`, `set_title`, `docs`) fail if called at top level (while `read`, `sh`, `sleep`, `json`, and `inspect` work, with `read` using `cwd` and default `max_image_bytes`). On reload, although `t.session()` still returns the pre-session snapshot, the live session already exists in the process; top-level side effects (file writes, shell commands, UI calls, global mutations) execute immediately and are **not** rolled back if config validation fails. Keep top-level config evaluation pure and put runtime actions in callbacks.
 
 ## Modules and `require`
@@ -64,7 +64,7 @@ Config files, plugins, trusted `require`d modules, and callbacks defined in them
 | `require("~/path")` | `~/path.lua`, else `~/path/init.lua`. Absolute `/path` works the same. |
 | `require("~/path/file.lua")` | That exact file. A relative `dir/file.lua` is relative to the calling file. |
 
-File modules are cached by their canonical path in the calling environment's isolated `package.loaded` (trusted config/plugin modules and agent `lua(code)` modules do not share module caches), so identically named files in different folders do not collide and different relative paths to the same file share one module instance. Each file module runs in the calling environment (trusted or agent) with arguments `(name, canonical_path)`; returning `nil` caches `true`. An initial file load returns two values `(value, canonical_path)`; subsequent cached loads return only `value`. Cyclic `require` chains raise `cyclic require: '<path>'`. Missing files raise an error listing every candidate path checked.
+File modules are cached by their canonical path in the calling environment's isolated `package.loaded` (trusted config modules and agent `lua(code)` modules do not share module caches), so identically named files in different folders do not collide and different relative paths to the same file share one module instance. Each file module runs in the calling environment (trusted or agent) with arguments `(name, canonical_path)`; returning `nil` caches `true`. An initial file load returns two values `(value, canonical_path)`; subsequent cached loads return only `value`. Cyclic `require` chains raise `cyclic require: '<path>'`. Missing files raise an error listing every candidate path checked.
 
 On reload, Tuse forgets all trusted file-backed module cache entries before re-evaluating the config and restores them if reload fails.
 
@@ -79,11 +79,10 @@ Every key is optional. Unknown keys are rejected. Empty tables `{}` are accepted
 | `models` | list of tables | `{}` | Model metadata keyed by `name = "provider/model"`. |
 | `systems` | list of strings | `{}` | Extra instructions appended to the built-in system prompt. |
 | `prompts` | map (`name -> string`) | `{}` | Named prompts for the `#` picker ([prompts.md](prompts.md)) and JSON-RPC `turn.submit`. |
-| `functions` | map (`name -> function \| false`) | `{}` | Agent-only Lua functions, built-in overrides, and built-in/plugin disables (`false`); see [functions.md](functions.md). |
+| `functions` | map (`name -> function \| false`) | `{}` | Agent-only Lua functions, built-in overrides, and built-in disables (`false`); see [functions.md](functions.md). |
 | `hooks` | map (`name -> table`) | `{}` | Named event hooks; see [hooks.md](hooks.md). |
 | `commands` | map (`name -> function`) | `{}` | Custom slash commands (`/name` in TUI, `commands.run` in JSON-RPC); see [lua.md](lua.md). |
 | `open` | map (`ext -> function`) | `{}` | Local file opener callbacks for clicked paths in TUI (`open.<ext>`); see [lua.md](lua.md). |
-| `plugins` | list of specs | `{}` | Plugins merged under this config (forbidden inside plugins); see [plugins.md](plugins.md). |
 
 ### `settings`
 
@@ -154,23 +153,13 @@ return {
 - `commands`: maps a custom slash command name to a Lua function `function() ... end`. Names must be non-empty, must not start with `/`, must not contain whitespace or control characters, and cannot override any built-in command (`config`, `new`, `resume`, `models`, `tasks`, `session`, `trace`, `reload`, `quit`).
 - `open`: maps a file extension (without a leading dot, e.g. `md`) to `function(path) ... end`. Keys must be non-empty, must not start with `.`, and must not contain `/`, `\`, whitespace, or control characters. Matching is case-insensitive and applies only to clicked local file paths in the TUI (URLs use the OS opener; `tuse json` has no clicks).
 
-## Merge Rules
-
-When `plugins` are declared, plugins load and validate in list order and the user config merges on top:
-
-- `systems` and `models`: concatenated (plugins in list order, then user config). For `models`, the last definition for a given `name` wins.
-- `prompts`, `functions`, `hooks`, `commands`, `open`: merged by key. If two plugins define the same key in one of these maps, loading fails. The user config silently overrides any plugin key.
-- `settings` and `theme`: merged deeply table-by-table; later plugins override earlier plugins on overlapping keys, and user values win over all plugins.
-- `plugins`: allowed only in the user config; plugins cannot declare `plugins`.
-
-See [plugins.md](plugins.md) for plugin entries, options, and checkout paths.
-
 ## Validation
 
-Tuse validates the user config, every enabled plugin, and the merged result strictly on startup, reload, and session switch (`/new`, `/resume`, `session.new`, `session.resume`).
+Tuse validates the config strictly on startup, reload, and session switch (`/new`, `/resume`, `session.new`, `session.resume`).
 
 - Returning a non-table value (other than `nil`) fails with `<source>: the config must return a table`.
 - Unknown keys, wrong types, out-of-range integers, negative or non-finite prices, invalid colors, malformed `provider/model` names, non-list tables for list fields, empty or unknown hook events, invalid or reserved function/command/`open` names (including Lua keywords and base/stdlib globals in `functions`), non-function/`false` values in `functions` (including `json = function(...)`), `false` on an unknown function name, and missing or non-function hook `run`/command/`open` callbacks all fail before any change takes effect.
+- The former `plugins` key is rejected as an unknown key. Remove it from existing configs before loading them.
 - Diagnostics report `<source>: <path>: <message>` with dot-separated keys and 1-based list indices, e.g. `tuse.lua: models[2].prices.input: expected a finite non-negative number`.
 
 ## Providers and SQLite State
@@ -183,8 +172,8 @@ Compaction thresholds resolve as: per-model `compact_at` (which overrides `setti
 
 ## Inspecting Config (`/config`, `config.get`, `tuse models`)
 
-- **`/config`** (TUI): opens a scrollable styled panel listing `Config file` (clickable path or `(none, defaults)`), `Settings`, `Theme` (all 10 tokens with color swatches), `System prompts` (numbered, first non-empty line), `Prompts` (`#name`, first non-empty line), `Functions` (`<name>`, `<name>  [override]`, or `<name>  [disabled]`), `Hooks` (name and events), `Commands` (`/name`), `Open` (`.ext`), and `Plugins` (name, optional `@ref`, 7-char commit or `local`, and clickable folder path). Provider credentials and Lua function bodies are never shown.
-- **`config.get`** (JSON-RPC): returns the resolved config JSON (`settings`, `theme`, `models`, `systems`, `prompts`, `functions`, `hooks`, `commands`, `open`, `path`, `plugins`), omitting provider secrets and Lua bodies.
+- **`/config`** (TUI): opens a scrollable styled panel listing `Config file` (clickable path or `(none, defaults)`), `Settings`, `Theme` (all 10 tokens with color swatches), `System prompts` (numbered, first non-empty line), `Prompts` (`#name`, first non-empty line), `Functions` (`<name>`, `<name>  [override]`, or `<name>  [disabled]`), `Hooks` (name and events), `Commands` (`/name`), and `Open` (`.ext`). Provider credentials and Lua function bodies are never shown.
+- **`config.get`** (JSON-RPC): returns the resolved config JSON (`settings`, `theme`, `models`, `systems`, `prompts`, `functions`, `hooks`, `commands`, `open`, `path`), omitting provider secrets and Lua bodies.
 - **`tuse models [--config PATH]`** (CLI): evaluates the effective config (in `tui` mode) and prints the saved default model/effort plus configured model metadata.
 
 ## Reloading (`/reload`, `config.reload`, `reload()`)
@@ -192,8 +181,8 @@ Compaction thresholds resolve as: per-model `compact_at` (which overrides `setti
 Reloads are serialized so only one reload runs at a time. Each reload follows this sequence:
 
 1. Re-resolves the config file path from the original `--config` argument (if any) and session `cwd`.
-2. Clears cached trusted file modules, evaluates the user config under pre-session `session()` semantics, validates user keys and `plugins` entries (including URL and `ref` conflict checks), synchronizes enabled Git plugins (cloning missing checkouts and updating moving refs while respecting immutable commit pins and local-work safety; see [plugins.md](plugins.md)), loads and validates all plugins and the merged result, and reloads providers from SQLite.
-3. **On failure**: restores the previous trusted module cache and leaves the previous config, helpers, hooks, commands, and `open` handlers active (already-synced sibling Git repositories on disk are not reverted so concurrent Tuse sessions are unaffected, and arbitrary top-level Lua side effects cannot be undone). TUI shows `Reload failed: <reason>`; JSON-RPC returns `-32000`; Lua `reload()` raises an error (or emits an `error` event when deferred from a hook).
+2. Clears cached trusted file modules, evaluates the user config under pre-session `session()` semantics, validates the config, and reloads providers from SQLite.
+3. **On failure**: restores the previous trusted module cache and leaves the previous config, helpers, hooks, commands, and `open` handlers active (arbitrary top-level Lua side effects cannot be undone). TUI shows `Reload failed: <reason>`; JSON-RPC returns `-32000`; Lua `reload()` raises an error (or emits an `error` event when deferred from a hook).
 4. **On success**:
    - Cancels pending interactive UI requests from hooks and denies new hook UI requests during the transition.
    - Runs `close` (`reason = "reload"`) on the old hooks and waits for all running hook coroutines to finish.

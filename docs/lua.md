@@ -1,11 +1,11 @@
 # Lua Runtime
 
-Tuse embeds a Lua 5.4 VM per session. The agent's single tool (`lua`), config files, plugins, hooks, custom slash commands, local file openers, and background tasks all share this VM through a cooperative coroutine scheduler.
+Tuse embeds a Lua 5.4 VM per session. The agent's single tool (`lua`), config files, hooks, custom slash commands, local file openers, and background tasks all share this VM through a cooperative coroutine scheduler.
 
 ## VM Lifecycle
 
 - **One VM per session**: created on a dedicated thread when a session opens, initialized with built-in host functions and the resolved config, and destroyed when the session closes (process exit, `/new`, `/resume`, `session.new`, or `session.resume`).
-- **Persistence**: globals created by the agent persist across `lua(code)` tool calls for the lifetime of the session, and are shared with background tasks spawned in that VM. Resuming or switching sessions starts a fresh VM (agent globals are not persisted; config and plugins are re-evaluated).
+- **Persistence**: globals created by the agent persist across `lua(code)` tool calls for the lifetime of the session, and are shared with background tasks spawned in that VM. Resuming or switching sessions starts a fresh VM (agent globals are not persisted; the config is re-evaluated).
 - **Resilience**: Lua syntax errors, runtime errors, timeouts, and cancellations never terminate the VM.
 
 ## Execution Environments
@@ -20,9 +20,9 @@ The VM maintains two strictly isolated Lua environments:
 - Live-gated built-in host functions (subject to overrides and `false` disables in `functions`) and live-gated configured custom functions are installed as globals; the agent's own persistent globals live in this table across calls.
 - `require("tuse")` is reserved (always returning the live, genuinely read-only agent-scoped proxy regardless of `package.loaded.tuse`; also installed initially as `package.loaded.tuse`). Lookups dynamically read active built-in capabilities (overrides applied, disabled built-ins returning `nil`, custom non-built-in configured functions not exposed on `tuse`).
 
-### Trusted Environment (Configs, Plugins, Trusted Modules, Callbacks)
+### Trusted Environment (Configs, Trusted Modules, Callbacks)
 
-- Covers config files, plugins, modules `require`d by trusted code, hooks, custom `commands`, `open` handlers, configured `functions` bodies themselves, and background tasks spawned via `require("tuse").spawn`.
+- Covers config files, modules `require`d by trusted code, hooks, custom `commands`, `open` handlers, configured `functions` bodies themselves, and background tasks spawned via `require("tuse").spawn`.
 - Has its own isolated `_G`/`_ENV`, `package`, `package.loaded`, `package.preload`, `require`, `load`, `loadfile`, `dofile`, and `tuse`. Agent code cannot inspect or mutate trusted `package.loaded`, cannot share module cache entries with trusted code, and cannot obtain the raw trusted `tuse` table.
 - Built-in host function names are **not** globals; code imports the unmodified original built-ins via `require("tuse")`.
 - Configured `functions` are **never** visible here — not as globals, not on `require("tuse")`, and not to other configured functions. Share helper code via `local` functions or `require`d helper modules.

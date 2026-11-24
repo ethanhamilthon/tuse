@@ -24,18 +24,6 @@ pub struct Config {
     pub open: Vec<String>,
     #[serde(skip_deserializing)]
     pub path: String,
-    #[serde(skip_deserializing)]
-    pub plugins: Vec<PluginInfo>,
-}
-
-#[derive(Debug, Clone, Default, serde::Serialize)]
-pub struct PluginInfo {
-    pub name: String,
-    pub dir: String,
-    #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
-    pub git_ref: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub commit: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]

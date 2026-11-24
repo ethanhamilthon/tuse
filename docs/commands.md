@@ -1,6 +1,6 @@
 # Commands
 
-Quick reference for CLI subcommands and TUI slash commands (embedded as the `docs("commands")` topic; linked pages below live in `docs/` and are not all separate `docs()` topics). Canonical specifications live in [cli.md](cli.md) and [tui.md](tui.md).
+Quick reference for CLI subcommands and TUI slash commands (also available as `docs("commands")`). Canonical specifications live in [cli.md](cli.md) and [tui.md](tui.md).
 
 ## CLI
 
@@ -26,9 +26,9 @@ Built-in slash commands run when typed as `/name` with no arguments or selected 
 - `/session` opens a scrollable view of `require("tuse").session()` (all fields except `trace`).
 - `/trace` opens a searchable list of all trace entries (`index  role  first line`); Enter opens the full entry panel, `Left`/`Right` (when input is empty) step to the previous/next filtered entry, and Esc returns to the list with search and selection intact.
 - `/config` opens a scrollable view of the resolved config (without provider secrets or Lua function bodies).
-- `/reload` synchronizes enabled Git plugins (installing missing checkouts and updating moving refs), validates, and re-evaluates the config in the same VM (keeping the previous working config on failure).
+- `/reload` re-evaluates and validates the config in the same VM (keeping the previous working config on failure).
 - `/quit` closes the session and exits.
 
-Custom slash commands from `commands = { name = function() ... end }` appear in `/` autocomplete and run as non-blocking Lua jobs (built-in names cannot be overridden). When `"tuse/default"` is enabled with `subs = true` (or a table), it registers `/subs` to manage the local CLIProxyAPI subscription proxy ([subs.md](subs.md)).
+Custom slash commands from `commands = { name = function() ... end }` appear in `/` autocomplete and run as non-blocking Lua jobs (built-in names cannot be overridden).
 
 Picker search filters item **labels** (not details) by case-insensitive substring; modal searchable pickers reuse the input as a search box and restore your draft on close. See [tui.md](tui.md) for complete keyboard shortcuts, mouse selection, interactive links, steering, and overlay workflows.

@@ -8,7 +8,7 @@ A minimal AI coding agent for the terminal written in Rust + Crossterm, centered
 
 - **One tool: `lua`** — runs in one persistent Lua 5.4 VM per session with `read`, `write`, `edit`, `append`, `delete`, `grep`, `sh`, `sleep`, and `spawn` background coroutines, live colored diffs, and no output cap.
 - **TUI and `tuse json`** — full-screen terminal UI (Markdown, `/` commands, `#` prompts, `@` files, image paste) plus a JSON-RPC 2.0 stdio server (`tuse json`) sharing SQLite sessions (`~/.tuse/tuse.db`).
-- **Plain Lua config & plugins** — configure hooks, custom slash commands, helpers, file openers, a 10-token theme, and Git or local plugins with live `/reload`.
+- **Plain Lua config** — configure hooks, custom slash commands, helpers, file openers, and a 10-token theme with live `/reload`.
 - **Lean context** — small built-in system prompt, 50/25/25 context compaction, and automatic retries.
 - **Single binary** — built-in defaults require no config file to start, and `tuse update` replaces the binary without touching your config.
 
@@ -18,7 +18,7 @@ A minimal AI coding agent for the terminal written in Rust + Crossterm, centered
 curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 ```
 
-Interactive installs can optionally set up `~/.config/tuse/init.lua` without overwriting an existing config; non-interactive, `CI`, `TUSE_NO_SETUP=1`, and `--no-setup` runs install only the binary.
+The installer installs only the binary and leaves configuration files untouched.
 
 Update in place with `tuse update`, or build from source with `cargo install --locked --git https://github.com/ethanhamilthon/tuse tuse` or `make install`. See [docs/install.md](docs/install.md) and [docs/env.md](docs/env.md) for version pinning (`TUSE_VERSION`) and custom install directories (`TUSE_BIN_DIR`).
 
@@ -36,7 +36,7 @@ Resume a saved session with `tuse --resume ID` (the session ID prints to stderr 
 
 ## Documentation
 
-Browse the published guides and references at [ethanhamilthon.github.io/tuse/docs/](https://ethanhamilthon.github.io/tuse/docs/) or locally starting from [docs/index.md](docs/index.md) — covering CLI flags, TUI keybindings, JSON-RPC, Lua host functions, hooks, configuration, themes, and plugins.
+Browse the published guides and references at [ethanhamilthon.github.io/tuse/docs/](https://ethanhamilthon.github.io/tuse/docs/) or locally starting from [docs/index.md](docs/index.md) — covering CLI flags, TUI keybindings, JSON-RPC, Lua host functions, hooks, configuration, and themes.
 
 ## Development & License
 

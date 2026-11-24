@@ -2,7 +2,7 @@
 
 Canonical reference for Tuse's provider configuration, secret handling, four API protocol adapters (`openai-chat`, `openai-responses`, `anthropic-messages`, `google-gemini`), model discovery, streaming, reasoning replay, usage accounting, errors, and retries.
 
-For model metadata (`models` in Lua config), selection UX, and session scoping, see [models.md](models.md); for cost calculation, display, and 50/25/25 context compaction, see [usage.md](usage.md); for Lua config keys, see [config.md](config.md); for using existing AI subscriptions via a local loopback proxy, see [subs.md](subs.md).
+For model metadata (`models` in Lua config), selection UX, and session scoping, see [models.md](models.md); for cost calculation, display, and 50/25/25 context compaction, see [usage.md](usage.md); for Lua config keys, see [config.md](config.md).
 
 ## Storage, Snapshots, and Secrets
 

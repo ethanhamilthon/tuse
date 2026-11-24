@@ -1,18 +1,15 @@
-use std::collections::HashSet;
 use tuse_lua::mlua::{Lua, Table, Value};
 
-pub(crate) fn table(
-    lua: &Lua,
-    t: &Table,
-    source: &str,
-    is_plugin: bool,
-    allow_deferred_false: bool,
-) -> Result<tuse_config::Config, String> {
+pub(crate) fn table(lua: &Lua, t: &Table, source: &str) -> Result<tuse_config::Config, String> {
     let fail = |path: String, msg: &str| Err(format!("{source}: {path}: {msg}"));
-    if is_plugin && !t.raw_get::<Value>("plugins").is_ok_and(|v| v.is_nil()) {
-        return fail("plugins".into(), "is not allowed in a plugin");
+    if !t
+        .raw_get::<Value>("plugins")
+        .map_err(|e| e.to_string())?
+        .is_nil()
+    {
+        return fail("plugins".into(), "unknown key");
     }
-    validate_functions(t, source, is_plugin, allow_deferred_false)?;
+    validate_functions(t, source)?;
     for (name, v) in entries(t, "hooks") {
         let Value::Table(entry) = v else { continue };
         match entry.raw_get::<Value>("run") {
@@ -32,12 +29,7 @@ pub(crate) fn table(
     tuse_config::from_value(json(lua, t), source)
 }
 
-fn validate_functions(
-    t: &Table,
-    source: &str,
-    is_plugin: bool,
-    allow_deferred_false: bool,
-) -> Result<(), String> {
+fn validate_functions(t: &Table, source: &str) -> Result<(), String> {
     let Ok(raw) = t.raw_get::<Value>("functions") else {
         return Ok(());
     };
@@ -66,9 +58,7 @@ fn validate_functions(
                 }
             }
             Value::Boolean(false) => {
-                if !tuse_config::HOST_FUNCTIONS.contains(&name.as_str())
-                    && (is_plugin || !allow_deferred_false)
-                {
+                if !tuse_config::HOST_FUNCTIONS.contains(&name.as_str()) {
                     return Err(format!(
                         "{source}: functions.{name}: cannot disable unknown function"
                     ));
@@ -90,33 +80,6 @@ fn validate_functions(
     Ok(())
 }
 
-pub(crate) fn check_disabled_targets(
-    t: &Table,
-    source: &str,
-    plugin_fns: &HashSet<String>,
-) -> Result<(), String> {
-    let mut list = entries(t, "functions");
-    list.sort_by(|a, b| a.0.cmp(&b.0));
-    for (name, v) in list {
-        if matches!(v, Value::Boolean(false))
-            && !tuse_config::HOST_FUNCTIONS.contains(&name.as_str())
-            && !plugin_fns.contains(&name)
-        {
-            return Err(format!(
-                "{source}: functions.{name}: cannot disable unknown function"
-            ));
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn function_names(t: &Table) -> Vec<String> {
-    entries(t, "functions")
-        .into_iter()
-        .filter_map(|(n, v)| matches!(v, Value::Function(_)).then_some(n))
-        .collect()
-}
-
 fn expected(v: &Value) -> String {
     format!("expected function, got {}", v.type_name())
 }
@@ -131,10 +94,9 @@ fn entries(t: &Table, key: &str) -> Vec<(String, Value)> {
         .collect()
 }
 
-pub(crate) fn json(lua: &Lua, t: &Table) -> serde_json::Value {
+fn json(lua: &Lua, t: &Table) -> serde_json::Value {
     let mut raw = to_json(lua, Value::Table(t.clone()));
     if let Some(obj) = raw.as_object_mut() {
-        obj.remove("plugins");
         if t.raw_get::<Value>("functions").is_ok_and(|v| v.is_table()) {
             let mut map = serde_json::Map::new();
             for (name, v) in entries(t, "functions") {
@@ -160,17 +122,13 @@ pub(crate) fn json(lua: &Lua, t: &Table) -> serde_json::Value {
     raw
 }
 
-pub(crate) fn key_str(v: &Value) -> String {
+fn key_str(v: &Value) -> String {
     match v {
         Value::String(s) => s.to_string_lossy(),
         Value::Integer(n) => n.to_string(),
         Value::Number(n) => n.to_string(),
         other => format!("<{}>", other.type_name()),
     }
-}
-
-pub(crate) fn kind(v: &Value) -> &'static str {
-    v.type_name()
 }
 
 fn to_json(lua: &Lua, v: Value) -> serde_json::Value {

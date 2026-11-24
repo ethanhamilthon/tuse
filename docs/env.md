@@ -10,8 +10,6 @@ Tuse leaves ordinary process environment variables untouched in Lua (`os.getenv`
 | `TUSE_RELEASE_URL` | installer, `tuse update` | Release download base URL (ignored when empty). Default: `https://github.com/ethanhamilthon/tuse/releases/latest/download`. |
 | `TUSE_VERSION` | installer only | Release version to install, with or without a leading `v` (for example `0.9.2` or `v0.9.2`). Default: latest release. |
 | `TUSE_BIN_DIR` | installer only | Destination directory for the `tuse` binary. Default: `~/.local/bin`. |
-| `TUSE_NO_SETUP` | installer only | When set to any non-empty value other than `0` or `false`, skips interactive first-run setup (equivalent to passing `--no-setup`). |
-| `CI` | installer only | When set to any non-empty value other than `0` or `false`, treats the environment as non-interactive and skips first-run setup. |
 | `HOME` | Tuse, installer | Standard home directory used to expand `~/` and locate `~/.tuse`, `~/.config/tuse.lua`, `~/.config/tuse/init.lua`, and the default installer target. |
 
 In the installer, a non-empty `TUSE_RELEASE_URL` takes precedence over `TUSE_VERSION`: when both are set, the installer downloads from `TUSE_RELEASE_URL` and ignores `TUSE_VERSION`. `tuse update` reads only `TUSE_RELEASE_URL` and replaces the running executable in place.

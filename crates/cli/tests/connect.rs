@@ -185,12 +185,5 @@ fn connect_apis_providers_format_key_stdin_replace_and_probe() {
             .contains(&format!("sub\t{u2}"))
     );
 
-    let probe = dir.join("probe.lua");
-    std::fs::write(
-        &probe,
-        r#"return { plugins = { { "tuse/default", opts = { theme = false, subs = false } } } }"#,
-    )
-    .unwrap();
-    assert!(ok(&["models", "-c", probe.to_str().unwrap()], None));
     let _ = std::fs::remove_dir_all(&dir);
 }

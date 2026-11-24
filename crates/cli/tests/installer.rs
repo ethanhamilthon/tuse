@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 #[test]
-fn installer_handles_prompts_races_signals_and_capability_gate() {
+fn installer_installs_only_the_verified_binary() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let out = Command::new("python3")
         .arg(root.join("release/install_test.py"))

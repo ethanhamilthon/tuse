@@ -49,7 +49,7 @@ impl App {
                 match &mut self.picker {
                     Some(pk) => {
                         let rows = cap.saturating_sub(1).max(1);
-                        let lines = crate::ui::list::options(pk, rows, inner, p);
+                        let lines = crate::ui::screen::list::options(pk, rows, inner, p);
                         self.list_rows = rows;
                         crate::kit::rich::render::framed(lines, inner, p)
                     }

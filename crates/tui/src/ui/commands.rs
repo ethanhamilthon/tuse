@@ -13,17 +13,19 @@ impl App {
         self.palette_gen += 1;
         self.chat.invalidate();
         if let Some(panel) = &mut self.panel {
-            let scroll = panel.scroll;
-            match panel.kind {
-                crate::ui::panel::PanelKind::Config => {
-                    *panel = crate::ui::config_view::panel(&self.session.config(), &self.palette);
-                    panel.scroll = scroll;
-                }
-                crate::ui::panel::PanelKind::Session => {
-                    *panel = crate::ui::session_view::panel(&self.session, &self.palette);
-                    panel.scroll = scroll;
-                }
-                crate::ui::panel::PanelKind::Plain => panel.invalidate(),
+            let fresh = match panel.kind {
+                crate::ui::panel::PanelKind::Config => Some(crate::ui::screen::config_view::panel(
+                    &self.session.config(),
+                    &self.palette,
+                )),
+                crate::ui::panel::PanelKind::Session => Some(
+                    crate::ui::screen::session_view::panel(&self.session, &self.palette),
+                ),
+                crate::ui::panel::PanelKind::Plain => None,
+            };
+            match fresh {
+                Some(fresh) => *panel = fresh.rebuilt(panel),
+                None => panel.invalidate(),
             }
         }
         if let Some(q) = &mut self.question {
@@ -35,7 +37,7 @@ impl App {
             "config" => {
                 self.trace_back = None;
                 self.trace_items.clear();
-                self.panel = Some(crate::ui::config_view::panel(
+                self.panel = Some(crate::ui::screen::config_view::panel(
                     &self.session.config(),
                     &self.palette,
                 ));
@@ -51,7 +53,10 @@ impl App {
             "session" => {
                 self.trace_back = None;
                 self.trace_items.clear();
-                self.panel = Some(crate::ui::session_view::panel(&self.session, &self.palette));
+                self.panel = Some(crate::ui::screen::session_view::panel(
+                    &self.session,
+                    &self.palette,
+                ));
             }
             "trace" => self.open_trace(),
             "reload" => match self.session.reload() {

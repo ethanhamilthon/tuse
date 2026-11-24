@@ -333,11 +333,11 @@ mod tests {
         assert!(border > 0 && !app.overlay_rows.is_empty());
         let step = app.palette.ui.scroll_step as usize;
         app.mouse(event(MouseEventKind::ScrollDown, 0, border));
-        assert_eq!(app.question.as_ref().unwrap().panel.scroll, step);
+        assert_eq!(app.question.as_ref().unwrap().panel.scroll(), step);
         assert_eq!(app.scroll, 0);
         app.mouse(event(MouseEventKind::ScrollUp, 0, border - 1));
         assert_eq!(app.scroll, step);
-        assert_eq!(app.question.as_ref().unwrap().panel.scroll, step);
+        assert_eq!(app.question.as_ref().unwrap().panel.scroll(), step);
         renderer
             .draw(&mut app, &mut std::io::sink(), 80, 20)
             .unwrap();
@@ -347,7 +347,7 @@ mod tests {
         app.key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE), 18);
         assert_eq!(app.scroll, 18);
         app.key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::SHIFT), 18);
-        assert_eq!(app.question.as_ref().unwrap().panel.scroll, 0);
+        assert_eq!(app.question.as_ref().unwrap().panel.scroll(), 0);
         assert_eq!(app.scroll, 18);
         assert_eq!(app.editor.text(), "draft answer");
         crate::ui::app::cleanup(app);

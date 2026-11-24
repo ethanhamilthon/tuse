@@ -17,6 +17,12 @@ pub struct InputArea {
     pub cols: usize,
 }
 
+#[derive(Default)]
+pub struct Pump {
+    pub dirty: bool,
+    pub immediate: bool,
+}
+
 pub struct QuestionPrompt {
     pub id: u64,
     pub panel: Panel,
@@ -111,6 +117,18 @@ impl App {
             .max(1)
     }
 
+    pub fn session(&self) -> Arc<Session> {
+        self.session.clone()
+    }
+
+    pub fn wants_quit(&self) -> bool {
+        self.quit
+    }
+
+    pub fn finish(self) -> String {
+        self.session.id.clone()
+    }
+
     pub fn scroll_history(&mut self, delta: isize) {
         self.scroll = self.scroll.saturating_add_signed(delta);
         self.clear_link_hover();
@@ -176,7 +194,8 @@ pub fn test_app(name: &str) -> App {
 }
 #[cfg(test)]
 pub fn cleanup(app: App) {
-    app.session.close();
-    std::fs::remove_dir_all(tuse_core::tuse_home().join(&app.session.id)).ok();
+    let session = app.session();
+    session.close();
+    std::fs::remove_dir_all(tuse_core::tuse_home().join(&session.id)).ok();
     std::fs::remove_dir_all(app.cwd).ok();
 }

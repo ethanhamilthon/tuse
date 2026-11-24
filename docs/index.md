@@ -45,4 +45,3 @@ Specifications for planned (not yet implemented) features and changes. Baseline 
 - [09 — Agent-Only, Undiscoverable Configured Functions](planned/09-agent-only-functions.md)
 - [10 — Setup Guide](planned/10-setup-guide.md)
 - [10 — Plugin Authoring Guide](planned/10-plugin-authoring-guide.md)
-- [13 — Rewrite `README.md`](planned/13-readme-rewrite.md)

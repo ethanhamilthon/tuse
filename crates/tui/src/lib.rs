@@ -1,37 +1,6 @@
-mod app;
-mod chat;
-mod clipboard;
-mod commands;
-mod config_view;
-mod draw;
-mod editor;
-mod entry;
-mod events;
-mod files;
-mod fold;
-mod input_view;
-mod keys;
-mod layout_keys;
-mod links;
-mod list;
-mod markdown;
-mod md_stream;
-mod modal;
-mod mouse;
-mod panel;
-mod picker;
-mod render;
-mod selection;
-mod send;
-mod session_view;
-mod status;
-mod style;
-mod syntax;
-mod table;
-mod text;
-mod token_picker;
-mod tool_view;
-mod watchdog;
+mod frame;
+mod kit;
+mod ui;
 
 use crossterm::event::{
     self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
@@ -62,8 +31,8 @@ pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Resul
         restore();
         prev(info);
     }));
-    let dog = watchdog::Watchdog::start(session.clone(), stop.clone());
-    main_loop(app::App::new(session, config_arg), &stop, &dog)
+    let dog = frame::watchdog::Watchdog::start(session.clone(), stop.clone());
+    main_loop(ui::app::App::new(session, config_arg), &stop, &dog)
 }
 
 struct RestoreGuard;
@@ -107,12 +76,12 @@ fn restore() {
 }
 
 fn main_loop(
-    mut app: app::App,
+    mut app: ui::app::App,
     stop: &std::sync::atomic::AtomicBool,
-    dog: &watchdog::Watchdog,
+    dog: &frame::watchdog::Watchdog,
 ) -> std::io::Result<String> {
     let mut out = BufWriter::with_capacity(1 << 16, stdout());
-    let mut renderer = draw::Renderer::default();
+    let mut renderer = frame::draw::Renderer::default();
     let (mut w, mut h) = terminal::size()?;
     let mut dirty = true;
     let mut immediate = true;
@@ -134,11 +103,9 @@ fn main_loop(
                 immediate = true;
             }
         }
-        if app
-            .flash
-            .as_ref()
-            .is_some_and(|(_, since)| since.elapsed() >= Duration::from_secs(style::FLASH_SECS))
-        {
+        if app.flash.as_ref().is_some_and(|(_, since)| {
+            since.elapsed() >= Duration::from_secs(kit::style::FLASH_SECS)
+        }) {
             app.flash = None;
             dirty = true;
         }
@@ -148,7 +115,9 @@ fn main_loop(
             dirty = true;
             immediate = true;
         }
-        if dirty && (immediate || last_draw.elapsed() >= Duration::from_millis(style::FRAME_MS)) {
+        if dirty
+            && (immediate || last_draw.elapsed() >= Duration::from_millis(kit::style::FRAME_MS))
+        {
             renderer.draw(&mut app, &mut out, w, h)?;
             dirty = false;
             immediate = false;
@@ -157,7 +126,7 @@ fn main_loop(
         if app.quit || stop.load(std::sync::atomic::Ordering::Relaxed) {
             break;
         }
-        if !event::poll(Duration::from_millis(style::FRAME_MS))? {
+        if !event::poll(Duration::from_millis(kit::style::FRAME_MS))? {
             continue;
         }
         let page = h.saturating_sub(4) as usize;

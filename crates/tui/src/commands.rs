@@ -21,6 +21,7 @@ impl App {
     pub(crate) fn restyle(&mut self) {
         self.palette = Palette::for_session(&self.session.config(), &self.cwd);
         self.palette_gen += 1;
+        self.chat.invalidate();
         if let Some(panel) = &mut self.panel {
             panel.invalidate();
         }

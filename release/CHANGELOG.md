@@ -4,6 +4,7 @@
 
 - `/trace`: pressing `Left` or `Right` in a trace detail panel (when the input editor is empty) steps to the previous or next entry in the current filtered `/trace` list without wrapping, resetting scroll to the top and keeping the search query and picker selection in sync.
 - Simplified the TUI working indicator to show only `<spinner> <elapsed>` in `accent`, removing transient per-call activity labels (`reading ...`, `running ...`); steering, flash notices, and JSON-RPC `status` events are unchanged.
+- `settings.ui.diff_line = 0` now hides the entire diff block (header, body, and footer) in TUI chat while keeping stored diffs, `/trace`, and JSON-RPC unchanged; Lua `reload()` now invalidates cached chat entries so updated `settings.ui` and `theme` settings apply immediately at the same terminal width.
 
 ## 0.9.2
 

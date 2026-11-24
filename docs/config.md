@@ -101,7 +101,7 @@ See [theme.md](theme.md) for visual details.
 | --- | --- | --- | --- |
 | `fold_strings` | boolean | `true` | Folds multiline Lua long strings (`[[...]]`) in chat tool calls to one line (`/trace` always shows full code). |
 | `tool_line` | integer `>= -1` | `-1` | Max tool call code lines shown in chat (`0` hides, `-1` unlimited). |
-| `diff_line` | integer `>= -1` | `12` | Max diff lines shown per file in chat (`0` suppresses body, `-1` unlimited). |
+| `diff_line` | integer `>= -1` | `12` | Max diff lines shown per file in chat (`0` hides the entire diff block, `-1` all stored diff lines). |
 | `output_line` | integer `>= -1` | `1` | Max tool output lines shown in chat (`0` hides, `-1` unlimited). |
 | `reasoning_line` | integer `>= -1` | `-1` | Max reasoning lines shown in chat (`0` hides, `-1` unlimited). |
 | `scroll_step` | integer `1..=65535` | `3` | Lines scrolled per mouse wheel tick or arrow scroll step in panels. |
@@ -200,4 +200,4 @@ Reloads are serialized so only one reload runs at a time. Each reload follows th
    - Swaps the active config, clears cached remote provider models (discarding in-flight model fetches from the prior config generation), and recalculates session usage costs if `models` changed.
    - Re-enables hooks, fires `start` (`reason = "reload"`, `is_new = false`, `restored = false`) on the new hooks, and emits a `reloaded` event.
 
-In TUI, `/reload` restyles the palette, rebuilds the chat view from the session (preserving live `show` blocks and answered UI entries, and immediately applying updated `theme` and `settings.ui` to existing chat entries), and flashes `Config reloaded.`. A reload triggered from Lua `reload()` emits `reloaded` and restyles the TUI palette, but does not rebuild existing cached chat entries until resized or `/reload` is run. Reload never changes the active session's model or effort, never stops running background tasks, and preserves live UI markdown blocks, UI entries, and non-hook UI prompts.
+In TUI, `/reload` restyles the palette, rebuilds the chat view from the session (preserving live `show` blocks and answered UI entries, and immediately applying updated `theme` and `settings.ui` to existing chat entries), and flashes `Config reloaded.`. A reload triggered from Lua `reload()` emits `reloaded`, which restyles the palette and invalidates cached chat entries and open panels so updated `theme` and `settings.ui` rules re-render immediately at the same terminal width. Reload never changes the active session's model or effort, never stops running background tasks, and preserves live UI markdown blocks, UI entries, and non-hook UI prompts.

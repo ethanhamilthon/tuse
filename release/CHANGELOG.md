@@ -5,6 +5,7 @@
 - **Breaking:** Configured `functions` now map names directly to plain Lua functions or `false` (removing `{ run, args, description, show_agent }`), are strictly isolated to the agent's `lua` environment, and are undiscoverable unless documented in `systems`/`prompts`. Built-in host functions can be overridden (delegating to unmodified originals via `require("tuse")`) or disabled with `false` (live-gated across reloads and filtered from the system prompt, `lua` tool description, and `docs()`).
 - Reload (`/reload`, `config.reload`, `reload()`) now automatically installs missing Git plugins and updates moving refs (`ref` tags/branches/default branch) with per-repository advisory locking, non-interactive 60s-bounded Git execution, immutable commit-SHA pins, URL/ref conflict checks, and local-work safety checks; startup and session switches stay offline.
 - Persisted `show()` Markdown blocks and answered `pick()`/`ask()` prompt results in session history (`ui_markdown` and `ui_result` records), restoring them in chat order and pin state across TUI and JSON-RPC resume (before `start` hooks run) while keeping them out of model context, compaction, and `/trace` and never persisting cancelled or pending prompts.
+- Published [docs/setup.md](docs/setup.md) and [docs/plugin-authoring.md](docs/plugin-authoring.md) guides, linked from `docs/index.md`, `docs/config.md`, and `docs/plugins.md`.
 
 ## 0.9.2
 

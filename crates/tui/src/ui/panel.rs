@@ -19,7 +19,7 @@ pub enum PanelKind {
 pub struct Panel {
     body: Body,
     pub kind: PanelKind,
-    pub scroll: usize,
+    scroll: usize,
     cache: Option<(usize, Vec<Line>)>,
 }
 
@@ -94,6 +94,16 @@ impl Panel {
         crate::kit::rich::render::framed(rows, width, p)
     }
 
+    #[cfg(test)]
+    pub fn scroll(&self) -> usize {
+        self.scroll
+    }
+
+    pub fn rebuilt(mut self, old: &Panel) -> Panel {
+        self.scroll = old.scroll;
+        self
+    }
+
     pub fn scroll_by(&mut self, delta: isize) {
         self.scroll = self.scroll.saturating_add_signed(delta);
     }
@@ -160,7 +170,7 @@ mod tests {
         assert_eq!(panel.lines(20, 8, &p).len(), 8);
         panel.scroll_by(1000);
         assert_eq!(panel.lines(20, 8, &p).len(), 8);
-        assert_eq!(panel.scroll, 23);
+        assert_eq!(panel.scroll(), 23);
         assert_eq!(Panel::new("one").lines(20, 8, &p).len(), 2);
     }
 
@@ -197,12 +207,12 @@ mod tests {
         k(&mut app, KeyCode::Enter);
         app.panel.as_mut().unwrap().scroll_by(5);
         k(&mut app, KeyCode::Left);
-        assert_eq!(app.panel.as_ref().unwrap().scroll, 5);
+        assert_eq!(app.panel.as_ref().unwrap().scroll(), 5);
         assert!(panel_text(&mut app).contains("line-5"));
 
         app.hover = Some(1);
         k(&mut app, KeyCode::Right);
-        assert_eq!((app.panel.as_ref().unwrap().scroll, app.hover), (0, None));
+        assert_eq!((app.panel.as_ref().unwrap().scroll(), app.hover), (0, None));
         assert!(panel_text(&mut app).contains("plain-out"));
 
         k(&mut app, KeyCode::Right);
@@ -217,7 +227,7 @@ mod tests {
         );
         app.panel.as_mut().unwrap().scroll_by(4);
         k(&mut app, KeyCode::Left);
-        assert_eq!(app.panel.as_ref().unwrap().scroll, 0);
+        assert_eq!(app.panel.as_ref().unwrap().scroll(), 0);
 
         app.paste("ab");
         k(&mut app, KeyCode::Left);
@@ -242,7 +252,7 @@ mod tests {
         assert!(panel_text(&mut app).contains("local b = 2"));
         app.panel.as_mut().unwrap().scroll_by(6);
         k(&mut app, KeyCode::Right);
-        assert_eq!(app.panel.as_ref().unwrap().scroll, 6);
+        assert_eq!(app.panel.as_ref().unwrap().scroll(), 6);
         assert!(panel_text(&mut app).contains("--b-4"));
         k(&mut app, KeyCode::Esc);
         assert_eq!(

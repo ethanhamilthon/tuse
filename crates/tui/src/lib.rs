@@ -13,7 +13,7 @@ use std::io::{BufWriter, Write, stdout};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tuse_core::{Event, Session};
+use tuse_core::Session;
 
 pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Result<String> {
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -88,33 +88,10 @@ fn main_loop(
     let mut last_tick = Instant::now();
     let mut last_draw = Instant::now();
     loop {
-        dog.set_session(&app.session);
-        while let Ok(e) = app.events.try_recv() {
-            if matches!(e, Event::Status(_)) {
-                continue;
-            }
-            let stream = matches!(
-                e,
-                Event::Text(_) | Event::Reasoning(_) | Event::ToolDelta { .. }
-            );
-            app.handle_event(e);
-            dirty = true;
-            if !stream {
-                immediate = true;
-            }
-        }
-        if app.flash.as_ref().is_some_and(|(_, since)| {
-            since.elapsed() >= Duration::from_secs(kit::style::FLASH_SECS)
-        }) {
-            app.flash = None;
-            dirty = true;
-        }
-        if app.session.busy() && last_tick.elapsed() >= Duration::from_millis(100) {
-            app.tick += 1;
-            last_tick = Instant::now();
-            dirty = true;
-            immediate = true;
-        }
+        dog.set_session(&app.session());
+        let pumped = app.pump(&mut last_tick);
+        dirty |= pumped.dirty;
+        immediate |= pumped.immediate;
         if dirty
             && (immediate || last_draw.elapsed() >= Duration::from_millis(kit::style::FRAME_MS))
         {
@@ -123,7 +100,7 @@ fn main_loop(
             immediate = false;
             last_draw = Instant::now();
         }
-        if app.quit || stop.load(std::sync::atomic::Ordering::Relaxed) {
+        if app.wants_quit() || stop.load(std::sync::atomic::Ordering::Relaxed) {
             break;
         }
         if !event::poll(Duration::from_millis(kit::style::FRAME_MS))? {
@@ -152,12 +129,13 @@ fn main_loop(
             immediate = true;
         }
     }
-    let id = app.session.id.clone();
+    let session = app.session();
+    let id = app.finish();
     if !dog.claim_close() {
         loop {
             std::thread::park();
         }
     }
-    app.session.close();
+    session.close();
     Ok(id)
 }

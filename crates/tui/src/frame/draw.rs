@@ -1,7 +1,7 @@
 use crate::kit::style::Style;
 use crate::kit::text::{Line, line_width, span};
 use crate::ui::app::App;
-use crate::ui::compose::Frame;
+use crate::ui::screen::compose::Frame;
 use crossterm::QueueableCommand;
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::style::{

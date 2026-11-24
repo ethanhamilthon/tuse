@@ -1,8 +1,38 @@
 use crate::kit::entry::Entry;
 use crate::ui::app::App;
+use crate::ui::app::Pump;
 use tuse_core::{Event, UiPrompt};
 
 impl App {
+    pub fn pump(&mut self, last_tick: &mut std::time::Instant) -> Pump {
+        let mut pump = Pump::default();
+        while let Ok(e) = self.events.try_recv() {
+            if matches!(e, Event::Status(_)) {
+                continue;
+            }
+            let stream = matches!(
+                e,
+                Event::Text(_) | Event::Reasoning(_) | Event::ToolDelta { .. }
+            );
+            self.handle_event(e);
+            pump.dirty = true;
+            pump.immediate |= !stream;
+        }
+        if self.flash.as_ref().is_some_and(|(_, since)| {
+            since.elapsed() >= std::time::Duration::from_secs(crate::kit::style::FLASH_SECS)
+        }) {
+            self.flash = None;
+            pump.dirty = true;
+        }
+        if self.session.busy() && last_tick.elapsed() >= std::time::Duration::from_millis(100) {
+            self.tick += 1;
+            *last_tick = std::time::Instant::now();
+            pump.dirty = true;
+            pump.immediate = true;
+        }
+        pump
+    }
+
     pub(super) fn stream(&mut self, t: String, reasoning: bool) {
         let slot = if reasoning {
             self.thinking

@@ -225,7 +225,7 @@ mod tests {
         let text: String = (0..80)
             .step_by(10)
             .flat_map(|off| {
-                pnl.scroll = off;
+                pnl.scroll_by(off as isize - pnl.scroll() as isize);
                 pnl.lines(80, 16, &p)
             })
             .flatten()

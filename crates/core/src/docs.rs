@@ -1,7 +1,7 @@
 const TOPICS: &[(&str, &str, &str)] = &[
     (
         "README.md",
-        "Overview, install, usage, hotkeys, config, benchmark (long; read in slices)",
+        "Concise overview, install, quick start, and links to docs",
         include_str!("../../../README.md"),
     ),
     (

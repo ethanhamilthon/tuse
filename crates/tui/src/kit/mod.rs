@@ -2,7 +2,6 @@ pub(crate) mod clipboard;
 pub(crate) mod editor;
 pub(crate) mod entry;
 pub(crate) mod files;
-pub(crate) mod layout_keys;
 pub(crate) mod links;
 pub(crate) mod rich;
 pub(crate) mod selection;

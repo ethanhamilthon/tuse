@@ -1,5 +1,4 @@
 use super::fail;
-use super::resolve;
 use ignore::WalkBuilder;
 use ignore::overrides::OverrideBuilder;
 use regex::RegexBuilder;
@@ -25,9 +24,12 @@ pub fn run(
     stopped: &dyn Fn() -> bool,
 ) -> Result<String, String> {
     let roots: Vec<_> = if o.paths.is_empty() {
-        vec![resolve(".", cwd)]
+        vec![tuse_config::resolve_path(".", cwd)]
     } else {
-        o.paths.iter().map(|p| resolve(p, cwd)).collect()
+        o.paths
+            .iter()
+            .map(|p| tuse_config::resolve_path(p, cwd))
+            .collect()
     };
     let (glob, ignore_case, context) = (o.glob, o.ignore_case, o.context);
     let limit = o.limit.unwrap_or(DEFAULT_LIMIT).max(1);

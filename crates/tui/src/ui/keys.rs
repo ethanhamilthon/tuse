@@ -13,7 +13,7 @@ impl App {
         if k.modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER)
             && let KeyCode::Char(c) = k.code
-            && let Some(mapped) = crate::kit::layout_keys::latin(c)
+            && let Some(mapped) = latin(c)
         {
             k.code = KeyCode::Char(mapped);
         }
@@ -214,6 +214,14 @@ impl App {
         }
         true
     }
+}
+
+fn latin(c: char) -> Option<char> {
+    let c = c.to_lowercase().next()?;
+    "йцукенгшщзфывапролдячсмить"
+        .chars()
+        .zip("qwertyuiopasdfghjklzxcvbnm".chars())
+        .find_map(|(ru, en)| (c == ru).then_some(en))
 }
 
 fn edits_text(k: KeyEvent) -> bool {

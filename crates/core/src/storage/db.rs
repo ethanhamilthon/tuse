@@ -1,4 +1,4 @@
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::sync::{Mutex, OnceLock};
 
 static DB: OnceLock<Mutex<Vec<(std::path::PathBuf, Connection)>>> = OnceLock::new();
@@ -34,11 +34,11 @@ pub(super) fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Res
     let mut all = DB.get_or_init(Mutex::default).lock().unwrap();
     if !all.iter().any(|(h, _)| *h == home) {
         std::fs::create_dir_all(&home).map_err(|e| format!("{}: {e}", home.display()))?;
-        let c = Connection::open(home.join("tuse.db")).map_err(|e| e.to_string())?;
+        let mut c = Connection::open(home.join("tuse.db")).map_err(|e| e.to_string())?;
         c.busy_timeout(std::time::Duration::from_secs(5))
             .and_then(|_| c.pragma_update(None, "journal_mode", "WAL"))
             .and_then(|_| c.execute_batch(SCHEMA))
-            .and_then(|_| migrate(&c))
+            .and_then(|_| migrate(&mut c))
             .map_err(|e| e.to_string())?;
         all.push((home.clone(), c));
     }
@@ -46,28 +46,19 @@ pub(super) fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Res
     f(c).map_err(|e| e.to_string())
 }
 
-fn migrate(c: &Connection) -> rusqlite::Result<()> {
-    c.execute_batch("BEGIN IMMEDIATE")?;
-    let res = (|| {
-        let mut q = c.prepare("PRAGMA table_info(providers)")?;
-        let cols: Vec<String> = q
-            .query_map([], |r| r.get::<_, String>(1))?
-            .collect::<Result<_, _>>()?;
-        if !cols.iter().any(|col| col == "api") {
-            c.execute(
-                "ALTER TABLE providers ADD COLUMN api TEXT NOT NULL DEFAULT 'openai-chat'",
-                [],
-            )?;
-        }
-        Ok(())
-    })();
-    match res {
-        Ok(()) => c.execute_batch("COMMIT"),
-        Err(e) => {
-            let _ = c.execute_batch("ROLLBACK");
-            Err(e)
-        }
+fn migrate(c: &mut Connection) -> rusqlite::Result<()> {
+    let tx = c.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let cols: Vec<String> = tx
+        .prepare("PRAGMA table_info(providers)")?
+        .query_map([], |r| r.get(1))?
+        .collect::<Result<_, _>>()?;
+    if !cols.iter().any(|col| col == "api") {
+        tx.execute(
+            "ALTER TABLE providers ADD COLUMN api TEXT NOT NULL DEFAULT 'openai-chat'",
+            [],
+        )?;
     }
+    tx.commit()
 }
 
 pub struct Prefs;
@@ -194,10 +185,10 @@ mod tests {
                 let p = path.clone();
                 let b = barrier.clone();
                 std::thread::spawn(move || {
-                    let c = Connection::open(&p).unwrap();
+                    let mut c = Connection::open(&p).unwrap();
                     c.busy_timeout(std::time::Duration::from_secs(5)).unwrap();
                     b.wait();
-                    migrate(&c).unwrap();
+                    migrate(&mut c).unwrap();
                 })
             })
             .collect();

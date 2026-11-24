@@ -1,63 +1,34 @@
-use super::{diff, fail, fs, io_fail};
+use super::{diff, fail, io_fail, write_atomic};
+use std::borrow::Cow;
 use std::path::Path;
 
-pub fn run(path: &Path, content: &str) -> Result<(String, String), String> {
+pub(super) fn run(path: &Path, text: &str, append: bool) -> Result<(String, String), String> {
     if path.is_dir() {
-        return Err(fail(format!("{} is a directory", path.display())));
+        return Err(format!("{} is a directory", path.display()));
     }
     let before = std::fs::read(path)
         .ok()
         .map(|b| String::from_utf8_lossy(&b).into_owned());
-    fs::write_atomic(path, content.as_bytes()).map_err(|e| io_fail(path, &e))?;
+    let content = match &before {
+        Some(old) if append => Cow::Owned([old.as_str(), text].concat()),
+        _ => Cow::Borrowed(text),
+    };
+    write_atomic(path, content.as_bytes()).map_err(|e| io_fail(path, &e))?;
     let now = content.lines().count();
+    let name = path.display();
     Ok(match before {
         None => (
-            format!("created {} ({now} lines)", path.display()),
-            diff::whole(content),
+            format!("created {name} ({now} lines)"),
+            diff::whole(&content),
         ),
-        Some(old) => (
-            format!(
-                "overwrote {} ({} -> {now} lines)",
-                path.display(),
-                old.lines().count()
-            ),
-            diff::changed(&old, content),
-        ),
-    })
-}
-
-pub fn append(path: &Path, text: &str) -> Result<(String, String), String> {
-    if path.is_dir() {
-        return Err(fail(format!("{} is a directory", path.display())));
-    }
-    let before = std::fs::read(path)
-        .ok()
-        .map(|b| String::from_utf8_lossy(&b).into_owned());
-    match before {
-        None => {
-            fs::write_atomic(path, text.as_bytes()).map_err(|e| io_fail(path, &e))?;
-            let now = text.lines().count();
-            Ok((
-                format!("created {} ({now} lines)", path.display()),
-                diff::whole(text),
-            ))
-        }
         Some(old) => {
-            let mut combined = String::with_capacity(old.len() + text.len());
-            combined.push_str(&old);
-            combined.push_str(text);
-            fs::write_atomic(path, combined.as_bytes()).map_err(|e| io_fail(path, &e))?;
-            Ok((
-                format!(
-                    "appended {} ({} -> {} lines)",
-                    path.display(),
-                    old.lines().count(),
-                    combined.lines().count()
-                ),
-                diff::changed(&old, &combined),
-            ))
+            let verb = if append { "appended" } else { "overwrote" };
+            (
+                format!("{verb} {name} ({} -> {now} lines)", old.lines().count()),
+                diff::changed(&old, &content),
+            )
         }
-    }
+    })
 }
 
 pub fn delete(path: &Path) -> Result<(String, String), String> {
@@ -88,22 +59,22 @@ pub fn delete(path: &Path) -> Result<(String, String), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::{append, delete, write};
 
     #[test]
     fn creates_parents_and_overwrites() {
         let dir = std::env::temp_dir().join(format!("tuse-write-{}", std::process::id()));
         let file = dir.join("a/b/c.txt");
-        let (msg, diff) = run(&file, "x\ny\n").unwrap();
+        let (msg, diff) = write(&file, "x\ny\n").unwrap();
         assert!(msg.starts_with("created") && diff.contains("+    1 | x"));
-        let (msg, diff) = run(&file, "z\n").unwrap();
+        let (msg, diff) = write(&file, "z\n").unwrap();
         assert!(msg.contains("2 -> 1 lines"), "{msg}");
         assert!(
             diff.contains("-    1 | x") && diff.contains("+    1 | z"),
             "{diff}"
         );
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "z\n");
-        assert!(run(&dir.join("a"), "").is_err());
+        assert!(write(&dir.join("a"), "").is_err());
 
         let (msg, d) = append(&file, "w\n").unwrap();
         assert!(
@@ -115,6 +86,9 @@ mod tests {
         let (msg, d) = delete(&file).unwrap();
         assert!(msg.starts_with("deleted") && d.contains("-    1 | z") && d.contains("-    2 | w"));
         assert!(!file.exists());
+        let (msg, d) = append(&file, "new\n").unwrap();
+        assert!(msg.starts_with("created") && d.contains("+    1 | new"));
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "new\n");
         assert!(
             delete(&dir.join("a")).is_err(),
             "must not delete directories"

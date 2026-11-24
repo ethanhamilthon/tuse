@@ -1,4 +1,4 @@
-use super::{diff, fail, fs, io_fail};
+use super::{diff, fail, io_fail, write_atomic};
 use std::path::Path;
 
 pub fn run(path: &Path, old: &str, new: &str, all: bool) -> Result<(String, String), String> {
@@ -39,7 +39,7 @@ pub fn run(path: &Path, old: &str, new: &str, all: bool) -> Result<(String, Stri
     }
     let hunks = diff::hunks(&text, &at, &new);
     let result = text.replace(&old, &new);
-    fs::write_atomic(path, result.as_bytes()).map_err(|e| io_fail(path, &e))?;
+    write_atomic(path, result.as_bytes()).map_err(|e| io_fail(path, &e))?;
     let n = at.len();
     let head = format!(
         "edited {} ({n} replacement{})",

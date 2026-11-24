@@ -7,6 +7,7 @@
 - `settings.ui.diff_line = 0` now hides the entire diff block (header, body, and footer) in TUI chat while keeping stored diffs, `/trace`, and JSON-RPC unchanged; Lua `reload()` now invalidates cached chat entries so updated `settings.ui` and `theme` settings apply immediately at the same terminal width.
 - Interactive links now render in `theme.accent` (underlined) by default and highlight in `theme.fg` (bold, underlined) on hover or press, clearing hover on pointer leave, drag, scroll, or resize with no persistent visited state.
 - `release/install.sh`: added interactive first-run setup after binary installation to optionally enable `"tuse/default"` (`theme` and `subs`) and atomically create `~/.config/tuse/init.lua` without overwriting existing configs, gated on binary capability and skipped automatically in non-interactive, `CI`, `TUSE_NO_SETUP`, or `--no-setup` runs.
+- Added GitHub Pages docs site and landing page builder (`site/build.py`, `site/landing.html`, `site/templates/`, `site/assets/`, `site/redirects.json`, `site/requirements.txt`) and `.github/workflows/pages.yml` to build and offline-verify links, anchors, and assets on every PR and deploy from `main`.
 
 ## 0.9.2
 

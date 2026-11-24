@@ -1,0 +1,75 @@
+    <div class="landing">
+      <section class="hero">
+        <h1>Minimal AI coding agent for the terminal</h1>
+        <p class="hero-lead">
+          Written in Rust with Crossterm, centered on one <code>lua</code> tool in a persistent Lua 5.4 VM, with both a full-screen TUI and <code>tuse json</code> editor protocol.
+        </p>
+        <div class="install-box">
+          <pre><code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh</code></pre>
+          <button type="button" class="copy-btn" id="copy-install" hidden>Copy</button>
+        </div>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="{{base}}docs/">Read the Docs</a>
+          <a class="btn btn-secondary" href="https://github.com/ethanhamilthon/tuse">View on GitHub</a>
+        </div>
+      </section>
+
+      <section class="demo-section" aria-label="Terminal demo">
+        <div class="demo-frame">
+          <img src="{{base}}assets/demo.svg" width="880" height="500" alt="Tuse terminal UI showing a user prompt, syntax-highlighted lua tool call, colored file diff, assistant summary, and bottom model and context status bar">
+        </div>
+      </section>
+
+      <section aria-labelledby="capabilities">
+        <h2 class="section-heading" id="capabilities">Core capabilities</h2>
+        <div class="feature-grid">
+          <div class="card">
+            <h3>One tool: <code>lua</code></h3>
+            <p>Persistent Lua 5.4 VM with <code>read</code>, <code>write</code>, <code>edit</code>, <code>append</code>, <code>delete</code>, <code>grep</code>, <code>sh</code>, <code>sleep</code>, and <code>spawn</code> coroutines; diffs shown automatically with no output truncation.</p>
+          </div>
+          <div class="card">
+            <h3>TUI and <code>tuse json</code></h3>
+            <p>Full-screen terminal UI with Markdown and pickers (<code>/</code> commands, <code>#</code> prompts, <code>@</code> files), plus a JSON-RPC 2.0 stdio mode sharing the same SQLite sessions (<code>~/.tuse/tuse.db</code>).</p>
+          </div>
+          <div class="card">
+            <h3>Lua config &amp; plugins</h3>
+            <p>Plain Lua tables for hooks, custom slash commands, helpers, file openers, a 10-token theme, and Git or local plugins with live <code>/reload</code>.</p>
+          </div>
+          <div class="card">
+            <h3>Lean context</h3>
+            <p>Small built-in system prompt, 50/25/25 context compaction, and automatic retries for rate limits and transient errors.</p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="quick-start">
+        <h2 class="section-heading" id="quick-start">Quick start</h2>
+        <ol class="steps">
+          <li>
+            <span class="step-num">1.</span>Install the binary (macOS 11+, Linux glibc 2.35+):
+            <pre><code>curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh</code></pre>
+          </li>
+          <li>
+            <span class="step-num">2.</span>Connect an OpenAI-compatible provider:
+            <pre><code>tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai</code></pre>
+          </li>
+          <li>
+            <span class="step-num">3.</span>Launch <code>tuse</code> and choose a model and effort with <code>/models</code>. See the <a href="{{base}}docs/">documentation</a> for <a href="{{base}}docs/providers.html">providers</a>, <a href="{{base}}docs/config.html">config</a>, and <a href="{{base}}docs/plugins.html">plugins</a>.
+          </li>
+        </ol>
+      </section>
+    </div>
+    <script>
+      (function () {
+        var btn = document.getElementById("copy-install");
+        var code = document.getElementById("install-cmd");
+        if (!btn || !code || !navigator.clipboard) return;
+        btn.hidden = false;
+        btn.addEventListener("click", function () {
+          navigator.clipboard.writeText(code.textContent).then(function () {
+            btn.textContent = "Copied";
+            setTimeout(function () { btn.textContent = "Copy"; }, 1800);
+          });
+        });
+      })();
+    </script>

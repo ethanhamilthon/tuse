@@ -39,7 +39,6 @@ Source of truth for Tuse's observable behavior and public contracts. All baselin
 Specifications for planned (not yet implemented) features and changes. Baseline pages above reflect only current behavior until each spec is implemented.
 
 - [02 — Support Four API Types](planned/02-api-types.md)
-- [04 — Publish Docs on GitHub Pages](planned/04-github-pages-docs.md)
 - [06 — Install and Update Plugins on Reload](planned/06-plugin-sync-on-reload.md)
 - [07 — Bundled Default Plugin: `theme` and `subs`](planned/07-default-plugin-theme-subs.md)
 - [08 — Persist `show`, `pick`, and `ask` in UI History](planned/08-persist-ui-history.md)
@@ -47,4 +46,3 @@ Specifications for planned (not yet implemented) features and changes. Baseline 
 - [10 — Setup Guide](planned/10-setup-guide.md)
 - [10 — Plugin Authoring Guide](planned/10-plugin-authoring-guide.md)
 - [13 — Rewrite `README.md`](planned/13-readme-rewrite.md)
-- [14 — Tuse Landing Page on GitHub Pages](planned/14-landing-page.md)

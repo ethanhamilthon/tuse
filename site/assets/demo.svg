@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 500" width="880" height="500" role="img" aria-label="Tuse terminal UI demo">
+  <defs>
+    <style>
+      .t { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13.5px; }
+      .b { font-weight: 700; }
+      .i { font-style: italic; }
+    </style>
+  </defs>
+  <rect width="880" height="500" rx="10" fill="#121212" stroke="#333333" stroke-width="1.5"/>
+  <rect x="1" y="1" width="878" height="32" rx="9" fill="#1E1E1E"/>
+  <rect x="1" y="22" width="878" height="11" fill="#1E1E1E"/>
+  <line x1="1" y1="33" x2="879" y2="33" stroke="#333333" stroke-width="1"/>
+  <circle cx="20" cy="17" r="5" fill="#333333"/>
+  <circle cx="36" cy="17" r="5" fill="#333333"/>
+  <circle cx="52" cy="17" r="5" fill="#333333"/>
+  <text x="440" y="21" text-anchor="middle" class="t" fill="#929292">tuse — ~/projects/tuse</text>
+
+  <rect x="20" y="48" width="840" height="34" rx="3" fill="#1E1E1E"/>
+  <text x="32" y="70" class="t" fill="#DEDEDE">Hide the entire diff block when settings.ui.diff_line is 0 in tool_view.rs</text>
+
+  <text x="20" y="108" class="t" fill="#929292" font-style="italic">∴ Checking tool_view.rs diff() to skip rendering when diff_line == 0.</text>
+
+  <text x="20" y="138" class="t">
+    <tspan fill="#97BEDC">* edit</tspan><tspan fill="#DEDEDE">(</tspan><tspan fill="#94B979">"crates/tui/src/tool_view.rs"</tspan><tspan fill="#DEDEDE">,</tspan>
+  </text>
+  <text x="36" y="158" class="t">
+    <tspan fill="#94B979">[[fn diff(d: &amp;FileDiff, w: usize, pad: &amp;str, p: &amp;Palette) -&gt; Vec&lt;Line&gt; {]]</tspan><tspan fill="#DEDEDE">,</tspan>
+  </text>
+  <text x="36" y="178" class="t">
+    <tspan fill="#94B979">[[fn diff(d: &amp;FileDiff, w: usize, pad: &amp;str, p: &amp;Palette) -&gt; Vec&lt;Line&gt; {…]]</tspan><tspan fill="#DEDEDE">)</tspan>
+  </text>
+
+  <text x="36" y="202" class="t" fill="#929292">edited crates/tui/src/tool_view.rs (1 replacement)</text>
+
+  <text x="36" y="226" class="t" fill="#929292">crates/tui/src/tool_view.rs</text>
+  <text x="36" y="246" class="t" fill="#BDBDBD">  64 | fn diff(d: &amp;FileDiff, w: usize, pad: &amp;str, p: &amp;Palette) -&gt; Vec&lt;Line&gt; {</text>
+  <text x="36" y="266" class="t" fill="#94B979">+ 65 |     if p.ui.diff_line == 0 {</text>
+  <text x="36" y="286" class="t" fill="#94B979">+ 66 |         return vec![];</text>
+  <text x="36" y="306" class="t" fill="#94B979">+ 67 |     }</text>
+  <text x="36" y="326" class="t" fill="#BDBDBD">  68 |     let room = w.saturating_sub(pad.len());</text>
+
+  <text x="20" y="360" class="t">
+    <tspan fill="#DEDEDE">Updated </tspan><tspan fill="#BDDEAB" text-decoration="underline">crates/tui/src/tool_view.rs</tspan><tspan fill="#DEDEDE"> so </tspan><tspan fill="#94B979">diff_line = 0</tspan><tspan fill="#DEDEDE"> returns early before</tspan>
+  </text>
+  <text x="20" y="380" class="t" fill="#DEDEDE">rendering the file path header, body lines, or truncation footer.</text>
+
+  <text x="20" y="408" class="t" fill="#929292">✓ 4s · Claude Sonnet · medium</text>
+
+  <line x1="20" y1="432" x2="860" y2="432" stroke="#333333" stroke-width="1"/>
+  <text x="20" y="456" class="t">
+    <tspan fill="#BDDEAB">› </tspan><tspan fill="#DEDEDE">Run make check and verify </tspan><tspan fill="#BDDEAB">@crates/tui/src/tool_view.rs</tspan>
+  </text>
+  <rect x="478" y="443" width="2" height="17" fill="#BDDEAB"/>
+  <line x1="20" y1="474" x2="546" y2="474" stroke="#333333" stroke-width="1"/>
+  <text x="860" y="479" text-anchor="end" class="t">
+    <tspan fill="#929292">Claude Sonnet · medium · </tspan><tspan fill="#BDDEAB">14.2k</tspan><tspan fill="#929292">/200k · $0.03</tspan>
+  </text>
+</svg>

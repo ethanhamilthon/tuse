@@ -1,5 +1,6 @@
-use crate::chat::{Chat, Entry};
+use crate::chat::Chat;
 use crate::editor::Editor;
+use crate::entry::Entry;
 use crate::panel::Panel;
 use crate::picker::Picker;
 use crate::style::Palette;

@@ -590,9 +590,9 @@ mod tests {
         let text = format!("[doc]({path}) https://example.com");
         let md_block = crate::render::ui_markdown(&text, 60, &p);
         assert!(!scan(&md_block, 0).is_empty());
-        let agent = crate::chat::Entry::Assistant(text.clone());
+        let agent = crate::entry::Entry::Assistant(text.clone());
         assert!(!scan(&crate::render::render(&agent, 60, &p), 0).is_empty());
-        let user = crate::chat::Entry::User {
+        let user = crate::entry::Entry::User {
             text: text.clone(),
             images: 0,
         };

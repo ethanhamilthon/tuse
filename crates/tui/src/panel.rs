@@ -67,7 +67,7 @@ impl Panel {
                     crate::markdown::render_with_links(text, width, p, false)
                 }
                 Body::Lua(code) => {
-                    let clean = crate::render::clean(code);
+                    let clean = crate::text::clean(code);
                     crate::syntax::highlight(&clean, Style::fg(p.fg), p)
                         .into_iter()
                         .flat_map(|r| wrap(&r, width, &empty, &empty))

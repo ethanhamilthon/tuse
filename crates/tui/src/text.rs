@@ -118,6 +118,19 @@ fn join(prefix: &Line, cells: &[(char, Style)]) -> Line {
     line
 }
 
+pub(crate) fn clean(text: &str) -> String {
+    text.chars()
+        .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
+        .map(|c| {
+            if c == '\t' {
+                "    ".to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

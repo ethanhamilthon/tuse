@@ -160,7 +160,7 @@ mod tests {
             String::from_utf8_lossy(&out).into_owned()
         };
         app.chat
-            .push(crate::chat::Entry::Assistant("note.txt other.txt".into()));
+            .push(crate::entry::Entry::Assistant("note.txt other.txt".into()));
         draw(&mut r, &mut app, 60, 12);
         let (la, lb) = (app.links[0].clone(), app.links[1].clone());
         assert!(app.mouse(event(MouseEventKind::Moved, la.start as u16, la.row as u16)));
@@ -234,7 +234,7 @@ mod tests {
             la.start as u16,
             la.row as u16,
         ));
-        if let Some(crate::chat::Entry::Assistant(s)) = app.chat.get_mut(app.chat.len() - 1) {
+        if let Some(crate::entry::Entry::Assistant(s)) = app.chat.get_mut(app.chat.len() - 1) {
             *s = "other.txt\n\nshifted note.txt".into();
         }
         draw(&mut r, &mut app, 60, 12);
@@ -247,7 +247,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(60));
         assert!(!marker.exists());
 
-        if let Some(crate::chat::Entry::Assistant(s)) = app.chat.get_mut(app.chat.len() - 1) {
+        if let Some(crate::entry::Entry::Assistant(s)) = app.chat.get_mut(app.chat.len() - 1) {
             *s = "a note.txt\n\nshifted b note.txt".into();
         }
         draw(&mut r, &mut app, 60, 12);
@@ -257,7 +257,7 @@ mod tests {
             top.start as u16,
             top.row as u16,
         ));
-        app.chat.push(crate::chat::Entry::Notice("shift".into()));
+        app.chat.push(crate::entry::Entry::Notice("shift".into()));
         draw(&mut r, &mut app, 60, 12);
         assert_eq!(app.hover, None);
 

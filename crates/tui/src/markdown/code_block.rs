@@ -1,4 +1,4 @@
-use crate::markdown::Renderer;
+use super::Renderer;
 use crate::style::Style;
 use crate::text::{span, wrap};
 use pulldown_cmark::CodeBlockKind;

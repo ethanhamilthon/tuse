@@ -1,8 +1,35 @@
 use crate::app::App;
-use crate::chat::Entry;
+use crate::entry::Entry;
 use tuse_core::{Event, UiPrompt};
 
 impl App {
+    pub(super) fn stream(&mut self, t: String, reasoning: bool) {
+        let slot = if reasoning {
+            self.thinking
+        } else {
+            self.streaming
+        };
+        if let Some(i) = slot
+            && let Some(Entry::Assistant(s) | Entry::Reasoning(s)) = self.chat.get_mut(i)
+        {
+            s.push_str(&t);
+            return;
+        }
+        if !reasoning {
+            self.streamed_text = true;
+        }
+        let i = self.chat.len();
+        self.chat.push(if reasoning {
+            Entry::Reasoning(t)
+        } else {
+            Entry::Assistant(t)
+        });
+        if reasoning {
+            self.thinking = Some(i);
+        } else {
+            self.streaming = Some(i);
+        }
+    }
     fn drop_pending(&mut self) {
         self.pending_tools.sort_by_key(|(_, pos)| *pos);
         for (_, pos) in self.pending_tools.drain(..).rev() {

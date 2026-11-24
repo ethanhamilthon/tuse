@@ -22,7 +22,7 @@ pub fn tool(
         }
     }
     let Some(out) = output else { return lines };
-    let out = crate::render::clean(out);
+    let out = crate::text::clean(out);
     let all: Vec<&str> = out.trim_end().lines().collect();
     let shown = tuse_config::limit(p.ui.output_line, all.len());
     let st = Style::fg(p.muted);
@@ -41,7 +41,7 @@ pub fn tool(
 }
 
 fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<Line> {
-    let cleaned = crate::render::clean(input.trim());
+    let cleaned = crate::text::clean(input.trim());
     let code = if p.ui.fold_strings {
         crate::fold::fold_multiline_strings(&cleaned)
     } else {
@@ -68,7 +68,7 @@ fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
     let room = w.saturating_sub(pad.len());
     let all: Vec<&str> = d.diff.lines().collect();
     let hdr = span(
-        clip(&crate::render::clean(&d.path), room, MORE),
+        clip(&crate::text::clean(&d.path), room, MORE),
         Style::fg(p.border),
     );
     let mut out = vec![vec![span(pad.to_string(), Style::fg(p.border)), hdr]];
@@ -93,12 +93,12 @@ fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
 fn pair_windows(lines: &[&str], room: usize, more: &str) -> Vec<String> {
     let mut out: Vec<String> = lines
         .iter()
-        .map(|l| clip(&crate::render::clean(l), room, more))
+        .map(|l| clip(&crate::text::clean(l), room, more))
         .collect();
     for i in 0..lines.len().saturating_sub(1) {
         let (a, b) = (
-            crate::render::clean(lines[i]),
-            crate::render::clean(lines[i + 1]),
+            crate::text::clean(lines[i]),
+            crate::text::clean(lines[i + 1]),
         );
         if !(a.starts_with('-') && b.starts_with('+')) || width(&a) <= room && width(&b) <= room {
             continue;
@@ -187,7 +187,8 @@ mod tests {
     #[test]
     fn diff_line_zero_hides_entire_diff_block_and_updates_on_reload_and_resume() {
         use crate::app::App;
-        use crate::chat::{Chat, Entry};
+        use crate::chat::Chat;
+        use crate::entry::Entry;
         use std::io::{BufRead, BufReader, Read, Write};
         use tuse_config::UiSettings;
         use tuse_core::{Event, Options, Record, Session};

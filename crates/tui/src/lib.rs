@@ -1,11 +1,11 @@
 mod app;
 mod chat;
 mod clipboard;
-mod code_block;
 mod commands;
 mod config_view;
 mod draw;
 mod editor;
+mod entry;
 mod events;
 mod files;
 mod fold;

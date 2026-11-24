@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::commands::COMMANDS;
+use crate::picker::COMMANDS;
 use crate::picker::{Kind, Picker, item};
 
 impl App {

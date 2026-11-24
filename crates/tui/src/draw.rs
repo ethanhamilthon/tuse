@@ -56,7 +56,18 @@ impl Renderer {
 
         let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.list_max_height);
         let mut overlay = if app.picker.is_some() {
-            crate::list::picker(app, inner, cap)
+            {
+                let p = &app.palette;
+                match &mut app.picker {
+                    Some(pk) => {
+                        let rows = cap.saturating_sub(1).max(1);
+                        let lines = crate::list::options(pk, rows, inner, p);
+                        app.list_rows = rows;
+                        crate::list::framed(lines, inner, p)
+                    }
+                    None => vec![],
+                }
+            }
         } else if let Some(panel) = app
             .question
             .as_mut()

@@ -1,4 +1,3 @@
-use crate::app::App;
 use crate::picker::Picker;
 use crate::style::{LIST_SELECTED_PREFIX, MORE, Palette, RULE_CHAR, Style};
 use crate::text::{Line, clip, line_width, span, width};
@@ -22,17 +21,6 @@ pub fn framed(rows: Vec<Line>, w: usize, p: &Palette) -> Vec<Line> {
     }
     out.insert(0, vec![span(RULE_CHAR.repeat(w), Style::fg(p.border))]);
     out
-}
-
-pub fn picker(app: &mut App, w: usize, max: usize) -> Vec<Line> {
-    let p = &app.palette;
-    let Some(pk) = &mut app.picker else {
-        return vec![];
-    };
-    let rows = max.saturating_sub(1).max(1);
-    let lines = options(pk, rows, w, p);
-    app.list_rows = rows;
-    framed(lines, w, p)
 }
 
 pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Vec<Line> {

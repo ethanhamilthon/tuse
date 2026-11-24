@@ -1,7 +1,3 @@
-use crate::app::App;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tuse_config::ModelDef;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Command,
@@ -106,122 +102,17 @@ impl Picker {
     }
 }
 
-impl App {
-    pub(crate) fn picker_key(&mut self, k: KeyEvent, ctrl: bool, shift: bool) -> bool {
-        let rows = self.picker_rows();
-        let Some(p) = &mut self.picker else {
-            return false;
-        };
-        match k.code {
-            KeyCode::Up | KeyCode::Down if shift && p.kind.is_token() => return false,
-            KeyCode::Up => p.moved(-1, rows),
-            KeyCode::Down => p.moved(1, rows),
-            KeyCode::Char('p') if ctrl => p.moved(-1, rows),
-            KeyCode::Char('n') if ctrl => p.moved(1, rows),
-            KeyCode::Enter if !shift && p.kind == Kind::File => self.pick_file(),
-            KeyCode::Enter if !shift => self.choose(),
-            KeyCode::Tab if !shift && !matches!(p.kind, Kind::LuaPicker(_)) => self.choose(),
-            KeyCode::Esc => {
-                let p = self.picker.take().unwrap();
-                match &p.kind {
-                    k if k.is_token() => self.dismissed = Some(self.editor.token().1),
-                    Kind::LuaPicker(id) => {
-                        let id = *id;
-                        self.restore_draft();
-                        let _ = self.session.ui_reply(id, None);
-                    }
-                    Kind::Trace => {
-                        self.trace_items.clear();
-                        self.trace_back = None;
-                        self.restore_draft();
-                    }
-                    _ => self.restore_draft(),
-                }
-            }
-            KeyCode::Char('x') if ctrl && p.kind == Kind::Task => {
-                if let Some(it) = p.current() {
-                    let id = it.value.clone();
-                    let _ = self.session.stop_task(&id);
-                    self.open_tasks();
-                }
-            }
-            _ if p.kind.is_token() => return false,
-            _ if !p.kind.is_searchable() => return true,
-            _ => return !edits_text(k),
-        }
-        true
-    }
-}
-
-fn edits_text(k: KeyEvent) -> bool {
-    let primary = k
-        .modifiers
-        .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER);
-    match k.code {
-        KeyCode::Char(c) => !primary || matches!(c, 'a' | 'e' | 'u' | 'k' | 'w' | 'v' | 'x'),
-        KeyCode::Backspace
-        | KeyCode::Delete
-        | KeyCode::Left
-        | KeyCode::Right
-        | KeyCode::Home
-        | KeyCode::End => true,
-        _ => false,
-    }
-}
-
-impl App {
-    pub fn open_models(&mut self) {
-        let config = self.session.config();
-        let (current, _) = self.session.model();
-        let mut names = self.session.available_models();
-        if !names.contains(&current) {
-            names.insert(0, current.clone());
-        }
-        names.sort();
-        let items: Vec<Item> = names
-            .iter()
-            .map(|n| {
-                let def = config.model_def(n);
-                model_item(def, n, self.session.model_available(n))
-            })
-            .collect();
-        let selected = self
-            .picker
-            .as_ref()
-            .filter(|p| p.kind == Kind::Model)
-            .and_then(|p| p.current())
-            .map_or(current, |i| i.value.clone());
-        self.open_modal(Picker::new(Kind::Model, items))
-            .select(&selected);
-    }
-}
-
-fn model_item(def: Option<&ModelDef>, name: &str, available: bool) -> Item {
-    let shown = tuse_config::display_name(def, name);
-    let mut parts = if shown == name {
-        vec![]
-    } else {
-        vec![name.to_string()]
-    };
-    if !available && !name.is_empty() {
-        parts.push("unavailable".to_string());
-    }
-    if let Some(m) = def {
-        parts.extend(details(m));
-    }
-    item(shown, parts.join(" · "), name)
-}
-
-fn details(m: &ModelDef) -> Vec<String> {
-    let mut out = vec![];
-    if m.window > 0 {
-        out.push(format!("{} ctx", tuse_core::tokens(m.window)));
-    }
-    if let Some(p) = &m.prices {
-        out.push(format!("${}/${} per 1M", p.input, p.output));
-    }
-    out
-}
+pub const COMMANDS: [(&str, &str); 9] = [
+    ("config", "show the resolved config"),
+    ("new", "start a new session"),
+    ("resume", "open a session from this folder"),
+    ("models", "switch model and effort"),
+    ("tasks", "background tasks"),
+    ("session", "session info, usage and model"),
+    ("trace", "everything in this session"),
+    ("reload", "run the config file again"),
+    ("quit", "exit"),
+];
 
 #[cfg(test)]
 mod tests {
@@ -235,32 +126,5 @@ mod tests {
         assert_eq!(picker.shown, [0, 2]);
         picker.filter("m One");
         assert!(picker.shown.is_empty());
-    }
-
-    #[test]
-    fn model_detail_repeats_the_name_only_under_a_display_name() {
-        let opus = ModelDef {
-            name: "c/opus".into(),
-            window: 200_000,
-            ..Default::default()
-        };
-        let sonnet = ModelDef {
-            name: "c/sonnet".into(),
-            display: "Sonnet".into(),
-            window: 200_000,
-            ..Default::default()
-        };
-        let plain = model_item(Some(&opus), "c/opus", true);
-        assert_eq!(
-            (plain.label.as_str(), plain.detail.as_str()),
-            ("c/opus", "200k ctx")
-        );
-        let named = model_item(Some(&sonnet), "c/sonnet", true);
-        assert_eq!(named.detail, "c/sonnet · 200k ctx");
-        assert_eq!(model_item(None, "c/other", true).detail, "");
-        assert_eq!(
-            model_item(Some(&opus), "c/opus", false).detail,
-            "unavailable · 200k ctx"
-        );
     }
 }

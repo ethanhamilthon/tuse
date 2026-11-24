@@ -2,22 +2,32 @@
 
 ## Theme
 
-The config has one theme, `theme`; it is not selectable in the UI. It starts from the built-in
-dark palette and overrides only the colors you write.
+The config defines one theme under `theme`; it is not selectable in the UI. It starts from the built-in dark palette and overrides only the tokens you specify. Invalid color values or unknown keys fail config validation.
 
-The theme has 10 color tokens. Colors take `#rrggbb`, `#rgb`, `0`-`255`, a name (`red`,
-`dark_grey`, `bright_blue`, ...), `accent`, or `none` for the terminal default:
+### Color values
 
-- `bg` (`#121212`): main background, including lists and panels.
-- `surface` (`#1E1E1E`): elevated background (user messages, shown as a block without `›`); lists and panels do not use it.
-- `fg` (`#DEDEDE`): primary text and code blocks.
-- `dim` (`#BDBDBD`): secondary text (quotes, list details, notices, the scroll mark).
-- `muted` (`#929292`): subtle text (tool output, reasoning, syntax comments, inactive list items, status bars).
-- `border` (`#333333`): horizontal rules, box frames, separators, `/session` keys, cut marks (`…`, `… N more lines`).
-- `accent` (`#BDDEAB`): primary highlight (spinner and time, used context, flash notices, bar, picked `#`/`@`/image tokens in the input, selected list item).
-- `ok` (`#94B979`): additions and success (`diff` `+`, inline `code`, strings, `/session` cost).
-- `err` (`#E27373`): errors and deletions (`diff` `-`, failed calls, keywords).
-- `info` (`#97BEDC`): tools, headings, links, functions.
+Color validation is case-insensitive (surrounding whitespace ignored):
+
+- `#rrggbb` or `#rgb` (24-bit RGB hex; `#rgb` expands each nibble to two identical hex digits)
+- `0`–`255` as a string (ANSI 256-color palette index, e.g. `"208"`)
+- Named ANSI colors: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `grey`/`gray`, `dark_grey`/`dark_gray`, `bright_red`, `bright_green`, `bright_yellow`, `bright_blue`, `bright_magenta`, `bright_cyan`, `bright_white`
+- `"accent"` (inherits the resolved value of `theme.accent` — note that alias resolution during rendering is **case-sensitive** for lowercase `"accent"` despite case-insensitive validation, so `"ACCENT"` validates but resolves to the terminal default; setting `theme.accent = "accent"` likewise resolves to the terminal default)
+- `"none"` (terminal default foreground/background)
+
+### The 10 tokens
+
+| Token | Default | Used for |
+| --- | --- | --- |
+| `bg` | `#121212` | Main background, including pickers, panels, and selected text foreground. |
+| `surface` | `#1E1E1E` | Elevated background for user messages in chat (full-width block without `›`). Not used by pickers or panels. |
+| `fg` | `#DEDEDE` | Primary text, plain panel text, code blocks, active input text, `/session` values. |
+| `dim` | `#BDBDBD` | Secondary text: blockquotes, horizontal rules, table separators/headers in narrow mode, picker details and `no matches`, notices (`✓`), diff context lines, scroll mark (`↑N`), dimmed steering input, `/session` & `/config` secondary labels. |
+| `muted` | `#929292` | Subtle text: tool output, reasoning (`∴`, italic), Lua syntax comments, inactive picker items, turn summary (`✓ 12s · ...`), status bar labels, and working action text. |
+| `border` | `#333333` | Input rules, overlay top borders, disabled input `›`, `/session` & `/config` keys, diff file path headers, truncation marks (`…`, `… N more lines`). |
+| `accent` | `#BDDEAB` | Primary highlight: active input `›`, spinner and elapsed time, steering wave, used context count, flash notices, selection background, picked `#`/`@`/image atoms in input, selected picker item, Markdown list markers, Lua numbers, `show` (`◆`) and `pick`/`ask` (`?`) markers, hovered clickable links (bold), `/config` headings. |
+| `ok` | `#94B979` | Additions and success: diff `+` lines, inline Markdown `code`, Lua strings, `/session` cost (bold). |
+| `err` | `#E27373` | Errors and deletions: diff `-` lines, error entries (`✗`), failed tool calls, Lua keywords. |
+| `info` | `#97BEDC` | Tools, headings (bold), links (underlined by default, including Markdown links whose destination is not clickable), Lua host and called functions, `/session` mode/effort/window, `/config` hooks/commands/open/plugins. |
 
 ```lua
 return {
@@ -27,22 +37,31 @@ return {
 
 ## UI settings (`settings.ui`)
 
-UI behavior and layout live under `settings.ui`, apart from the colors:
+UI behavior and layout live under `settings.ui`, separate from theme colors:
 
-- `fold_strings`: `true` (default) or `false`. Folds multiline Lua long strings (`[[...]]`) in chat
-  tool calls to a single line (`[[first line…]]`). `/trace` always shows the full code.
-- Lines shown in the chat (`0` hides the block, `-1` removes the limit): `tool_line` (`-1`),
-  `output_line` (`1`), `diff_line` (`12`), `reasoning_line` (`-1`).
-- Layout and scrolling: `pad_x` (`0`), `message_gap` (`1`), `scroll_step` (`3`),
-  `list_max_height` (`16`), `input_max_height` (`-1`).
+| Key | Default | Allowed values | Behavior |
+| --- | --- | --- | --- |
+| `fold_strings` | `true` | boolean | Folds multiline Lua long strings (`[[...]]`, `[=[...]=]`, including unclosed streaming strings) in chat tool calls to a single line (`[[first non-empty line…]]`). `/trace` always shows unfolded source. |
+| `tool_line` | `-1` | `-1` or `>= 0` | Max wrapped lines of Lua tool source shown in chat (`-1` = unlimited, `0` = hide source, `N > 0` = first `N` lines + `…`). |
+| `output_line` | `1` | `-1` or `>= 0` | Max lines of tool output shown in chat (`-1` = unlimited, `0` = hide output, `N > 0` = first `N` lines + `… M more lines`). |
+| `diff_line` | `12` | `-1` or `>= 0` | Max diff body lines per modified file shown in chat (`-1` = all stored diff lines, `N > 0` = first `N` lines + `… M more lines`; `0` suppresses body lines while still showing the file path header and `… M more lines` footer). |
+| `reasoning_line` | `-1` | `-1` or `>= 0` | Max wrapped lines of model reasoning shown in chat (`-1` = unlimited, `0` = hide reasoning, `N > 0` = **last** `N` wrapped lines). |
+| `pad_x` | `0` | `0..=65535` | Horizontal margin in columns on both left and right edges of the screen. |
+| `message_gap` | `1` | `0..=65535` | Blank lines inserted between non-empty chat entries. |
+| `scroll_step` | `3` | `1..=65535` | Lines scrolled per mouse wheel tick or Up/Down key in an open panel. |
+| `list_max_height` | `16` | `>= 1` | Maximum height in rows (including top border) for picker and panel overlays. |
+| `input_max_height` | `-1` | `-1` or `>= 1` (`0` invalid) | Maximum visible rows of the input editor (`-1` = grow up to available screen height). |
 
-### Input design
+## Input framing and status bars
 
-The input is framed by two rules with status labels: working (spinner, elapsed time and the current
-action (`reading PATH...`, `writing PATH...`, `editing PATH...`, `searching PATTERN...`, `running CMD...`; each stays at least 100 ms), or `steering…` while a queued message waits) and the model (model, effort,
-context, cost).
+The input area is framed by two `border`-colored horizontal rules (`─`):
 
-Colors of the two bars: the spinner and time are `accent`, the action is `muted`. In the model
-bar everything is `muted` except the used context (`x` of `x/y`), which is `accent`. A notice
-flashed in the working place (a copy, an error) is `accent`; the scroll mark `↑N` is `dim`.
-Each of the two labels takes at most half the width and is cut with `…`.
+- **Top rule:**
+  - Left side: scroll mark `↑N ` in `dim` whenever the chat is scrolled up (`N` lines above the bottom).
+  - Right side: if a flash notice is active (lasts 5 seconds, for example `Copied.`, `Config reloaded.`, or retry status), it renders in `accent` here. Otherwise, while a turn is running:
+    - With a queued steering message: animated wave (`●····`) in `accent` followed by `steering…` in `muted`.
+    - Without a queued steering message: spinner (`◐`, `◓`, `◑`, `◒`) and elapsed duration in `accent`, followed when available by ` · <action>` in `muted` (`reading PATH...`, `writing PATH...`, `appending PATH...`, `deleting PATH...`, `editing PATH...`, `searching PATTERN...`, `running CMD...`; first line capped at 60 characters). Each action label stays visible for at least 100 ms before being replaced.
+- **Bottom rule:**
+  - Right side: model bar showing `<display> · <effort>`, optionally ` · <used>/<window>` (omitted when both `<used>` and `<window>` are `0`; shows `/?` when `<window>` is `0` and `<used> > 0`), and optionally ` · $<cost>` (2 decimal places, omitted when pricing is unknown). Everything is `muted` except `<used>`, which is `accent`.
+
+Each label area is capped at half the inner width (the working label shares the remaining half after the scroll mark) and clipped with `…` if wider.

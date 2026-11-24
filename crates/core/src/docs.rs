@@ -1,60 +1,4 @@
-const TOPICS: &[(&str, &str, &str)] = &[
-    (
-        "README.md",
-        "Concise overview, install, quick start, and links to docs",
-        include_str!("../../../README.md"),
-    ),
-    (
-        "tool",
-        "Lua tool, limits, timeouts and modules",
-        include_str!("../../../docs/tool.md"),
-    ),
-    (
-        "functions",
-        "Built-in Lua functions (session, read, write, append, delete, edit, grep, sh, show, pick, ask, llm, reload, task_*, docs)",
-        include_str!("../../../docs/functions.md"),
-    ),
-    (
-        "json",
-        "tuse json: JSON-RPC 2.0 over stdio for editors and other clients",
-        include_str!("../../../docs/json.md"),
-    ),
-    (
-        "commands",
-        "CLI flags, TUI slash commands, steering and /trace",
-        include_str!("../../../docs/commands.md"),
-    ),
-    (
-        "env",
-        "Environment variables and config file lookup",
-        include_str!("../../../docs/env.md"),
-    ),
-    (
-        "config",
-        "Config modules, keys, compaction and files",
-        include_str!("../../../docs/config.md"),
-    ),
-    (
-        "prompts",
-        "#prompts, @files and [Image #N] in a message: the hidden context blocks",
-        include_str!("../../../docs/prompts.md"),
-    ),
-    (
-        "plugins",
-        "Plugins from GitHub: plugins = {...}, opts, merging, Git checkouts",
-        include_str!("../../../docs/plugins.md"),
-    ),
-    (
-        "hooks",
-        "Event hooks",
-        include_str!("../../../docs/hooks.md"),
-    ),
-    (
-        "theme",
-        "The 10-color theme and settings.ui",
-        include_str!("../../../docs/theme.md"),
-    ),
-];
+include!(concat!(env!("OUT_DIR"), "/topics.rs"));
 
 fn disabled_notice(disabled: &[&str]) -> String {
     let mut names = disabled.to_vec();
@@ -129,102 +73,11 @@ pub fn docs_for(topic: Option<&str>, disabled: &[&str]) -> String {
 }
 
 fn render_functions(disabled: &[&str]) -> String {
-    let has = |n: &str| !disabled.contains(&n);
-    let mut out = String::from(
-        "# Functions\n\nBuilt-in host functions are globals in the agent's `lua` tool and are also exposed on `require(\"tuse\")`. Errors are plain Lua errors (catchable with `pcall`). File paths accept absolute paths, `~/...`, or paths relative to the session working directory.",
-    );
-    let mut prefs = crate::prompt::prefer_sentence(disabled, false);
-    if has("sh") {
-        prefs.push_str(" Use `sh` for running programs and processing their output.");
-    }
-    if !prefs.is_empty() {
-        out.push_str("\n\n");
-        out.push_str(prefs.trim_start());
-    }
-    let mut current = "";
-    for (sec, name, line) in crate::prompt::FUNC_SPECS {
-        if !has(name) {
-            continue;
-        }
-        if *sec != current {
-            out.push_str(&format!("\n\n## {sec}\n"));
-            current = sec;
-        }
-        out.push('\n');
-        out.push_str(line);
-    }
-    out
+    crate::prompt::functions_doc(disabled)
 }
 
 fn render_tool(disabled: &[&str]) -> String {
-    let has = |n: &str| !disabled.contains(&n);
-    let mut lines: Vec<String> = vec![
-        "# The `lua` tool".into(),
-        String::new(),
-        "The agent has a single tool, `lua`, taking one required string argument `code` (Lua 5.4 source).".into(),
-        String::new(),
-        "## Tool call contract".into(),
-        "- **Arguments:** JSON object `{\"code\": \"...\"}`. Unknown tools, invalid JSON, or missing/non-string `code` fail with `code = 1` without starting a Lua job.".into(),
-        "- **Compilation and output:** Tuse first tries `return <code>` so a lone expression returns its value; otherwise compiles `<code>` as statements. Captured `print(...)` and `io.write(...)` come first, followed by formatted non-nil return values. Output is uncapped.".into(),
-        "- **Exit status:** `0` on success, `1` on error or timeout, `nil` on cancel.".into(),
-        String::new(),
-        "## VM lifetime, timeouts, and scheduling".into(),
-        "- **Persistent VM:** One Lua 5.4 VM runs per session. Globals persist between `lua` calls (use `local` for scratch variables).".into(),
-        if has("spawn") {
-            "- **120-second deadline:** Each `lua` call has a 120-second deadline. Start long jobs with `spawn(fn, name)` (no deadline).".into()
-        } else {
-            "- **120-second deadline:** Each `lua` call has a 120-second deadline.".into()
-        },
-        "- **Standard library:** `string`, `table`, `math`, `utf8`, `io`, `os` (without `os.exit`), `coroutine`, `package`, `load`, `loadfile`, `dofile`, and `require`. The `debug` library is unavailable.".into(),
-    ];
-    let extras: Vec<&str> = [
-        has("json").then_some("`json.encode`/`json.decode`"),
-        has("inspect").then_some("`inspect(value)`"),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    if !extras.is_empty() {
-        lines.push(format!("- **Added globals:** {}.", extras.join(", ")));
-    }
-    let waits: Vec<String> = ["sh", "sleep", "pick", "ask", "reload", "llm"]
-        .into_iter()
-        .filter(|n| has(n))
-        .map(|n| format!("`{n}`"))
-        .collect();
-    if !waits.is_empty() {
-        lines.push(format!(
-            "- **Cooperative yielding:** {} yield cooperatively so other coroutines keep running.",
-            waits.join(", ")
-        ));
-    }
-    let paused: Vec<String> = ["pick", "ask", "reload"]
-        .into_iter()
-        .filter(|n| has(n))
-        .map(|n| format!("`{n}`"))
-        .collect();
-    if !paused.is_empty() {
-        lines.push(format!(
-            "- **Paused deadlines:** {} pause the calling coroutine's remaining deadline while waiting.",
-            paused.join(", ")
-        ));
-    }
-    let active_tools: Vec<&str> = crate::prompt::FUNC_SPECS
-        .iter()
-        .filter(|(_, name, _)| {
-            matches!(
-                *name,
-                "read" | "write" | "append" | "delete" | "edit" | "grep" | "sh"
-            ) && has(name)
-        })
-        .map(|(_, _, line)| *line)
-        .collect();
-    if !active_tools.is_empty() {
-        lines.push(String::new());
-        lines.push("## Available file, search, and shell functions".into());
-        lines.extend(active_tools.into_iter().map(String::from));
-    }
-    lines.join("\n")
+    crate::prompt::tool_doc(disabled)
 }
 
 #[cfg(test)]

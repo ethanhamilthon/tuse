@@ -14,6 +14,7 @@ Source of truth for Tuse's observable behavior and public contracts. Pages descr
 
 - [Sessions & Persistence](sessions.md) — SQLite store (`~/.tuse/tuse.db`), session locks, resume, and TUI/JSON parity.
 - [Agent Loop & Tool Lifecycle](agent-loop.md) — Turn execution, streaming, tool calls, cancellation, and recovery.
+- [System Prompt](system-prompt.md) — The exact system prompt, the `lua` tool description and the function reference lines, with the placeholders that drop disabled functions.
 - [Prompts, Files & Images](prompts.md) — `#` prompts, `@` files/directories, pasted images, and hidden context blocks.
 - [Providers & API Client](providers.md) — Provider credentials, four API adapters (`openai-chat`, `openai-responses`, `anthropic-messages`, `google-gemini`), streaming, reasoning replay, retries, and errors.
 - [Providers & Models](models.md) — Model naming, background discovery, Lua metadata, reasoning effort, and selection scoping.

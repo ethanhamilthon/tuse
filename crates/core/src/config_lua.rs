@@ -1,20 +1,9 @@
 use crate::mode::{Mode, Options, Start};
+use crate::registry::COMMIT_AGENT;
 use std::path::Path;
 use std::sync::Arc;
 use tuse_config::Config;
 use tuse_lua::mlua::{self, Function, Lua, Table, Value};
-
-pub(crate) const FILE_ENV: &str = "tuse.file_env";
-pub(crate) const AGENT_ENV: &str = "tuse.agent_env";
-pub(crate) const COMMIT_AGENT: &str = "tuse.commit_agent";
-
-pub(crate) fn file_env(lua: &Lua) -> mlua::Result<Table> {
-    lua.named_registry_value(FILE_ENV)
-}
-
-pub(crate) fn agent_env(lua: &Lua) -> mlua::Result<Table> {
-    lua.named_registry_value(AGENT_ENV)
-}
 
 pub(crate) fn prepare(
     lua: &Lua,
@@ -83,7 +72,7 @@ pub(crate) fn eval_file(lua: &Lua, path: &Path) -> Result<Value, String> {
     let key = canonical.display().to_string();
     let text =
         std::fs::read_to_string(&canonical).map_err(|e| format!("{}: {e}", path.display()))?;
-    let env = file_env(lua).map_err(error)?;
+    let env = crate::registry::file_env(lua).map_err(error)?;
     crate::require::set_loading(lua, &key, true).map_err(error)?;
     let eval = lua
         .load(text)
@@ -109,26 +98,6 @@ pub(crate) fn commit(lua: &Lua, _config: &Config) -> Result<(), String> {
         .map_err(|e| tuse_lua::message(&e))?;
     crate::subs::reconcile(lua);
     Ok(())
-}
-
-pub(crate) fn code_of(lua: &Lua, key: &str, name: &str) -> Option<Function> {
-    let t: Table = lua.named_registry_value("tuse.config").ok()?;
-    t.get::<Table>(key)
-        .ok()?
-        .get::<Table>(name)
-        .ok()?
-        .get("run")
-        .ok()
-}
-
-pub(crate) fn command_of(lua: &Lua, name: &str) -> Option<Function> {
-    let t: Table = lua.named_registry_value("tuse.config").ok()?;
-    t.get::<Table>("commands").ok()?.get(name).ok()
-}
-
-pub(crate) fn open_of(lua: &Lua, ext: &str) -> Option<Function> {
-    let t: Table = lua.named_registry_value("tuse.config").ok()?;
-    t.get::<Table>("open").ok()?.get(ext).ok()
 }
 
 pub fn config_arg(cwd: &Path, path: Option<&str>) -> Option<std::path::PathBuf> {

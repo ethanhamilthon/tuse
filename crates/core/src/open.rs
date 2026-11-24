@@ -74,13 +74,13 @@ impl Session {
                     if !d.ok && d.stop != Some("cancelled") {
                         s.emit(Event::Error(format!(
                             "open.{e2}: {}",
-                            crate::host::error_line(&d.text)
+                            crate::text::error_line(&d.text)
                         )));
                     }
                 }
             };
             let start = || -> mlua::Result<()> {
-                let f = crate::config_lua::open_of(lua, &ext)
+                let f = crate::registry::open_of(lua, &ext)
                     .ok_or_else(|| mlua::Error::runtime("open handler is gone"))?;
                 let arg = Value::String(lua.create_string(&path_str)?);
                 let job = Job::new(

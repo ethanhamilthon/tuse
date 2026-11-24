@@ -83,7 +83,7 @@ pub(crate) fn stop_all(lua: &Lua) {
 pub(crate) fn load_default_plugin(lua: &Lua, opts: Option<Table>) -> Result<Table, String> {
     ensure_state(lua);
     let m = |e: mlua::Error| tuse_lua::message(&e);
-    let env = crate::config_lua::file_env(lua).map_err(&m)?;
+    let env = crate::registry::file_env(lua).map_err(&m)?;
     let store = match lua
         .named_registry_value::<Value>("tuse_subs_store")
         .map_err(&m)?

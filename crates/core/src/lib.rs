@@ -17,6 +17,7 @@ mod plugin_sync;
 mod plugins;
 mod prompt;
 mod record;
+mod registry;
 mod require;
 mod session;
 mod snapshot;
@@ -25,6 +26,7 @@ mod stream;
 mod subs;
 mod subs_proc;
 mod tasks;
+mod text;
 mod tool;
 mod tools;
 mod trace;
@@ -34,13 +36,12 @@ mod usage;
 mod validate;
 
 pub use config_lua::{config_arg, configured_models};
-pub use control::InputId;
 pub use db::{
     add_provider, default_effort, default_model, providers, providers_json, remove_provider,
     set_state,
 };
 pub use docs::docs;
-pub use event::{Event, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
+pub use event::{Event, InputId, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 pub use hooks::EVENTS;
 pub use input::{FILE_LIMIT, Refs, build as build_input};
 pub use models::model_available;

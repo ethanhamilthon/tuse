@@ -44,7 +44,7 @@ UI behavior and layout live under `settings.ui`, separate from theme colors:
 | `fold_strings` | `true` | boolean | Folds multiline Lua long strings (`[[...]]`, `[=[...]=]`, including unclosed streaming strings) in chat tool calls to a single line (`[[first non-empty line…]]`). `/trace` always shows unfolded source. |
 | `tool_line` | `-1` | `-1` or `>= 0` | Max wrapped lines of Lua tool source shown in chat (`-1` = unlimited, `0` = hide source, `N > 0` = first `N` lines + `…`). |
 | `output_line` | `1` | `-1` or `>= 0` | Max lines of tool output shown in chat (`-1` = unlimited, `0` = hide output, `N > 0` = first `N` lines + `… M more lines`). |
-| `diff_line` | `12` | `-1` or `>= 0` | Max diff body lines per modified file shown in chat (`-1` = all stored diff lines, `N > 0` = first `N` lines + `… M more lines`; `0` suppresses body lines while still showing the file path header and `… M more lines` footer). |
+| `diff_line` | `12` | `-1` or `>= 0` | Max diff body lines per modified file shown in chat (`-1` = all stored diff lines, `0` = hide the entire diff block, `N > 0` = first `N` lines + `… M more lines`). |
 | `reasoning_line` | `-1` | `-1` or `>= 0` | Max wrapped lines of model reasoning shown in chat (`-1` = unlimited, `0` = hide reasoning, `N > 0` = **last** `N` wrapped lines). |
 | `pad_x` | `0` | `0..=65535` | Horizontal margin in columns on both left and right edges of the screen. |
 | `message_gap` | `1` | `0..=65535` | Blank lines inserted between non-empty chat entries. |

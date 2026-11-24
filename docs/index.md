@@ -47,7 +47,6 @@ Specifications for planned (not yet implemented) features and changes. Baseline 
 - [10 — Setup Guide](planned/10-setup-guide.md)
 - [10 — Plugin Authoring Guide](planned/10-plugin-authoring-guide.md)
 - [11 — First-Run Setup in the Installer](planned/11-installer-first-run.md)
-- [12 — Hide Entire Diff Block When `diff_line = 0`](planned/12-diff-line-zero.md)
 - [13 — Rewrite `README.md`](planned/13-readme-rewrite.md)
 - [14 — Tuse Landing Page on GitHub Pages](planned/14-landing-page.md)
 - [15 — Use Accent Colors for Interactive Links](planned/15-link-accent-colors.md)

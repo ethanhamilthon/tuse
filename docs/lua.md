@@ -43,21 +43,23 @@ The VM maintains two strictly isolated Lua environments:
 
 Every executable Lua job runs as a Lua coroutine inside one scheduler on the VM thread (polling approximately every 5 ms while any job is active).
 
-- **Yielding waits**: `sh()`, `sleep()`, `pick()`, `ask()`, `llm()`, and `reload()` yield the calling coroutine to the scheduler so other coroutines (background tasks, hooks, commands, tool calls) keep making progress concurrently.
-- **User coroutines**: `coroutine.resume` and `coroutine.wrap` are wrapped so scheduler yields pass transparently through user-created coroutines; calling `sh()` or `sleep()` inside `coroutine.wrap(...)` works without blocking other jobs.
+- **Yielding waits**: `sh()`, `pick()`, `ask()`, `llm()`, and `reload()` yield the calling coroutine to the scheduler so other coroutines (background tasks, hooks, commands, tool calls) keep making progress concurrently.
+- **User coroutines**: `coroutine.resume` and `coroutine.wrap` are wrapped so scheduler yields pass transparently through user-created coroutines; calling `sh()` inside `coroutine.wrap(...)` works without blocking other jobs.
 - **Non-yieldable contexts** (top-level config evaluation or inside a C callback such as `string.gsub`):
-  - `sh()` and `sleep()` fall back to blocking the VM thread while still honoring timeouts and cancellation.
+  - `sh()` falls back to blocking the VM thread while still honoring timeouts and cancellation.
   - `pick()`, `ask()`, `llm()`, and `reload()` cannot block and raise `"interactive wait cannot run here"`.
-- **Timeout pausing**: while a coroutine is yielded inside `pick()`, `ask()`, or `reload()`, its remaining deadline budget is paused and resumed once the wait finishes. `sh()`, `sleep()`, and `llm()` do not pause the deadline.
-- **CPU loop interruption**: a VM instruction hook checks cancellation and deadlines every 1,000 instructions, so tight loops (`while true do end`) still terminate promptly on timeout or Esc / `turn.cancel`.
+- **Timeout pausing**: while a coroutine is yielded inside `pick()`, `ask()`, or `reload()`, its remaining deadline budget is paused and resumed once the wait finishes. `sh()` and `llm()` do not pause the deadline.
+- **CPU loop interruption**: a VM instruction hook checks cancellation and deadlines every 1,000 instructions, so tight loops (`while true do end`) still terminate promptly on timeout or job cancellation. The same hook can also recognize a handoff without stopping the Lua code.
 - **Wait cancellation**: cancelling or timing out a yielded job kills any running `sh()` child process group (`SIGKILL`), removes and clears a pending `pick()`/`ask()` request, signals cancellation to an in-flight `llm()` request (checked cooperatively between streamed SSE lines and retry sleeps, not an immediate socket abort—blocking reads and non-SSE JSON responses finish before noticing cancellation), and wakes the coroutine with `"cancelled"` or `"timed out"`.
+
+An agent tool job handed off on steering or cancellation is not interrupted by that action; its coroutine becomes a task instead. See [tasks.md](tasks.md) for what is preserved.
 
 ## Job Kinds, Deadlines, and Cancellation
 
 | Kind | Trigger | Deadline | Output sink | Error handling | Stopped by | Emits `lua_start` / `lua_end` |
 | --- | --- | --- | --- | --- | --- | --- |
-| `tool` | Model calls `lua(code)` with valid JSON and string `code` | 120 s (paused in `pick`/`ask`/`reload`) | Returned to model as tool output | Returned to model (`code = 1`, or `nil` if cancelled) | Esc / `turn.cancel`, session close | Yes (`code` set) |
-| `task` | `spawn(fn, name?)` | None | Appended to task log file | Logged + agent notification | `task_stop`, `/tasks` Ctrl+X, `tasks.stop`, session close | Yes (`name` set), unless spawned in `lua_start`/`lua_end` hook |
+| `tool` | Model calls `lua(code)` with valid JSON and string `code` | 120 s (paused in `pick`/`ask`/`reload`) | Returned to model as tool output | Returned to model (`code = 1`, or `nil` if cancelled) | Session close; Esc / `turn.cancel` hands off to a task | Yes (`code` set) |
+| `task` | `spawn(fn, name?)` or tool handoff | None | Appended to task log file | Logged + agent notification | `task_stop`, `/tasks` Ctrl+X, `tasks.stop`, session close | Yes (`name` set), unless spawned in `lua_start`/`lua_end` hook |
 | `command` | `/name` or `commands.run` | None | Buffered (not shown in chat) | Emits `error` event `/<name>: <error>` (unless cancelled) | Esc / `turn.cancel`, session close | Yes (`name` set) |
 | `open` | Clicking a matching local path in TUI | None | Buffered (not shown in chat) | Emits `error` event `open.<ext>: <error>` (unless cancelled) | Esc / `turn.cancel`, session close | Yes (`name` = configured ext) |
 | `hook` | Lifecycle event | None | Buffered (not shown in chat) | Emits `notice` event `hook <name>: <error>` + trace entry | Esc / `turn.cancel` (cancels active run in each lane; queued runs proceed); `close` hooks finish on close/reload | Never |
@@ -72,13 +74,13 @@ The model is given a single tool named `lua` with one required string parameter 
   - `print(...)` converts arguments with `tostring`, joins them with `\t`, appends `\n`, and writes to the job's output sink (or `stderr` if called outside any job, such as during config load).
   - `io.write(...)` converts arguments with `tostring`, concatenates them with no separator, and writes to the same sink.
   - Non-`nil` return values are formatted with `inspect(value)`, joined with `\t`, and appended after printed output (adding a separating newline if needed). If all return values are `nil`, nothing is appended.
-  - On error, the error message and stack traceback are appended (or `[cancelled]` / `[timed out]` when stopped by cancellation/deadline).
+  - On handoff, the tool result identifies the task instead of waiting for the final Lua return value. On error, the error message and stack traceback are appended (or `[cancelled]` / `[timed out]` when stopped by cancellation/deadline).
   - Tool output is **never truncated** by the runtime.
 - **Side-channel attachments (agent `tool` jobs only)**:
   - Every `write()`, `append()`, `edit()`, and `delete()` during an agent `lua` tool call appends a `(path, diff)` entry to the tool result's `diffs` list (displayed in TUI and included in `tool_end` and durable records; the Lua function returns only a confirmation string).
   - Every `read()` of an image during an agent `lua` tool call appends a base64 `data:<mime>;base64,...` URL to the tool result's `images` list so the model receives the image on the next step.
   - Calls to `read`/`write`/`append`/`edit`/`delete` from hooks, commands, tasks, or `open` handlers perform the filesystem operation normally, but do not attach chat diffs or model images.
-- **Result exit code**: `0` on normal completion, `nil` (`null` in JSON) when cancelled, `1` on runtime/syntax/timeout/argument error.
+- **Result exit code**: `0` on normal completion, `nil` (`null` in JSON) on cancellation or handoff, `1` on runtime/syntax/timeout/argument error.
 
 ## Custom Slash Commands (`commands`)
 

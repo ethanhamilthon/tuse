@@ -55,6 +55,8 @@ pub(crate) struct State {
     pub turn_error: Option<String>,
     pub generation: u64,
     pub cancel: Arc<AtomicBool>,
+    pub tool_handoff: Option<Arc<AtomicBool>>,
+    pub cancel_pending: bool,
     pub queue: Vec<(InputId, UserInput)>,
     pub next_input: u64,
     pub turn_start: Instant,
@@ -101,7 +103,7 @@ impl Session {
         }
         self.ui_close();
         self.stop_commands();
-        self.cancel_turn();
+        self.cancel_turn(false);
         self.tasks.stop_all();
         self.finish_hooks(reason);
         self.dir.lock().unwrap().take();

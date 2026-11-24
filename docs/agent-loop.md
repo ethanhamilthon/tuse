@@ -5,8 +5,8 @@ A turn begins when the user (or a completed background task) submits input to an
 ## Turn submission and steering queue
 
 - **Idle session:** Submitting input marks the session busy, starts a fresh generation and cancellation flag, attempts session auto-titling if unnamed ([sessions.md](sessions.md)), emits `turn_start`, and starts the turn loop on a background worker thread.
-- **Busy session (steering):** Submitting input while a turn is already running appends it to the session's FIFO input queue and returns `(inputId, queued = true)`.
-- **Withdrawing queued input:** Before the turn loop drains a queued item at the start of the next step, the client can withdraw it by `inputId` (in the TUI, editing the dimmed draft withdraws it automatically; in JSON-RPC, `turn.withdraw`). Withdrawing does not interrupt the running step.
+- **Busy session (steering):** Submitting input while a turn is already running appends it to the session's FIFO input queue and returns `(inputId, queued = true)`. If an agent `lua` call is running, it is [handed off to a background task](tasks.md#handing-off-a-running-lua-call), so the next step can consume the steering message without waiting for the script. Otherwise, the input is consumed at the next step as usual.
+- **Withdrawing queued input:** Before the turn loop drains a queued item at the start of the next step, the client can withdraw it by `inputId` (in the TUI, editing the dimmed draft withdraws it automatically; in JSON-RPC, `turn.withdraw`). Withdrawing does not interrupt the running step or undo a handoff that already happened.
 
 ## Step execution loop
 
@@ -22,7 +22,7 @@ Each iteration of the turn loop runs one model request and any tool calls it emi
 3. **Resolve provider and call API:**
    - Splits active `model` on the first `/` and looks up the provider in the session's loaded provider snapshot. If missing, records and emits an `error` (`no \`connect\` entry named \`<provider>\` for model \`<model>\``) and treats the step as done.
    - Sends the Chat Completions request via the HTTP client ([providers.md](providers.md)): streams SSE until `data: [DONE]` or stream EOF (or parses a single JSON fallback body), emitting `reasoning` deltas (from `reasoning_content` and/or `reasoning` — both emit if both appear), `text` deltas, and live `tool_delta` code chunks. When the response ends, tool calls with empty names are dropped and remaining calls without IDs receive synthetic IDs `call_0`, `call_1`, etc.
-   - Retryable failures (HTTP `429`, HTTP `5xx`, network/transport errors) retry up to `min(settings.retries, 5)` times over `[2, 5, 10, 20, 30]` seconds, emitting `stream_reset` and `flash` (`Retry A/M in Ds: <error>`) before each delay.
+   - Retryable failures (HTTP `429`, HTTP `5xx`, network/transport errors) retry up to 5 times over `[2, 5, 10, 20, 30]` seconds, emitting `stream_reset` and `flash` (`Retry A/M in Ds: <error>`) before each delay.
    - Non-retryable or exhausted errors record and emit an `error` and treat the step as done (see step 5: if more inputs are already queued, the turn continues to a new step instead of ending).
 4. **Record assistant step:**
    - If the response includes `usage`, updates session `context = input + output` and persists a main `usage` record (`llm = false`).
@@ -31,7 +31,7 @@ Each iteration of the turn loop runs one model request and any tool calls it emi
    - Emits `assistant` and `usage`.
 5. **Branch on tool calls (and failed steps):**
    - **No tool calls (or step failed with an error):** Checks the input queue. If new inputs arrived while the step ran, loops into another step to process them; otherwise marks the session idle, persists a `turn_end` record (`cancelled = false`), updates session metadata, and emits `turn_end`.
-   - **One or more tool calls:** Runs each tool call sequentially in order, checks compaction after all calls finish ([usage.md](usage.md)), and loops to the next step.
+   - **One or more tool calls:** Runs tool calls sequentially in order. If steering hands off a running call, records its handoff result, skips all remaining calls in that batch with `[interrupted: no output]` tool results (`code = null`), then proceeds to the next step. Checks compaction after the batch ([usage.md](usage.md)).
 
 ## Tool call lifecycle
 
@@ -42,7 +42,7 @@ For each tool call emitted in a step:
    - Invalid JSON arguments, any tool name other than `lua`, or missing/non-string `code` immediately returns an error result (`code = 1`) **without** starting a Lua job or emitting `lua_start`/`lua_end` hooks.
    - Valid `lua` calls assign a sequential execution ID (`lua-1`, `lua-2`, ...), fire `lua_start` (`kind = "tool"`), run the code as a coroutine in the session's persistent Lua VM with a 120-second deadline and the turn's cancel flag, and fire `lua_end` (`kind = "tool"`, status `"success"` / `"error"` / `"cancelled"`, duration in ms).
 3. While running, built-in host functions emit transient `status` updates (`<verb> <first line, max 60 chars>...`, suppressing consecutive identical strings). File mutations (`write`, `append`, `edit`, `delete`) accumulate diffs and `read` on image files accumulates image data URLs on the active tool job.
-4. If the turn was cancelled mid-call, the stale result is discarded (cancellation already recorded placeholder tool results). Otherwise Tuse increments the turn's call counter, persists a `tool` record (output, exit code `0` / `1` / `null`, captured images, captured diffs), and emits `tool_end`.
+4. On normal completion Tuse increments the turn's call counter, persists a `tool` record (output, exit code `0` / `1` / `null`, captured images, captured diffs), and emits `tool_end`. On handoff, the foreground call likewise records and emits a single `tool_end` with `[continued in background: tN]` and `code = null`. The background task never supplies a second tool result.
 
 ## Cancellation
 
@@ -50,13 +50,13 @@ Cancelling (`Esc` in TUI when no overlay is open, or `turn.cancel` in JSON-RPC):
 
 1. Stops running custom slash commands and `open` handlers.
 2. Cancels currently running hook invocations (queued follow-up events in a hook's lane are not cleared).
-3. If a turn is busy: sets the turn's cancel flag, increments generation (so any late API or tool result is discarded), marks the session idle, clears pending queued inputs, appends synthetic `[interrupted: no output]` tool records for any unfinished tool calls, persists and emits `turn_end` with `cancelled = true`, saves metadata, and fires `agent_message` hooks with any partial streamed text and `status = "cancelled"`.
+3. If a turn is busy: hands off any running agent `lua` call before applying turn cancellation to the remaining foreground work. Sets the turn's cancel flag, increments generation (so late foreground output is discarded), clears pending queued inputs, and appends synthetic `[interrupted: no output]` tool records for unfinished calls other than the handed-off call, which gets its handoff result instead. Marks the session idle, persists and emits `turn_end` with `cancelled = true`, saves metadata, and fires `agent_message` hooks with any partial streamed text and `status = "cancelled"`.
 
 Cancellation is **cooperative** for in-flight HTTP requests: SSE streaming checks the cancel flag before reading each line, and retry delays poll every 100 ms, so an ongoing socket connect/read or a non-SSE JSON body read is not immediately aborted at the OS socket level (the session still becomes idle right away and ignores the stale response when it returns).
 
 ## Background task notifications and `llm()`
 
-- **Task notifications:** When a background task started with `spawn()` finishes or fails on its own (not stopped via `task_stop`), Tuse submits a `notification` input:
-  `<notification>Task tN (name) finished|failed. Last line: <last>. Output: \`task_get("tN").output\`.</notification>`
+- **Task notifications:** When a background task started with `spawn()` or by a tool handoff finishes or fails on its own (not stopped via `task_stop`), Tuse submits a `notification` input:
+  `<task>Task tN (name) finished|failed. Last line: <last>. Output: \`task_get("tN").output\`.</task>`
   `<last>` is derived from the task's **return value or error message** (not lines written via `print()`/`io.write()` to the task log); a task that returns `nil` has no return text, which yields `Last line: failed.` even when it finished cleanly ([tasks.md](tasks.md)). If the session is idle, the notification starts a new turn; if busy, it is queued for the next step.
-- **One-shot `llm(prompt, model?, effort?)`:** Sends a standalone user-message request (no tools, no conversation history) through the same provider and retry client ([providers.md](providers.md)). `model` and `effort` default to the session's active values. It yields cooperatively, cancels when its own calling coroutine is cancelled or times out (so cancelling a turn cancels `llm()` inside tool calls, hooks, or commands, but **not** inside background tasks), and records a `usage` record (`llm = true`) and emits `usage` **only if** the API reply includes a `usage` object.
+- **One-shot `llm(prompt, model?, effort?)`:** Sends a standalone user-message request (no tools, no conversation history) through the same provider and retry client ([providers.md](providers.md)). `model` and `effort` default to the session's active values. It yields cooperatively, cancels when its own calling coroutine is cancelled or times out (so cancelling a turn cancels `llm()` inside hooks or commands, but **not** inside background tasks, including handed-off tool calls), and records a `usage` record (`llm = true`) and emits `usage` **only if** the API reply includes a `usage` object.

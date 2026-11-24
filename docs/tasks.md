@@ -25,6 +25,16 @@ end, "tests")
 
 Note that `sh()` captures stdout/stderr into `r.out` rather than streaming it to the task log; call `print(r.out)` to record shell output in the log file and return a short summary value for the completion notification.
 
+## Handing Off a Running Lua Call
+
+Submitting a steering message or cancelling the turn while an agent `lua` tool call is running hands off the **entire running Lua call** as one background task. This does not apply to hooks, custom commands, open handlers, or calls that have not started. Task completions are not steering inputs and do not cause handoff.
+
+- The same coroutine continues in the same VM with its existing locals, globals, and pending wait. A running `sh()` process is neither killed nor restarted; it and subsequent `sh()` calls return their usual results to the script. The tool's 120-second deadline no longer applies; an explicit `sh()` timeout still counts from the start of that command. The rest of the script, including file changes, can still run after Esc.
+- Handoff is recognized at a scheduler yield or instruction-hook check. It does not make blocking, non-yieldable code cooperative: for example, a `sh()` inside a C callback can still hold the VM until it returns. On Esc, an already-open TUI picker or `ask()` is dismissed first, without cancelling the turn or handing off the call.
+- The task uses the normal task ID, log, lifecycle events, and stop controls; its display name is the original Lua execution ID (for example, `lua-3`). It inherits buffered `print()` / `io.write()` output. Diffs and images collected before handoff stay with the immediate tool result; later file operations do not attach diffs or images to chat. Shell output is still captured as `sh().out`, not automatically copied to the log.
+- The foreground tool finishes with `[continued in background: tN]` (`code = null`); the foreground `lua_end` hook reports `cancelled` with that marker as its error. The handoff emits `lua_start` for the task; its eventual return value or error goes to the task log and completion notification, not to a second tool result.
+- A handoff happens at most once. If the tool finishes before it can be handed off, there is no task. Once the handoff occurs, withdrawing a queued steering message or cancelling another turn does not undo it. Use `/tasks` or `task_stop()` to stop the resulting task.
+
 ## Task Fields and States
 
 | Field | Type | Present in | Meaning |
@@ -61,12 +71,12 @@ When a task ends on its own (`done` or `failed`), Tuse:
 3. Submits a notification message to the session:
 
 ```text
-<notification>Task t1 (tests) finished. Last line: tests passed. Output: `task_get("t1").output`.</notification>
+<task>Task t1 (tests) finished. Last line: tests passed. Output: `task_get("t1").output`.</task>
 ```
 
 - `Last line` is extracted from the task's **final return value or error text**, not from lines written to the log via `print()` / `io.write()`. If a task returns normally with no return value (`nil`), its return text is empty and `Last line` falls back to `"failed"` (producing `finished. Last line: failed.`). For `failed` tasks, `Last line` is the last non-empty line before `stack traceback:` (or `"failed"` if none).
 - If the session is idle, the notification starts a new agent turn; if a turn is running, it is queued for the next step.
-- In model API requests, notifications are sent with role `"user"`, but they are stored as `notification` records, hidden from the TUI chat transcript, and do not trigger `user_message` hooks or session auto-titling.
+- In model API requests, notifications are sent with role `"user"`, but the event and stored record are still named `notification`, hidden from the TUI chat transcript, and do not trigger `user_message` hooks or session auto-titling.
 - Tasks ended via `stopped` emit `tasks` and `lua_end` (`status = "cancelled"`) but send **no** completion notification to the agent.
 
 ## Stopping and Lifecycle Rules
@@ -74,7 +84,7 @@ When a task ends on its own (`done` or `failed`), Tuse:
 - **Stopping a task** (`task_stop(id)`, JSON-RPC `tasks.stop`, TUI `/tasks` Ctrl+X): marks the task `"stopped"`, sets its cancel flag, emits a `tasks` event, and returns the updated task record (`ended` remains `""` until the coroutine exits and finalizes). The task coroutine receives `"cancelled"` at its next wait or instruction-hook check (killing any running `sh()` process group and cancelling any pending `pick`/`ask`/`llm`). Calling stop on an already-ended task succeeds without changing its status. Unknown IDs fail with `"no task <id>"`.
 
 For full signatures of `spawn`, `task_get`, `task_stop`, and `task_list`, see [functions.md](functions.md).
-- **Esc / `turn.cancel`**: does **not** stop background tasks (only stops the active turn, hooks, and custom commands).
+- **Esc / `turn.cancel`**: does **not** stop background tasks. It hands off a running agent `lua` call and cancels the foreground turn, hooks, commands, and open handlers.
 - **Reload (`/reload`, `config.reload`, `reload()`)**: does **not** stop running tasks; they continue running in the same VM.
 - **Session close or switch (`/new`, `/resume`, `shutdown`)**: stops all running tasks. Tasks are not persisted or restored when resuming a session.
 

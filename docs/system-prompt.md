@@ -26,6 +26,8 @@ The full Lua standard library is there (`string`, `table`, `math`, `io`, `os`, `
 
 # Rules
 - Prefer short, multi-step scripts over one big call. Create a file and extend it in small chunks instead of writing a 1000-line file in a single call.
+{{spawn:- Prefer asynchronous work: start long jobs with `spawn` and keep working on anything that does not depend on them.}}
+- If all that remains is waiting for a background task, briefly tell the user what is pending and end the turn. Do not poll or block waiting for it; task completion will wake the agent.
 ```
 
 ### functions-header
@@ -98,7 +100,7 @@ The agent has a single tool, `lua`, taking one required string argument `code` (
 - **120-second deadline:** Each `lua` call has a 120-second deadline.{{spawn: Start long jobs with `spawn(fn, name)` (no deadline).}}
 - **Standard library:** `string`, `table`, `math`, `utf8`, `io`, `os` (without `os.exit`), `coroutine`, `package`, `load`, `loadfile`, `dofile`, and `require`. The `debug` library is unavailable.
 {{json|inspect:- **Added globals:** }}{{json:`json.encode`/`json.decode`}}{{json&inspect:, }}{{inspect:`inspect(value)`}}{{json|inspect:.}}
-- **Cooperative yielding:** {{each:sh,sleep,pick,ask,reload,llm}} yield cooperatively so other coroutines keep running.
+- **Cooperative yielding:** {{each:sh,pick,ask,reload,llm}} yield cooperatively so other coroutines keep running.
 - **Paused deadlines:** {{each:pick,ask,reload}} pause the calling coroutine's remaining deadline while waiting.
 ```
 
@@ -124,8 +126,7 @@ One line per built-in function, grouped as `docs("functions")` shows them. The f
 
 ### Shell, Timing, and Background Tasks
 
-- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E "foo\\bar" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. At its timeout or the call's the command is killed.
-- `sleep(seconds)`: waits cooperatively while other tasks and hooks keep running.
+- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E "foo\\bar" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. A command is killed at its explicit timeout or the foreground Lua deadline, whichever comes first. Steering or cancelling the turn can move the whole Lua call to a background task, where the foreground deadline no longer applies.
 - `spawn(fn, name)`: runs `fn` in the background as a task in this same VM (it sees your globals); returns its ID. A task has no deadline; its `print` goes to its log, and you get a message when it ends.
 - `task_get(id, lines=50)`: return `{ id, name, status, started, ended, output }` with the log tail in `.output`.
 - `task_stop(id)`: stop a running background task and return its task info.

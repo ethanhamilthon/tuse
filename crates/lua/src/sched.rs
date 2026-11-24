@@ -3,11 +3,10 @@ use crate::sh::Proc;
 use crate::value::{sh_value, to_lua};
 use mlua::{IntoLuaMulti, Lua, MultiValue, Value};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 enum Wait {
     Ready,
-    Sleep(Instant),
     Sh(u64),
     Ext { key: u64, paused: Option<Duration> },
     Unknown(String),
@@ -64,6 +63,11 @@ impl Sched {
         let parked = std::mem::take(&mut self.parked);
         let mut ready = vec![];
         for (mut job, mut wait) in parked {
+            if job.handoff(lua)
+                && let Wait::Ext { paused, .. } = &mut wait
+            {
+                *paused = None;
+            }
             if let Some(reply) = self.step(lua, &wait, job.stop_reason()) {
                 let paused = match wait {
                     Wait::Ext { paused, .. } => paused,
@@ -99,8 +103,6 @@ impl Sched {
                 }
                 Some(Err(why.to_string()))
             }
-            (_, Some(why)) => Some(Err(why.to_string())),
-            (Wait::Sleep(t), None) => (Instant::now() >= *t).then_some(Ok(Value::Nil)),
             (Wait::Sh(k), None) => {
                 let k = *k;
                 let out = self.procs.get_mut(&k).and_then(Proc::poll);
@@ -171,7 +173,33 @@ pub fn with_run<R>(lua: &Lua, f: impl FnOnce(&mut Job) -> R) -> Option<R> {
 }
 
 pub fn stopped(lua: &Lua) -> Option<&'static str> {
-    with_run(lua, |j| j.stop().reason()).flatten()
+    with_run(lua, |j| j.stop_reason()).flatten()
+}
+
+pub(crate) fn should_yield(lua: &Lua) -> bool {
+    let current = lua.current_thread();
+    if unsafe { mlua::ffi::lua_isyieldable(current.state()) } == 0 {
+        return false;
+    }
+    with_run(lua, |j| {
+        let requested = j.wants_handoff() || j.background();
+        if requested && j.thread() != current {
+            j.nested_yield = Some(current.clone());
+        }
+        requested
+    })
+    .unwrap_or(false)
+}
+
+pub(crate) fn nested_yield(lua: &Lua, child: mlua::Thread) -> mlua::Result<bool> {
+    Ok(with_run(lua, |j| {
+        if j.nested_yield.as_ref() != Some(&child) {
+            return false;
+        }
+        j.nested_yield = None;
+        true
+    })
+    .unwrap_or(false))
 }
 
 pub fn is_hook(lua: &Lua) -> bool {
@@ -223,13 +251,7 @@ fn parse_wait(lua: &Lua, vals: &MultiValue, job: &mut Job) -> Wait {
         .unwrap_or_default();
     let arg = vals.get(2).cloned().unwrap_or(Value::Nil);
     match kind.as_str() {
-        "sleep" => {
-            let secs = arg
-                .as_number()
-                .or(arg.as_integer().map(|i| i as f64))
-                .unwrap_or(0.0);
-            Wait::Sleep(Instant::now() + std::time::Duration::from_secs_f64(secs.max(0.0)))
-        }
+        "ready" => Wait::Ready,
         "sh" => Wait::Sh(arg.as_integer().unwrap_or(0) as u64),
         "wait" => {
             let key = arg.as_integer().unwrap_or(0) as u64;

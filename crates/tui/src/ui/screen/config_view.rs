@@ -46,12 +46,6 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         vec![
             kv("compact_at", compact, fg),
             kv(
-                "max_image_bytes",
-                cfg.settings.max_image_bytes.to_string(),
-                fg,
-            ),
-            kv("retries", cfg.settings.retries.to_string(), fg),
-            kv(
                 "ui.lines",
                 format!(
                     "tool={} diff={} output={} reasoning={}",

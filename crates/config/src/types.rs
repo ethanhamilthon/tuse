@@ -56,7 +56,7 @@ impl Connect {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
     #[serde(
@@ -64,22 +64,7 @@ pub struct Settings {
         deserialize_with = "crate::de::opt_u64"
     )]
     pub compact_at: Option<u64>,
-    #[serde(deserialize_with = "crate::de::int::<_, _, 1, { i64::MAX }>")]
-    pub max_image_bytes: usize,
-    #[serde(deserialize_with = "crate::de::int::<_, _, 0, 100>")]
-    pub retries: usize,
     pub ui: UiSettings,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            compact_at: None,
-            max_image_bytes: 5 * 1024 * 1024,
-            retries: 5,
-            ui: UiSettings::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]

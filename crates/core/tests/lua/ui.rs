@@ -18,7 +18,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     let addr = common::provider(vec![
         common::Reply::Call(
             "lua",
-            serde_json::json!({"code": "ran = 0; spawn(function() sleep(0.05); ran = 1 end, 'bg'); local p = pick({'yes'}); return tostring(p) .. ':' .. tostring(ran)"}).to_string(),
+            serde_json::json!({"code": "ran = 0; spawn(function() sh('sleep 0.05'); ran = 1 end, 'bg'); local p = pick({'yes'}); return tostring(p) .. ':' .. tostring(ran)"}).to_string(),
         ),
         common::Reply::Text("ok"),
     ]);

@@ -114,6 +114,8 @@ impl Prepared {
             turn_error: None,
             generation: 0,
             cancel: Arc::default(),
+            tool_handoff: None,
+            cancel_pending: false,
             queue: vec![],
             next_input: 0,
             turn_start: Instant::now(),

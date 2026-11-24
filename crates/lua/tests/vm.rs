@@ -15,7 +15,7 @@ impl Host for H {
     }
     fn task_start(&self, name: &str, _from_lua_hook: bool) -> Result<TaskStart, String> {
         let log = std::env::temp_dir().join(format!("tuse-lua-{}-{name}.log", std::process::id()));
-        let _ = std::fs::remove_file(&log);
+        let log = std::fs::File::create(log).map_err(|e| e.to_string())?;
         Ok(TaskStart {
             id: name.into(),
             log,
@@ -70,7 +70,7 @@ fn deadlines_stop_loops_and_commands_but_not_others() {
     assert!(!d.ok && d.text.starts_with("a\n"), "{}", d.text);
     assert!(started.elapsed() < Duration::from_secs(5));
     let d = vm.run(
-        "n = 0\nspawn(function() for i = 1, 3 do n = n + 1; sleep(0.05) end print('done', n) end, 't')\nsleep(0.5)\nreturn n",
+        "n = 0\nspawn(function() for i = 1, 3 do n = n + 1; sh('sleep 0.05') end print('done', n) end, 't')\nsh('sleep 0.5')\nreturn n",
         "lua",
         stop(5),
     );
@@ -134,6 +134,10 @@ fn external_wait_pauses_and_resumes_timeout_budget() {
         Arc::default(),
         Some(Instant::now() + Duration::from_millis(300)),
     );
-    let d = vm.run("local v = pause_wait(); sleep(0.05); return v", "lua", stop);
+    let d = vm.run(
+        "local v = pause_wait(); sh('sleep 0.05'); return v",
+        "lua",
+        stop,
+    );
     assert!(d.ok && d.text == "ok", "ok={} text={}", d.ok, d.text);
 }

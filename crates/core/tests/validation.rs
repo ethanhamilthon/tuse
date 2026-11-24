@@ -44,7 +44,11 @@ fn validates_config_and_preserves_state_on_failed_reload() {
         ),
         (
             "return { settings = { retries = 'x' } }",
-            "settings.retries: invalid type: string \"x\", expected i64",
+            "settings.retries: unknown key",
+        ),
+        (
+            "return { settings = { max_image_bytes = 1 } }",
+            "settings.max_image_bytes: unknown key",
         ),
         (
             "return { settings = { ui = { scroll_step = 0 } } }",

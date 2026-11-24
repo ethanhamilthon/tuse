@@ -18,7 +18,7 @@ fn wait_lines(path: &std::path::Path, n: usize) -> Vec<String> {
 #[test]
 fn lua_hooks_cover_tool_command_task_open_without_recursion() {
     let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
-    let code = "spawn(function() sleep(0.02); return 'bg-ok' end, 'bg'); return 'tool-ok'";
+    let code = "spawn(function() sh('sleep 0.02'); return 'bg-ok' end, 'bg'); return 'tool-ok'";
     let addr = common::provider(vec![
         Reply::Call("lua", json!({"code": code}).to_string()),
         Reply::Text("done"),

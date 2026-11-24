@@ -34,9 +34,9 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
 ## File Functions
 
 - `read(path)` / `read(path, { lines = false, offset = 1, limit = 2000 })`:
-  - Works in live sessions and during top-level config load (outside a session uses `cwd` and default `max_image_bytes`).
+  - Works in live sessions and during top-level config load (outside a session uses `cwd`).
   - Raises an error on directories (`<path> is a directory; list it with sh("ls")`).
-  - **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, case-insensitive): raises an error if larger than `settings.max_image_bytes`. Otherwise returns `"[image: <path>, <KB> KB]"` and, when called inside an agent `lua` tool call, attaches the base64 image so the model sees it on the next step (images read from hooks, commands, tasks, or `open` handlers are not sent to the model).
+  - **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, case-insensitive): raises an error if larger than 5 MiB (5,242,880 bytes). Otherwise returns `"[image: <path>, <KB> KB]"` and, when called inside an agent `lua` tool call, attaches the base64 image so the model sees it on the next step (images read from hooks, commands, tasks, or `open` handlers are not sent to the model).
   - **Binary files** (NUL byte in the first 8,192 bytes): returns `"[binary file, <bytes> bytes]"`.
   - **Default mode** (`lines = false` or omitted): returns full raw text (lossy UTF-8) with no line numbers, no pagination footer, and no truncation (`""` for empty files).
   - **Paginated mode** (`lines = true`): `offset` and `limit` clamp to `>= 1`. Returns `<line_no>\t<text>` per line (lines over 2,000 characters cut with `… [line cut]`). Empty file returns `"[empty file]"`; `offset` past EOF returns `"[offset <offset> is past the end of the file (<n> lines)]"`; more lines remaining appends `"[lines <offset>-<last> of <n>; continue with offset=<last+1>]"`.
@@ -66,11 +66,9 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
 - `sh(cmd, { timeout = nil, cwd = nil, env = {} })`:
   - Runs `bash -c cmd` with stdin closed, stdout and stderr merged, in its own session/process group (no controlling terminal).
   - Wrap shell commands containing quotes, backslashes, or regexes in Lua long strings (`sh([=[...]=])`) so Lua does not interpret shell escapes.
-  - `timeout` (seconds, clamped `>= 0`) takes the earlier of itself and the caller's remaining deadline. `cwd` resolves relative to the session `cwd`. `env` merges string pairs onto the inherited process environment (no `TUSE_*` variables are injected).
+  - `timeout` (seconds, clamped `>= 0`) takes the earlier of itself and the caller's remaining deadline. A [tool handoff](tasks.md#handing-off-a-running-lua-call) removes the tool deadline clamp, but preserves the explicit timeout measured from command start. `cwd` resolves relative to the session `cwd`. `env` merges string pairs onto the inherited process environment (no `TUSE_*` variables are injected).
   - Returns a table with `.out` (string, uncapped), `.code` (integer exit code, or `nil` when killed), `.ok` (`code == 0`), `.timed_out` (boolean), and `:lines()` (1-based list of lines, stripping `\r?\n` and trailing empty element). `tostring(r)` returns `.out` plus `[timed out]`, `[killed by signal]`, or `[exit code N]` when non-zero/killed.
   - Yields cooperatively in coroutines (blocking in non-yieldable contexts). Kills the entire process group (`SIGKILL`) on timeout, cancellation, or drop.
-- `sleep(seconds)`:
-  - Waits for `seconds` (number; `nil` or negative behaves as `0`), yielding without blocking other coroutines (blocking in non-yieldable contexts). Raises `"cancelled"` or `"timed out"` if stopped early.
 - `spawn(fn, name)`:
   - Starts `fn` as a background task coroutine in the same VM with no deadline; returns its task ID (`"t1"`, `"t2"`, ...). `name` defaults to the task ID. See [tasks.md](tasks.md).
 - `task_get(id, lines = 50)`:
@@ -105,9 +103,9 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
   - Outside hooks: yields (pausing caller timeout) until reload finishes, returns `nil` on success, and raises a Lua error if the config is invalid (keeping the previous config active).
   - Inside hooks: returns `nil` immediately and schedules the reload right after that hook run finishes (since reload waits for `close` hooks); any failure emits an `error` event (`reload: ...`).
 - `llm(prompt, model, effort)` -> `string`:
-  - Sends a single stateless user-message request (no tools, no system prompt, no conversation history) through configured providers using `settings.retries` (capped at 5 retries).
+  - Sends a single stateless user-message request (no tools, no system prompt, no conversation history) through configured providers with the same [retry policy](providers.md#errors-and-retries) as agent turns.
   - `model` (`"provider/model"`) and `effort` default to the session's active values when `nil` or `""`. Raises an error on invalid `effort`, unset `model`, unknown provider, or request failure.
-  - Yields without blocking other coroutines (does **not** pause caller timeout). Cancellation follows the calling job: Esc / `turn.cancel` cancels `llm()` inside a `lua` tool call, hook, or custom command, but does **not** cancel `llm()` inside a background task (use `task_stop`). HTTP cancellation is cooperative (checked between SSE chunks and retry sleeps, not an immediate socket abort).
+  - Yields without blocking other coroutines (does **not** pause caller timeout). Cancellation follows the calling job: Esc / `turn.cancel` cancels `llm()` inside a hook or custom command, but does **not** cancel `llm()` inside a background task (including a handed-off tool call; use `task_stop`). HTTP cancellation is cooperative (checked between SSE chunks and retry sleeps, not an immediate socket abort).
   - If the provider reply includes usage data, records usage in the session and emits a `usage` event (priced using configured `models` prices; included in `session().usage.cost` and separated out in `session().usage.llm_cost`).
 - `set_title(text)`:
   - Trims whitespace, replaces newlines with spaces, and truncates to 80 characters. Raises `"empty title"` if empty.
@@ -154,7 +152,7 @@ return {
 
 Configured `functions` overrides and disables are capability-scoping and ergonomic controls for cooperative agents, not a hostile-code security sandbox (the agent still runs standard Lua 5.4 libraries such as `os.execute` and `io.open`).
 
-- **Key rules**: must be a valid ASCII Lua identifier (`[_A-Za-z][_A-Za-z0-9]*`) and not a Lua keyword or Lua base/standard-library global (`_G`, `_VERSION`, `assert`, `collectgarbage`, `dofile`, `error`, `getmetatable`, `ipairs`, `load`, `loadfile`, `next`, `pairs`, `pcall`, `print`, `rawequal`, `rawget`, `rawlen`, `rawset`, `require`, `select`, `setmetatable`, `tonumber`, `tostring`, `type`, `warn`, `xpcall`, `coroutine`, `io`, `math`, `os`, `package`, `string`, `table`, `utf8`). All built-in host names (`sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `session`, `task_get`, `task_list`, `task_stop`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`) are allowed.
+- **Key rules**: must be a valid ASCII Lua identifier (`[_A-Za-z][_A-Za-z0-9]*`) and not a Lua keyword or Lua base/standard-library global (`_G`, `_VERSION`, `assert`, `collectgarbage`, `dofile`, `error`, `getmetatable`, `ipairs`, `load`, `loadfile`, `next`, `pairs`, `pcall`, `print`, `rawequal`, `rawget`, `rawlen`, `rawset`, `require`, `select`, `setmetatable`, `tonumber`, `tostring`, `type`, `warn`, `xpcall`, `coroutine`, `io`, `math`, `os`, `package`, `string`, `table`, `utf8`). All built-in host names (`sh`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `session`, `task_get`, `task_list`, `task_stop`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`) are allowed.
 - **Value rules**:
   - Must be a Lua `function` or boolean `false`. Passing any other value (including the removed `{ run, description, args, show_agent }` table form) fails validation.
   - `json` is a module table (`{ encode, decode }`), not a function: `json = false` disables `json` for the agent, while `json = function(...) ... end` fails validation.
@@ -164,7 +162,7 @@ Configured `functions` overrides and disables are capability-scoping and ergonom
   - Configured functions are **never** listed automatically in the system prompt or `docs("functions")`. Describe any custom agent function explicitly in `systems` or `prompts` if you want the agent to discover it.
 - **Overriding built-ins**:
   - Setting any function-valued built-in in `functions` replaces both the global `<name>` and `require("tuse").<name>` in the agent environment.
-  - Use `local t = require("tuse")` in trusted config code to call the unmodified original built-in without recursing (`t.sh(...)`, `t.write(...)`, etc.). Job-scoped side effects (diffs, model images, 120-second deadline, timeout pausing, Esc cancellation) remain bound to the active agent tool call.
+  - Use `local t = require("tuse")` in trusted config code to call the unmodified original built-in without recursing (`t.sh(...)`, `t.write(...)`, etc.). Job-scoped behavior (diffs, model images, deadlines, timeout pausing, and handoff) follows the active job.
   - Overrides never affect trusted code (config, hooks, commands, `open` handlers, or trusted tasks).
 - **Disabling built-ins (`false`) and live-gated handles**:
   - Disabling a built-in sets both the global and `require("tuse").<name>` to `nil` in the agent environment (including `load(...)`, agent-`require`d `.lua` files, and agent-`spawn`ed tasks).

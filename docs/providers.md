@@ -248,7 +248,7 @@ Unsupported capabilities are handled in two ways:
   - During retry backoff sleeps, cancellation is checked every 100 ms.
   - The non-streaming JSON fallback has no mid-read cancellation check.
 - On turn cancellation (Esc or `turn.cancel`), the session immediately invalidates the turn's generation and emits `turn_end` (`cancelled: true`), ignoring any subsequent output from the unwinding HTTP thread.
-- For `llm()`, cancellation is bound to the calling Lua job: cancelling a turn cancels an `llm()` call inside an agent `lua` tool call, whereas cancelling a turn does **not** cancel an `llm()` call running inside a background task (which is cancelled only by `task_stop()` or session close).
+- For `llm()`, cancellation is bound to the calling Lua job: cancelling a turn does **not** cancel an `llm()` call running inside a background task, including an agent `lua` call handed off on cancellation (which is cancelled only by `task_stop()` or session close).
 
 ## Usage Accounting
 
@@ -268,7 +268,7 @@ Errors fall into five categories:
 | Unsupported adapter capability | `provider \`<name>\` (<api>) does not support ...` | No |
 | Cancellation | `cancelled` | No |
 
-- **Retry policy**: configured by `settings.retries` (`0..=100`, default `5`). Backoff delays are fixed at `[2, 5, 10, 20, 30]` seconds. The effective retry limit is `min(settings.retries, 5)` (at most 5 retries / 6 total attempts; `0` disables retries). Only completion requests (`complete`) retry; model-listing requests never retry.
+- **Retry policy**: up to 5 retries (6 total attempts), with fixed backoff delays of `[2, 5, 10, 20, 30]` seconds. Only completion requests (`complete`) retry; model-listing requests never retry.
 - **Agent turn retries**: before each retry sleep, Tuse emits `stream_reset` (discarding partial streamed text, reasoning, and pending tool call entries from the failed attempt) and a `flash` event formatted as `Retry <attempt>/<max> in <delay>s: <error>`.
 - **`llm()` retries**: uses the same retry schedule and cancellation handling silently (no `stream_reset` or `flash` events).
 - **Terminal failure**:

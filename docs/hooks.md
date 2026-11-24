@@ -47,7 +47,7 @@ Tracked Lua jobs are:
 
 - **`tool`**: agent `lua(code)` tool calls with valid JSON arguments and a string `code` (unknown tools, invalid JSON arguments, and missing/non-string `code` fail before starting a Lua job and do not emit `lua_start`/`lua_end`).
 - **`command`**: custom slash commands from `commands`.
-- **`task`**: background tasks started via `spawn(fn, name?)`.
+- **`task`**: background tasks started via `spawn(fn, name?)` or a [tool handoff](tasks.md#handing-off-a-running-lua-call). A handoff ends the foreground `tool` lifecycle before starting the `task` lifecycle.
 - **`open`**: local file opener callbacks from `open`.
 
 Exclusions (to prevent infinite recursion):

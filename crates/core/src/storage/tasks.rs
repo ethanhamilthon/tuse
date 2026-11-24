@@ -56,7 +56,7 @@ impl Tasks {
         let mut list = self.list.lock().unwrap();
         let id = format!("t{}", list.len() + 1);
         let log = self.dir.join(format!("{id}.log"));
-        File::create(&log).map_err(|e| format!("{}: {e}", log.display()))?;
+        let file = File::create(&log).map_err(|e| format!("{}: {e}", log.display()))?;
         list.push(TaskInfo {
             id: id.clone(),
             name: if name.is_empty() {
@@ -74,7 +74,11 @@ impl Tasks {
             .lock()
             .unwrap()
             .insert(id.clone(), cancel.clone());
-        Ok(tuse_lua::TaskStart { id, log, cancel })
+        Ok(tuse_lua::TaskStart {
+            id,
+            log: file,
+            cancel,
+        })
     }
 
     pub(crate) fn end(&self, id: &str, ok: bool) -> Option<TaskInfo> {

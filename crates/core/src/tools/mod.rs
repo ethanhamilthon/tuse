@@ -42,14 +42,8 @@ fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
     result
 }
 
-pub fn read(
-    path: &Path,
-    lines: bool,
-    offset: usize,
-    limit: usize,
-    max_image: usize,
-) -> Result<Read, String> {
-    read::run(path, lines, offset, limit, max_image)
+pub fn read(path: &Path, lines: bool, offset: usize, limit: usize) -> Result<Read, String> {
+    read::run(path, lines, offset, limit)
 }
 
 pub fn write(path: &Path, content: &str) -> Result<(String, String), String> {

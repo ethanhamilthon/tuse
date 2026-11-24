@@ -1,6 +1,6 @@
 use crate::Host;
 use crate::job::{Done, Job, Out, Stop};
-use crate::sched::{add_proc, is_lua_hook, start, stopped, take_proc, with_run};
+use crate::sched::{add_proc, is_lua_hook, should_yield, start, stopped, take_proc, with_run};
 use crate::sh::Proc;
 use crate::value::{sh_value, to_lua};
 use mlua::{Function, HookTriggers, Lua, LuaSerdeExt, MultiValue, Table, Value, VmState};
@@ -19,6 +19,10 @@ pub fn install(lua: &Lua) -> mlua::Result<()> {
     let marker = lua.create_table()?;
     lua.set_named_registry_value("tuse.sched", marker.clone())?;
     tuse.set("sh_start", lua.create_function(sh_start)?)?;
+    tuse.set(
+        "nested_yield",
+        lua.create_function(crate::sched::nested_yield)?,
+    )?;
     tuse.set("block", lua.create_function(block)?)?;
     g.set("print", lua.create_function(print)?)?;
     let io: Table = g.get("io")?;
@@ -39,6 +43,7 @@ pub fn install(lua: &Lua) -> mlua::Result<()> {
         HookTriggers::new().every_nth_instruction(1000),
         |lua, _| match stopped(lua) {
             Some(why) => Err(mlua::Error::runtime(why)),
+            None if should_yield(lua) => Ok(VmState::Yield),
             None => Ok(VmState::Continue),
         },
     )?;
@@ -92,14 +97,17 @@ fn write(lua: &Lua, args: MultiValue) -> mlua::Result<()> {
 
 fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64> {
     let h = host(lua);
-    h.action(&cmd);
+    if !with_run(lua, |j| j.background()).unwrap_or(false) {
+        h.action(&cmd);
+    }
     let mut cwd = h.cwd();
     let mut env = Vec::new();
-    let mut deadline = with_run(lua, |j| j.stop().deadline()).flatten();
+    let mut deadline = None;
     if let Some(o) = opts {
         if let Some(t) = o.get::<Option<f64>>("timeout")? {
-            let own = Instant::now() + Duration::from_secs_f64(t.max(0.0));
-            deadline = Some(deadline.map_or(own, |d| d.min(own)));
+            let duration =
+                Duration::try_from_secs_f64(t.max(0.0)).map_err(mlua::Error::external)?;
+            deadline = Instant::now().checked_add(duration);
         }
         if let Some(c) = o.get::<Option<String>>("cwd")? {
             cwd = cwd.join(c);
@@ -114,28 +122,11 @@ fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64
     Ok(add_proc(lua, p))
 }
 
-fn block(lua: &Lua, (kind, arg): (String, Value)) -> mlua::Result<(bool, Value)> {
-    let stop = with_run(lua, |j| j.stop()).unwrap_or_default();
-    match kind.as_str() {
-        "sleep" => {
-            let until =
-                Instant::now() + Duration::from_secs_f64(arg.as_f64().unwrap_or(0.0).max(0.0));
-            while Instant::now() < until {
-                if let Some(why) = stop.reason() {
-                    return Ok((false, Value::String(lua.create_string(why)?)));
-                }
-                std::thread::sleep(Duration::from_millis(10).min(until - Instant::now()));
-            }
-            Ok((true, Value::Nil))
-        }
-        _ => {
-            let key = arg.as_integer().unwrap_or(0) as u64;
-            let p = take_proc(lua, key);
-            let p = p.ok_or_else(|| mlua::Error::runtime("no such process"))?;
-            let out = p.wait(|| stop.reason().is_some());
-            Ok((true, sh_value(lua, out)))
-        }
-    }
+fn block(lua: &Lua, (_, arg): (String, Value)) -> mlua::Result<(bool, Value)> {
+    let key = arg.as_integer().unwrap_or(0) as u64;
+    let p = take_proc(lua, key).ok_or_else(|| mlua::Error::runtime("no such process"))?;
+    let out = p.wait(|| stopped(lua).is_some());
+    Ok((true, sh_value(lua, out)))
 }
 
 fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<String> {
@@ -144,21 +135,16 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
     let t = h
         .task_start(&name, is_lua_hook(lua))
         .map_err(mlua::Error::runtime)?;
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&t.log)
-        .map_err(|e| mlua::Error::runtime(format!("{}: {e}", t.log.display())))?;
     let id = t.id.clone();
     let job = Job::new(
         lua,
         f,
         MultiValue::new(),
         Stop::new(t.cancel, None),
-        Out::File(file),
+        Out::File(t.log),
         move |_, d: Done| h.task_end(&t.id, d),
     )?;
-    start(lua, job);
+    start(lua, job.as_task());
     Ok(id)
 }
 

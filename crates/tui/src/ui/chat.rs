@@ -12,6 +12,7 @@ pub struct Chat {
     pub(crate) entries: Vec<(Entry, Cache)>,
     pub(crate) pinned: Vec<(String, String, Cache)>,
     hot: Option<usize>,
+    pub(crate) tick: usize,
     stream: Option<crate::kit::rich::md_stream::Prefix>,
 }
 
@@ -131,6 +132,20 @@ impl Chat {
         self.get_mut(i)
     }
 
+    pub(crate) fn finish_interrupted_tools(&mut self) {
+        for (entry, cache) in self.entries.iter_mut().rev() {
+            if matches!(entry, Entry::TurnEnd { .. }) {
+                break;
+            }
+            if let Entry::Tool { output, .. } = entry
+                && output.is_none()
+            {
+                *output = Some("[interrupted: no output]".into());
+                *cache = None;
+            }
+        }
+    }
+
     pub fn invalidate(&mut self) {
         self.stream = None;
         for (_, cache) in self.entries.iter_mut() {
@@ -152,7 +167,17 @@ impl Chat {
             };
             *cache = Some((width, lines));
         }
-        &cache.as_ref().unwrap().1
+        let (_, lines) = cache.as_mut().unwrap();
+        if matches!(e, Entry::Tool { output: None, .. })
+            && let Some(prefix) = lines.first_mut().and_then(|line| line.first_mut())
+        {
+            const STARS: [&str; 4] = ["✦ ", "✧ ", "✦ ", "✶ "];
+            let frame = STARS[self.tick % STARS.len()];
+            if prefix.text != frame {
+                prefix.text = frame.into();
+            }
+        }
+        lines
     }
 
     pub fn window(
@@ -357,6 +382,7 @@ mod tests {
             name: "lua".into(),
             code: "1".into(),
         });
+        assert_eq!(app.chat.lines(n, 40, &app.palette)[0][0].text, "✦ ");
         app.handle_event(Event::ToolStart {
             timeout: 120,
             id: "id".into(),
@@ -365,6 +391,15 @@ mod tests {
         });
         assert_eq!(app.chat.len(), n + 1);
         assert!(matches!(&app.chat.entries[n].0, Entry::Tool { input, .. } if input == "1"));
+        app.chat.tick = 1;
+        assert_eq!(app.chat.lines(n, 40, &app.palette)[0][0].text, "✧ ");
+        app.handle_event(Event::ToolEnd {
+            id: "id".into(),
+            output: "1".into(),
+            code: Some(0),
+            diffs: vec![],
+        });
+        assert_eq!(app.chat.lines(n, 40, &app.palette)[0][0].text, "* ");
         crate::ui::app::cleanup(app);
     }
 

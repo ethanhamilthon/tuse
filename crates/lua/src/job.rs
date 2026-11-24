@@ -8,15 +8,26 @@ use std::time::{Duration, Instant};
 pub struct Stop {
     pub cancel: Arc<AtomicBool>,
     deadline: Option<Instant>,
+    handoff: Option<(String, Arc<AtomicBool>)>,
 }
 
 impl Stop {
     pub fn new(cancel: Arc<AtomicBool>, deadline: Option<Instant>) -> Self {
-        Self { cancel, deadline }
+        Self {
+            cancel,
+            deadline,
+            handoff: None,
+        }
     }
 
-    pub fn deadline(&self) -> Option<Instant> {
-        self.deadline
+    pub fn transferable(mut self, name: String, requested: Arc<AtomicBool>) -> Self {
+        self.handoff = Some((name, requested));
+        self
+    }
+
+    fn handoff_name(&self) -> Option<&str> {
+        let (name, requested) = self.handoff.as_ref()?;
+        (self.reason().is_none() && requested.load(Ordering::Acquire)).then_some(name)
     }
 
     fn resume_after(&mut self, rem: Duration) {
@@ -60,6 +71,7 @@ pub struct Done {
     pub ok: bool,
     pub text: String,
     pub stop: Option<&'static str>,
+    pub handed_off: bool,
     pub diffs: Vec<(String, String)>,
     pub images: Vec<String>,
 }
@@ -82,6 +94,9 @@ pub struct Job {
     thread: Thread,
     args: MultiValue,
     done: Option<OnDone>,
+    task: bool,
+    resumed: bool,
+    pub(crate) nested_yield: Option<Thread>,
 }
 
 impl Job {
@@ -103,7 +118,14 @@ impl Job {
             thread: lua.create_thread(f)?,
             args,
             done: Some(Box::new(done)),
+            task: false,
+            resumed: false,
+            nested_yield: None,
         })
+    }
+
+    pub(crate) fn on_done(&mut self, done: impl FnOnce(&Lua, Done) + 'static) {
+        self.done = Some(Box::new(done));
     }
 
     pub fn hooked(mut self, lua_hook: bool) -> Self {
@@ -117,11 +139,15 @@ impl Job {
     }
 
     pub fn add_diff(&mut self, path: String, diff: String) {
-        self.diffs.push((path, diff));
+        if !self.task {
+            self.diffs.push((path, diff));
+        }
     }
 
     pub fn add_image(&mut self, url: String) {
-        self.images.push(url);
+        if !self.task {
+            self.images.push(url);
+        }
     }
 
     pub fn is_hook(&self) -> bool {
@@ -132,8 +158,13 @@ impl Job {
         self.is_lua_hook
     }
 
-    pub fn stop(&self) -> Stop {
-        self.stop.clone()
+    pub fn background(&self) -> bool {
+        self.task
+    }
+
+    pub fn as_task(mut self) -> Self {
+        self.task = true;
+        self
     }
 
     pub(crate) fn thread(&self) -> Thread {
@@ -141,6 +172,7 @@ impl Job {
     }
 
     pub(crate) fn take_args(&mut self) -> MultiValue {
+        self.resumed = true;
         std::mem::replace(&mut self.args, MultiValue::new())
     }
 
@@ -153,6 +185,45 @@ impl Job {
 
     pub(crate) fn stop_reason(&self) -> Option<&'static str> {
         self.stop.reason()
+    }
+
+    pub(crate) fn wants_handoff(&self) -> bool {
+        self.resumed && self.stop.handoff_name().is_some()
+    }
+
+    pub(crate) fn handoff(&mut self, lua: &Lua) -> bool {
+        if !self.resumed {
+            return false;
+        }
+        let Some(name) = self.stop.handoff_name().map(str::to_owned) else {
+            return false;
+        };
+        self.stop.handoff = None;
+        let host = crate::host(lua);
+        let Ok(t) = host.task_start(&name, true) else {
+            return false;
+        };
+        let mut out = Out::File(t.log);
+        if let Out::Buf(buf) = &self.out {
+            out.put(buf);
+        }
+        self.out = out;
+        self.stop = Stop::new(t.cancel, None);
+        self.task = true;
+        let done = Done {
+            ok: false,
+            text: format!("[continued in background: {}]", t.id),
+            stop: Some("cancelled"),
+            handed_off: true,
+            diffs: std::mem::take(&mut self.diffs),
+            images: std::mem::take(&mut self.images),
+        };
+        if let Some(on_done) = self.done.take() {
+            on_done(lua, done);
+        }
+        host.task_track(&t.id, &name);
+        self.done = Some(Box::new(move |_, done| host.task_end(&t.id, done)));
+        true
     }
 
     pub(crate) fn pause_timeout(&mut self) -> Option<Duration> {
@@ -188,6 +259,7 @@ impl Job {
             ok: ok && stop.is_none(),
             text,
             stop: if ok { None } else { stop },
+            handed_off: false,
             diffs: std::mem::take(&mut self.diffs),
             images: std::mem::take(&mut self.images),
         };

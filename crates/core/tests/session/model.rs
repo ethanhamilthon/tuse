@@ -31,11 +31,7 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     .unwrap();
     let cfg = dir.join("tuse.lua");
     let models = dir.join("models.lua");
-    std::fs::write(
-        &cfg,
-        "return { models = require('models'), settings = { retries = 0 } }",
-    )
-    .unwrap();
+    std::fs::write(&cfg, "return { models = require('models') }").unwrap();
     std::fs::write(
         &models,
         r#"return {{

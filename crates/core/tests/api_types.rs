@@ -104,7 +104,7 @@ fn replay_resume_provider_isolation_truncation_and_migration() {
     tuse_core::Prefs::set("model", "anth/claude-sonnet-4").unwrap();
     tuse_core::Prefs::set("effort", "high").unwrap();
     let cfg = dir.join("tuse.lua");
-    std::fs::write(&cfg, "return { settings = { retries = 1 } }\n").unwrap();
+    std::fs::write(&cfg, "return {}\n").unwrap();
 
     let open = |resume: Option<String>| {
         let start = if resume.is_some() {

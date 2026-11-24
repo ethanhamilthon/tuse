@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.2
+
+- **Breaking: removed all plugins.** Git and local plugins, `welcome`, and `tuse/default` (its palette and the `/subs` proxy integration) are gone. Remove `plugins` from existing Lua configs before updating; it is now an unknown key. Lua modules, hooks, custom commands, and theme overrides still work.
+- **Installer.** Installs only the binary. There is no interactive setup or `--no-setup` flag, and existing config files are left untouched.
+- **Terminal and file operations.** Simplified terminal rendering, editor navigation, and file operations.
+
 ## 0.10.1
 
 - **Docs drive the prompt.** The agent's system prompt and the `docs()` topics are now built from `docs/` (`docs/system-prompt.md`), so the docs, the site, and the agent all read one source.

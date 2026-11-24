@@ -79,7 +79,7 @@ fn fnv1a_128(bytes: &[u8]) -> u128 {
 }
 
 fn lock_repo(name: &str, root: &Path, deadline: Instant) -> Result<File, String> {
-    let dir = tuse_config::plugins_root().join(".locks");
+    let dir = tuse_config::Repo::lock_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("plugin {name}: {e}"))?;
     let hash = fnv1a_128(root.as_os_str().as_encoded_bytes());
     let path = dir.join(format!("{hash:032x}.lock"));
@@ -155,7 +155,7 @@ fn update_repo(
         deadline,
     )?;
     let actual = if origin.ok { origin.stdout.trim() } else { "" };
-    if tuse_config::normalize_url(actual) != tuse_config::normalize_url(url) {
+    if !tuse_config::Repo::same_origin(actual, url) {
         return Err(format!(
             "plugin {name}: checkout remote URL '{actual}' does not match '{url}'"
         ));

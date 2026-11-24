@@ -17,7 +17,7 @@ pub use docs::docs;
 pub use event::{Event, InputId, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 pub use mode::{Mode, Options, Start};
 pub use session::Session;
-pub use session::hooks::hooks::EVENTS;
+pub use session::hooks::lanes::EVENTS;
 pub use session::lua::config_lua::{config_arg, configured_models};
 pub use session::lua::open::openable_url;
 pub use session::view::models::model_available;

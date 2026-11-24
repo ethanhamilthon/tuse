@@ -25,7 +25,7 @@ pub fn module_candidates(name: &str, base: &Path) -> Vec<PathBuf> {
     lua_files(base.join(name.replace('.', "/")))
 }
 
-pub fn global_candidates() -> Vec<PathBuf> {
+fn global_candidates() -> Vec<PathBuf> {
     let d = std::env::home_dir().unwrap_or_default().join(".config");
     vec![d.join("tuse.lua"), d.join("tuse/init.lua")]
 }

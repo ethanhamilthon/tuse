@@ -180,7 +180,7 @@ fn require_session_validation_and_reload_rollback() {
             .contains("cyclic require")
     );
 
-    let globals = tuse_config::global_candidates();
+    let globals = tuse_config::module_candidates("global", std::path::Path::new("."));
     assert_eq!(globals.len(), 2);
     assert!(globals[0].ends_with(".config/tuse.lua"));
     assert!(globals[1].ends_with(".config/tuse/init.lua"));

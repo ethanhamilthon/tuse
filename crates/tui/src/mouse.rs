@@ -26,6 +26,7 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.editor.clear_selection();
                 self.selection = Default::default();
+                self.pressed_link = self.link_at(point);
                 self.click(point.1, point.0);
                 self.selection.drag = Some((point, point));
                 if inside && !self.input_disabled() {
@@ -35,6 +36,9 @@ impl App {
             }
             MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left) => {
                 if let Some((a, _)) = self.selection.drag {
+                    if a != point {
+                        self.clear_link_hover();
+                    }
                     if inside && let Some(index) = self.selection.input {
                         self.click(point.1, point.0);
                         self.editor.anchor = Some(index);
@@ -44,6 +48,7 @@ impl App {
                         self.selection.drag = Some((a, point));
                     }
                     if matches!(m.kind, MouseEventKind::Up(_)) {
+                        self.pressed_link = None;
                         self.selection.input = None;
                         if self.selection.drag == Some((a, a)) {
                             self.selection.drag = None;
@@ -73,6 +78,7 @@ impl App {
 
     fn wheel(&mut self, dir: isize, row: usize) {
         self.selection = Default::default();
+        self.clear_link_hover();
         let step = self.palette.ui.scroll_step as isize;
         if self.overlay_rows.contains(&row) {
             if let Some(p) = &mut self.picker {
@@ -138,6 +144,101 @@ mod tests {
         );
         assert!(app.mouse(event(MouseEventKind::Moved, 9, 2)));
         assert_eq!(app.hover, None);
+
+        app.mouse(event(MouseEventKind::Down(MouseButton::Left), 4, 2));
+        assert_eq!(app.pressed_link, Some(id));
+        assert_eq!(app.hover, None);
+        app.mouse(event(MouseEventKind::Drag(MouseButton::Left), 6, 2));
+        assert_eq!(app.pressed_link, None);
+        assert_eq!(app.hover, None);
+        assert_eq!(app.selection.drag, Some(((2, 4), (2, 6))));
+        app.mouse(event(MouseEventKind::Up(MouseButton::Left), 6, 2));
+        assert_eq!(app.pressed_link, None);
+
+        app.mouse(event(MouseEventKind::Moved, 4, 2));
+        assert_eq!(app.hover, Some(id));
+        app.mouse(event(MouseEventKind::ScrollUp, 4, 2));
+        assert_eq!(app.hover, None);
+
+        let cfg = app.cwd.join("tuse.lua");
+        let note = app.cwd.join("note.txt");
+        let marker = app.cwd.join("opened.txt");
+        std::fs::write(&note, "hi").unwrap();
+        std::fs::write(
+            &cfg,
+            r#"local t = require("tuse")
+return { open = { txt = function(p) t.write("opened.txt", p) end } }"#,
+        )
+        .unwrap();
+        app.run_command("reload");
+
+        let mut renderer = crate::draw::Renderer::default();
+        app.chat
+            .push(crate::chat::Entry::Assistant("see note.txt".into()));
+        let mut out = Vec::new();
+        renderer.draw(&mut app, &mut out, 60, 12).unwrap();
+        let link = app.links[0].clone();
+        assert_eq!(app.hover, None);
+        app.mouse(event(
+            MouseEventKind::Down(MouseButton::Left),
+            link.start as u16,
+            link.row as u16,
+        ));
+        assert_eq!(app.pressed_link, Some(link.id));
+        out.clear();
+        renderer.draw(&mut app, &mut out, 60, 12).unwrap();
+        let pressed_ansi = String::from_utf8_lossy(&out);
+        assert!(pressed_ansi.contains("\x1b[38;2;222;222;222m"));
+        app.mouse(event(
+            MouseEventKind::Up(MouseButton::Left),
+            link.start as u16,
+            link.row as u16,
+        ));
+        assert_eq!(app.pressed_link, None);
+        assert_eq!(app.hover, None);
+        out.clear();
+        renderer.draw(&mut app, &mut out, 60, 12).unwrap();
+        let resting_ansi = String::from_utf8_lossy(&out);
+        assert!(resting_ansi.contains("\x1b[38;2;189;222;171m"));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while !marker.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(marker.exists());
+
+        app.mouse(event(
+            MouseEventKind::Moved,
+            link.start as u16,
+            link.row as u16,
+        ));
+        assert_eq!(app.hover, Some(link.id));
+        renderer
+            .draw(&mut app, &mut std::io::sink(), 62, 12)
+            .unwrap();
+        assert_eq!(app.hover, None);
+
+        std::fs::write(
+            &cfg,
+            "return { theme = { accent = '#112233', fg = '#445566' } }",
+        )
+        .unwrap();
+        app.session.reload().unwrap();
+        app.handle_event(tuse_core::Event::Reloaded);
+        out.clear();
+        renderer.draw(&mut app, &mut out, 62, 12).unwrap();
+        let reloaded_ansi = String::from_utf8_lossy(&out);
+        assert!(reloaded_ansi.contains("\x1b[38;2;17;34;51m"));
+        let link = app.links[0].clone();
+        app.mouse(event(
+            MouseEventKind::Moved,
+            link.start as u16,
+            link.row as u16,
+        ));
+        out.clear();
+        renderer.draw(&mut app, &mut out, 62, 12).unwrap();
+        let hovered_ansi = String::from_utf8_lossy(&out);
+        assert!(hovered_ansi.contains("\x1b[38;2;68;85;102m"));
+
         crate::app::cleanup(app);
     }
 

@@ -105,14 +105,21 @@ impl App {
         match code {
             KeyCode::Esc => {
                 self.panel = None;
+                self.clear_link_hover();
                 if let Some((mut picker, search)) = self.trace_back.take() {
                     picker.follow(self.picker_rows());
                     self.picker = Some(picker);
                     self.editor = search;
                 }
             }
-            KeyCode::Up if self.editor.is_empty() => panel.scroll_by(-step),
-            KeyCode::Down if self.editor.is_empty() => panel.scroll_by(step),
+            KeyCode::Up if self.editor.is_empty() => {
+                panel.scroll_by(-step);
+                self.clear_link_hover();
+            }
+            KeyCode::Down if self.editor.is_empty() => {
+                panel.scroll_by(step);
+                self.clear_link_hover();
+            }
             KeyCode::Left
                 if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
             {
@@ -153,7 +160,7 @@ impl App {
         picker.follow(rows);
         self.panel = Some(trace_panel(it));
         self.selection = Default::default();
-        self.hover = None;
+        self.clear_link_hover();
     }
 }
 

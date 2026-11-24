@@ -84,7 +84,7 @@ Shortcuts also work with the Russian keyboard layout when `Ctrl`, `Alt`, or `Sup
   - Active in: agent Markdown messages (outside `lua` code fences), `show()` blocks, `/config`, `/session`, and `system`/`user`/`agent` detail panels in `/trace`.
   - Not active in: user chat messages, `ask()` panels, Lua code, tool output, diffs, or plain-text `/trace` panels.
   - Detects bare `http://`/`https://` URLs (trimming trailing punctuation while preserving balanced parentheses), existing local file paths (absolute, `~/`, `./`, `../`, relative with `/` or `name.ext`, with optional `:line[:col]`), and Markdown `[label](dest)` links (`http://`, `https://`, `mailto:`, `file://`, or local path).
-  - Hover highlights all visible spans for the same link target in `accent` (bold); resting links are `info` (underlined).
+  - Resting clickable links render in `accent` (underlined); hovering or pressing the left mouse button highlights all visible spans for the same link target in `fg` (bold, underlined), returning to `accent` when the pointer leaves or press-only state clears (with no visited color). Scrolling, resizing, or dragging clears stale link hover.
   - Left-clicking (press and release on the same cell without dragging) opens URLs (`http://`, `https://`, `mailto:`, under 2,000 characters) via the OS opener, and opens existing local paths via a matching `open.<ext>` Lua callback (case-insensitive extension) or the OS default (`open` on macOS, `xdg-open` on Linux, `cmd /C start ""` on Windows). Open failures emit a chat error.
 
 ## Pickers, panels, and slash workflows

@@ -28,6 +28,7 @@ impl Renderer {
         let (w, h) = (w as usize, h as usize);
         if self.size != (w, h) || self.palette_gen != app.palette_gen {
             app.selection = Default::default();
+            app.clear_link_hover();
             self.prev.clear();
             self.size = (w, h);
             self.palette_gen = app.palette_gen;
@@ -88,7 +89,7 @@ impl Renderer {
         );
         screen.truncate(h);
         app.links = crate::links::scan(&screen, pad);
-        crate::links::highlight(&mut screen, app.hover, p.accent);
+        crate::links::highlight(&mut screen, app.hover.or(app.pressed_link), p.fg);
         app.selection
             .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
 

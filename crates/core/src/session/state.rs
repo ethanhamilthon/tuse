@@ -2,9 +2,16 @@ use crate::convo::record::Record;
 use crate::convo::usage::Stats;
 use crate::event::Event;
 use crate::session::{Session, State};
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 impl Session {
+    pub(crate) fn stop_commands(&self) {
+        for c in self.cmd_runs.lock().unwrap().drain(..) {
+            c.store(true, Ordering::Relaxed);
+        }
+    }
+
     pub fn records(&self) -> Vec<Record> {
         self.state.lock().unwrap().records.clone()
     }

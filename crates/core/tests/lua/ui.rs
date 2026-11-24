@@ -1,3 +1,4 @@
+#[path = "../common/mod.rs"]
 mod common;
 use std::time::{Duration, Instant};
 use tuse_core::{Event, Mode, Options, Session, Start, UiPrompt, UiRequest, UserInput};

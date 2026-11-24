@@ -21,3 +21,47 @@ getrandom = "0.3"
 
 [dev-dependencies]
 tuse-config.workspace = true
+
+[[test]]
+name = "lua_llm"
+path = "tests/lua/llm.rs"
+
+[[test]]
+name = "lua_reload"
+path = "tests/lua/reload.rs"
+
+[[test]]
+name = "lua_ui"
+path = "tests/lua/ui.rs"
+
+[[test]]
+name = "reload_helpers"
+path = "tests/lua/helpers.rs"
+
+[[test]]
+name = "plugins"
+path = "tests/plugins/loading.rs"
+
+[[test]]
+name = "plugin_sync"
+path = "tests/plugins/sync.rs"
+
+[[test]]
+name = "default_plugin"
+path = "tests/plugins/default.rs"
+
+[[test]]
+name = "agent_flow"
+path = "tests/session/agent_flow.rs"
+
+[[test]]
+name = "agent_functions"
+path = "tests/session/agent_functions.rs"
+
+[[test]]
+name = "session_and_open"
+path = "tests/session/open.rs"
+
+[[test]]
+name = "session_model"
+path = "tests/session/model.rs"

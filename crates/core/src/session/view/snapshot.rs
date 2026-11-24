@@ -1,6 +1,6 @@
 use crate::mode::Mode;
 use crate::session::Session;
-use crate::session::trace::TraceItem;
+use crate::session::view::trace::TraceItem;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tuse_config::{ModelDef, Prices, split_model};

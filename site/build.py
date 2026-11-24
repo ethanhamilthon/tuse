@@ -21,6 +21,16 @@ TEMPLATES_DIR = SITE_DIR / "templates"
 REDIRECTS_FILE = SITE_DIR / "redirects.json"
 CANONICAL_ORIGIN = "https://ethanhamilthon.github.io"
 EXTERNAL_SCHEMES = ("http://", "https://", "mailto:", "data:")
+BUILD_MARKER = ".tuse-site-build"
+PROTECTED_DIRS = (
+    DOCS_DIR,
+    SITE_DIR,
+    ROOT / ".git",
+    ROOT / ".github",
+    ROOT / "crates",
+    ROOT / "release",
+    ROOT / "plugins",
+)
 
 
 def normalize_base(raw: str) -> str:
@@ -30,13 +40,38 @@ def normalize_base(raw: str) -> str:
     return "/" + s.strip("/") + "/"
 
 
-def github_slug(text: str, counts: dict[str, int]) -> str:
+def validate_out_dir(raw: str) -> Path:
+    raw_path = Path(raw)
+    if raw_path.is_symlink():
+        raise ValueError(f"refusing to write through symlink --out '{raw}'")
+    out_dir = raw_path.resolve()
+    if out_dir == out_dir.parent or out_dir == ROOT or ROOT.is_relative_to(out_dir):
+        raise ValueError(f"refusing unsafe --out '{raw}' (resolves to '{out_dir}')")
+    for protected in PROTECTED_DIRS:
+        if out_dir == protected or out_dir.is_relative_to(protected):
+            raise ValueError(f"refusing protected --out '{raw}' (inside '{protected}')")
+    if out_dir.exists():
+        if not out_dir.is_dir():
+            raise ValueError(f"--out '{raw}' exists and is not a directory")
+        has_entries = any(out_dir.iterdir())
+        if has_entries and not (out_dir / BUILD_MARKER).is_file():
+            raise ValueError(
+                f"refusing to overwrite non-empty directory '{out_dir}' without {BUILD_MARKER}"
+            )
+    return out_dir
+
+
+def github_slug(text: str, used: set[str]) -> str:
     lowered = text.strip().lower()
     kept = "".join(ch for ch in lowered if ch.isalnum() or ch in (" ", "-", "_"))
     base = kept.replace(" ", "-")
-    n = counts.get(base, 0)
-    counts[base] = n + 1
-    return base if n == 0 else f"{base}-{n}"
+    candidate = base
+    n = 1
+    while candidate in used:
+        candidate = f"{base}-{n}"
+        n += 1
+    used.add(candidate)
+    return candidate
 
 
 def inline_plain_text(token) -> str:
@@ -51,22 +86,25 @@ def inline_plain_text(token) -> str:
     return "".join(parts)
 
 
-def rewrite_md_href(href: str, rel_md: str, errors: list[str]) -> str:
-    if not href or href.startswith("#") or href.startswith(EXTERNAL_SCHEMES):
-        return href
-    parsed = urlsplit(href)
+def rewrite_md_dest(dest: str, rel_md: str, is_link: bool, errors: list[str]) -> str:
+    if not dest or dest.startswith("#") or dest.startswith(EXTERNAL_SCHEMES):
+        return dest
+    parsed = urlsplit(dest)
     if parsed.scheme:
-        return href
-    path_part = parsed.path
+        return dest
+    raw_path = parsed.path
+    decoded_path = unquote(raw_path)
     frag = f"#{parsed.fragment}" if parsed.fragment else ""
-    if path_part.startswith("/"):
-        return href
+    kind = "link" if is_link else "image"
+    if raw_path.startswith("/") or decoded_path.startswith("/"):
+        errors.append(f"docs/{rel_md}: {kind} '{dest}' must stay relative inside docs/")
+        return dest
     src_dir = posixpath.dirname(rel_md)
-    joined = posixpath.normpath(posixpath.join(src_dir, path_part))
+    joined = posixpath.normpath(posixpath.join(src_dir, decoded_path))
     if joined == ".." or joined.startswith("../"):
-        errors.append(f"docs/{rel_md}: link '{href}' escapes docs/")
-        return href
-    if path_part.endswith(".md"):
+        errors.append(f"docs/{rel_md}: {kind} '{dest}' escapes docs/")
+        return dest
+    if is_link and decoded_path.endswith(".md"):
         if joined == "index.md":
             rel_dir = posixpath.relpath(".", src_dir or ".")
             target = "./" if rel_dir == "." else rel_dir.rstrip("/") + "/"
@@ -75,8 +113,10 @@ def rewrite_md_href(href: str, rel_md: str, errors: list[str]) -> str:
             rel_dir = posixpath.relpath(posixpath.dirname(joined), src_dir or ".")
             target = "./" if rel_dir == "." else rel_dir.rstrip("/") + "/"
             return target + frag
-        return path_part[:-3] + ".html" + frag
-    return href
+        if raw_path.endswith(".md"):
+            return raw_path[:-3] + ".html" + frag
+        return decoded_path[:-3] + ".html" + frag
+    return dest
 
 
 def make_markdown() -> MarkdownIt:
@@ -87,7 +127,7 @@ def make_markdown() -> MarkdownIt:
 
 def render_markdown(md: MarkdownIt, text: str, rel_md: str, errors: list[str]) -> tuple[str, str]:
     tokens = md.parse(text)
-    slug_counts: dict[str, int] = {}
+    used_ids: set[str] = set()
     title = ""
     i = 0
     while i < len(tokens):
@@ -96,12 +136,15 @@ def render_markdown(md: MarkdownIt, text: str, rel_md: str, errors: list[str]) -
             heading_text = inline_plain_text(tokens[i + 1]).strip()
             if tok.tag == "h1" and not title:
                 title = heading_text
-            tok.attrSet("id", github_slug(heading_text, slug_counts))
+            tok.attrSet("id", github_slug(heading_text, used_ids))
         if tok.children:
             for child in tok.children:
                 if child.type == "link_open":
                     href = child.attrGet("href") or ""
-                    child.attrSet("href", rewrite_md_href(href, rel_md, errors))
+                    child.attrSet("href", rewrite_md_dest(href, rel_md, True, errors))
+                elif child.type == "image":
+                    src = child.attrGet("src") or ""
+                    child.attrSet("src", rewrite_md_dest(src, rel_md, False, errors))
         i += 1
     rendered = md.renderer.render(tokens, md.options, {})
     rendered = rendered.replace("<table>", '<div class="table-wrap"><table>')
@@ -184,9 +227,10 @@ def write_redirect(out_dir: Path, src_rel: str, dst_rel: str, base: str) -> None
 
 def build_site(base: str, out_dir: Path) -> tuple[list[str], set[str], dict[str, str]]:
     errors: list[str] = []
-    if out_dir.exists():
+    if out_dir.exists() and (out_dir / BUILD_MARKER).is_file():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / BUILD_MARKER).write_text("tuse-site\n", encoding="utf-8")
 
     if ASSETS_DIR.exists():
         shutil.copytree(ASSETS_DIR, out_dir / "assets")
@@ -277,13 +321,17 @@ class HtmlInspector(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.ids: set[str] = set()
+        self.dup_ids: list[str] = []
         self.links: list[tuple[str, str]] = []
         self.assets: list[tuple[str, str]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attr_map = {k: (v or "") for k, v in attrs}
         if "id" in attr_map and attr_map["id"]:
-            self.ids.add(attr_map["id"])
+            ident = attr_map["id"]
+            if ident in self.ids:
+                self.dup_ids.append(ident)
+            self.ids.add(ident)
         if tag == "a" and "href" in attr_map:
             self.links.append((tag, attr_map["href"]))
         elif tag == "link" and "href" in attr_map:
@@ -291,6 +339,11 @@ class HtmlInspector(HTMLParser):
                 self.assets.append((tag, attr_map["href"]))
         elif tag in ("script", "img") and "src" in attr_map:
             self.assets.append((tag, attr_map["src"]))
+        elif tag == "source" and "srcset" in attr_map:
+            for item in attr_map["srcset"].split(","):
+                part = item.strip().split()[0] if item.strip() else ""
+                if part:
+                    self.assets.append((tag, part))
         elif tag == "meta":
             if attr_map.get("property") == "og:image" and attr_map.get("content"):
                 self.assets.append(("meta[og:image]", attr_map["content"]))
@@ -351,7 +404,7 @@ def check_site(
     errors = list(build_errors)
     for tmpl in [SITE_DIR / "landing.html", *sorted(TEMPLATES_DIR.glob("*.html"))]:
         text = tmpl.read_text(encoding="utf-8")
-        for m in re.finditer(r'(?:href|src|content)=["\'](/(?:docs|assets)/[^"\']*)["\']', text):
+        for m in re.finditer(r'(?:href|src|srcset|content)=["\'](/(?:docs|assets)/[^"\']*)["\']', text):
             errors.append(
                 f"{tmpl.relative_to(ROOT)}: unprefixed root-absolute URL '{m.group(1)}' (use {{{{base}}}})"
             )
@@ -361,6 +414,8 @@ def check_site(
         rel = html_file.relative_to(out_dir).as_posix()
         parser = HtmlInspector()
         parser.feed(html_file.read_text(encoding="utf-8"))
+        for dup in parser.dup_ids:
+            errors.append(f"{rel}: duplicate id '{dup}'")
         inspectors[rel] = parser
 
     graph: dict[str, set[str]] = {rel: set() for rel in inspectors}
@@ -410,7 +465,11 @@ def main() -> int:
     args = ap.parse_args()
 
     base = normalize_base(args.base)
-    out_dir = Path(args.out).resolve()
+    try:
+        out_dir = validate_out_dir(args.out)
+    except ValueError as exc:
+        print(f"site build error: {exc}", file=sys.stderr)
+        return 1
     errors, rendered_docs, redirects = build_site(base, out_dir)
     if args.check:
         errors = check_site(base, out_dir, errors, rendered_docs, redirects)

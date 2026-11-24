@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
     let defs = tuse_core::configured_models(cwd, config)?;
-    let model = tuse_core::default_model();
-    let effort = tuse_core::default_effort();
+    let model = tuse_core::Prefs::model();
+    let effort = tuse_core::Prefs::effort();
     println!(
         "Default: {} (effort: {effort})",
         if model.is_empty() { "(none)" } else { &model }

@@ -45,7 +45,7 @@ pub fn run(args: &Args) -> Result<(), String> {
         return Err("the name can't contain `/` or whitespace".into());
     }
     let replace = args.has(&["--replace"]);
-    if !replace && tuse_core::providers()?.iter().any(|p| p.name == name) {
+    if !replace && tuse_core::Providers::list()?.iter().any(|p| p.name == name) {
         return Err(format!(
             "`{name}` already exists; `tuse disconnect {name}` removes it"
         ));
@@ -57,7 +57,7 @@ pub fn run(args: &Args) -> Result<(), String> {
     let models = tuse_api::Client::new(&base_url, &key, api)
         .models()
         .map_err(|e| format!("can't fetch models from {base_url}: {e}"))?;
-    tuse_core::add_provider(&tuse_config::Connect {
+    tuse_core::Providers::add(&tuse_config::Connect {
         name: name.clone(),
         base_url,
         api_key,
@@ -68,7 +68,7 @@ pub fn run(args: &Args) -> Result<(), String> {
 }
 
 pub fn remove(name: &str) -> Result<(), String> {
-    if !tuse_core::remove_provider(name)? {
+    if !tuse_core::Providers::remove(name)? {
         return Err(format!("no provider `{name}`"));
     }
     println!("Removed `{name}`");
@@ -77,9 +77,9 @@ pub fn remove(name: &str) -> Result<(), String> {
 
 pub fn list(as_json: bool) -> Result<(), String> {
     if as_json {
-        println!("{}", tuse_core::providers_json()?);
+        println!("{}", tuse_core::Providers::json()?);
     } else {
-        for p in tuse_core::providers()? {
+        for p in tuse_core::Providers::list()? {
             println!("{}\t{}", p.name, p.base_url);
         }
     }

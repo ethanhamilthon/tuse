@@ -1,6 +1,6 @@
-use crate::convo::id;
 use crate::convo::record::{FileDiff, Record};
 use crate::event::Event;
+use crate::id;
 use crate::session::Session;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;

@@ -43,7 +43,7 @@ return #s2.trace
         Reply::Text("second reply"),
     ]);
     let (dir, cfg) = common::setup("session-open", &addr, "");
-    tuse_core::add_provider(&tuse_config::Connect {
+    tuse_core::Providers::add(&tuse_config::Connect {
         name: "p".into(),
         base_url: format!("http://{addr}"),
         api_key: "sk-super-secret".into(),

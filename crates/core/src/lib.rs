@@ -1,6 +1,7 @@
 mod convo;
 mod docs;
 mod event;
+mod id;
 mod mode;
 mod prompt;
 mod scripting;
@@ -11,7 +12,7 @@ mod tools;
 
 pub use convo::input::{FILE_LIMIT, Refs, build as build_input};
 pub use convo::record::{FileDiff, Record, UserInput};
-pub use convo::usage::{Stats, tokens};
+pub use convo::usage::Stats;
 pub use docs::docs;
 pub use event::{Event, InputId, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 pub use mode::{Mode, Options, Start};
@@ -24,12 +25,10 @@ pub use session::view::snapshot::{
     ModelInfoSnapshot, PricesSnapshot, SessionSnapshot, UsageSnapshot,
 };
 pub use session::view::trace::TraceItem;
-pub use storage::db::{
-    add_provider, default_effort, default_model, providers, providers_json, remove_provider,
-    set_state,
-};
-pub use storage::store::{Meta, list_sessions};
-pub use storage::tasks::{TaskInfo, tail};
+pub use storage::store::Meta;
+pub use storage::tasks::{TaskInfo, Tasks};
+pub use storage::{Prefs, Providers};
+pub use text::tokens;
 pub use tuse_config::HOST_FUNCTIONS;
 pub use tuse_config::tuse_home;
 

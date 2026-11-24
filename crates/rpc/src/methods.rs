@@ -157,7 +157,7 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             let cwd = p["cwd"]
                 .as_str()
                 .map_or_else(|| s.cwd().to_path_buf(), Into::into);
-            serde_json::to_value(tuse_core::list_sessions(&cwd))
+            serde_json::to_value(tuse_core::Meta::list(&cwd))
                 .map_err(|e| Fail::session(e.to_string()))
         }
         "model.get" => {
@@ -210,7 +210,7 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
                 .ok_or_else(|| Fail::session(format!("no task {id}")))?;
             let lines = p["lines"].as_u64().unwrap_or(50) as usize;
             let mut v = serde_json::to_value(&t).map_err(|e| Fail::session(e.to_string()))?;
-            v["output"] = json!(tuse_core::tail(&t.log, lines));
+            v["output"] = json!(tuse_core::Tasks::tail(&t.log, lines));
             Ok(v)
         }
         "tasks.stop" => {

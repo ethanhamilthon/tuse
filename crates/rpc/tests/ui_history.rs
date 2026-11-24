@@ -122,11 +122,7 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
     event(&out0, "ui_result");
     call(&tx0, &out0, 5, "shutdown", json!({}));
     srv0.join().unwrap();
-    assert!(
-        tuse_core::list_sessions(&dir)
-            .iter()
-            .all(|m| m.id != only_id)
-    );
+    assert!(tuse_core::Meta::list(&dir).iter().all(|m| m.id != only_id));
     assert!(!tuse_core::tuse_home().join(&only_id).join("lock").exists());
 
     let s1 = Session::open(Options {

@@ -149,7 +149,9 @@ fn bundled_default_plugin_theme_validation_and_zero_side_effects() {
     );
     s.reload().unwrap();
     assert!(
-        !subs_dir.exists() && s.tasks().is_empty() && tuse_core::providers().unwrap().is_empty()
+        !subs_dir.exists()
+            && s.tasks().is_empty()
+            && tuse_core::Providers::list().unwrap().is_empty()
     );
     s.close();
 
@@ -329,7 +331,7 @@ fn subs_setup_digest_login_streaming_ownership_reload_and_redaction() {
         .find(|t| t.id != decoy && t.name == "subs-proxy")
         .unwrap()
         .id;
-    let log = tuse_core::tail(&s.task(&owned).unwrap().log, 50);
+    let log = tuse_core::Tasks::tail(&s.task(&owned).unwrap().log, 50);
     assert!(log.contains("[REDACTED]"));
     for sec in [
         key.as_str(),

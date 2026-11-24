@@ -72,11 +72,11 @@ fn spawn_rpc(
 }
 
 fn providers(list: &[(&str, String)]) {
-    for p in tuse_core::providers().unwrap() {
-        tuse_core::remove_provider(&p.name).unwrap();
+    for p in tuse_core::Providers::list().unwrap() {
+        tuse_core::Providers::remove(&p.name).unwrap();
     }
     for (name, url) in list {
-        tuse_core::add_provider(&tuse_config::Connect {
+        tuse_core::Providers::add(&tuse_config::Connect {
             name: name.to_string(),
             base_url: url.clone(),
             api_key: "k".into(),

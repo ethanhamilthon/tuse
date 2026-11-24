@@ -287,14 +287,14 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let cfg = dir.join("tuse.lua");
         let addr = listener.local_addr().unwrap();
-        tuse_core::add_provider(&tuse_config::Connect {
+        tuse_core::Providers::add(&tuse_config::Connect {
             name: "steer".into(),
             base_url: format!("http://{addr}"),
             api_key: "test".into(),
             ..Default::default()
         })
         .unwrap();
-        tuse_core::set_state("model", "steer/m").unwrap();
+        tuse_core::Prefs::set("model", "steer/m").unwrap();
         std::fs::write(&cfg, "return {}").unwrap();
         let session = Session::open(Options {
             cwd: dir.clone(),
@@ -473,7 +473,7 @@ mod tests {
                 );
             }
         });
-        tuse_core::add_provider(&tuse_config::Connect {
+        tuse_core::Providers::add(&tuse_config::Connect {
             name: "switch".into(),
             base_url: format!("http://{addr}"),
             api_key: "test".into(),

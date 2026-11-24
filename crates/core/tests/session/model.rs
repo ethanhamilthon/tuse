@@ -22,7 +22,7 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     unsafe {
         std::env::set_var("HOME", &home);
     }
-    tuse_core::add_provider(&tuse_config::Connect {
+    tuse_core::Providers::add(&tuse_config::Connect {
         name: "p".into(),
         base_url: "http://127.0.0.1:1".into(),
         api_key: "k".into(),
@@ -47,8 +47,8 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     }}"#,
     )
     .unwrap();
-    tuse_core::set_state("model", "p/a").unwrap();
-    tuse_core::set_state("effort", "high").unwrap();
+    tuse_core::Prefs::set("model", "p/a").unwrap();
+    tuse_core::Prefs::set("effort", "high").unwrap();
     let s = open(&cfg, &dir, None);
     assert_eq!(s.model(), ("p/a".into(), "high".into()));
     assert_eq!(s.available_models(), ["p/a"]);
@@ -75,8 +75,8 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
         events.recv_timeout(std::time::Duration::from_secs(10)),
         Ok(tuse_core::Event::TurnEnd { .. }) | Err(_)
     ) {}
-    tuse_core::set_state("model", "p/b").unwrap();
-    tuse_core::set_state("effort", "low").unwrap();
+    tuse_core::Prefs::set("model", "p/b").unwrap();
+    tuse_core::Prefs::set("effort", "low").unwrap();
     std::fs::write(&models, "return {{ name = 'p/a', window = 300000 }}").unwrap();
     s.reload().unwrap();
     assert_eq!(s.model(), ("p/a".into(), "high".into()));
@@ -89,10 +89,6 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     assert_eq!(fresh.model(), ("p/b".into(), "low".into()));
     fresh.close();
     assert!(!home.join(".tuse").join(&fresh.id).exists());
-    assert!(
-        tuse_core::list_sessions(&dir)
-            .iter()
-            .all(|m| m.id != fresh.id)
-    );
+    assert!(tuse_core::Meta::list(&dir).iter().all(|m| m.id != fresh.id));
     std::fs::remove_dir_all(dir).ok();
 }

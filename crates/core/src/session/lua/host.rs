@@ -1,6 +1,6 @@
 use crate::event::UiPrompt;
 use crate::session::Session;
-use crate::storage::tasks::{TaskInfo, tail};
+use crate::storage::tasks::{TaskInfo, Tasks};
 use crate::tools;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -284,7 +284,7 @@ fn install_tasks(lua: &Lua) -> mlua::Result<()> {
                 .tasks
                 .get(&id)
                 .ok_or_else(|| mlua::Error::runtime(format!("no task {id}")))?;
-            let out = tail(&t.log, lines.map_or(50, |n| n.max(1) as usize));
+            let out = Tasks::tail(&t.log, lines.map_or(50, |n| n.max(1) as usize));
             task(lua, &t, Some(out))
         })?,
     )?;

@@ -49,10 +49,10 @@ fn prepare(mut opts: Options) -> Result<Prepared, String> {
     let id = opts
         .resume
         .clone()
-        .unwrap_or_else(crate::convo::id::new_session_id);
+        .unwrap_or_else(crate::id::new_session_id);
     let meta = if restored {
         let meta =
-            crate::storage::store::read_meta(&id).ok_or_else(|| format!("no session {id}"))?;
+            crate::storage::store::Meta::read(&id).ok_or_else(|| format!("no session {id}"))?;
         let cwd = PathBuf::from(&meta.cwd);
         if cwd.is_dir() {
             opts.cwd = cwd;
@@ -62,7 +62,7 @@ fn prepare(mut opts: Options) -> Result<Prepared, String> {
         Meta {
             id: id.clone(),
             cwd: opts.cwd.display().to_string(),
-            created: crate::convo::id::now(),
+            created: crate::id::now(),
             ..Default::default()
         }
     };
@@ -96,8 +96,8 @@ impl Prepared {
             dir.append(&r);
             records.push(r);
         }
-        let default_model = crate::storage::db::default_model();
-        let default_effort = crate::storage::db::default_effort();
+        let default_model = crate::storage::Prefs::model();
+        let default_effort = crate::storage::Prefs::effort();
         if !restored {
             let r = Record::Settings {
                 model: default_model.clone(),

@@ -82,7 +82,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let cfg = dir.join("tuse.lua");
         let addr = listener.local_addr().unwrap();
-        tuse_core::add_provider(&tuse_config::Connect {
+        tuse_core::Providers::add(&tuse_config::Connect {
             name: "workind".into(),
             base_url: format!("http://{addr}"),
             api_key: "test".into(),

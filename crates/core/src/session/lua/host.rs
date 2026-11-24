@@ -160,7 +160,7 @@ fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
             tuse_config::Settings::default().max_image_bytes,
         ),
     };
-    let p = tools::resolve(&path, &cwd);
+    let p = tuse_config::resolve_path(&path, &cwd);
     let lines = match &o {
         Some(t) => t.get::<Option<bool>>("lines")?.unwrap_or(false),
         None => false,
@@ -185,7 +185,7 @@ fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
 fn write(lua: &Lua, (path, content): (String, String)) -> mlua::Result<String> {
     let s = session(lua)?;
     action(&s, "writing", &path);
-    let p = tools::resolve(&path, &s.cwd);
+    let p = tuse_config::resolve_path(&path, &s.cwd);
     let (msg, diff) = tools::write(&p, &content).map_err(err)?;
     with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
     Ok(msg)
@@ -194,7 +194,7 @@ fn write(lua: &Lua, (path, content): (String, String)) -> mlua::Result<String> {
 fn append(lua: &Lua, (path, text): (String, String)) -> mlua::Result<String> {
     let s = session(lua)?;
     action(&s, "appending", &path);
-    let p = tools::resolve(&path, &s.cwd);
+    let p = tuse_config::resolve_path(&path, &s.cwd);
     let (msg, diff) = tools::append(&p, &text).map_err(err)?;
     with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
     Ok(msg)
@@ -203,7 +203,7 @@ fn append(lua: &Lua, (path, text): (String, String)) -> mlua::Result<String> {
 fn delete(lua: &Lua, path: String) -> mlua::Result<String> {
     let s = session(lua)?;
     action(&s, "deleting", &path);
-    let p = tools::resolve(&path, &s.cwd);
+    let p = tuse_config::resolve_path(&path, &s.cwd);
     let (msg, diff) = tools::delete(&p).map_err(err)?;
     with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
     Ok(msg)
@@ -215,7 +215,7 @@ fn edit(
 ) -> mlua::Result<String> {
     let s = session(lua)?;
     action(&s, "editing", &path);
-    let p = tools::resolve(&path, &s.cwd);
+    let p = tuse_config::resolve_path(&path, &s.cwd);
     let all = match o {
         Some(t) => t.get::<Option<bool>>("all")?.unwrap_or(false),
         None => false,

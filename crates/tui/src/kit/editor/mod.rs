@@ -1,6 +1,5 @@
 mod atoms;
 mod layout;
-mod selection;
 
 pub use atoms::{Atom, AtomKind};
 
@@ -87,16 +86,6 @@ impl Editor {
         }
     }
 
-    pub fn view(&self, cols: usize) -> View {
-        let (rows, cursor) = self.layout(cols);
-        View {
-            rows,
-            cursor,
-            selected: self.selected_columns(cols),
-            atoms: self.atom_columns(cols),
-        }
-    }
-
     pub fn refs(&self) -> Refs {
         Refs {
             prompts: self.prompts(),
@@ -119,6 +108,38 @@ impl Editor {
 
     pub fn has_selection(&self) -> bool {
         self.selection_range().is_some()
+    }
+
+    fn selection_range(&self) -> Option<(usize, usize)> {
+        self.anchor
+            .filter(|a| *a != self.cursor)
+            .map(|a| (a.min(self.cursor), a.max(self.cursor)))
+    }
+
+    pub fn selected_text(&self) -> Option<String> {
+        let (a, b) = self.selection_range()?;
+        Some(self.range_text(a, b))
+    }
+
+    fn delete_selection(&mut self) -> bool {
+        let range = self.selection_range();
+        self.clear_selection();
+        if let Some((a, b)) = range {
+            self.buf.drain(a..b);
+            self.cursor = a;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn select_all(&mut self) {
+        self.anchor = Some(0);
+        self.cursor = self.buf.len();
+    }
+
+    fn clear_selection(&mut self) {
+        self.anchor = None;
     }
 
     #[cfg(test)]

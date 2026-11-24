@@ -1,4 +1,4 @@
-use super::Editor;
+use super::{Editor, View};
 use crate::kit::text::{char_width, width};
 
 pub struct Row {
@@ -9,18 +9,21 @@ pub struct Row {
 }
 
 impl Editor {
-    pub(super) fn layout(&self, cols: usize) -> (Vec<String>, (usize, usize)) {
-        let (rows, cur) = self.placed(cols);
-        (rows.into_iter().map(|r| r.text).collect(), cur)
+    pub fn view(&self, cols: usize) -> View {
+        let (rows, cursor) = self.placed(cols);
+        View {
+            cursor,
+            selected: self.selected_columns(&rows, cols),
+            atoms: self.atom_columns(&rows, cols),
+            rows: rows.into_iter().map(|r| r.text).collect(),
+        }
     }
 
-    pub(super) fn selected_columns(&self, cols: usize) -> Vec<(usize, usize)> {
+    fn selected_columns(&self, rows: &[Row], cols: usize) -> Vec<(usize, usize)> {
         let Some((a, b)) = self.selection_range() else {
             return vec![];
         };
-        self.placed(cols)
-            .0
-            .iter()
+        rows.iter()
             .map(|r| {
                 let col = |index: usize| {
                     (r.start..index.clamp(r.start, r.end))
@@ -33,10 +36,8 @@ impl Editor {
             .collect()
     }
 
-    pub(super) fn atom_columns(&self, cols: usize) -> Vec<Vec<(usize, usize)>> {
-        self.placed(cols)
-            .0
-            .iter()
+    fn atom_columns(&self, rows: &[Row], cols: usize) -> Vec<Vec<(usize, usize)>> {
+        rows.iter()
             .map(|r| {
                 let mut col = 0;
                 let mut out = vec![];
@@ -216,22 +217,35 @@ mod tests {
     #[test]
     fn wraps_at_words_and_cuts_long_ones() {
         let e = ed("hello big world");
-        assert_eq!(e.layout(8).0, ["hello ", "big ", "world"]);
-        assert_eq!(ed("abcdefghij").layout(4).0, ["abcd", "efgh", "ij"]);
-        assert_eq!(ed("ab cdefghij").layout(4).0, ["ab ", "cdef", "ghij", ""]);
-        assert_eq!(ed("ab cdefghi").layout(4).0, ["ab ", "cdef", "ghi"]);
+        assert_eq!(e.view(8).rows, ["hello ", "big ", "world"]);
+        assert_eq!(ed("abcdefghij").view(4).rows, ["abcd", "efgh", "ij"]);
+        assert_eq!(ed("ab cdefghij").view(4).rows, ["ab ", "cdef", "ghij", ""]);
+        assert_eq!(ed("ab cdefghi").view(4).rows, ["ab ", "cdef", "ghi"]);
     }
 
     #[test]
     fn cursor_follows_wrapped_rows() {
         let mut e = ed("hello big world");
-        assert_eq!(e.layout(8).1, (2, 5));
+        assert_eq!(e.view(8).cursor, (2, 5));
         e.cursor = 6;
-        assert_eq!(e.layout(8).1, (1, 0));
+        assert_eq!(e.view(8).cursor, (1, 0));
         let mut e = ed("abcd");
-        assert_eq!(e.layout(4).1, (1, 0));
+        assert_eq!(e.view(4).cursor, (1, 0));
         e.cursor = 2;
-        assert_eq!(e.layout(4).1, (0, 2));
+        assert_eq!(e.view(4).cursor, (0, 2));
+    }
+
+    #[test]
+    fn view_aligns_selection_and_atoms_across_wrapped_rows() {
+        let mut e = ed("ab ");
+        e.insert_atom("@x", super::super::AtomKind::File("x".into()));
+        e.insert("語");
+        e.select_all();
+        let view = e.view(4);
+        assert_eq!(view.rows, ["ab ", "@x語", ""]);
+        assert_eq!(view.cursor, (2, 0));
+        assert_eq!(view.selected, [(0, 3), (0, 4), (0, 0)]);
+        assert_eq!(view.atoms, [vec![], vec![(0, 2)], vec![]]);
     }
 
     #[test]

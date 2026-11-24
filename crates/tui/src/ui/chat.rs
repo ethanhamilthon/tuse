@@ -182,10 +182,9 @@ impl Chat {
             let lines = self.lines(i, width, p);
             push_rev(&mut rev, lines, need, gap);
         }
-        rev.truncate(need);
         let clamped = scroll.min(rev.len().saturating_sub(height));
         let end = rev.len().min(clamped + height);
-        let out = rev[clamped..end].iter().rev().cloned().collect();
+        let out = rev.drain(clamped..end).rev().collect();
         (out, clamped)
     }
 }
@@ -194,15 +193,10 @@ fn push_rev(rev: &mut Vec<Line>, lines: &[Line], need: usize, gap: usize) {
     if lines.is_empty() {
         return;
     }
-    let gap_lines = if rev.is_empty() { 0 } else { gap };
-    let take = need - rev.len();
-    let mut block: Vec<Line> = lines.iter().rev().take(take).cloned().collect();
-    if gap_lines > 0 {
-        let mut with_gap: Vec<Line> = (0..gap_lines).map(|_| vec![]).collect();
-        with_gap.append(&mut block);
-        block = with_gap;
+    if !rev.is_empty() {
+        rev.resize_with(rev.len() + gap.min(need - rev.len()), Vec::new);
     }
-    rev.extend(block);
+    rev.extend(lines.iter().rev().take(need - rev.len()).cloned());
 }
 
 impl Chat {
@@ -376,7 +370,8 @@ mod tests {
 
     #[test]
     fn window_slices_and_invalidate_clears_cache() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let mut p = Palette::new(&Default::default(), &Default::default());
+        p.ui.message_gap = 4;
         let mut c = Chat::default();
         c.push(Entry::Notice("one".into()));
         c.push(Entry::Notice("two".into()));

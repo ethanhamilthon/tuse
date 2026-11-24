@@ -26,36 +26,27 @@ impl App {
         let left = crate::kit::text::width(crate::kit::style::INPUT_PREFIX);
         let text_w = inner.saturating_sub(left).max(1);
         self.input_cols = text_w;
-        let view = self.editor.view(text_w);
+        let mut view = self.editor.view(text_w);
         let (crow, ccol) = view.cursor;
-        let rows = view.rows.clone();
         let head = usize::from(h > 1);
         let foot = usize::from(h > 2);
         let editor_room = h.saturating_sub(head + foot).max(1);
-        let input_h = tuse_config::limit(ui.input_max_height, rows.len())
+        let input_h = tuse_config::limit(ui.input_max_height, view.rows.len())
             .max(1)
             .min(editor_room);
         let input_top = crow
             .saturating_sub(input_h.saturating_sub(1))
-            .min(rows.len().saturating_sub(input_h));
+            .min(view.rows.len().saturating_sub(input_h));
         let fixed = input_h + head + foot;
         let chat_h = h.saturating_sub(fixed);
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
         let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.list_max_height);
-        let mut overlay = if self.picker.is_some() {
-            {
-                let p = &self.palette;
-                match &mut self.picker {
-                    Some(pk) => {
-                        let rows = cap.saturating_sub(1).max(1);
-                        let lines = crate::ui::screen::list::options(pk, rows, inner, p);
-                        self.list_rows = rows;
-                        crate::kit::rich::render::framed(lines, inner, p)
-                    }
-                    None => vec![],
-                }
-            }
+        let mut overlay = if let Some(pk) = &mut self.picker {
+            let rows = cap.saturating_sub(1).max(1);
+            let lines = crate::ui::screen::list::options(pk, rows, inner, p);
+            self.list_rows = rows;
+            crate::kit::rich::render::framed(lines, inner, p)
         } else if let Some(panel) = self
             .question
             .as_mut()
@@ -69,7 +60,6 @@ impl App {
         overlay.truncate(cap);
         let history_h = chat_h - overlay.len();
         self.overlay_rows = history_h..chat_h;
-        let p = &self.palette;
         if history_h > 0 {
             let (view, clamped) = self.chat.window(inner, p, self.scroll, history_h);
             self.scroll = clamped;
@@ -77,9 +67,9 @@ impl App {
             screen.extend(view);
         }
         screen.extend(overlay);
-        let mut rows = rows;
-        rows.resize_with(rows.len().max(input_h), String::new);
-        let shown = &rows[input_top..input_top + input_h];
+        view.rows
+            .resize_with(view.rows.len().max(input_h), String::new);
+        let shown = &view.rows[input_top..input_top + input_h];
         screen.extend(
             self.input_block(&view, inner, shown, input_top)
                 .into_iter()

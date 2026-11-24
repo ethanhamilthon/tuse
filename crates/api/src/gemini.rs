@@ -1,24 +1,27 @@
-use crate::args::ArgStream;
-use crate::client::{
-    Client, check_status, finalize_calls, map_err, parse_data_url, parse_json, parse_json_object,
-    read_body, read_sse, url_encode,
+use crate::client::Client;
+use crate::http::{
+    active_turn_start, add_reasoning, add_text, check_err, drive_response, finalize_calls, jarr,
+    jstr, ju64, make_replay, paginate_models, parse_data_url, parse_json_object, post_json,
+    push_tool, push_turn, url_encode,
 };
-use crate::types::{ApiType, Delta, Error, Message, Replay, Reply, Request, ToolCall, Usage};
+use crate::types::{ApiType, Delta, Error, Message, Reply, Request, Usage};
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 
-const MAX_MODEL_PAGES: usize = 10;
-const SKIP_THOUGHT_SIG: &str = "skip_thought_signature_validator";
+const SKIP_SIG: &str = "skip_thought_signature_validator";
+
+fn push_images(parts: &mut Vec<Value>, urls: &[String], prov: &str) -> Result<(), Error> {
+    for u in urls {
+        let (mime, data) = parse_data_url(u, prov, ApiType::GoogleGemini)?;
+        parts.push(json!({"inlineData": {"mimeType": mime, "data": data}}));
+    }
+    Ok(())
+}
 
 pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
-    let active_start = req
-        .messages
-        .iter()
-        .rposition(|m| matches!(m, Message::User { .. }))
-        .map_or(0, |i| i + 1);
-    let mut contents: Vec<Value> = vec![];
-    let mut wire_ids: HashMap<&str, bool> = HashMap::new();
+    let active_start = active_turn_start(&req.messages);
+    let (mut contents, mut wire_ids) = (vec![], HashMap::<&str, bool>::new());
     for (idx, m) in req.messages.iter().enumerate() {
         let (role, parts) = match m {
             Message::User { text, images } => {
@@ -26,10 +29,7 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
                 if !text.is_empty() {
                     parts.push(json!({"text": text}));
                 }
-                for url in images {
-                    let (mime, data) = parse_data_url(url, &req.provider, ApiType::GoogleGemini)?;
-                    parts.push(inline_data(mime, data));
-                }
+                push_images(&mut parts, images, &req.provider)?;
                 ("user", parts)
             }
             Message::Assistant {
@@ -39,29 +39,25 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
             } => {
                 wire_ids.clear();
                 let mut parts = vec![];
-                if let Some(r) = replay
+                let hit = replay
                     .as_ref()
-                    .filter(|r| r.matches(&req.provider, ApiType::GoogleGemini, &req.model))
-                {
+                    .filter(|r| r.matches(&req.provider, ApiType::GoogleGemini, &req.model));
+                if let Some(r) = hit {
                     let mut items = r.items.clone();
                     let has_sig = items.iter().any(|p| p.get("thoughtSignature").is_some());
                     let mut fc_i = 0usize;
                     for p in &mut items {
                         if let Some(fc) = p.get("functionCall") {
-                            let has_id = fc
-                                .get("id")
-                                .and_then(Value::as_str)
-                                .is_some_and(|s| !s.is_empty());
+                            let has_id = jstr(fc, "id").is_some_and(|s| !s.is_empty());
                             if let Some(tc) = tool_calls.get(fc_i) {
                                 wire_ids.insert(tc.id.as_str(), has_id);
                             }
-                            if idx >= active_start
+                            let need_sig = idx >= active_start
                                 && !has_sig
                                 && fc_i == 0
-                                && !req.model.starts_with("gemini-2.5-")
-                                && let Some(obj) = p.as_object_mut()
-                            {
-                                obj.insert("thoughtSignature".into(), json!(SKIP_THOUGHT_SIG));
+                                && !req.model.starts_with("gemini-2.5-");
+                            if need_sig && let Some(obj) = p.as_object_mut() {
+                                obj.insert("thoughtSignature".into(), json!(SKIP_SIG));
                             }
                             fc_i += 1;
                         }
@@ -72,17 +68,15 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
                         parts.push(json!({"text": text}));
                     }
                     for c in tool_calls {
-                        let mut fc = json!({
-                            "name": c.name,
-                            "args": parse_json_object(&c.arguments),
-                        });
+                        let mut fc =
+                            json!({"name": c.name, "args": parse_json_object(&c.arguments)});
                         if !c.id.is_empty() {
                             fc["id"] = json!(c.id);
                             wire_ids.insert(c.id.as_str(), true);
                         }
                         let mut part = json!({"functionCall": fc});
                         if idx >= active_start {
-                            part["thoughtSignature"] = json!(SKIP_THOUGHT_SIG);
+                            part["thoughtSignature"] = json!(SKIP_SIG);
                         }
                         parts.push(part);
                     }
@@ -95,60 +89,35 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
                 output,
                 images,
             } => {
-                let mut fr = json!({
-                    "name": name,
-                    "response": {"output": output},
-                });
-                let send_id = wire_ids.get(id.as_str()).copied().unwrap_or(!id.is_empty());
-                if send_id && !id.is_empty() {
+                let mut fr = json!({"name": name, "response": {"output": output}});
+                if wire_ids.get(id.as_str()).copied().unwrap_or(!id.is_empty()) && !id.is_empty() {
                     fr["id"] = json!(id);
                 }
                 let mut parts = vec![json!({"functionResponse": fr})];
                 if let Some(im) = images {
-                    for url in &im.urls {
-                        let (mime, data) =
-                            parse_data_url(url, &req.provider, ApiType::GoogleGemini)?;
-                        parts.push(inline_data(mime, data));
-                    }
+                    push_images(&mut parts, &im.urls, &req.provider)?;
                 }
                 ("user", parts)
             }
         };
-        if parts.is_empty() {
-            continue;
-        }
-        if let Some(last) = contents.last_mut()
-            && last["role"] == role
-            && let Some(arr) = last["parts"].as_array_mut()
-        {
-            arr.extend(parts);
-        } else {
-            contents.push(json!({"role": role, "parts": parts}));
-        }
+        push_turn(&mut contents, role, "parts", parts);
     }
     let mut body = json!({"contents": contents});
     if !req.system.is_empty() {
         body["systemInstruction"] = json!({"parts": [{"text": req.system}]});
     }
     if !req.tools.is_empty() {
-        body["tools"] = json!([{
-            "functionDeclarations": req.tools.iter().map(|t| {
-                json!({
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.parameters,
-                })
-            }).collect::<Vec<_>>()
-        }]);
+        let decls: Vec<_> = req.tools.iter().map(|t| json!({"name": t.name, "description": t.description, "parameters": t.parameters})).collect();
+        body["tools"] = json!([{"functionDeclarations": decls}]);
     }
     if let Some(effort) = req.effort.as_deref() {
         let thinking = if req.model.starts_with("gemini-2.5-") {
-            let budget = match effort {
+            let b = match effort {
                 "low" => 1024,
                 "medium" => 8192,
                 _ => 24576,
             };
-            json!({"includeThoughts": true, "thinkingBudget": budget})
+            json!({"includeThoughts": true, "thinkingBudget": b})
         } else {
             json!({"includeThoughts": true, "thinkingLevel": effort})
         };
@@ -157,199 +126,123 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
     Ok(body)
 }
 
-fn inline_data(mime: &str, data: &str) -> Value {
-    json!({"inlineData": {"mimeType": mime, "data": data}})
-}
-
 pub(crate) fn complete(
     client: &Client,
     req: &Request,
     cancel: &AtomicBool,
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<Reply, Error> {
-    let body = encode(req)?;
     let url = format!(
         "{}/models/{}:streamGenerateContent?alt=sse",
         client.base_url, req.model
     );
-    let resp = check_status(
-        client
-            .agent
-            .post(&url)
-            .set("x-goog-api-key", &client.api_key)
-            .set("Content-Type", "application/json")
-            .send_string(&body.to_string())
-            .map_err(map_err)?,
+    let resp = post_json(
+        client,
+        &url,
+        &[("x-goog-api-key", &client.api_key)],
+        &encode(req)?,
     )?;
-    let streaming = resp.content_type().contains("event-stream");
-    let mut acc = Accumulator::new(&req.provider, &req.model);
-    if !streaming {
-        let v = parse_json(&read_body(resp)?)?;
-        match v {
-            Value::Array(chunks) => {
-                for c in &chunks {
-                    acc.chunk(c, on_delta)?;
-                }
+    let (mut reply, mut replay) = (Reply::default(), vec![]);
+    let (streamed, _) = drive_response(resp, cancel, |ev, v| {
+        match (ev, &v) {
+            (None, Value::Array(cs)) => cs
+                .iter()
+                .try_for_each(|c| chunk(&mut reply, &mut replay, c, on_delta))?,
+            (None, Value::Object(_)) | (Some(_), _) => {
+                chunk(&mut reply, &mut replay, &v, on_delta)?
             }
-            Value::Object(_) => acc.chunk(&v, on_delta)?,
             _ => return Err(Error::Parse("expected JSON object or array".into())),
         }
-        return Ok(acc.finish());
-    }
-    read_sse(resp.into_reader(), cancel, |_, data| {
-        let v = parse_json(data)?;
-        acc.chunk(&v, on_delta)?;
         Ok(true)
     })?;
-    if acc.reply.finish.is_empty() {
+    if streamed && reply.finish.is_empty() {
         return Err(Error::Transport("stream ended before finishReason".into()));
     }
-    Ok(acc.finish())
+    finalize_calls(&mut reply.tool_calls);
+    reply.replay = make_replay(
+        req.provider.clone(),
+        ApiType::GoogleGemini,
+        req.model.clone(),
+        replay,
+    );
+    Ok(reply)
 }
 
 pub(crate) fn models(client: &Client) -> Result<Vec<String>, Error> {
-    let mut out = vec![];
-    let mut seen = HashSet::new();
-    let mut token: Option<String> = None;
-    for _ in 0..MAX_MODEL_PAGES {
-        let url = match &token {
-            Some(t) => format!(
-                "{}/models?pageSize=100&pageToken={}",
-                client.base_url,
-                url_encode(t)
-            ),
-            None => format!("{}/models?pageSize=100", client.base_url),
-        };
-        let resp = check_status(
-            client
-                .agent
-                .get(&url)
-                .set("x-goog-api-key", &client.api_key)
-                .call()
-                .map_err(map_err)?,
-        )?;
-        let v = parse_json(&read_body(resp)?)?;
-        for m in v["models"].as_array().into_iter().flatten() {
-            if let Some(methods) = m
-                .get("supportedGenerationMethods")
-                .and_then(Value::as_array)
-                && !methods
-                    .iter()
-                    .any(|x| x.as_str() == Some("generateContent"))
-            {
-                continue;
-            }
-            if let Some(name) = m.get("name").and_then(Value::as_str) {
-                out.push(name.strip_prefix("models/").unwrap_or(name).to_string());
-            }
-        }
-        let next = v
-            .get("nextPageToken")
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty());
-        match next {
-            Some(t) if seen.insert(t.to_string()) => token = Some(t.to_string()),
-            _ => break,
-        }
-    }
-    Ok(out)
-}
-
-struct Accumulator {
-    provider: String,
-    model: String,
-    reply: Reply,
-    replay: Vec<Value>,
-}
-
-impl Accumulator {
-    fn new(provider: &str, model: &str) -> Self {
-        Self {
-            provider: provider.to_string(),
-            model: model.to_string(),
-            reply: Reply::default(),
-            replay: vec![],
-        }
-    }
-
-    fn chunk(&mut self, v: &Value, on_delta: &mut dyn FnMut(Delta)) -> Result<(), Error> {
-        if let Some(e) = v.get("error").filter(|e| !e.is_null()) {
-            return Err(Error::Status(
-                e.get("code").and_then(Value::as_u64).unwrap_or(500) as u16,
-                e.to_string(),
-            ));
-        }
-        if let Some(u) = v.get("usageMetadata").filter(|u| u.is_object()) {
-            self.reply.usage = Some(usage(u));
-        }
-        let Some(cand) = v.get("candidates").and_then(|c| c.get(0)) else {
-            return Ok(());
-        };
-        if let Some(f) = cand.get("finishReason").and_then(Value::as_str) {
-            self.reply.finish = f.to_string();
-        }
-        for part in cand
-            .get("content")
-            .and_then(|c| c.get("parts"))
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            push_replay_part(&mut self.replay, part);
-            if let Some(t) = part.get("text").and_then(Value::as_str)
-                && !t.is_empty()
-            {
-                if part.get("thought").and_then(Value::as_bool) == Some(true) {
-                    self.reply.reasoning.push_str(t);
-                    on_delta(Delta::Reasoning(t));
-                } else {
-                    self.reply.text.push_str(t);
-                    on_delta(Delta::Text(t));
+    let base = &client.base_url;
+    paginate_models(
+        client,
+        &[("x-goog-api-key", client.api_key.as_str())],
+        |cur| match cur {
+            Some(t) => format!("{base}/models?pageSize=100&pageToken={}", url_encode(t)),
+            None => format!("{base}/models?pageSize=100"),
+        },
+        |v, out| {
+            for m in jarr(v, "models") {
+                let ok = m
+                    .get("supportedGenerationMethods")
+                    .and_then(Value::as_array)
+                    .is_none_or(|ms| ms.iter().any(|x| x.as_str() == Some("generateContent")));
+                if ok && let Some(name) = jstr(m, "name") {
+                    out.push(name.strip_prefix("models/").unwrap_or(name).into());
                 }
             }
-            if let Some(fc) = part.get("functionCall") {
-                let name = fc.get("name").and_then(Value::as_str).unwrap_or("");
-                let idx = self.reply.tool_calls.len();
-                let id = fc
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .filter(|s| !s.is_empty())
-                    .map(String::from)
-                    .unwrap_or_else(|| format!("call_{idx}"));
-                let args = fc.get("args").cloned().unwrap_or_else(|| json!({}));
-                let arguments = serde_json::to_string(&args).unwrap_or_else(|_| "{}".into());
-                let code = ArgStream::default().feed(&arguments);
-                self.reply.tool_calls.push(ToolCall {
-                    id,
-                    name: name.to_string(),
-                    arguments,
-                });
-                let call = &self.reply.tool_calls[idx];
-                if !call.name.is_empty() {
-                    on_delta(Delta::Tool {
-                        index: idx,
-                        id: &call.id,
-                        name: &call.name,
-                        code: &code,
-                    });
-                }
+            jstr(v, "nextPageToken").map(String::from)
+        },
+    )
+}
+
+fn chunk(
+    reply: &mut Reply,
+    replay: &mut Vec<Value>,
+    v: &Value,
+    on_delta: &mut dyn FnMut(Delta),
+) -> Result<(), Error> {
+    check_err(v)?;
+    if let Some(u) = v.get("usageMetadata").filter(|u| u.is_object()) {
+        let out = ju64(u, "candidatesTokenCount").unwrap_or(0)
+            + ju64(u, "thoughtsTokenCount").unwrap_or(0);
+        reply.usage = Some(Usage {
+            input: ju64(u, "promptTokenCount").unwrap_or(0),
+            output: out,
+            cached: ju64(u, "cachedContentTokenCount").unwrap_or(0),
+            cache_write: 0,
+        });
+    }
+    let Some(cand) = jarr(v, "candidates").first() else {
+        return Ok(());
+    };
+    if let Some(f) = jstr(cand, "finishReason") {
+        reply.finish = f.into();
+    }
+    for part in cand.get("content").map_or(&[][..], |c| jarr(c, "parts")) {
+        push_replay_part(replay, part);
+        if let Some(t) = jstr(part, "text") {
+            if part.get("thought").and_then(Value::as_bool) == Some(true) {
+                add_reasoning(reply, t, on_delta);
+            } else {
+                add_text(reply, t, on_delta);
             }
         }
-        Ok(())
-    }
-
-    fn finish(mut self) -> Reply {
-        finalize_calls(&mut self.reply.tool_calls);
-        if !self.replay.is_empty() {
-            self.reply.replay = Some(Replay {
-                provider: self.provider,
-                api: ApiType::GoogleGemini.as_str().to_string(),
-                model: self.model,
-                items: self.replay,
-            });
+        if let Some(fc) = part.get("functionCall") {
+            let idx = reply.tool_calls.len();
+            let id = jstr(fc, "id")
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .unwrap_or_else(|| format!("call_{idx}"));
+            let args = serde_json::to_string(fc.get("args").unwrap_or(&json!({})))
+                .unwrap_or_else(|_| "{}".into());
+            push_tool(
+                &mut reply.tool_calls,
+                None,
+                id,
+                jstr(fc, "name").unwrap_or("").into(),
+                args,
+                on_delta,
+            );
         }
-        self.reply
     }
+    Ok(())
 }
 
 fn plain_text_part(v: &Value) -> Option<(bool, &str)> {
@@ -357,192 +250,20 @@ fn plain_text_part(v: &Value) -> Option<(bool, &str)> {
     if !obj.keys().all(|k| k == "text" || k == "thought") {
         return None;
     }
-    let text = obj.get("text")?.as_str()?;
-    let thought = obj.get("thought").and_then(Value::as_bool).unwrap_or(false);
-    Some((thought, text))
+    Some((
+        obj.get("thought").and_then(Value::as_bool).unwrap_or(false),
+        obj.get("text")?.as_str()?,
+    ))
 }
 
 fn push_replay_part(replay: &mut Vec<Value>, part: &Value) {
-    if let Some((thought, text)) = plain_text_part(part)
+    if let Some((th, text)) = plain_text_part(part)
         && let Some(prev) = replay.last_mut()
-        && let Some((prev_thought, _)) = plain_text_part(prev)
-        && prev_thought == thought
-        && let Some(prev_text) = prev.get("text").and_then(Value::as_str).map(String::from)
+        && plain_text_part(prev).is_some_and(|(pt, _)| pt == th)
+        && let Some(old) = jstr(prev, "text").map(String::from)
     {
-        prev["text"] = Value::String(format!("{prev_text}{text}"));
+        prev["text"] = Value::String(format!("{old}{text}"));
         return;
     }
     replay.push(part.clone());
-}
-
-fn usage(u: &Value) -> Usage {
-    let n = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
-    Usage {
-        input: n("promptTokenCount"),
-        output: n("candidatesTokenCount") + n("thoughtsTokenCount"),
-        cached: n("cachedContentTokenCount"),
-        cache_write: 0,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn mid_loop_switch_to_gemini_3_adds_migration_signature() {
-        let req = Request {
-            provider: "gem".into(),
-            model: "gemini-3-pro".into(),
-            system: String::new(),
-            messages: vec![
-                Message::User {
-                    text: "old".into(),
-                    images: vec![],
-                },
-                Message::Assistant {
-                    text: String::new(),
-                    tool_calls: vec![ToolCall {
-                        id: "old_tc".into(),
-                        name: "lua".into(),
-                        arguments: r#"{"code":"return 0"}"#.into(),
-                    }],
-                    replay: None,
-                },
-                Message::ToolResult {
-                    id: "old_tc".into(),
-                    name: "lua".into(),
-                    output: "0".into(),
-                    images: None,
-                },
-                Message::Assistant {
-                    text: "done".into(),
-                    tool_calls: vec![],
-                    replay: None,
-                },
-                Message::User {
-                    text: "now".into(),
-                    images: vec![],
-                },
-                Message::Assistant {
-                    text: String::new(),
-                    tool_calls: vec![ToolCall {
-                        id: "tc_foreign".into(),
-                        name: "lua".into(),
-                        arguments: r#"{"code":"return 1"}"#.into(),
-                    }],
-                    replay: Some(Replay {
-                        provider: "anth".into(),
-                        api: "anthropic-messages".into(),
-                        model: "claude".into(),
-                        items: vec![json!({"type": "thinking", "thinking": "x", "signature": "S"})],
-                    }),
-                },
-                Message::ToolResult {
-                    id: "tc_foreign".into(),
-                    name: "lua".into(),
-                    output: "1".into(),
-                    images: None,
-                },
-            ],
-            tools: vec![],
-            effort: Some("high".into()),
-        };
-        let body = encode(&req).unwrap();
-        let contents = body["contents"].as_array().unwrap();
-        assert!(contents[1]["parts"][0].get("thoughtSignature").is_none());
-        let active_call = &contents[5]["parts"][0];
-        assert_eq!(active_call["thoughtSignature"], SKIP_THOUGHT_SIG);
-        assert_eq!(active_call["functionCall"]["id"], "tc_foreign");
-        assert_eq!(
-            contents[6]["parts"][0]["functionResponse"]["id"],
-            "tc_foreign"
-        );
-    }
-
-    #[test]
-    fn idless_sequential_and_parallel_calls_keep_synthetic_ids_local() {
-        let mut a1 = Accumulator::new("gem", "gemini-2.5-pro");
-        a1.chunk(
-            &json!({"candidates":[{"content":{"parts":[
-                {"functionCall":{"name":"lua","args":{"code":"a()"}},"thoughtSignature":"S1"},
-                {"functionCall":{"name":"lua","args":{"code":"b()"}}}
-            ]},"finishReason":"STOP"}]}),
-            &mut |_| {},
-        )
-        .unwrap();
-        let r1 = a1.finish();
-        assert_eq!(
-            (r1.tool_calls[0].id.as_str(), r1.tool_calls[1].id.as_str()),
-            ("call_0", "call_1")
-        );
-
-        let mut a2 = Accumulator::new("gem", "gemini-2.5-pro");
-        a2.chunk(
-            &json!({"candidates":[{"content":{"parts":[
-                {"functionCall":{"name":"lua","args":{"code":"c()"}},"thoughtSignature":"S2"}
-            ]},"finishReason":"STOP"}]}),
-            &mut |_| {},
-        )
-        .unwrap();
-        let r2 = a2.finish();
-
-        let body = encode(&Request {
-            provider: "gem".into(),
-            model: "gemini-2.5-pro".into(),
-            system: String::new(),
-            messages: vec![
-                Message::User {
-                    text: "go".into(),
-                    images: vec![],
-                },
-                Message::Assistant {
-                    text: String::new(),
-                    tool_calls: r1.tool_calls,
-                    replay: r1.replay,
-                },
-                Message::ToolResult {
-                    id: "call_0".into(),
-                    name: "lua".into(),
-                    output: "rA".into(),
-                    images: None,
-                },
-                Message::ToolResult {
-                    id: "call_1".into(),
-                    name: "lua".into(),
-                    output: "rB".into(),
-                    images: None,
-                },
-                Message::Assistant {
-                    text: String::new(),
-                    tool_calls: r2.tool_calls,
-                    replay: r2.replay,
-                },
-                Message::ToolResult {
-                    id: "call_0".into(),
-                    name: "lua".into(),
-                    output: "rC".into(),
-                    images: None,
-                },
-            ],
-            tools: vec![],
-            effort: None,
-        })
-        .unwrap();
-        let c = body["contents"].as_array().unwrap();
-        assert!(c[1]["parts"][0]["functionCall"].get("id").is_none());
-        assert!(c[1]["parts"][1]["functionCall"].get("id").is_none());
-        assert!(c[2]["parts"][0]["functionResponse"].get("id").is_none());
-        assert!(c[2]["parts"][1]["functionResponse"].get("id").is_none());
-        assert_eq!(
-            c[2]["parts"][0]["functionResponse"]["response"]["output"],
-            "rA"
-        );
-        assert_eq!(
-            c[2]["parts"][1]["functionResponse"]["response"]["output"],
-            "rB"
-        );
-        assert!(c[3]["parts"][0]["functionCall"].get("id").is_none());
-        assert!(c[4]["parts"][0]["functionResponse"].get("id").is_none());
-    }
 }

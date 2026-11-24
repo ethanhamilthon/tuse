@@ -2,7 +2,6 @@ use crossterm::style::Color;
 use tuse_config::{Config, Theme, UiSettings};
 
 pub const FRAME_MS: u64 = 33;
-pub const STATUS_MIN_MS: u64 = 100;
 pub const FILE_PICKER_MAX: usize = 20_000;
 pub const LIST_INDENT: usize = 2;
 pub const CODE_INDENT: usize = 2;

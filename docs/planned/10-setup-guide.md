@@ -1,5 +1,5 @@
 > [!NOTE]
-> **Planned guide draft (TODO #10).** References target behavior from [06-plugin-sync-on-reload.md](06-plugin-sync-on-reload.md), [07-default-plugin-theme-subs.md](07-default-plugin-theme-subs.md), [09-agent-only-functions.md](09-agent-only-functions.md), and [11-installer-first-run.md](11-installer-first-run.md). Remove this note and the Integration Notes section when moving this file into `docs/`.
+> **Planned guide draft (TODO #10).** References target behavior from [06-plugin-sync-on-reload.md](06-plugin-sync-on-reload.md), [07-default-plugin-theme-subs.md](07-default-plugin-theme-subs.md), [09-agent-only-functions.md](09-agent-only-functions.md), and [install.md](../install.md). Remove this note and the Integration Notes section when moving this file into `docs/`.
 
 # Setup Guide
 
@@ -173,7 +173,7 @@ See [config.md](../config.md) for the complete key reference and [plugins.md](..
 - **Decision:** Target published path is `docs/setup.md`, linked from the docs index (TODO #3 / #4) and referenced from `docs/config.md`.
 - **Dependencies before moving into `docs/`**:
   - [06-plugin-sync-on-reload.md](06-plugin-sync-on-reload.md) (for `/reload` syncing Git plugins and offline startup bootstrap).
-  - [07-default-plugin-theme-subs.md](07-default-plugin-theme-subs.md) and [11-installer-first-run.md](11-installer-first-run.md) (confirm the final bundled default plugin ID matches `"tuse/default"`).
+  - [07-default-plugin-theme-subs.md](07-default-plugin-theme-subs.md) and [install.md](../install.md) (confirm the final bundled default plugin ID matches `"tuse/default"`).
   - [09-agent-only-functions.md](09-agent-only-functions.md) (for `functions = { name = function(...) ... end }` syntax and agent-only isolation).
 - **Acceptance checks when publishing**:
   - Remove top `> [!NOTE]` banner and this Integration Notes section.

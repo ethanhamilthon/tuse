@@ -8,3 +8,6 @@ TUSE-*.md
 
 TODO-*.md
 *.html
+!site/**/*.html
+/dist/
+/dist-root/

@@ -62,6 +62,9 @@ fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<
 }
 
 fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
+    if p.ui.diff_line == 0 {
+        return vec![];
+    }
     let room = w.saturating_sub(pad.len());
     let all: Vec<&str> = d.diff.lines().collect();
     let hdr = span(
@@ -179,5 +182,211 @@ mod tests {
         let text: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
         assert!(!text.contains('\t') && !text.contains('\x1b'), "{text:?}");
         assert!(text.contains("1    x"), "tabs become spaces: {text:?}");
+    }
+
+    #[test]
+    fn diff_line_zero_hides_entire_diff_block_and_updates_on_reload_and_resume() {
+        use crate::app::App;
+        use crate::chat::{Chat, Entry};
+        use std::io::{BufRead, BufReader, Read, Write};
+        use tuse_config::UiSettings;
+        use tuse_core::{Event, Options, Record, Session};
+
+        let make_diff = |path: &str, n: usize| FileDiff {
+            path: path.into(),
+            diff: (0..n).map(|i| format!("+ {i}\n")).collect(),
+        };
+        let render_text = |lines: &[Line]| -> String {
+            lines
+                .iter()
+                .map(|l| l.iter().map(|s| s.text.as_str()).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let pal = |ui| Palette::new(&Default::default(), &ui);
+        let diffs = vec![
+            make_diff("a.rs", 10),
+            make_diff("b.rs", 5),
+            FileDiff {
+                path: "empty.rs".into(),
+                diff: String::new(),
+            },
+        ];
+        let hidden = tool(
+            "x = 1",
+            Some("edited a.rs"),
+            Some(0),
+            &diffs,
+            60,
+            &pal(UiSettings {
+                diff_line: 0,
+                ..Default::default()
+            }),
+        );
+        let ht = render_text(&hidden);
+        assert_eq!(hidden.len(), 2);
+        assert!(
+            ht.contains("x = 1")
+                && ht.contains("edited a.rs")
+                && !ht.contains("b.rs")
+                && !ht.contains("empty.rs")
+                && !ht.contains("more lines")
+        );
+
+        let p_zero = pal(UiSettings {
+            tool_line: 0,
+            output_line: 0,
+            diff_line: 0,
+            ..Default::default()
+        });
+        let mut c = Chat::default();
+        c.push(Entry::Notice("before".into()));
+        c.push(Entry::Tool {
+            id: "t1".into(),
+            input: "x = 1".into(),
+            output: Some("ok".into()),
+            code: Some(0),
+            diffs,
+        });
+        c.push(Entry::Notice("after".into()));
+        assert_eq!(c.window(60, &p_zero, 0, 10).0.len(), 3);
+
+        let two = tool(
+            "x",
+            Some(""),
+            Some(0),
+            &[make_diff("a.rs", 10)],
+            60,
+            &pal(UiSettings {
+                diff_line: 2,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(two.len(), 5);
+        assert!(render_text(&two).contains("8 more lines"));
+        let all = tool(
+            "x",
+            Some(""),
+            Some(0),
+            &[make_diff("a.rs", 20)],
+            60,
+            &pal(UiSettings {
+                diff_line: -1,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(all.len(), 22);
+        assert!(render_text(&all).contains("+ 19") && !render_text(&all).contains("more lines"));
+
+        let mut app = crate::app::test_app("diff-reload");
+        let cfg = app.cwd.join("tuse.lua");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for (step, mut s) in listener.incoming().flatten().take(2).enumerate() {
+                let mut r = BufReader::new(s.try_clone().unwrap());
+                let mut len = 0;
+                loop {
+                    let mut line = String::new();
+                    r.read_line(&mut line).unwrap();
+                    if line.trim().is_empty() {
+                        break;
+                    }
+                    if let Some(v) = line.to_lowercase().strip_prefix("content-length:") {
+                        len = v.trim().parse().unwrap();
+                    }
+                }
+                r.read_exact(&mut vec![0; len]).unwrap();
+                let body = if step == 0 {
+                    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"lua","arguments":"{\"code\":\"local t={} for i=0,19 do t[#t+1]='row'..i end write('long.rs', table.concat(t, string.char(10)))\"}"}}]}}]}"#
+                } else {
+                    r#"{"choices":[{"delta":{"content":"done"}}]}"#
+                };
+                let _ = write!(
+                    s,
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {body}\n\ndata: [DONE]\n\n"
+                );
+            }
+        });
+        tuse_core::add_provider(&tuse_config::Connect {
+            name: "difftest".into(),
+            base_url: format!("http://{addr}"),
+            api_key: "test".into(),
+        })
+        .unwrap();
+        let write_cfg = |n: i32| {
+            std::fs::write(
+                &cfg,
+                format!(
+                    "return {{ settings = {{ ui = {{ diff_line = {n} }} }}, commands = {{ r = function() require('tuse').reload() end }} }}"
+                ),
+            )
+            .unwrap();
+        };
+        let drain_until = |app: &mut App, pred: fn(&Event) -> bool| loop {
+            let ev = app
+                .events
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .unwrap();
+            let done = pred(&ev);
+            app.handle_event(ev);
+            if done {
+                break;
+            }
+        };
+        write_cfg(12);
+        app.run_command("reload");
+        drain_until(&mut app, |e| matches!(e, Event::Reloaded));
+        app.session.set_model("difftest/m", "default");
+        app.session.submit(tuse_core::UserInput::text("write"));
+        drain_until(&mut app, |e| matches!(e, Event::TurnEnd { .. }));
+
+        let view = |app: &mut App| render_text(&app.chat.window(60, &app.palette, 0, 60).0);
+        assert!(view(&mut app).contains("8 more lines"));
+        write_cfg(0);
+        app.run_command("r");
+        drain_until(&mut app, |e| matches!(e, Event::Reloaded));
+        let v0 = view(&mut app);
+        assert!(!v0.contains("row0") && !v0.contains("more lines"));
+        write_cfg(12);
+        app.run_command("r");
+        drain_until(&mut app, |e| matches!(e, Event::Reloaded));
+        let v12 = view(&mut app);
+        assert!(v12.contains("row0") && v12.contains("8 more lines") && !v12.contains("row19"));
+        write_cfg(-1);
+        app.run_command("reload");
+        let v_all = view(&mut app);
+        assert!(v_all.contains("row0") && v_all.contains("row19") && !v_all.contains("more lines"));
+        write_cfg(0);
+        app.run_command("reload");
+        assert!(!view(&mut app).contains("row0"));
+
+        let (sid, cwd) = (app.session.id.clone(), app.cwd.clone());
+        app.session.close();
+        let resumed = Session::open(Options {
+            cwd,
+            config: Some(cfg),
+            mode: tuse_core::Mode::Tui,
+            resume: Some(sid),
+            start: Default::default(),
+        })
+        .unwrap();
+        let mut app2 = App::new(resumed, None);
+        assert!(!view(&mut app2).contains("row0"));
+        let mut stored = false;
+        app2.session.with_records(|recs| {
+            stored = recs.iter().any(|r| {
+                matches!(r, Record::Tool { diffs, .. } if diffs.iter().any(|d| d.diff.contains("row19")))
+            });
+        });
+        assert!(
+            stored
+                && app2
+                    .session
+                    .trace()
+                    .iter()
+                    .any(|t| t.text.contains("row19"))
+        );
+        crate::app::cleanup(app2);
     }
 }

@@ -28,6 +28,7 @@ impl Renderer {
         let (w, h) = (w as usize, h as usize);
         if self.size != (w, h) || self.palette_gen != app.palette_gen {
             app.selection = Default::default();
+            app.clear_link_hover();
             self.prev.clear();
             self.size = (w, h);
             self.palette_gen = app.palette_gen;
@@ -88,7 +89,21 @@ impl Renderer {
         );
         screen.truncate(h);
         app.links = crate::links::scan(&screen, pad);
-        crate::links::highlight(&mut screen, app.hover, p.accent);
+        if let Some(id) = app.hover
+            && app.pointer.is_none_or(|pt| app.link_at(pt) != Some(id))
+        {
+            app.hover = None;
+        }
+        if let Some((pt, id)) = app.pressed_link
+            && app.link_at(pt) != Some(id)
+        {
+            app.pressed_link = None;
+        }
+        crate::links::highlight(
+            &mut screen,
+            app.pressed_link.map(|(_, id)| id).or(app.hover),
+            p.fg,
+        );
         app.selection
             .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
 
@@ -141,7 +156,11 @@ fn put(
     cur: &mut Option<Style>,
 ) -> std::io::Result<()> {
     let eff = Style {
-        fg: s.style.fg.or(base.fg),
+        fg: if s.style.link.is_some() {
+            s.style.fg
+        } else {
+            s.style.fg.or(base.fg)
+        },
         bg: s.style.bg.or(base.bg),
         bold: s.style.bold,
         italic: s.style.italic,

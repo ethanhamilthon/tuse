@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.3
+
+- `/trace`: pressing `Left` or `Right` in a trace detail panel (when the input editor is empty) steps to the previous or next entry in the current filtered `/trace` list without wrapping, resetting scroll to the top and keeping the search query and picker selection in sync.
+- Simplified the TUI working indicator to show only `<spinner> <elapsed>` in `accent`, removing transient per-call activity labels (`reading ...`, `running ...`); steering, flash notices, and JSON-RPC `status` events are unchanged.
+- `settings.ui.diff_line = 0` now hides the entire diff block (header, body, and footer) in TUI chat while keeping stored diffs, `/trace`, and JSON-RPC unchanged; Lua `reload()` now invalidates cached chat entries so updated `settings.ui` and `theme` settings apply immediately at the same terminal width.
+- Interactive links now render in `theme.accent` (underlined) by default and highlight in `theme.fg` (bold, underlined) on hover or press, clearing hover on pointer leave, drag, scroll, or resize with no persistent visited state.
+- `release/install.sh`: added interactive first-run setup after binary installation to optionally enable `"tuse/default"` (`theme` and `subs`) and atomically create `~/.config/tuse/init.lua` without overwriting existing configs, gated on binary capability and skipped automatically in non-interactive, `CI`, `TUSE_NO_SETUP`, or `--no-setup` runs.
+- Added GitHub Pages docs site and landing page builder (`site/build.py`, `site/landing.html`, `site/templates/`, `site/assets/`, `site/redirects.json`, `site/requirements.txt`) and `.github/workflows/pages.yml` to build and offline-verify links, anchors, and assets on every PR and deploy from `main`.
+- Rewrote `README.md` as a concise front door linking to the GitHub Pages site, published `/docs/`, and `docs/index.md`, and updated the `docs("README.md")` topic summary.
+
 ## 0.9.2
 
 - **Breaking:** Removed `tuse plugins`. Manage plugin checkouts with Git in `~/.tuse/plugins` and declare them in `tuse.lua`; a missing checkout prints the `git clone` to run. Startup stays offline.

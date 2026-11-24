@@ -135,7 +135,7 @@ pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, compact: u64, p: &Palette
             },
         ));
     }
-    Panel::styled(lines)
+    Panel::styled(lines).with_kind(crate::panel::PanelKind::Session)
 }
 
 #[cfg(test)]

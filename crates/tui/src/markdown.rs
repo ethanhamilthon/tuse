@@ -121,13 +121,11 @@ impl Renderer<'_> {
             Event::End(tag) => self.end(tag),
             Event::Text(t) if self.code => self.code_block(&t),
             Event::Text(t) => self.text(&t),
-            Event::Code(t) => self.push_text(
-                &t,
-                Style {
-                    fg: self.p.ok,
-                    ..self.style()
-                },
-            ),
+            Event::Code(t) => {
+                let st = self.style();
+                let fg = if st.link.is_some() { st.fg } else { self.p.ok };
+                self.push_text(&t, Style { fg, ..st });
+            }
             Event::SoftBreak => self.text(" "),
             Event::HardBreak => self.flush(),
             Event::Rule => {

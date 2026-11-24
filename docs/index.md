@@ -43,7 +43,6 @@ Specifications for planned (not yet implemented) features and changes. Baseline 
 - [04 — Publish Docs on GitHub Pages](planned/04-github-pages-docs.md)
 - [05 — Simplify the TUI Working Indicator](planned/05-working-indicator.md)
 - [07 — Bundled Default Plugin: `theme` and `subs`](planned/07-default-plugin-theme-subs.md)
-- [08 — Persist `show`, `pick`, and `ask` in UI History](planned/08-persist-ui-history.md)
 - [10 — Setup Guide](planned/10-setup-guide.md)
 - [10 — Plugin Authoring Guide](planned/10-plugin-authoring-guide.md)
 - [11 — First-Run Setup in the Installer](planned/11-installer-first-run.md)

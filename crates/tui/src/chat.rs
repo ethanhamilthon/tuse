@@ -108,6 +108,25 @@ impl Chat {
                 effort: effort.clone(),
                 cancelled: *cancelled,
             },
+            Record::UiMarkdown {
+                name,
+                text,
+                pin,
+                removed,
+            } => {
+                self.set_markdown(name.clone(), text.clone(), *pin, *removed);
+                return;
+            }
+            Record::UiResult {
+                kind,
+                prompt,
+                value,
+                ..
+            } => Entry::UiResult {
+                is_picker: kind == "picker",
+                prompt: prompt.clone(),
+                value: value.clone(),
+            },
             _ => return,
         };
         self.push(e);
@@ -248,81 +267,14 @@ impl App {
     }
 }
 
-enum Transient {
-    Markdown {
-        name: String,
-        text: String,
-    },
-    Result {
-        is_picker: bool,
-        prompt: String,
-        value: String,
-    },
-}
-
 impl Chat {
     pub fn from_session(session: &Session) -> Chat {
-        let snap = session.ui_snapshot();
-        let mut transient: Vec<(usize, u64, Transient)> = vec![];
-        let mut pinned = vec![];
-        for m in snap.markdowns {
-            if m.pin {
-                pinned.push((m.name, m.text, None));
-            } else {
-                transient.push((
-                    m.after_record,
-                    m.seq,
-                    Transient::Markdown {
-                        name: m.name,
-                        text: m.text,
-                    },
-                ));
-            }
-        }
-        for e in snap.entries {
-            transient.push((
-                e.after_record,
-                e.seq,
-                Transient::Result {
-                    is_picker: e.kind == "picker",
-                    prompt: e.prompt,
-                    value: e.value,
-                },
-            ));
-        }
-        transient.sort_by_key(|(at, seq, _)| (*at, *seq));
         let mut chat = Chat::default();
-        let mut ti = 0usize;
         session.with_records(|records| {
-            let flush = |chat: &mut Chat, ti: &mut usize, upto: usize| {
-                while *ti < transient.len() && transient[*ti].0 <= upto {
-                    let entry = match &transient[*ti].2 {
-                        Transient::Markdown { name, text } => Entry::Markdown {
-                            name: name.clone(),
-                            text: text.clone(),
-                        },
-                        Transient::Result {
-                            is_picker,
-                            prompt,
-                            value,
-                        } => Entry::UiResult {
-                            is_picker: *is_picker,
-                            prompt: prompt.clone(),
-                            value: value.clone(),
-                        },
-                    };
-                    chat.push(entry);
-                    *ti += 1;
-                }
-            };
-            flush(&mut chat, &mut ti, 0);
-            for (i, r) in records.iter().enumerate() {
+            for r in records {
                 chat.push_record(r, &|m| session.display_name(m));
-                flush(&mut chat, &mut ti, i + 1);
             }
-            flush(&mut chat, &mut ti, usize::MAX);
         });
-        chat.pinned = pinned;
         chat
     }
 
@@ -375,6 +327,69 @@ impl Chat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn replays_persisted_ui_records_in_position_with_pin_and_update() {
+        let user = |t: &str| Record::User {
+            text: t.into(),
+            context: String::new(),
+            images: vec![],
+            at: String::new(),
+        };
+        let md = |name: &str, text: &str, pin: bool, removed: bool| Record::UiMarkdown {
+            name: name.into(),
+            text: text.into(),
+            pin,
+            removed,
+        };
+        let c = Chat::from_records(
+            &[
+                md("a", "v1", false, false),
+                md("p", "pinned-1", true, false),
+                md("tmp", "drop", false, false),
+                user("turn 1"),
+                Record::UiResult {
+                    id: 1,
+                    kind: "picker".into(),
+                    prompt: "Picker".into(),
+                    value: "optA".into(),
+                },
+                md("a", "v2", false, false),
+                md("tmp", "", false, true),
+                md("p", "unpinned", false, false),
+                user("turn 2"),
+                md("end_pin", "stay-end", true, false),
+            ],
+            &str::to_owned,
+        );
+        let tags: Vec<String> = c
+            .entries
+            .iter()
+            .map(|(e, _)| match e {
+                Entry::User { text, .. } => format!("u:{text}"),
+                Entry::Markdown { name, text } => format!("m:{name}={text}"),
+                Entry::UiResult {
+                    is_picker, value, ..
+                } => format!("r:{is_picker}:{value}"),
+                _ => "other".into(),
+            })
+            .collect();
+        assert_eq!(
+            tags,
+            [
+                "m:a=v2",
+                "u:turn 1",
+                "r:true:optA",
+                "m:p=unpinned",
+                "u:turn 2"
+            ]
+        );
+        assert_eq!(c.pinned.len(), 1);
+        assert_eq!(
+            (c.pinned[0].0.as_str(), c.pinned[0].1.as_str()),
+            ("end_pin", "stay-end")
+        );
+    }
+
     #[test]
     fn notifications_are_not_chat_entries() {
         let c = Chat::from_records(

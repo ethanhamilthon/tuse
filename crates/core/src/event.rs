@@ -20,10 +20,6 @@ pub struct UiMarkdown {
     pub name: String,
     pub text: String,
     pub pin: bool,
-    #[serde(skip)]
-    pub after_record: usize,
-    #[serde(skip)]
-    pub seq: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -32,10 +28,6 @@ pub struct UiEntry {
     pub kind: &'static str,
     pub prompt: String,
     pub value: String,
-    #[serde(skip)]
-    pub after_record: usize,
-    #[serde(skip)]
-    pub seq: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]

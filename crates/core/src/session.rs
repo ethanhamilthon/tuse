@@ -170,6 +170,7 @@ impl Prepared {
                 _ => {}
             }
         }
+        let ui = crate::ui::UiState::replay(&records);
         let models = config.models.clone();
         st.stats = (crate::usage::Stats::of(&records, &models), models);
         st.records = records;
@@ -190,7 +191,7 @@ impl Prepared {
                 vm,
                 hooks_on: AtomicBool::new(true),
                 hook_runs: Default::default(),
-                ui: Mutex::default(),
+                ui: Mutex::new(ui),
                 cmd_runs: Mutex::default(),
                 http: tuse_api::default_agent(),
                 next_lua: AtomicU64::new(0),

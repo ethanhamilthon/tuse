@@ -29,19 +29,15 @@ Source of truth for Tuse's observable behavior and public contracts. All baselin
 
 ## Configuration & Customization
 
+- [Setup Guide](setup.md) — Step-by-step setup: connecting providers, global and project configs, modular layout, and verifying with `/reload` and `/config`.
 - [Config](config.md) — Lua config modules, `require` resolution, schema keys, strict validation, and `/reload`.
 - [Environment & Config Lookup](env.md) — Environment variables read by Tuse and config file search order.
 - [Theme & UI Settings](theme.md) — The 10-token color theme and `settings.ui` behavior and layout options.
-- [Plugins](plugins.md) — Git and local plugins, options, merge rules, and bundled plugins.
+- [Plugins](plugins.md) — Git and local plugins, options, merge rules, reload sync, and repository plugins.
+- [Plugin Authoring Guide](plugin-authoring.md) — Writing, testing, and publishing Tuse plugins.
 
 ## Planned Changes
 
 Specifications for planned (not yet implemented) features and changes. Baseline pages above reflect only current behavior until each spec is implemented.
 
 - [02 — Support Four API Types](planned/02-api-types.md)
-- [06 — Install and Update Plugins on Reload](planned/06-plugin-sync-on-reload.md)
-- [07 — Bundled Default Plugin: `theme` and `subs`](planned/07-default-plugin-theme-subs.md)
-- [08 — Persist `show`, `pick`, and `ask` in UI History](planned/08-persist-ui-history.md)
-- [09 — Agent-Only, Undiscoverable Configured Functions](planned/09-agent-only-functions.md)
-- [10 — Setup Guide](planned/10-setup-guide.md)
-- [10 — Plugin Authoring Guide](planned/10-plugin-authoring-guide.md)

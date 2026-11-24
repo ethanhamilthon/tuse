@@ -74,8 +74,32 @@ fn validates_user_config_plugins_and_preserves_state_on_failed_reload() {
             "hooks.h.run: is required",
         ),
         (
-            "return { functions = { f = { description = 'ok', modes = {'tui'}, run = function() end } } }",
-            "functions.f.modes: unknown key",
+            "return { functions = { f = { description = 'ok', run = function() end } } }",
+            "functions.f: expected function or false, got table",
+        ),
+        (
+            "return { functions = { os = false } }",
+            "functions: 'os': reserved name",
+        ),
+        (
+            "return { functions = { package = false } }",
+            "functions: 'package': reserved name",
+        ),
+        (
+            "return { functions = { require = function() end } }",
+            "functions: 'require': reserved name",
+        ),
+        (
+            "return { functions = { typo = false } }",
+            "functions.typo: cannot disable unknown function",
+        ),
+        (
+            "return { functions = { json = function() end } }",
+            "functions.json: 'json' is a table and can only be disabled with false",
+        ),
+        (
+            "return { functions = { f = true } }",
+            "functions.f: expected function or false, got boolean",
         ),
         (
             "return { commands = { session = function() end } }",

@@ -1,6 +1,3 @@
-> [!NOTE]
-> **Planned guide draft (TODO #10).** References target behavior from [06-plugin-sync-on-reload.md](06-plugin-sync-on-reload.md) and [09-agent-only-functions.md](09-agent-only-functions.md). Remove this note and the Integration Notes section when moving this file into `docs/`.
-
 # Plugin Authoring Guide
 
 A Tuse plugin is a Lua module returning a config table or `function(opts)` that returns one. Tuse validates every plugin strictly and merges plugins underneath the user's config.
@@ -30,7 +27,7 @@ end
 return M
 ```
 
-```lua
+````lua
 -- tuse-git-summary/init.lua
 local t = require("tuse")
 local git = require("./git")
@@ -66,9 +63,9 @@ return function(opts)
 
   return cfg
 end
-```
+````
 
-Users add it to their existing `plugins` list in `~/.config/tuse/init.lua` (preserving any bundled plugin entries already there) and run `/reload` to install it—or clone it beforehand into `~/.tuse/plugins/you/tuse-git-summary` if bootstrapping offline before starting Tuse:
+Users add it to their `plugins` list in `~/.config/tuse/init.lua` and run `/reload` to install it—or clone it beforehand into `~/.tuse/plugins/you/tuse-git-summary` if bootstrapping offline before starting Tuse:
 
 ```lua
 plugins = {
@@ -158,17 +155,4 @@ Test loop:
 4. **Local edits safety**: `/reload` never overwrites local changes or unpublished commits in a checkout under `~/.tuse/plugins/`; document `dir = "..."` for contributors hacking locally.
 5. **Monorepo note**: if a repository provides multiple plugins under `plugins/*`, every enabled entry from that repository in a user's config must agree on both URL and `ref` (shared repositories sync once per reload).
 
-See [plugins.md](../plugins.md) for the complete plugin specification and [hooks.md](../hooks.md) for hook payloads.
-
----
-
-## Integration Notes (remove when publishing)
-
-- **Decision:** Target published path is `docs/plugin-authoring.md`, linked from the docs index (TODO #3 / #4) and referenced from `docs/plugins.md`.
-- **Dependencies before moving into `docs/`**:
-  - [06-plugin-sync-on-reload.md](06-plugin-sync-on-reload.md) (for `/reload` Git sync, immutable commit SHA pins, URL/ref conflict checks, and local-work safety).
-  - [09-agent-only-functions.md](09-agent-only-functions.md) (for agent-only `functions`, `false` disables, and sharing helpers via local modules).
-- **Acceptance checks when publishing**:
-  - Remove top `> [!NOTE]` banner and this Integration Notes section.
-  - Add a link to `plugin-authoring.md` in `docs/index.md`.
-  - Verify the example plugin loads, passes strict validation, runs `/git_summary`, and handles both TUI and JSON modes cleanly.
+See [plugins.md](plugins.md) for the complete plugin specification and [hooks.md](hooks.md) for hook payloads.

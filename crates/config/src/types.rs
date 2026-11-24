@@ -15,7 +15,7 @@ pub struct Config {
     pub systems: Vec<String>,
     pub prompts: BTreeMap<String, String>,
     #[serde(deserialize_with = "crate::de::functions")]
-    pub functions: BTreeMap<String, Function>,
+    pub functions: BTreeMap<String, FunctionKind>,
     pub hooks: BTreeMap<String, Hook>,
     #[serde(deserialize_with = "crate::de::commands")]
     pub commands: Vec<String>,
@@ -99,29 +99,12 @@ pub struct Prices {
     pub cache_write: f64,
 }
 
-#[derive(Debug, Clone, Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Function {
-    #[serde(default)]
-    pub args: String,
-    #[serde(deserialize_with = "crate::de::non_empty")]
-    pub description: String,
-    #[serde(default = "yes")]
-    pub show_agent: bool,
-}
-
-impl Default for Function {
-    fn default() -> Self {
-        Self {
-            args: String::new(),
-            description: String::new(),
-            show_agent: true,
-        }
-    }
-}
-
-fn yes() -> bool {
-    true
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FunctionKind {
+    Custom,
+    Override,
+    Disabled,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
@@ -163,6 +146,18 @@ impl Config {
 
     pub fn compact_at(&self, def: Option<&ModelDef>) -> u64 {
         compact_at(def, self.settings.compact_at)
+    }
+
+    pub fn is_disabled(&self, name: &str) -> bool {
+        self.functions.get(name) == Some(&FunctionKind::Disabled)
+    }
+
+    pub fn disabled_builtins(&self) -> Vec<&'static str> {
+        crate::HOST_FUNCTIONS
+            .iter()
+            .copied()
+            .filter(|n| self.is_disabled(n))
+            .collect()
     }
 }
 

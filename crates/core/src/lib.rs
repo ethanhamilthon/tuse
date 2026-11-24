@@ -13,6 +13,7 @@ mod input;
 mod mode;
 mod models;
 mod open;
+mod plugin_sync;
 mod plugins;
 mod prompt;
 mod record;

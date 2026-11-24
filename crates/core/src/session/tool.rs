@@ -1,6 +1,6 @@
+use crate::convo::id;
+use crate::convo::record::{FileDiff, Record};
 use crate::event::Event;
-use crate::id;
-use crate::record::{FileDiff, Record};
 use crate::session::Session;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -30,16 +30,6 @@ impl Outcome {
 }
 
 impl Session {
-    pub(crate) fn set_status(&self, text: String) {
-        let mut st = self.state.lock().unwrap();
-        if st.status == text {
-            return;
-        }
-        st.status = text.clone();
-        drop(st);
-        self.emit(Event::Status(text));
-    }
-
     pub(crate) fn tool(
         self: &Arc<Self>,
         generation: u64,
@@ -116,7 +106,7 @@ impl Session {
         self.lua_start_hook(exec_id.clone(), "tool", Some(code.to_string()), None);
         let d = self
             .vm
-            .run_with(code, "lua", stop, crate::registry::agent_env);
+            .run_with(code, "lua", stop, crate::scripting::registry::agent_env);
         self.lua_end_done(&exec_id, "tool", started.elapsed(), &d);
         Outcome {
             code: match (d.ok, d.stop) {

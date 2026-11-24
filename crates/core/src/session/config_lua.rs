@@ -1,5 +1,5 @@
 use crate::mode::{Mode, Options, Start};
-use crate::registry::COMMIT_AGENT;
+use crate::scripting::registry::COMMIT_AGENT;
 use std::path::Path;
 use std::sync::Arc;
 use tuse_config::Config;
@@ -10,30 +10,33 @@ pub(crate) fn prepare(
     path: Option<&Path>,
     sync_plugins: bool,
 ) -> Result<Config, String> {
-    let saved = crate::require::forget(lua).map_err(|e| e.to_string())?;
-    let prev_ctx = lua.app_data_mut::<crate::snapshot::LoadCtx>().map(|mut c| {
-        let old = (c.loading, c.configpath.clone());
-        c.loading = true;
-        c.configpath = path.map(|p| p.display().to_string());
-        old
-    });
+    let saved = crate::scripting::require::forget(lua).map_err(|e| e.to_string())?;
+    let prev_ctx = lua
+        .app_data_mut::<crate::session::snapshot::LoadCtx>()
+        .map(|mut c| {
+            let old = (c.loading, c.configpath.clone());
+            c.loading = true;
+            c.configpath = path.map(|p| p.display().to_string());
+            old
+        });
     let res = prepare_inner(lua, path, sync_plugins);
-    if let (Some(mut ctx), Some((old_loading, old_path))) =
-        (lua.app_data_mut::<crate::snapshot::LoadCtx>(), prev_ctx)
-    {
+    if let (Some(mut ctx), Some((old_loading, old_path))) = (
+        lua.app_data_mut::<crate::session::snapshot::LoadCtx>(),
+        prev_ctx,
+    ) {
         ctx.loading = old_loading;
         if res.is_err() {
             ctx.configpath = old_path;
         }
     }
     if res.is_err() {
-        let _ = crate::require::restore(lua, saved);
+        let _ = crate::scripting::require::restore(lua, saved);
     }
     res
 }
 
 fn prepare_inner(lua: &Lua, path: Option<&Path>, sync_plugins: bool) -> Result<Config, String> {
-    crate::subs::begin_prepare(lua);
+    crate::scripting::subs::begin_prepare(lua);
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     let (table, plugins, parsed) = match path {
         Some(p) => read_file(lua, p, sync_plugins)?,
@@ -41,46 +44,31 @@ fn prepare_inner(lua: &Lua, path: Option<&Path>, sync_plugins: bool) -> Result<C
     };
     let mut config = match parsed {
         Some(c) => c,
-        None => tuse_config::from_value(crate::validate::json(lua, &table), &name)?,
+        None => tuse_config::from_value(crate::scripting::validate::json(lua, &table), &name)?,
     };
     config.plugins = plugins;
     config.path = path.map(|p| p.display().to_string()).unwrap_or_default();
     lua.set_named_registry_value("tuse.next", table)
         .map_err(|e| e.to_string())?;
-    crate::store::apply_providers(&mut config)?;
+    crate::storage::store::apply_providers(&mut config)?;
     Ok(config)
 }
 
-fn read_file(lua: &Lua, path: &Path, sync_plugins: bool) -> Result<crate::plugins::Merged, String> {
+fn read_file(
+    lua: &Lua,
+    path: &Path,
+    sync_plugins: bool,
+) -> Result<crate::scripting::plugins::Merged, String> {
     let source = path.display().to_string();
     let error = |e: mlua::Error| format!("{source}: {}", tuse_lua::message(&e));
-    match eval_file(lua, path)? {
+    match crate::scripting::require::eval_file(lua, path)? {
         Value::Table(t) => {
             let base = path.parent().unwrap_or(Path::new("."));
-            crate::plugins::apply(lua, t, &source, base, sync_plugins)
+            crate::scripting::plugins::apply(lua, t, &source, base, sync_plugins)
         }
         Value::Nil => Ok((lua.create_table().map_err(error)?, vec![], None)),
         _ => Err(format!("{source}: the config must return a table")),
     }
-}
-
-pub(crate) fn eval_file(lua: &Lua, path: &Path) -> Result<Value, String> {
-    let error = |e: mlua::Error| format!("{}: {}", path.display(), tuse_lua::message(&e));
-    let canonical = path
-        .canonicalize()
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-    let key = canonical.display().to_string();
-    let text =
-        std::fs::read_to_string(&canonical).map_err(|e| format!("{}: {e}", path.display()))?;
-    let env = crate::registry::file_env(lua).map_err(error)?;
-    crate::require::set_loading(lua, &key, true).map_err(error)?;
-    let eval = lua
-        .load(text)
-        .set_environment(env)
-        .set_name(format!("@{key}"))
-        .eval::<Value>();
-    let _ = crate::require::set_loading(lua, &key, false);
-    eval.map_err(error)
 }
 
 pub(crate) fn commit(lua: &Lua, _config: &Config) -> Result<(), String> {
@@ -96,7 +84,14 @@ pub(crate) fn commit(lua: &Lua, _config: &Config) -> Result<(), String> {
     commit_agent
         .call::<()>(funcs)
         .map_err(|e| tuse_lua::message(&e))?;
-    crate::subs::reconcile(lua);
+    if let Some(task) = crate::scripting::subs::reconcile(lua)
+        && let Ok(s) = crate::session::host::session(lua)
+    {
+        let _ = s.stop_task(&task);
+        s.emit(crate::event::Event::Notice(
+            "Stopped previous managed subs proxy (subs disabled or settings changed). Run /subs -> start to launch a new one.".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -120,11 +115,11 @@ pub fn configured_models(
 
 pub(crate) fn start_vm(
     opts: &Options,
-) -> Result<(tuse_lua::Vm, crate::host::Slot, Config), String> {
-    let slot = crate::host::Slot::default();
+) -> Result<(tuse_lua::Vm, crate::session::host::Slot, Config), String> {
+    let slot = crate::session::host::Slot::default();
     let cwd = opts.cwd.clone();
     let mode = opts.mode;
-    let host = crate::host::SessionHost {
+    let host = crate::session::host::SessionHost {
         slot: slot.clone(),
         cwd: cwd.clone(),
     };
@@ -132,16 +127,16 @@ pub(crate) fn start_vm(
     let path = tuse_config::find(opts.config.as_deref(), &cwd);
     let s2 = slot.clone();
     let config = vm.call(move |lua| {
-        crate::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
-        lua.set_app_data(crate::snapshot::LoadCtx {
+        crate::session::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
+        lua.set_app_data(crate::session::snapshot::LoadCtx {
             mode,
             cwd: cwd.clone(),
             configpath: path.as_ref().map(|p| p.display().to_string()),
             loading: false,
         });
-        crate::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
-        let config = crate::config_lua::prepare(lua, path.as_deref(), false)?;
-        crate::config_lua::commit(lua, &config)?;
+        crate::scripting::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
+        let config = crate::session::config_lua::prepare(lua, path.as_deref(), false)?;
+        crate::session::config_lua::commit(lua, &config)?;
         Ok::<_, String>(config)
     })?;
     Ok((vm, slot, config))

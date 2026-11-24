@@ -1,4 +1,4 @@
-use crate::record::UserInput;
+use crate::convo::record::UserInput;
 use base64::Engine;
 use std::io::Read;
 use std::path::{Path, PathBuf};

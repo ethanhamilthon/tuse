@@ -26,7 +26,7 @@ pub fn run(
             path.display()
         )));
     }
-    if let Some(mime) = crate::input::image_mime(path) {
+    if let Some(mime) = crate::convo::input::image_mime(path) {
         return image(path, mime, meta.len() as usize, max_image);
     }
     let text = if lines {

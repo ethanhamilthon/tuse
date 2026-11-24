@@ -59,7 +59,7 @@ impl Session {
         st.remote.clear();
         if st.stats.1 != c.models {
             st.stats = (
-                crate::usage::Stats::of(&st.records, &c.models),
+                crate::convo::usage::Stats::of(&st.records, &c.models),
                 c.models.clone(),
             );
         }
@@ -124,6 +124,6 @@ impl Session {
     }
 
     pub fn save_choice(&self, key: &str, value: &str) -> Result<(), String> {
-        crate::db::set_state(key, value)
+        crate::storage::db::set_state(key, value)
     }
 }

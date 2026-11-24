@@ -32,10 +32,12 @@ impl Drop for CleanDir {
     }
 }
 
-pub(crate) fn sync_all(entries: &[crate::plugins::Entry]) -> Result<(), String> {
+pub(crate) fn sync_all<'a>(
+    plugins: impl IntoIterator<Item = &'a tuse_config::Plugin>,
+) -> Result<(), String> {
     let mut repos: Vec<RepoSpec> = vec![];
-    for e in entries {
-        let Some(repo) = e.plugin.repo() else {
+    for plugin in plugins {
+        let Some(repo) = plugin.repo() else {
             continue;
         };
         if let Some(existing) = repos.iter_mut().find(|r| r.root == repo.root()) {
@@ -45,7 +47,7 @@ pub(crate) fn sync_all(entries: &[crate::plugins::Entry]) -> Result<(), String> 
             continue;
         }
         repos.push(RepoSpec {
-            name: e.plugin.name().to_string(),
+            name: plugin.name().to_string(),
             url: repo.url().to_string(),
             root: repo.root().to_path_buf(),
             git_ref: repo.git_ref().map(String::from),

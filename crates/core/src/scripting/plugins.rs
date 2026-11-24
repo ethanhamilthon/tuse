@@ -16,7 +16,7 @@ fn text(t: &Table, key: &str, path: &str) -> Result<Option<String>, String> {
         Value::String(s) => Ok(Some(s.to_string_lossy())),
         other => Err(format!(
             "{path}.{key}: expected string, got {}",
-            crate::validate::kind(&other)
+            crate::scripting::validate::kind(&other)
         )),
     }
 }
@@ -31,7 +31,7 @@ pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String>
         other => {
             return Err(format!(
                 "plugins: expected list, got {}",
-                crate::validate::kind(&other)
+                crate::scripting::validate::kind(&other)
             ));
         }
     };
@@ -41,7 +41,7 @@ pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String>
         if !matches!(k, Value::Integer(i) if i >= 1 && (i as usize) <= len) {
             return Err(format!(
                 "plugins: expected list (1..={len}), unexpected key {}",
-                crate::validate::key_str(&k)
+                crate::scripting::validate::key_str(&k)
             ));
         }
     }
@@ -59,7 +59,7 @@ pub(crate) fn entries(config: &Table, base: &Path) -> Result<Vec<Entry>, String>
             other => {
                 return Err(format!(
                     "{idx}: expected string or table, got {}",
-                    crate::validate::kind(&other)
+                    crate::scripting::validate::kind(&other)
                 ));
             }
         };
@@ -88,7 +88,7 @@ fn entry(t: &Table, idx: &str, base: &Path) -> Result<Entry, String> {
             _ => {
                 return Err(format!(
                     "{idx}.{}: unknown key for plugin `{name}`; use {}",
-                    crate::validate::key_str(&k),
+                    crate::scripting::validate::key_str(&k),
                     KEYS.join(", ")
                 ));
             }
@@ -103,7 +103,7 @@ fn entry(t: &Table, idx: &str, base: &Path) -> Result<Entry, String> {
         other => {
             return Err(format!(
                 "{idx}.enabled: expected boolean, got {}",
-                crate::validate::kind(&other)
+                crate::scripting::validate::kind(&other)
             ));
         }
     };
@@ -120,7 +120,7 @@ fn entry(t: &Table, idx: &str, base: &Path) -> Result<Entry, String> {
         other => {
             return Err(format!(
                 "{idx}.opts: expected table, got {}",
-                crate::validate::kind(&other)
+                crate::scripting::validate::kind(&other)
             ));
         }
     };
@@ -140,10 +140,10 @@ pub(crate) fn apply(
     base: &Path,
     sync_plugins: bool,
 ) -> Result<Merged, String> {
-    let parsed = crate::validate::table(lua, &config, source, false, true)?;
+    let parsed = crate::scripting::validate::table(lua, &config, source, false, true)?;
     let list = entries(&config, base).map_err(|e| format!("{source}: {e}"))?;
     if list.is_empty() {
-        crate::validate::check_disabled_targets(
+        crate::scripting::validate::check_disabled_targets(
             &config,
             source,
             &std::collections::HashSet::new(),
@@ -152,7 +152,7 @@ pub(crate) fn apply(
         return Ok((config, vec![], Some(parsed)));
     }
     if sync_plugins {
-        crate::plugin_sync::sync_all(&list)?;
+        crate::scripting::plugin_sync::sync_all(list.iter().map(|e| &e.plugin))?;
     }
     let infos = list.iter().map(|e| e.plugin.info()).collect();
     let mut plugin_fns = std::collections::HashSet::new();
@@ -160,15 +160,15 @@ pub(crate) fn apply(
     for e in list {
         let psrc = format!("plugin {}", e.plugin.name());
         let t = load(lua, &e).map_err(|err| format!("{psrc}: {err}"))?;
-        crate::validate::table(lua, &t, &psrc, true, false)?;
-        plugin_fns.extend(crate::validate::function_names(&t));
+        crate::scripting::validate::table(lua, &t, &psrc, true, false)?;
+        plugin_fns.extend(crate::scripting::validate::function_names(&t));
         let item = lua.create_table().map_err(|e| e.to_string())?;
         item.set("name", e.plugin.name())
             .map_err(|e| e.to_string())?;
         item.set("config", t).map_err(|e| e.to_string())?;
         loaded.push(item).map_err(|e| e.to_string())?;
     }
-    crate::validate::check_disabled_targets(&config, source, &plugin_fns)?;
+    crate::scripting::validate::check_disabled_targets(&config, source, &plugin_fns)?;
     lua.load(MERGE)
         .set_name("=plugins")
         .call::<Table>((loaded, config))
@@ -179,10 +179,10 @@ pub(crate) fn apply(
 fn load(lua: &Lua, e: &Entry) -> Result<Table, String> {
     let p = &e.plugin;
     if p.is_bundled() {
-        return crate::subs::load_default_plugin(lua, e.opts.clone());
+        return crate::scripting::subs::load_default_plugin(lua, e.opts.clone());
     }
     let file = p.entry_file()?;
-    let value = crate::config_lua::eval_file(lua, &file)?;
+    let value = crate::scripting::require::eval_file(lua, &file)?;
     let value = match value {
         Value::Function(f) => {
             let opts = match &e.opts {

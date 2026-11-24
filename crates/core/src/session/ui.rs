@@ -1,5 +1,5 @@
+use crate::convo::record::Record;
 use crate::event::{Event, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
-use crate::record::Record;
 use crate::session::Session;
 use std::collections::VecDeque;
 use std::sync::mpsc;

@@ -1,5 +1,5 @@
-use crate::db;
-use crate::record::Record;
+use crate::convo::record::Record;
+use crate::storage::db;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::fs::{File, TryLockError};

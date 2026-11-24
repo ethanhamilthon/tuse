@@ -1,6 +1,98 @@
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use std::sync::OnceLock;
 use tuse_api::ToolDef;
 use tuse_config::Config;
+
+const PAGE: &str = include_str!("../../../docs/system-prompt.md");
+const DOCS_ONLY: &str = " <!-- docs-only -->";
+
+struct Page {
+    blocks: BTreeMap<&'static str, &'static str>,
+    functions: Vec<(&'static str, &'static str, &'static str, bool)>,
+}
+
+fn page() -> &'static Page {
+    static CELL: OnceLock<Page> = OnceLock::new();
+    CELL.get_or_init(|| parse(PAGE))
+}
+
+fn parse(text: &'static str) -> Page {
+    let mut blocks = BTreeMap::new();
+    let mut functions = vec![];
+    let mut in_functions = false;
+    let mut group = "";
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
+        if line == "## Functions" {
+            in_functions = true;
+            continue;
+        }
+        if line.starts_with("## ") {
+            in_functions = false;
+        }
+        let Some(name) = line.strip_prefix("### ") else {
+            if in_functions && line.starts_with("- `") {
+                let (body, docs_only) = match line.strip_suffix(DOCS_ONLY) {
+                    Some(b) => (b, true),
+                    None => (line, false),
+                };
+                let id = body[3..].split('`').next().unwrap_or("");
+                let id = id.split(['(', '.']).next().unwrap_or(id);
+                functions.push((group, id, body, docs_only));
+            }
+            continue;
+        };
+        if in_functions {
+            group = name;
+            continue;
+        }
+        if lines.peek() == Some(&"") {
+            lines.next();
+        }
+        if lines.peek() == Some(&"```text") {
+            lines.next();
+            let start = text.len() - lines.clone().map(|l| l.len() + 1).sum::<usize>();
+            let mut end = start;
+            for l in lines.by_ref() {
+                if l == "```" {
+                    break;
+                }
+                end += l.len() + 1;
+            }
+            blocks.insert(name, text[start..end].trim_end_matches('\n'));
+        }
+    }
+    Page { blocks, functions }
+}
+
+fn block(name: &str) -> &'static str {
+    page().blocks.get(name).copied().unwrap_or("")
+}
+
+struct Enabled<'a>(&'a [&'a str]);
+
+impl Enabled<'_> {
+    fn has(&self, name: &str) -> bool {
+        !self.0.contains(&name)
+    }
+
+    fn cond(&self, spec: &str) -> bool {
+        if spec.contains('&') {
+            spec.split('&').all(|n| self.has(n))
+        } else {
+            spec.split('|').any(|n| self.has(n))
+        }
+    }
+
+    fn line(&self, name: &str) -> Option<&'static str> {
+        page()
+            .functions
+            .iter()
+            .find(|(_, id, _, _)| *id == name)
+            .map(|(_, _, line, _)| *line)
+    }
+}
 
 fn join_clauses(items: &[String]) -> String {
     match items {
@@ -12,202 +104,158 @@ fn join_clauses(items: &[String]) -> String {
 }
 
 pub(crate) fn prefer_sentence(disabled: &[&str], with_parens: bool) -> String {
-    let has = |n: &str| !disabled.contains(&n);
-    let fmt = |n: &str| {
-        if with_parens {
-            format!("{n}()")
-        } else {
-            format!("`{n}`")
-        }
-    };
+    let on = Enabled(disabled);
     let mut parts = vec![];
-    if has("read") {
-        parts.push(format!("{} for file contents", fmt("read")));
-    }
-    if has("grep") {
-        parts.push(format!("{} for search", fmt("grep")));
-    }
-    let writes: Vec<String> = ["write", "edit", "append", "delete"]
-        .into_iter()
-        .filter(|n| has(n))
-        .map(fmt)
-        .collect();
-    if !writes.is_empty() {
-        parts.push(format!(
-            "{} for file changes so the user sees diffs",
-            writes.join("/")
-        ));
+    for clause in block("prefer-clauses").lines() {
+        let Some((names, template)) = clause.split_once(": ") else {
+            continue;
+        };
+        let names: Vec<&str> = names.split(", ").filter(|n| on.has(n)).collect();
+        if names.is_empty() {
+            continue;
+        }
+        let fmt = |n: &str| {
+            if with_parens {
+                format!("{n}()")
+            } else {
+                format!("`{n}`")
+            }
+        };
+        let list = names.iter().map(|n| fmt(n)).collect::<Vec<_>>().join("/");
+        parts.push(template.replace("{fn}", &list));
     }
     if parts.is_empty() {
         String::new()
     } else {
-        format!(" Prefer {}.", join_clauses(&parts))
+        format!(
+            " {}",
+            block("prefer").replace("{clauses}", &join_clauses(&parts))
+        )
     }
 }
 
-pub(crate) const FUNC_SPECS: &[(&str, &str, &str)] = &[
-    (
-        "File Functions",
-        "read",
-        "- `read(path)` / `read(path, {lines=true, offset=1, limit=2000})`: returns raw text by default, or an image (png, jpg, gif, webp) that you then see. Pass `{lines=true}` for numbered, paginated lines (ending with the next `offset`).",
-    ),
-    (
-        "File Functions",
-        "write",
-        "- `write(path, content)`: create a file or replace it completely; missing folders are created.",
-    ),
-    (
-        "File Functions",
-        "append",
-        "- `append(path, text)`: append text to a file (creating it if missing) and show the change as a diff.",
-    ),
-    (
-        "File Functions",
-        "delete",
-        "- `delete(path)`: delete a single file and show its removal as a diff (does not delete directories).",
-    ),
-    (
-        "File Functions",
-        "edit",
-        "- `edit(path, old, new, {all=false})`: replace exact text in a file. `old` must be unique unless `all` is set; read the file first. A wrong `old` raises an error.",
-    ),
-    (
-        "File Functions",
-        "grep",
-        "- `grep(pattern, {path=\".\", glob=nil, ignore_case=false, literal=false, context=0, limit=100})`: search file contents with a regex (or plain text with `literal=true`); `path` can be a string or list of paths. Returns `path:line: text` per match and respects `.gitignore`.",
-    ),
-    (
-        "Shell, Timing, and Background Tasks",
-        "sh",
-        "- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E \"foo\\\\bar\" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. At its timeout or the call's the command is killed.",
-    ),
-    (
-        "Shell, Timing, and Background Tasks",
-        "sleep",
-        "- `sleep(seconds)`: waits cooperatively while other tasks and hooks keep running.",
-    ),
-    (
-        "Shell, Timing, and Background Tasks",
-        "spawn",
-        "- `spawn(fn, name)`: runs `fn` in the background as a task in this same VM (it sees your globals); returns its ID. A task has no deadline; its `print` goes to its log, and you get a message when it ends.",
-    ),
-    (
-        "Shell, Timing, and Background Tasks",
-        "task_get",
-        "- `task_get(id, lines=50)`: return `{ id, name, status, started, ended, output }` with the log tail in `.output`.",
-    ),
-    (
-        "Shell, Timing, and Background Tasks",
-        "task_stop",
-        "- `task_stop(id)`: stop a running background task and return its task info.",
-    ),
-    (
-        "Shell, Timing, and Background Tasks",
-        "task_list",
-        "- `task_list()`: list all tasks in the session with `.id`, `.name`, and `.status` (`running`, `done`, `failed`, `stopped`).",
-    ),
-    (
-        "Interactive UI",
-        "show",
-        "- `show(name, text, pin)`: render or update a UI-only Markdown block by name (`pin=true` keeps it at the end of the chat after new messages; `show(name, \"\", false)` removes it).",
-    ),
-    (
-        "Interactive UI",
-        "pick",
-        "- `pick(options)`: show a list of strings to the user and return the selected string, or `nil` on Esc (pauses your timeout while waiting).",
-    ),
-    (
-        "Interactive UI",
-        "ask",
-        "- `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).",
-    ),
-    (
-        "Control, Model, Docs, and Utilities",
-        "llm",
-        "- `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text; `model` and `effort` default to the session's.",
-    ),
-    (
-        "Control, Model, Docs, and Utilities",
-        "reload",
-        "- `reload()`: reload the config like `/reload`; raises if it is invalid.",
-    ),
-    (
-        "Control, Model, Docs, and Utilities",
-        "set_title",
-        "- `set_title(text)`: update the session title (up to 80 characters).",
-    ),
-    (
-        "Control, Model, Docs, and Utilities",
-        "session",
-        "- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `trace`).",
-    ),
-    (
-        "Control, Model, Docs, and Utilities",
-        "docs",
-        "- `docs(topic)`: call `docs()` to list documentation topics, or `docs(\"<topic>\")` to read one.",
-    ),
-    (
-        "Control, Model, Docs, and Utilities",
-        "json",
-        "- `json.encode(value)` / `json.decode(text)`: encode a Lua value to compact JSON or decode JSON to Lua.",
-    ),
-    (
-        "Control, Model, Docs, and Utilities",
-        "inspect",
-        "- `inspect(value)`: format any Lua value into a readable string.",
-    ),
-];
+fn expand(template: &str, disabled: &[&str]) -> String {
+    let on = Enabled(disabled);
+    let mut out_lines: Vec<String> = vec![];
+    for line in template.split('\n') {
+        let had = line.contains("{{");
+        let mut out = String::new();
+        let mut rest = line;
+        while let Some(i) = rest.find("{{") {
+            out.push_str(&rest[..i]);
+            let Some(j) = rest[i..].find("}}") else {
+                out.push_str(&rest[i..]);
+                rest = "";
+                break;
+            };
+            let inner = &rest[i + 2..i + j];
+            rest = &rest[i + j + 2..];
+            out.push_str(&placeholder(inner, &on, disabled));
+        }
+        out.push_str(rest);
+        if had && out.trim().is_empty() {
+            continue;
+        }
+        out_lines.push(out);
+    }
+    out_lines.join("\n")
+}
+
+fn placeholder(inner: &str, on: &Enabled, disabled: &[&str]) -> String {
+    if inner == "prefer" {
+        return prefer_sentence(disabled, false);
+    }
+    if inner == "prefer()" {
+        return prefer_sentence(disabled, true);
+    }
+    if let Some(list) = inner.strip_prefix("each:") {
+        let names: Vec<String> = list
+            .split(',')
+            .filter(|n| on.has(n))
+            .map(|n| format!("`{n}`"))
+            .collect();
+        return names.join(", ");
+    }
+    if let Some(list) = inner.strip_prefix("lines:") {
+        let lines: Vec<&str> = list
+            .split(',')
+            .filter(|n| on.has(n))
+            .filter_map(|n| on.line(n))
+            .collect();
+        return lines.join("\n");
+    }
+    match inner.split_once(':') {
+        Some((spec, text)) if on.cond(spec) => text.to_string(),
+        Some(_) | None => String::new(),
+    }
+}
+
+pub(crate) fn function_sections(disabled: &[&str]) -> Vec<(&'static str, Vec<&'static str>)> {
+    let on = Enabled(disabled);
+    let mut out: Vec<(&'static str, Vec<&'static str>)> = vec![];
+    for (group, id, line, _) in &page().functions {
+        if !on.has(id) {
+            continue;
+        }
+        match out.last_mut() {
+            Some((g, lines)) if g == group => lines.push(line),
+            _ => out.push((group, vec![line])),
+        }
+    }
+    out
+}
+
+pub(crate) fn functions_doc(disabled: &[&str]) -> String {
+    let mut out = block("functions-doc-header").to_string();
+    let pref = expand(block("functions-doc-preference"), disabled);
+    if !pref.is_empty() {
+        out.push_str("\n\n");
+        out.push_str(pref.trim_start());
+    }
+    for (group, lines) in function_sections(disabled) {
+        out.push_str(&format!("\n\n## {group}\n"));
+        for line in lines {
+            out.push('\n');
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+pub(crate) fn tool_doc(disabled: &[&str]) -> String {
+    let mut out = expand(block("tool-doc"), disabled);
+    let tail = expand(block("tool-doc-functions"), disabled);
+    if !tail.is_empty() && !tail.ends_with("{{lines}}") && tail.lines().count() > 1 {
+        out.push_str("\n\n");
+        out.push_str(&tail);
+    }
+    out
+}
 
 pub fn system_prompt(config: &Config, compacted: bool) -> String {
     let disabled = config.disabled_builtins();
-    let has = |n: &str| !disabled.contains(&n);
-    let mut base = String::from(
-        "You are running inside Tuse, a coding agent.\n\n# Tool\nYou have one tool, `lua`: it runs Lua 5.4 code in the session's persistent VM, so globals stay between calls (use `local` for scratch values). You get what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Nothing is cut, so keep big outputs short yourself. A call is stopped after 120 seconds",
-    );
-    if has("spawn") {
-        base.push_str("; start a long job in the background with `spawn`");
-    }
-    base.push_str(".\n\nThe full Lua standard library is there (`string`, `table`, `math`, `io`, `os`, `utf8`, `coroutine`)");
-    match (has("json"), has("inspect")) {
-        (true, true) => base.push_str(", plus `json.encode`/`json.decode` and `inspect(value)`."),
-        (true, false) => base.push_str(", plus `json.encode`/`json.decode`."),
-        (false, true) => base.push_str(", plus `inspect(value)`."),
-        (false, false) => base.push('.'),
-    }
-    match (has("grep"), has("sh")) {
-        (true, true) => {
-            base.push_str(" Lua patterns are not regexes: use `grep` or `sh` for those.")
-        }
-        (true, false) => base.push_str(" Lua patterns are not regexes: use `grep` for those."),
-        (false, true) => base.push_str(" Lua patterns are not regexes: use `sh` for those."),
-        (false, false) => {}
-    }
-    base.push_str(
-        "\n\n# Rules\n- Prefer short, multi-step scripts over one big call. Create a file and extend it in small chunks instead of writing a 1000-line file in a single call.",
-    );
-
-    let bullets: Vec<&str> = FUNC_SPECS
+    let on = Enabled(&disabled);
+    let mut base = expand(block("prefix"), &disabled);
+    let bullets: Vec<&str> = page()
+        .functions
         .iter()
-        .filter(|(_, name, _)| !matches!(*name, "json" | "inspect" | "set_title") && has(name))
-        .map(|(_, _, line)| *line)
+        .filter(|(_, id, _, docs_only)| !docs_only && on.has(id))
+        .map(|(_, _, line, _)| *line)
         .collect();
     if !bullets.is_empty() {
-        base.push_str("\n\n# Functions in `lua`\nThey are Lua globals, not tools: call them inside `lua` code. Errors are Lua errors (catch them with `pcall`).");
-        base.push_str(&prefer_sentence(&disabled, false));
-        if has("sh") {
-            base.push_str(" Use `sh` for running programs and processing their output, not as the default for file operations.");
-        }
+        base.push_str("\n\n");
+        base.push_str(&expand(block("functions-header"), &disabled));
         for b in bullets {
             base.push('\n');
             base.push_str(b);
         }
     }
-
     let mut parts = vec![base];
     parts.extend(config.systems.iter().map(|s| s.trim_end().to_string()));
     let mut out = parts.join("\n\n");
     if compacted {
-        out.push_str("\n\nEarlier parts of this conversation were compacted to save context: old tool calls and their outputs were removed and some later outputs were cut to their first line.");
+        out.push_str("\n\n");
+        out.push_str(block("compacted"));
     }
     out
 }
@@ -222,18 +270,12 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
 
 pub fn tools(config: &Config) -> Vec<ToolDef> {
     let disabled = config.disabled_builtins();
-    let mut desc = String::from(
-        "Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback.",
-    );
-    desc.push_str(&prefer_sentence(&disabled, true));
-    if !disabled.contains(&"sh") {
-        desc.push_str(" Use sh(cmd) for running programs and processing their output, not as the default for file operations; use sh([=[…]=]) when a shell command has quotes, backslashes, or regexes.");
-    }
+    let desc = expand(block("tool-description"), &disabled);
     vec![tool(
         "lua",
         &desc,
         json!({
-            "code": {"type": "string", "description": "The Lua code to run."}
+            "code": {"type": "string", "description": block("tool-code-parameter")}
         }),
         &["code"],
     )]

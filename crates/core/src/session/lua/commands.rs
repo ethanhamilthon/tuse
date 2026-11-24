@@ -107,7 +107,7 @@ impl Session {
         let reply = client
             .complete(
                 &req,
-                config.settings.retries,
+                tuse_api::RETRY_DELAYS.len(),
                 cancel,
                 &mut |_| {},
                 &mut |_| {},

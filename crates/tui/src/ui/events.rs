@@ -26,6 +26,7 @@ impl App {
         }
         if self.session.busy() && last_tick.elapsed() >= std::time::Duration::from_millis(100) {
             self.tick += 1;
+            self.chat.tick = self.tick;
             *last_tick = std::time::Instant::now();
             pump.dirty = true;
             pump.immediate = true;
@@ -170,6 +171,7 @@ impl App {
                 code,
                 diffs,
             } => {
+                let handed_off = code.is_none() && output.starts_with("[continued in background: ");
                 if let Some(Entry::Tool {
                     output: o,
                     code: c,
@@ -180,6 +182,9 @@ impl App {
                     *o = Some(output);
                     *c = code;
                     *d = diffs;
+                }
+                if handed_off {
+                    self.drop_pending();
                 }
             }
             Event::Status(_) => {}
@@ -202,6 +207,7 @@ impl App {
                 self.thinking = None;
                 self.drop_pending();
                 if cancelled {
+                    self.chat.finish_interrupted_tools();
                     self.turn_error = None;
                 }
                 self.chat.push(Entry::TurnEnd {

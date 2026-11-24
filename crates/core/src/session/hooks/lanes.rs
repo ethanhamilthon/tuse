@@ -99,6 +99,7 @@ impl Session {
                     ok: false,
                     text: tuse_lua::message(&e),
                     stop: None,
+                    handed_off: false,
                     diffs: vec![],
                     images: vec![],
                 };

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.3
+
+- **Background Lua handoff.** Steering or pressing Esc during an agent Lua call moves the whole call to `/tasks`. The current shell process keeps running and later Lua statements still execute. Use `/tasks` to stop the task.
+- **Async agent behavior.** The default prompt favors asynchronous work and tells agents to end the turn rather than poll. Task completion messages use `<task>` without renaming JSON-RPC events or history records. Live Lua calls show a star spinner.
+- **Removed settings and Lua API.** Remove `settings.retries` and `settings.max_image_bytes` from older configs. Completion requests still retry up to five times, and Lua `read()` keeps its 5 MiB image limit. Use cooperative host calls or `spawn()` instead of the removed `sleep()` helper.
+
 ## 0.10.2
 
 - **Breaking: removed all plugins.** Git and local plugins, `welcome`, and `tuse/default` (its palette and the `/subs` proxy integration) are gone. Remove `plugins` from existing Lua configs before updating; it is now an unknown key. Lua modules, hooks, custom commands, and theme overrides still work.

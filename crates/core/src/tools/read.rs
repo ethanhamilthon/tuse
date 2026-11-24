@@ -4,6 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 pub const DEFAULT_LIMIT: usize = 2000;
+const MAX_IMAGE: usize = 5 * 1024 * 1024;
 const LINE_CHARS: usize = 2000;
 
 pub struct Read {
@@ -11,13 +12,7 @@ pub struct Read {
     pub image: Option<String>,
 }
 
-pub fn run(
-    path: &Path,
-    lines: bool,
-    offset: usize,
-    limit: usize,
-    max_image: usize,
-) -> Result<Read, String> {
+pub fn run(path: &Path, lines: bool, offset: usize, limit: usize) -> Result<Read, String> {
     let io = |e: std::io::Error| super::io_fail(path, &e);
     let meta = std::fs::metadata(path).map_err(io)?;
     if meta.is_dir() {
@@ -27,7 +22,7 @@ pub fn run(
         )));
     }
     if let Some(mime) = crate::text::image_mime(path) {
-        return image(path, mime, meta.len() as usize, max_image);
+        return image(path, mime, meta.len() as usize, MAX_IMAGE);
     }
     let text = if lines {
         text(path, offset, limit).map_err(io)?
@@ -40,7 +35,7 @@ pub fn run(
 fn image(path: &Path, mime: &str, size: usize, max: usize) -> Result<Read, String> {
     if size > max {
         return Err(fail(format!(
-            "{} is {size} bytes, over the image limit of {max} bytes (settings.max_image_bytes)",
+            "{} is {size} bytes, over the image limit of {max} bytes",
             path.display()
         )));
     }
@@ -119,16 +114,16 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("t.txt");
         std::fs::write(&f, "a\nb\nc\nd\n").unwrap();
-        assert_eq!(run(&f, false, 1, 2, 1024).unwrap().text, "a\nb\nc\nd\n");
-        let t = run(&f, true, 2, 2, 1024).unwrap().text;
+        assert_eq!(run(&f, false, 1, 2).unwrap().text, "a\nb\nc\nd\n");
+        let t = run(&f, true, 2, 2).unwrap().text;
         assert_eq!(t, "2\tb\n3\tc\n[lines 2-3 of 4; continue with offset=4]");
         assert!(text(&f, 9, 2).unwrap().contains("past the end"));
         std::fs::write(&f, "").unwrap();
-        assert_eq!(run(&f, false, 1, 2, 1024).unwrap().text, "");
+        assert_eq!(run(&f, false, 1, 2).unwrap().text, "");
         assert_eq!(text(&f, 1, 2).unwrap(), "[empty file]");
         std::fs::write(&f, b"ab\0cd").unwrap();
         assert!(
-            run(&f, false, 1, 2, 1024)
+            run(&f, false, 1, 2)
                 .unwrap()
                 .text
                 .starts_with("[binary file")

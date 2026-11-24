@@ -41,7 +41,7 @@ Blocks are emitted in order: prompts, then pasted images, then picked files and 
 - **Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, case-insensitive):**
   - Pasted images keep their `[Image #N]` atom ID.
   - Image files picked with `@` receive the next free ID (`max(pasted atom IDs) + 1`, incrementing).
-  - Each image is encoded as a base64 `data:<mime>;base64,...` URL attached to the user message and referenced by `<image id="N" path="PATH"/>`. (Message image attachments are not capped by `settings.max_image_bytes`; that limit applies only to Lua `read()`.)
+  - Each image is encoded as a base64 `data:<mime>;base64,...` URL attached to the user message and referenced by `<image id="N" path="PATH"/>`. (The 5 MiB limit for Lua `read()` does not apply to message image attachments.)
 - **Directories:** `<dir path="PATH">\nentry1\nentry2/\n</dir>`, sorted by name with `/` on subdirectories. Listings longer than 1,024 bytes stop early with `\n…`.
 - **Text files:** Tuse reads up to the first 1,024 bytes, cutting cleanly on a UTF-8 character boundary if a multi-byte character straddles byte 1,024. Files up to 1,024 bytes emit `<file path="PATH">CONTENT</file>`; larger files emit `<file path="PATH" truncated="true" size="BYTES">HEAD</file>`.
 - **Binary files:** Any file whose read head contains a NUL byte or invalid UTF-8 emits `<file path="PATH" binary="true" size="BYTES"/>` without content.

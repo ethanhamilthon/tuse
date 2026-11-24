@@ -24,8 +24,6 @@ g = ok and g or {}
 local shared = require("shared")       -- shared.lua or shared/init.lua next to this file
 local interactive = t.session().mode == "tui"
 
-g.settings = g.settings or {}
-g.settings.retries = 3
 g.systems = g.systems or {}
 g.systems[#g.systems + 1] = interactive and "Answer interactively." or "Keep responses concise."
 g.prompts = g.prompts or {}
@@ -45,7 +43,9 @@ Config files, trusted `require`d modules, and callbacks defined in them run in T
 - Configured `functions` are agent-only and are never visible in trusted code (share code via `local` functions or `require`d helper modules).
 - `os.exit` and the `debug` library are unavailable (`nil`). `os.getenv("THIS_PATH")` returns the calling Lua file's path. Other environment variables come straight from the process environment.
 - During top-level config evaluation (both on startup and on `/reload`), `require("tuse").session()` returns a pre-session snapshot containing `{ mode, configpath, cwd, home }` with `id` and all session-only fields set to `nil`.
-- **Startup vs reload**: on initial startup, no session exists yet, so session-dependent host functions (`write`, `append`, `delete`, `edit`, `grep`, `spawn`, `task_*`, `show`, `pick`, `ask`, `llm`, `reload`, `set_title`, `docs`) fail if called at top level (while `read`, `sh`, `sleep`, `json`, and `inspect` work, with `read` using `cwd` and default `max_image_bytes`). On reload, although `t.session()` still returns the pre-session snapshot, the live session already exists in the process; top-level side effects (file writes, shell commands, UI calls, global mutations) execute immediately and are **not** rolled back if config validation fails. Keep top-level config evaluation pure and put runtime actions in callbacks.
+- **Startup vs reload**: on initial startup, no session exists yet, so session-dependent host functions (`write`, `append`, `delete`, `edit`, `grep`, `spawn`, `task_*`, `show`, `pick`, `ask`, `llm`, `reload`, `set_title`, `docs`) fail if called at top level (while `read`, `sh`, `json`, and `inspect` work, with `read` using `cwd`). On reload, although `t.session()` still returns the pre-session snapshot, the live session already exists in the process; top-level side effects (file writes, shell commands, UI calls, global mutations) execute immediately and are **not** rolled back if config validation fails. Keep top-level config evaluation pure and put runtime actions in callbacks.
+
+> Remove `settings.retries` and `settings.max_image_bytes` from older configs; both now fail validation as unknown keys. Retries and the Lua `read()` image limit are fixed.
 
 ## Modules and `require`
 
@@ -57,7 +57,7 @@ Config files, trusted `require`d modules, and callbacks defined in them run in T
 
 | Call | Loads |
 | --- | --- |
-| `require("tuse")` | Host functions: `session`, `sh`, `sleep`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_get`, `task_list`, `task_stop`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`. |
+| `require("tuse")` | Host functions: `session`, `sh`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_get`, `task_list`, `task_stop`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`. |
 | `require("global")` | Global config: `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. |
 | `require("name")` | `name.lua`, else `name/init.lua`, relative to the calling file (`a.b` maps to `a/b`). |
 | `require("./name")` | `./name.lua`, else `./name/init.lua`, relative to the calling file (`../name` works too). |
@@ -89,8 +89,6 @@ Every key is optional. Unknown keys are rejected. Empty tables `{}` are accepted
 | Key | Type & range | Default | Meaning |
 | --- | --- | --- | --- |
 | `settings.compact_at` | integer `>= 0` (or unset) | unset (auto) | Context threshold in tokens that triggers compaction. Unset uses `floor(window * 6 / 10)` when the active model's `window` is positive, else disables compaction. `0` disables compaction globally unless overridden by a per-model `compact_at` (a per-model `compact_at` always takes precedence, even over a global `0`). |
-| `settings.max_image_bytes` | integer `>= 1` | `5242880` (5 MiB) | Maximum image file size `read()` will encode and send to the model. |
-| `settings.retries` | integer `0..=100` | `5` | Maximum retries for HTTP 429, HTTP 5xx, and network errors on agent turns and `llm()`. Validation accepts `0..=100`, while actual retries are capped at 5 (delays: 2, 5, 10, 20, 30 s). |
 | `settings.ui` | table | defaults below | TUI rendering, truncation, and layout controls. |
 
 ### `settings.ui`

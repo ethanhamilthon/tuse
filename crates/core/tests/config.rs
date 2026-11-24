@@ -76,7 +76,7 @@ fn require_session_validation_and_reload_rollback() {
         assert(require(dir .. '/lib/file.lua') == 'lib file')
         return {
             systems = { 'first', s.mode },
-            settings = { retries = 1, ui = { pad_x = 3 } },
+            settings = { ui = { pad_x = 3 } },
             prompts = { shared = 'kept', rex = rex.tag },
             functions = {
                 from_global = function()
@@ -121,7 +121,6 @@ fn require_session_validation_and_reload_rollback() {
         let s = open(mode, None).unwrap();
         let cfg = s.config();
         assert_eq!(cfg.systems, ["first", name, "last"]);
-        assert_eq!(cfg.settings.retries, 1);
         assert_eq!((cfg.settings.ui.pad_x, cfg.settings.ui.scroll_step), (3, 5));
         assert_eq!(cfg.prompts["local_wins"], "from project");
         assert_eq!(cfg.prompts["rex"], "rex-v1");

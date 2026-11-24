@@ -11,7 +11,7 @@ Tuse persists sessions, conversation history, providers, and global defaults in 
   - **State table:** global key-value defaults (`model`, `effort`).
 - **`~/.tuse/<id>/`** — per-session directory holding:
   - `lock` — OS advisory file lock created when the session materializes in SQLite (or immediately on resume) and held while open.
-  - `tasks/<task-id>.log` — log files created immediately when background tasks are started with `spawn()`.
+  - `tasks/<task-id>.log` — log files created immediately when background tasks start via `spawn()` or a tool handoff.
   - `images/image-<N>.png` — PNG files written when images are pasted from the clipboard in the TUI.
 
 ## Session IDs and timestamps

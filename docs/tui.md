@@ -6,7 +6,7 @@ Running `tuse` opens a full-screen terminal UI. See [commands.md](commands.md) f
 
 - **Startup:** Enables raw mode, alternate screen, bracketed paste, mouse capture, steady bar cursor, and Kitty keyboard disambiguation.
 - **Shutdown & watchdog:** Restores cursor, mouse/paste/keyboard modes, alternate screen, and raw mode on normal exit, panic, or `SIGINT` / `SIGTERM` / `SIGHUP`. A background watchdog polls signal flags and lost TTY stdin every 250 ms: if the main loop has **not yet claimed shutdown** within 2 seconds of a signal or lost TTY, the watchdog claims shutdown, closes the session, restores the terminal, and exits 0 (without printing a session ID). Once the main loop claims shutdown, the watchdog exits and does **not** impose a timeout on `close` hooks. (`SIGKILL` cannot be intercepted; run `reset` in the terminal afterward.)
-- **Rendering cadence:** Streams text, reasoning, and tool deltas at up to ~30 fps (33 ms frame pacing); redraws immediately on input, resize, and discrete session events; ticks the busy spinner every 100 ms; wraps frame output in synchronized terminal updates.
+- **Rendering cadence:** Streams text, reasoning, and tool deltas at up to ~30 fps (33 ms frame pacing); redraws immediately on input, resize, and discrete session events; ticks the busy and live tool spinners every 100 ms; wraps frame output in synchronized terminal updates.
 
 ## Screen layout
 
@@ -24,7 +24,7 @@ From top to bottom, padded horizontally on both edges by `settings.ui.pad_x`:
 - **Assistant message:** Renders a GFM Markdown subset: headings (all levels styled identically in `info` bold), emphasis, strong, strikethrough (`dim`), inline `code`, links, blockquotes (`│ `), bullet (`• `) and numbered lists, task lists (`[x]` / `[ ]`), horizontal rules, fenced/indented code blocks (with Lua syntax highlighting for `lua` fences), responsive tables (aligned columns or `Header: value` cards when narrow), and raw HTML shown as plain text. Markdown images, footnotes, and other extensions are not specially rendered. Interactive links are enabled everywhere except fenced `lua` code blocks; Markdown links with unsupported destinations (such as `#anchor` or non-openable schemes) still render in `info` + underline without being clickable or hover-highlighted.
 - **Reasoning:** Prefixed with `∴ ` in `muted` italic; shows the **last** `settings.ui.reasoning_line` wrapped lines (`0` hides, `-1` shows all).
 - **Tool call (`lua`):**
-  - Source code prefixed with `* `, Lua syntax highlighted (or colored `err` when failed), folding multiline long strings when `settings.ui.fold_strings = true`, capped at `settings.ui.tool_line` wrapped lines (+ `…` in `border`).
+  - Source code prefixed with an animated star (`✦`, `✧`, `✦`, `✶`, one frame every 100 ms) while the call is streaming or running, and with `* ` after it ends (including on handoff). The prefix takes one column plus a space. Source is Lua syntax highlighted (or colored `err` when failed), folding multiline long strings when `settings.ui.fold_strings = true`, capped at `settings.ui.tool_line` wrapped lines (+ `…` in `border`).
   - Output in `muted`, capped at `settings.ui.output_line` lines (+ `… N more lines` in `border`).
   - Per-file diffs: file path header in `border`, `+`/`-`/context lines (`ok`/`err`/`dim`), with paired `-`/`+` horizontal windowing so edits near the end of long lines stay visible, capped at `settings.ui.diff_line` body lines (+ `… N more lines` in `border`). Setting `diff_line = 0` hides the entire diff block (no file path header, diff body lines, or footer); `-1` shows all stored diff lines.
   - Tool calls, tool output, and diffs are not linkified. Tabs expand to 4 spaces and control characters other than `\n`/`\t` are stripped.
@@ -42,7 +42,7 @@ Shortcuts also work with the Russian keyboard layout when `Ctrl`, `Alt`, or `Sup
 | --- | --- |
 | `PageUp` / `PageDown` | Scroll chat history by one page, even when a picker or panel is open. |
 | `Shift+PageUp` / `Shift+PageDown` | Scroll the open panel or `ask` question panel by one page (otherwise scroll chat history). |
-| `Esc` | Close active picker -> cancel active `ask` -> close open panel (returning to `/trace` list if opened from `/trace`) -> cancel active turn, hooks, custom commands, and steering. |
+| `Esc` | Close active picker -> cancel active `ask` -> close open panel (returning to `/trace` list if opened from `/trace`) -> cancel active turn, hooks, custom commands, open handlers, and steering. A running agent Lua call is handed off to `/tasks`. |
 | `Ctrl+C` / `Cmd+C` | Copy active chat or input selection (flashes `Copied.`); otherwise clear non-empty input; otherwise quit (ignored for quitting inside modal pickers). |
 | `Ctrl+D` | Quit when the input is empty and no modal picker is open (including when a detail panel or `ask()` question panel is open with an empty editor). |
 
@@ -106,7 +106,7 @@ All pickers filter item **labels** only (never secondary detail columns) using c
 - **Lua UI prompts (`pick` and `ask`):**
   - `pick(options)` opens a non-searchable modal picker and disables the editor until the user picks (`Enter`) or cancels (`Esc` -> `nil`).
   - `ask(text)` opens a scrollable unlinked Markdown question panel and clears the editor for the answer (saving/restoring the user's draft); `Enter` returns the typed answer without sending it to the model, and `Esc` returns `nil`.
-- **Steering while busy:** Pressing `Enter` during a running turn queues the trimmed message, dims the input text (`dim`), and switches the top bar to `steering…`. Moving the cursor keeps it queued; any text modification withdraws it from the queue without interrupting the turn so you can edit and press `Enter` again. When the agent consumes the message, the input clears automatically.
+- **Steering while busy:** Pressing `Enter` during a running turn queues the trimmed message, dims the input text (`dim`), and switches the top bar to `steering…`. Moving the cursor keeps it queued; any text modification withdraws it from the queue without interrupting the turn so you can edit and press `Enter` again. If agent Lua is running when the message is submitted, the call [continues as a background task](tasks.md#handing-off-a-running-lua-call); editing the draft can withdraw the message but does not reverse a handoff. When the agent consumes the message, the input clears automatically.
 - **Reloading (`/reload` vs Lua `reload()`):**
   - TUI `/reload` validates and reloads config in the same Lua VM; on success, restyles the palette, **rebuilds the chat view** from the session (preserving live `show()` and UI result entries so updated `settings.ui` rules apply to existing entries), and flashes `Config reloaded.`. On failure, prints `Reload failed: <error>` and keeps the previous working config active.
   - A reload triggered from Lua (`reload()`) emits a `reloaded` event, which restyles the palette and invalidates cached chat entries and open panels so updated `theme` and `settings.ui` rules re-render immediately at the same terminal width.

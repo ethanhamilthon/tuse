@@ -23,9 +23,6 @@ Defaults and the built-in system prompt live in the binary, so Tuse runs without
 ```lua
 -- ~/.config/tuse/init.lua
 return {
-  settings = {
-    retries = 5,
-  },
   models = {
     {
       name = "openai/gpt-4.1",
@@ -62,9 +59,6 @@ table.insert(g.systems, "Always run `make check` before finishing a change.")
 g.prompts = g.prompts or {}
 g.prompts.review = "Review staged changes for correctness, missing tests, and edge cases."
 
-g.settings = g.settings or {}
-g.settings.retries = 3
-
 return g
 ```
 
@@ -95,7 +89,6 @@ local interactive = t.session().mode == "tui"
 
 return {
   settings = {
-    retries = 5,
     ui = {
       diff_line = 20,
       output_line = 4,

@@ -79,13 +79,13 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
     - `images`: `data:` URLs (attached directly) or file paths relative to `cwd` (read, base64-encoded, and tagged `<image id="N" path="..."/>`; missing file fails with `-32000`).
     - `files`: file or directory paths relative to `cwd` (deduplicated; images attach as images, directories as `<dir>`, text files up to 1 KiB as `<file>`, binary files as `<file ... binary="true"/>`; missing path fails with `-32000`). See [prompts.md](prompts.md).
     - Fails with `-32000` (`no input`) if `text` (trimmed), hidden context, and `images` are all empty.
-  - Result: `{ inputId: number, queued: boolean }` (`queued` is `true` if a turn was already running).
+  - Result: `{ inputId: number, queued: boolean }` (`queued` is `true` if a turn was already running). A steering submission while agent Lua is running [hands off that call to a task](tasks.md#handing-off-a-running-lua-call).
 - **`turn.withdraw`**:
   - Params: `{ inputId: number }`.
   - Result: `boolean` (`true` if the queued message was removed before the agent consumed it; `false` otherwise).
 - **`turn.cancel`**:
   - Params: `{}`.
-  - Result: `null`. Stops running custom commands, cancels running hooks, and cancels the active turn (clearing queued inputs, emitting `turn_end` with `cancelled: true`, and firing `agent_message` hook with `status = "cancelled"`). Does not stop background tasks.
+  - Result: `null`. Stops running custom commands and open handlers, cancels running hooks, and cancels the active turn (clearing queued inputs, emitting `turn_end` with `cancelled: true`, and firing `agent_message` hook with `status = "cancelled"`). Hands off a running agent Lua call and does not stop background tasks. The handed-off call emits `tool_end` with `output = "[continued in background: tN]"` and `code = null`; its later completion arrives through the normal task events.
 
 ### Sessions
 
@@ -158,7 +158,7 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
 - **`config.get`**:
   - Params: `{}`.
   - Result: structured resolved config object (no provider credentials, no Lua function bodies):
-    - `settings`: `{ compact_at?: u64, max_image_bytes: int, retries: int, ui: { fold_strings, tool_line, diff_line, output_line, reasoning_line, scroll_step, pad_x, message_gap, list_max_height, input_max_height } }` (`compact_at` omitted when unset)
+    - `settings`: `{ compact_at?: u64, ui: { fold_strings, tool_line, diff_line, output_line, reasoning_line, scroll_step, pad_x, message_gap, list_max_height, input_max_height } }` (`compact_at` omitted when unset)
     - `theme`: `{ bg, surface, fg, dim, muted, border, accent, ok, err, info }` (strings)
     - `models`: `[{ name, display, window, prices: { input, output, cache_read, cache_write } | null, compact_at: u64 | null }]`
     - `systems`: `string[]`
@@ -214,7 +214,7 @@ Every session event arrives as a JSON-RPC notification with `"method": "event"` 
 
 | `type` | Additional `params` fields | Meaning |
 | --- | --- | --- |
-| `notification` | `text` | Internal notification queued for the agent (e.g., background task completion). |
+| `notification` | `text` | Internal notification queued for the agent (e.g., a `<task>…</task>` completion message). The event type remains `notification`. |
 | `user` | `inputId`, `text`, `images` (count) | User message accepted into the turn. |
 | `turn_start` | — | A turn began. |
 | `text` | `text` | Streamed assistant text delta. |

@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 
 pub const HOST_FUNCTIONS: &[&str] = &[
     "sh",
-    "sleep",
     "spawn",
     "read",
     "write",

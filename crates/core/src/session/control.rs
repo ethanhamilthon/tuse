@@ -11,6 +11,11 @@ impl Session {
         let mut st = self.state.lock().unwrap();
         st.next_input += 1;
         let id = InputId(st.next_input);
+        if !input.notification
+            && let Some(request) = &st.tool_handoff
+        {
+            request.store(true, Ordering::Release);
+        }
         st.queue.push((id, input));
         if st.busy || self.dir.lock().unwrap().is_none() {
             return (id, st.busy);
@@ -40,14 +45,25 @@ impl Session {
     pub fn cancel(self: &Arc<Self>) {
         self.stop_commands();
         self.stop_hook_runs();
-        self.cancel_turn();
+        self.cancel_turn(true);
     }
 
-    pub(crate) fn cancel_turn(self: &Arc<Self>) {
+    pub(crate) fn cancel_turn(self: &Arc<Self>, handoff: bool) {
         let mut st = self.state.lock().unwrap();
         if !st.busy {
             return;
         }
+        if handoff && let Some(request) = &st.tool_handoff {
+            request.store(true, Ordering::Release);
+            st.cancel_pending = true;
+            return;
+        }
+        self.finish_cancel(st);
+    }
+
+    pub(crate) fn finish_cancel(self: &Arc<Self>, mut st: std::sync::MutexGuard<'_, super::State>) {
+        st.tool_handoff = None;
+        st.cancel_pending = false;
         st.cancel.store(true, Ordering::Relaxed);
         st.generation += 1;
         st.busy = false;
@@ -70,7 +86,6 @@ impl Session {
             },
         );
         self.save_meta(&mut st);
-        drop(st);
         self.emit(Event::TurnEnd {
             elapsed,
             calls,
@@ -78,6 +93,7 @@ impl Session {
             effort,
             cancelled: true,
         });
+        drop(st);
         self.agent_message_hook(partial, "cancelled", &[]);
     }
 }

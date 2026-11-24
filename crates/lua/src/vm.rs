@@ -55,43 +55,48 @@ impl Vm {
         stop: Stop,
         env: impl FnOnce(&Lua) -> mlua::Result<Table> + Send + 'static,
     ) -> Done {
+        self.run_observed(code, name, stop, env, |d| d)
+            .unwrap_or_else(|| fail("the lua thread is gone".into()))
+    }
+
+    pub fn run_observed<R: Send + 'static>(
+        &self,
+        code: &str,
+        name: &str,
+        stop: Stop,
+        env: impl FnOnce(&Lua) -> mlua::Result<Table> + Send + 'static,
+        done: impl FnOnce(Done) -> R + Send + 'static,
+    ) -> Option<R> {
         let (tx, rx) = mpsc::channel();
         let (code, name) = (code.to_string(), format!("={name}"));
         self.post(move |lua| {
-            let tx2 = tx.clone();
-            let env = match env(lua) {
-                Ok(e) => e,
-                Err(e) => {
-                    let _ = tx.send(fail(crate::message(&e)));
-                    return;
-                }
-            };
-            let f = match compile(lua, &code, &name, &env) {
+            let f = match env(lua).and_then(|env| compile(lua, &code, &name, &env)) {
                 Ok(f) => f,
                 Err(e) => {
-                    let _ = tx.send(fail(crate::message(&e)));
+                    let _ = tx.send(done(fail(crate::message(&e))));
                     return;
                 }
             };
-            let job = Job::new(
+            match Job::new(
                 lua,
                 f,
                 MultiValue::new(),
                 stop,
                 Out::Buf(String::new()),
-                move |_, d| {
-                    let _ = tx2.send(d);
-                },
-            );
-            match job {
-                Ok(j) => start(lua, j),
+                |_, _| {},
+            ) {
+                Ok(mut job) => {
+                    job.on_done(move |_, d| {
+                        let _ = tx.send(done(d));
+                    });
+                    start(lua, job);
+                }
                 Err(e) => {
-                    let _ = tx.send(fail(crate::message(&e)));
+                    let _ = tx.send(done(fail(crate::message(&e))));
                 }
             }
         });
-        rx.recv()
-            .unwrap_or_else(|_| fail("the lua thread is gone".into()))
+        rx.recv().ok()
     }
 }
 
@@ -100,6 +105,7 @@ fn fail(text: String) -> Done {
         ok: false,
         text,
         stop: None,
+        handed_off: false,
         diffs: vec![],
         images: vec![],
     }
@@ -116,12 +122,19 @@ fn compile(lua: &Lua, code: &str, name: &str, env: &Table) -> mlua::Result<mlua:
 }
 
 fn run(lua: &Lua, rx: &Receiver<Cmd>) {
+    let mut ready = false;
     loop {
         let idle = lua.app_data_ref::<Sched>().is_none_or(|s| s.is_empty());
         let cmd = if idle {
             match rx.recv() {
                 Ok(c) => Some(c),
                 Err(_) => return,
+            }
+        } else if ready {
+            match rx.try_recv() {
+                Ok(c) => Some(c),
+                Err(mpsc::TryRecvError::Empty) => None,
+                Err(mpsc::TryRecvError::Disconnected) => return,
             }
         } else {
             match rx.recv_timeout(Duration::from_millis(5)) {
@@ -136,6 +149,6 @@ fn run(lua: &Lua, rx: &Receiver<Cmd>) {
                 c(lua);
             }
         }
-        while sched::tick(lua) {}
+        ready = sched::tick(lua);
     }
 }

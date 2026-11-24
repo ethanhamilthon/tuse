@@ -262,7 +262,7 @@ return {
     wait_tasks = function(a, b)
       for _ = 1, 50 do
         if t.task_get(a).status ~= "running" and t.task_get(b).status ~= "running" then break end
-        t.sleep(0.02)
+        t.sh("sleep 0.02")
       end
       return t.task_get(a).output, t.task_get(b).output
     end,

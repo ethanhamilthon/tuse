@@ -118,7 +118,7 @@ impl Session {
         let (st, res, err) = if d.ok {
             ("success", Some(d.text.clone()), None)
         } else if d.stop == Some("cancelled") {
-            ("cancelled", None, None)
+            ("cancelled", None, d.handed_off.then(|| d.text.clone()))
         } else {
             ("error", None, Some(d.text.clone()))
         };

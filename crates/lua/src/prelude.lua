@@ -12,6 +12,10 @@ local function pass(co, ok, ...)
   if ok and (...) == SCHED and status(co) == "suspended" then
     return pass(co, raw_resume(co, raw_yield(...)))
   end
+  if ok and status(co) == "suspended" and select("#", ...) == 0 and isyieldable() and tuse.nested_yield(co) then
+    raw_yield(SCHED, "ready")
+    return pass(co, raw_resume(co))
+  end
   return ok, ...
 end
 local function wrapped_resume(co, ...)
@@ -63,10 +67,6 @@ tuse.sh_mt = sh_mt
 
 function sh(cmd, opts)
   return wait("sh", tuse.sh_start(cmd, opts))
-end
-
-function sleep(secs)
-  wait("sleep", secs or 0)
 end
 
 local function key_order(a, b)

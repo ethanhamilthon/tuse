@@ -29,7 +29,7 @@ impl Host for SessionHost {
 
     fn action(&self, what: &str) {
         if let Some(s) = self.get() {
-            action(&s, "running", what);
+            status(&s, "running", what);
         }
     }
 
@@ -37,20 +37,21 @@ impl Host for SessionHost {
         let s = self.get().ok_or("session closed")?;
         let t = s.tasks.create(name)?;
         if !from_lua_hook {
-            let exec_id = s.next_lua_id();
-            let display = if name.is_empty() {
-                t.id.clone()
-            } else {
-                name.to_string()
-            };
-            s.task_lua
-                .lock()
-                .unwrap()
-                .insert(t.id.clone(), (exec_id.clone(), Instant::now()));
-            s.lua_start_hook(exec_id, "task", None, Some(display));
+            self.task_track(&t.id, name);
         }
         s.emit(crate::Event::Tasks);
         Ok(t)
+    }
+
+    fn task_track(&self, id: &str, name: &str) {
+        let Some(s) = self.get() else { return };
+        let exec_id = s.next_lua_id();
+        let display = if name.is_empty() { id } else { name };
+        s.task_lua
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), (exec_id.clone(), Instant::now()));
+        s.lua_start_hook(exec_id, "task", None, Some(display.to_string()));
     }
 
     fn task_end(&self, id: &str, d: Done) {
@@ -69,12 +70,12 @@ impl Host for SessionHost {
             let what = if d.ok { "finished" } else { "failed" };
             let msg = if s.config().is_disabled("task_get") {
                 format!(
-                    "<notification>Task {} ({}) {what}. Last line: {last}.</notification>",
+                    "<task>Task {} ({}) {what}. Last line: {last}.</task>",
                     t.id, t.name
                 )
             } else {
                 format!(
-                    "<notification>Task {} ({}) {what}. Last line: {last}. Output: `task_get(\"{}\").output`.</notification>",
+                    "<task>Task {} ({}) {what}. Last line: {last}. Output: `task_get(\"{}\").output`.</task>",
                     t.id, t.name, t.id
                 )
             };
@@ -95,7 +96,14 @@ pub(crate) fn err(e: String) -> mlua::Error {
     mlua::Error::runtime(e)
 }
 
-pub(crate) fn action(s: &Session, verb: &str, what: &str) {
+pub(crate) fn action(lua: &Lua, s: &Session, verb: &str, what: &str) {
+    if with_run(lua, |j| j.background()).unwrap_or(false) {
+        return;
+    }
+    status(s, verb, what);
+}
+
+fn status(s: &Session, verb: &str, what: &str) {
     let what: String = what.lines().next().unwrap_or("").chars().take(60).collect();
     s.set_status(format!("{verb} {what}..."));
 }
@@ -150,15 +158,12 @@ fn install_fs(lua: &Lua) -> mlua::Result<()> {
 }
 
 fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
-    let (cwd, max_image_bytes) = match session(lua) {
+    let cwd = match session(lua) {
         Ok(s) => {
-            action(&s, "reading", &path);
-            (s.cwd.clone(), s.config().settings.max_image_bytes)
+            action(lua, &s, "reading", &path);
+            s.cwd.clone()
         }
-        Err(_) => (
-            tuse_lua::host(lua).cwd(),
-            tuse_config::Settings::default().max_image_bytes,
-        ),
+        Err(_) => tuse_lua::host(lua).cwd(),
     };
     let p = tuse_config::resolve_path(&path, &cwd);
     let lines = match &o {
@@ -175,7 +180,7 @@ fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
         opt("offset")?.unwrap_or(1),
         opt("limit")?.unwrap_or(tools::DEFAULT_LIMIT),
     );
-    let r = tools::read(&p, lines, offset, limit, max_image_bytes).map_err(err)?;
+    let r = tools::read(&p, lines, offset, limit).map_err(err)?;
     if let Some(url) = r.image {
         with_run(lua, |j| j.add_image(url));
     }
@@ -184,7 +189,7 @@ fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
 
 fn write(lua: &Lua, (path, content): (String, String)) -> mlua::Result<String> {
     let s = session(lua)?;
-    action(&s, "writing", &path);
+    action(lua, &s, "writing", &path);
     let p = tuse_config::resolve_path(&path, &s.cwd);
     let (msg, diff) = tools::write(&p, &content).map_err(err)?;
     with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
@@ -193,7 +198,7 @@ fn write(lua: &Lua, (path, content): (String, String)) -> mlua::Result<String> {
 
 fn append(lua: &Lua, (path, text): (String, String)) -> mlua::Result<String> {
     let s = session(lua)?;
-    action(&s, "appending", &path);
+    action(lua, &s, "appending", &path);
     let p = tuse_config::resolve_path(&path, &s.cwd);
     let (msg, diff) = tools::append(&p, &text).map_err(err)?;
     with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
@@ -202,7 +207,7 @@ fn append(lua: &Lua, (path, text): (String, String)) -> mlua::Result<String> {
 
 fn delete(lua: &Lua, path: String) -> mlua::Result<String> {
     let s = session(lua)?;
-    action(&s, "deleting", &path);
+    action(lua, &s, "deleting", &path);
     let p = tuse_config::resolve_path(&path, &s.cwd);
     let (msg, diff) = tools::delete(&p).map_err(err)?;
     with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
@@ -214,7 +219,7 @@ fn edit(
     (path, old, new, o): (String, String, String, Option<Table>),
 ) -> mlua::Result<String> {
     let s = session(lua)?;
-    action(&s, "editing", &path);
+    action(lua, &s, "editing", &path);
     let p = tuse_config::resolve_path(&path, &s.cwd);
     let all = match o {
         Some(t) => t.get::<Option<bool>>("all")?.unwrap_or(false),
@@ -227,7 +232,7 @@ fn edit(
 
 fn grep(lua: &Lua, (pattern, o): (String, Option<Table>)) -> mlua::Result<String> {
     let s = session(lua)?;
-    action(&s, "searching", &pattern);
+    action(lua, &s, "searching", &pattern);
     let o = o.unwrap_or(lua.create_table()?);
     let n = |k: &str| -> mlua::Result<Option<usize>> {
         Ok(o.get::<Option<i64>>(k)?.map(|n| n.max(0) as usize))

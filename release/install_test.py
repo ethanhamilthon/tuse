@@ -80,10 +80,10 @@ def main() -> None:
 
             config = home / ".config/tuse/init.lua"
             config.parent.mkdir(parents=True)
-            config.write_text("return { settings = { retries = 1 } }\n")
+            config.write_text("return { settings = { compact_at = 1 } }\n")
             result = install(home, f"{url}/ok")
             assert result.returncode == 0, result
-            assert config.read_text() == "return { settings = { retries = 1 } }\n"
+            assert config.read_text() == "return { settings = { compact_at = 1 } }\n"
 
             home = root / "bad-checksum"
             result = install(home, f"{url}/bad-sha")

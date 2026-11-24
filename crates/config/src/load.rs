@@ -72,8 +72,6 @@ mod tests {
         assert_eq!(c.open, ["md"]);
         assert!(from_value(json!("x"), "t").is_err());
         assert!(from_value(json!({"unknown_key": 1}), "t").is_err());
-        let s = crate::Settings::default();
-        assert_eq!(s.retries, 5);
     }
 
     #[test]

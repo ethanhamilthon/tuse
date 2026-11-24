@@ -140,7 +140,7 @@ impl Session {
         );
         let result = client.complete(
             &req,
-            config.settings.retries,
+            tuse_api::RETRY_DELAYS.len(),
             cancel,
             &mut |d| self.on_delta(d),
             &mut |r| {
@@ -195,8 +195,10 @@ impl Session {
             return Step::Done;
         }
         for call in &calls {
-            if !self.tool(generation, cancel, call) {
-                return Step::Stale;
+            match self.tool(generation, cancel, call) {
+                None => return Step::Stale,
+                Some(true) => break,
+                Some(false) => {}
             }
         }
         self.compact(generation, &config);

@@ -1,8 +1,7 @@
-use crate::client::Client;
 use crate::http::{
-    active_turn_start, add_reasoning, add_text, check_err, drive_response, finalize_calls, jarr,
-    jstr, ju64, make_replay, paginate_models, parse_data_url, parse_json_object, post_json,
-    push_tool, push_turn, url_encode,
+    Auth, Conn, active_turn_start, add_reasoning, add_text, check_err, drive_response,
+    finalize_calls, jarr, jstr, ju64, make_replay, parse_data_url, parse_json_object, push_tool,
+    push_turn, url_encode,
 };
 use crate::types::{ApiType, Delta, Error, Message, Reply, Request, Usage};
 use serde_json::{Value, json};
@@ -126,22 +125,16 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
     Ok(body)
 }
 
+const AUTH: Auth = Auth::Header("x-goog-api-key");
+
 pub(crate) fn complete(
-    client: &Client,
+    conn: &Conn,
     req: &Request,
     cancel: &AtomicBool,
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<Reply, Error> {
-    let url = format!(
-        "{}/models/{}:streamGenerateContent?alt=sse",
-        client.base_url, req.model
-    );
-    let resp = post_json(
-        client,
-        &url,
-        &[("x-goog-api-key", &client.api_key)],
-        &encode(req)?,
-    )?;
+    let path = format!("/models/{}:streamGenerateContent?alt=sse", req.model);
+    let resp = conn.post_json(&path, &AUTH, &[], &encode(req)?)?;
     let (mut reply, mut replay) = (Reply::default(), vec![]);
     let (streamed, _) = drive_response(resp, cancel, |ev, v| {
         match (ev, &v) {
@@ -168,14 +161,13 @@ pub(crate) fn complete(
     Ok(reply)
 }
 
-pub(crate) fn models(client: &Client) -> Result<Vec<String>, Error> {
-    let base = &client.base_url;
-    paginate_models(
-        client,
-        &[("x-goog-api-key", client.api_key.as_str())],
+pub(crate) fn models(conn: &Conn) -> Result<Vec<String>, Error> {
+    conn.paginate_models(
+        &AUTH,
+        &[],
         |cur| match cur {
-            Some(t) => format!("{base}/models?pageSize=100&pageToken={}", url_encode(t)),
-            None => format!("{base}/models?pageSize=100"),
+            Some(t) => format!("/models?pageSize=100&pageToken={}", url_encode(t)),
+            None => "/models?pageSize=100".to_string(),
         },
         |v, out| {
             for m in jarr(v, "models") {

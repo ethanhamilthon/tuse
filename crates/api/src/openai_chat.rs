@@ -1,8 +1,7 @@
 use crate::args::ArgStream;
-use crate::client::Client;
 use crate::http::{
-    add_reasoning, add_text, check_err, drive_response, finalize_calls, flush_tool_images, jarr,
-    jstr, ju64, post_json,
+    Auth, Conn, add_reasoning, add_text, check_err, drive_response, finalize_calls,
+    flush_tool_images, jarr, jstr, ju64,
 };
 use crate::types::{Delta, Error, Message, Reply, Request, ToolCall, ToolImage, Usage};
 use serde_json::{Value, json};
@@ -77,29 +76,19 @@ pub(crate) fn encode(req: &Request) -> Value {
 }
 
 pub(crate) fn complete(
-    client: &Client,
+    conn: &Conn,
     req: &Request,
     cancel: &AtomicBool,
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<Reply, Error> {
-    let auth = format!("Bearer {}", client.api_key);
-    let resp = post_json(
-        client,
-        &format!("{}/chat/completions", client.base_url),
-        &[("Authorization", &auth)],
-        &encode(req),
-    )?;
+    let resp = conn.post_json("/chat/completions", &Auth::Bearer, &[], &encode(req))?;
     let mut acc = Accumulator::default();
     let (streamed, done) = drive_response(resp, cancel, |_, v| {
         check_err(&v)?;
         acc.chunk(&v, on_delta);
         Ok(true)
     })?;
-    if streamed && !done {
-        return Err(Error::Transport("stream ended before [DONE]".into()));
-    }
-    finalize_calls(&mut acc.reply.tool_calls);
-    Ok(acc.reply)
+    acc.finish(streamed && !done)
 }
 
 #[derive(Default)]
@@ -109,6 +98,14 @@ struct Accumulator {
 }
 
 impl Accumulator {
+    fn finish(mut self, truncated: bool) -> Result<Reply, Error> {
+        if truncated {
+            return Err(Error::Transport("stream ended before [DONE]".into()));
+        }
+        finalize_calls(&mut self.reply.tool_calls);
+        Ok(self.reply)
+    }
+
     fn chunk(&mut self, v: &Value, on_delta: &mut dyn FnMut(Delta)) {
         if let Some(u) = v.get("usage").filter(|u| u.is_object()) {
             let d = |k| {

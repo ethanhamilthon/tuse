@@ -1,16 +1,16 @@
 use super::*;
 
-fn wait_lines(path: &std::path::Path, n: usize) -> Vec<String> {
+fn wait_lifecycle(path: &std::path::Path) -> Vec<String> {
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(30) {
         let text = std::fs::read_to_string(path).unwrap_or_default();
-        if text.lines().count() >= n {
+        if text.lines().filter(|line| line.starts_with("end|")).count() >= 4 {
             return text.lines().map(String::from).collect();
         }
         std::thread::sleep(Duration::from_millis(50));
     }
     panic!(
-        "the hook wrote fewer than {n} lines: {:?}",
+        "the hook did not finish all four jobs: {:?}",
         std::fs::read_to_string(path).unwrap_or_default()
     );
 }
@@ -84,7 +84,7 @@ return {{
     wait_turn(&events);
     s.run_command("boom").unwrap();
     s.open_path(&note);
-    let lines = wait_lines(&log, 8);
+    let lines = wait_lifecycle(&log);
     std::thread::sleep(Duration::from_millis(150));
     s.close();
     let all = std::fs::read_to_string(&log).unwrap();

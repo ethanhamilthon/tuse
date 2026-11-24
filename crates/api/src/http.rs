@@ -1,5 +1,4 @@
 use crate::args::ArgStream;
-use crate::client::Client;
 use crate::types::{ApiType, Delta, Error, Message, Replay, Reply, ToolCall, ToolImage, one_line};
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -99,27 +98,92 @@ pub(crate) fn check_status(resp: ureq::Response) -> Result<ureq::Response, Error
     Ok(resp)
 }
 
-pub(crate) fn post_json(
-    c: &Client,
-    url: &str,
-    hdrs: &[(&str, &str)],
-    body: &Value,
-) -> Result<ureq::Response, Error> {
-    let req = hdrs.iter().fold(
-        c.agent.post(url).set("Content-Type", "application/json"),
-        |r, (k, v)| r.set(k, v),
-    );
-    check_status(req.send_string(&body.to_string()).map_err(map_err)?)
+pub(crate) enum Auth {
+    Bearer,
+    Header(&'static str),
 }
 
-pub(crate) fn get_json(c: &Client, url: &str, hdrs: &[(&str, &str)]) -> Result<Value, Error> {
-    let req = hdrs.iter().fold(c.agent.get(url), |r, (k, v)| r.set(k, v));
-    let mut text = String::new();
-    check_status(req.call().map_err(map_err)?)?
-        .into_reader()
-        .read_to_string(&mut text)
-        .map_err(|e| Error::Transport(e.to_string()))?;
-    parse_json(&text)
+pub(crate) struct Conn {
+    base_url: String,
+    api_key: String,
+    agent: ureq::Agent,
+}
+
+impl Conn {
+    pub(crate) fn new(agent: ureq::Agent, base_url: &str, api_key: &str) -> Self {
+        Self {
+            base_url: base_url.trim_end_matches('/').into(),
+            api_key: api_key.into(),
+            agent,
+        }
+    }
+
+    fn headers(&self, auth: &Auth, extra: &[(&str, &str)]) -> Vec<(String, String)> {
+        let (k, v) = match auth {
+            Auth::Bearer => ("Authorization", format!("Bearer {}", self.api_key)),
+            Auth::Header(name) => (*name, self.api_key.clone()),
+        };
+        std::iter::once((k.to_string(), v))
+            .chain(extra.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+            .collect()
+    }
+
+    pub(crate) fn post_json(
+        &self,
+        path: &str,
+        auth: &Auth,
+        extra: &[(&str, &str)],
+        body: &Value,
+    ) -> Result<ureq::Response, Error> {
+        let url = format!("{}{path}", self.base_url);
+        let req = self.headers(auth, extra).iter().fold(
+            self.agent
+                .post(&url)
+                .set("Content-Type", "application/json"),
+            |r, (k, v)| r.set(k, v),
+        );
+        check_status(req.send_string(&body.to_string()).map_err(map_err)?)
+    }
+
+    fn get_json(&self, path: &str, auth: &Auth, extra: &[(&str, &str)]) -> Result<Value, Error> {
+        let url = format!("{}{path}", self.base_url);
+        let req = self
+            .headers(auth, extra)
+            .iter()
+            .fold(self.agent.get(&url), |r, (k, v)| r.set(k, v));
+        let mut text = String::new();
+        check_status(req.call().map_err(map_err)?)?
+            .into_reader()
+            .read_to_string(&mut text)
+            .map_err(|e| Error::Transport(e.to_string()))?;
+        parse_json(&text)
+    }
+
+    pub(crate) fn openai_models(&self) -> Result<Vec<String>, Error> {
+        let v = self.get_json("/models", &Auth::Bearer, &[])?;
+        let ids = jarr(&v, "data")
+            .iter()
+            .filter_map(|m| jstr(m, "id").map(String::from));
+        Ok(ids.collect())
+    }
+
+    pub(crate) fn paginate_models(
+        &self,
+        auth: &Auth,
+        extra: &[(&str, &str)],
+        make_path: impl Fn(Option<&str>) -> String,
+        extract: impl Fn(&Value, &mut Vec<String>) -> Option<String>,
+    ) -> Result<Vec<String>, Error> {
+        let (mut out, mut seen, mut cur) = (vec![], HashSet::new(), None);
+        for _ in 0..10 {
+            let v = self.get_json(&make_path(cur.as_deref()), auth, extra)?;
+            match extract(&v, &mut out) {
+                Some(next) if !next.is_empty() && seen.insert(next.clone()) => cur = Some(next),
+                _ => break,
+            }
+        }
+        Ok(out)
+    }
 }
 
 pub(crate) fn drive_response(
@@ -249,36 +313,6 @@ pub(crate) fn url_encode(s: &str) -> String {
         }
     }
     out
-}
-
-pub(crate) fn paginate_models(
-    c: &Client,
-    hdrs: &[(&str, &str)],
-    make_url: impl Fn(Option<&str>) -> String,
-    extract: impl Fn(&Value, &mut Vec<String>) -> Option<String>,
-) -> Result<Vec<String>, Error> {
-    let (mut out, mut seen, mut cur) = (vec![], HashSet::new(), None);
-    for _ in 0..10 {
-        let v = get_json(c, &make_url(cur.as_deref()), hdrs)?;
-        match extract(&v, &mut out) {
-            Some(next) if !next.is_empty() && seen.insert(next.clone()) => cur = Some(next),
-            _ => break,
-        }
-    }
-    Ok(out)
-}
-
-pub(crate) fn openai_models(c: &Client) -> Result<Vec<String>, Error> {
-    let auth = format!("Bearer {}", c.api_key);
-    let v = get_json(
-        c,
-        &format!("{}/models", c.base_url),
-        &[("Authorization", &auth)],
-    )?;
-    let ids = jarr(&v, "data")
-        .iter()
-        .filter_map(|m| jstr(m, "id").map(String::from));
-    Ok(ids.collect())
 }
 
 pub(crate) fn push_turn(out: &mut Vec<Value>, role: &str, field: &str, items: Vec<Value>) {

@@ -1,9 +1,8 @@
 use crate::args::ArgStream;
-use crate::client::Client;
 use crate::http::{
-    active_turn_start, add_reasoning, add_text, check_err, drive_response, finalize_calls, jarr,
-    jstr, ju64, make_replay, paginate_models, parse_data_url, parse_json_object, post_json,
-    push_tool, push_turn, url_encode,
+    Auth, Conn, active_turn_start, add_reasoning, add_text, check_err, drive_response,
+    finalize_calls, jarr, jstr, ju64, make_replay, parse_data_url, parse_json_object, push_tool,
+    push_turn, url_encode,
 };
 use crate::types::{ApiType, Delta, Error, Message, Reply, Request, Usage};
 use serde_json::{Value, json};
@@ -125,20 +124,18 @@ fn missing_thinking(req: &Request) -> bool {
         })
 }
 
+const AUTH: Auth = Auth::Header("x-api-key");
+
 pub(crate) fn complete(
-    client: &Client,
+    conn: &Conn,
     req: &Request,
     cancel: &AtomicBool,
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<Reply, Error> {
-    let hdrs = [
-        ("x-api-key", client.api_key.as_str()),
-        ("anthropic-version", ANTHROPIC_VERSION),
-    ];
-    let resp = post_json(
-        client,
-        &format!("{}/messages", client.base_url),
-        &hdrs,
+    let resp = conn.post_json(
+        "/messages",
+        &AUTH,
+        &[("anthropic-version", ANTHROPIC_VERSION)],
         &encode(req)?,
     )?;
     let mut acc = Acc::default();
@@ -146,41 +143,16 @@ pub(crate) fn complete(
         Some(ev) => acc.event(ev, &v, on_delta),
         None => acc.fallback(&v, on_delta),
     })?;
-    if streamed && (!acc.stopped || !acc.active.is_empty()) {
-        return Err(Error::Transport("stream ended before message_stop".into()));
-    }
-    if acc.usage_seen {
-        let [inp, out, read, write] = acc.usage;
-        acc.reply.usage = Some(Usage {
-            input: inp + read + write,
-            output: out,
-            cached: read,
-            cache_write: write,
-        });
-    }
-    finalize_calls(&mut acc.reply.tool_calls);
-    let items = acc.finalized.into_values().collect();
-    acc.reply.replay = make_replay(
-        req.provider.clone(),
-        ApiType::AnthropicMessages,
-        req.model.clone(),
-        items,
-    );
-    Ok(acc.reply)
+    acc.finish(streamed, req)
 }
 
-pub(crate) fn models(client: &Client) -> Result<Vec<String>, Error> {
-    let hdrs = [
-        ("x-api-key", client.api_key.as_str()),
-        ("anthropic-version", ANTHROPIC_VERSION),
-    ];
-    let base = &client.base_url;
-    paginate_models(
-        client,
-        &hdrs,
+pub(crate) fn models(conn: &Conn) -> Result<Vec<String>, Error> {
+    conn.paginate_models(
+        &AUTH,
+        &[("anthropic-version", ANTHROPIC_VERSION)],
         |cur| match cur {
-            Some(id) => format!("{base}/models?limit=100&after_id={}", url_encode(id)),
-            None => format!("{base}/models?limit=100"),
+            Some(id) => format!("/models?limit=100&after_id={}", url_encode(id)),
+            None => "/models?limit=100".to_string(),
         },
         |v, out| {
             out.extend(
@@ -213,6 +185,30 @@ struct Acc {
 }
 
 impl Acc {
+    fn finish(mut self, streamed: bool, req: &Request) -> Result<Reply, Error> {
+        if streamed && (!self.stopped || !self.active.is_empty()) {
+            return Err(Error::Transport("stream ended before message_stop".into()));
+        }
+        if self.usage_seen {
+            let [inp, out, read, write] = self.usage;
+            self.reply.usage = Some(Usage {
+                input: inp + read + write,
+                output: out,
+                cached: read,
+                cache_write: write,
+            });
+        }
+        finalize_calls(&mut self.reply.tool_calls);
+        let items = self.finalized.into_values().collect();
+        self.reply.replay = make_replay(
+            req.provider.clone(),
+            ApiType::AnthropicMessages,
+            req.model.clone(),
+            items,
+        );
+        Ok(self.reply)
+    }
+
     fn merge_usage(&mut self, u: &Value) {
         self.usage_seen = true;
         let keys = [

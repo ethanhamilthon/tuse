@@ -1,3 +1,4 @@
+use crate::http::Conn;
 use crate::types::{ApiType, Delta, Error, Reply, Request};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -5,10 +6,8 @@ use std::time::Duration;
 pub const RETRY_DELAYS: [u64; 5] = [2, 5, 10, 20, 30];
 
 pub struct Client {
-    pub(crate) base_url: String,
-    pub(crate) api_key: String,
-    pub(crate) api: ApiType,
-    pub(crate) agent: ureq::Agent,
+    api: ApiType,
+    conn: Conn,
 }
 
 pub struct Retry<'a> {
@@ -63,10 +62,8 @@ impl Client {
 
     pub fn with_agent(agent: ureq::Agent, base_url: &str, api_key: &str, api: ApiType) -> Self {
         Self {
-            base_url: base_url.trim_end_matches('/').into(),
-            api_key: api_key.into(),
             api,
-            agent,
+            conn: Conn::new(agent, base_url, api_key),
         }
     }
 
@@ -131,20 +128,22 @@ impl Client {
             )));
         }
         match self.api {
-            ApiType::OpenAiChat => crate::openai_chat::complete(self, req, cancel, on_delta),
+            ApiType::OpenAiChat => crate::openai_chat::complete(&self.conn, req, cancel, on_delta),
             ApiType::OpenAiResponses => {
-                crate::openai_responses::complete(self, req, cancel, on_delta)
+                crate::openai_responses::complete(&self.conn, req, cancel, on_delta)
             }
-            ApiType::AnthropicMessages => crate::anthropic::complete(self, req, cancel, on_delta),
-            ApiType::GoogleGemini => crate::gemini::complete(self, req, cancel, on_delta),
+            ApiType::AnthropicMessages => {
+                crate::anthropic::complete(&self.conn, req, cancel, on_delta)
+            }
+            ApiType::GoogleGemini => crate::gemini::complete(&self.conn, req, cancel, on_delta),
         }
     }
 
     pub fn models(&self) -> Result<Vec<String>, Error> {
         match self.api {
-            ApiType::OpenAiChat | ApiType::OpenAiResponses => crate::http::openai_models(self),
-            ApiType::AnthropicMessages => crate::anthropic::models(self),
-            ApiType::GoogleGemini => crate::gemini::models(self),
+            ApiType::OpenAiChat | ApiType::OpenAiResponses => self.conn.openai_models(),
+            ApiType::AnthropicMessages => crate::anthropic::models(&self.conn),
+            ApiType::GoogleGemini => crate::gemini::models(&self.conn),
         }
     }
 }

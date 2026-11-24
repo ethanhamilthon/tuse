@@ -1,8 +1,7 @@
 use crate::args::ArgStream;
-use crate::client::Client;
 use crate::http::{
-    add_reasoning, add_text, check_err, drive_response, finalize_calls, flush_tool_images, jarr,
-    jerr, jstr, ju64, make_replay, map_json_error, post_json,
+    Auth, Conn, add_reasoning, add_text, check_err, drive_response, finalize_calls,
+    flush_tool_images, jarr, jerr, jstr, ju64, make_replay, map_json_error,
 };
 use crate::types::{ApiType, Delta, Error, Message, Reply, Request, ToolCall, ToolImage, Usage};
 use serde_json::{Value, json};
@@ -73,18 +72,12 @@ pub(crate) fn encode(req: &Request) -> Value {
 }
 
 pub(crate) fn complete(
-    client: &Client,
+    conn: &Conn,
     req: &Request,
     cancel: &AtomicBool,
     on_delta: &mut dyn FnMut(Delta),
 ) -> Result<Reply, Error> {
-    let auth = format!("Bearer {}", client.api_key);
-    let resp = post_json(
-        client,
-        &format!("{}/responses", client.base_url),
-        &[("Authorization", &auth)],
-        &encode(req),
-    )?;
+    let resp = conn.post_json("/responses", &Auth::Bearer, &[], &encode(req))?;
     let mut acc = Acc::default();
     let (streamed, _) = drive_response(resp, cancel, |ev, v| {
         match ev {

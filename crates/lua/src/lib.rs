@@ -7,7 +7,7 @@ mod vm;
 pub use api::{host, to_lua, wrap, yield_wait};
 pub use job::{Done, ExtWait, Job, Out, Stop, add_wait, is_hook, is_lua_hook, stopped, with_run};
 pub use mlua;
-pub use sh::kill_group;
+pub use sh::{kill_group, setsid};
 pub use vm::Vm;
 
 use std::path::PathBuf;

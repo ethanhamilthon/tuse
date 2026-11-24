@@ -87,6 +87,7 @@ pub fn setup(name: &str, addr: &str, extra: &str) -> (PathBuf, PathBuf) {
         name: "p".into(),
         base_url: format!("http://{addr}"),
         api_key: "k".into(),
+        ..Default::default()
     })
     .unwrap();
     tuse_core::set_state("model", "p/m").unwrap();

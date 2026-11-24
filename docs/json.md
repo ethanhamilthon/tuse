@@ -101,7 +101,7 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
   - Params: `{}`.
   - Result: the session's live in-memory record list in chronological order (including records buffered before a new session materializes in SQLite on the first user message, such as the initial `settings` record and `start` hook records). Canonical record schemas, tagged by `"t"`:
     - `"user"`: `{ t, text, context?, images?, at }`
-    - `"assistant"`: `{ t, text, reasoning?, tool_calls?: [{ id, name, arguments }], at }`
+    - `"assistant"`: `{ t, text, reasoning?, tool_calls?: [{ id, name, arguments }], replay?: { provider, api, model, items }, at }` (`replay` is omitted when absent/empty)
     - `"tool"`: `{ t, id, tool, input, output, code: int | null, images?, diffs?: [{ path, diff }], at }`
     - `"notification"`: `{ t, text }`
     - `"notice"`: `{ t, text }`
@@ -211,7 +211,7 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
 
 ## Events
 
-Every session event arrives as a JSON-RPC notification with `"method": "event"` and `"params"` containing `"type"`:
+Every session event arrives as a JSON-RPC notification with `"method": "event"` and `"params"` containing `"type"`. All four provider API types (`openai-chat`, `openai-responses`, `anthropic-messages`, `google-gemini`) emit the same streaming and lifecycle event types:
 
 | `type` | Additional `params` fields | Meaning |
 | --- | --- | --- |
@@ -228,7 +228,7 @@ Every session event arrives as a JSON-RPC notification with `"method": "event"` 
 | `status` | `text` | Transient activity label (first line of argument, up to 60 characters, e.g., `reading path...`, `running cmd...`; identical consecutive values are suppressed). |
 | `notice` | `text` | Informational notice (e.g., compaction summary or `hook NAME: ...` error). |
 | `flash` | `text` | Short transient banner (e.g., retry countdown). |
-| `error` | `text` | Error message (turn/provider failure, command error, model fetch error, deferred reload error). |
+| `error` | `text` | Error message (turn/provider failure, unsupported provider capability, command error, model fetch error, deferred reload error). |
 | `turn_end` | `elapsedMs`, `calls`, `model`, `effort`, `cancelled` | Turn completed or was cancelled. |
 | `tasks` | — | Task list or status changed; re-read with `tasks.list` / `tasks.get`. |
 | `usage` | — | Usage totals or model/effort changed; re-read with `session.stats` / `model.get`. |

@@ -1,4 +1,5 @@
 use serde_json::{Value, json};
+use tuse_api::ToolDef;
 use tuse_config::Config;
 
 fn join_clauses(items: &[String]) -> String {
@@ -211,18 +212,15 @@ pub fn system_prompt(config: &Config, compacted: bool) -> String {
     out
 }
 
-fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
-    json!({
-        "type": "function",
-        "function": {
-            "name": name,
-            "description": description,
-            "parameters": {"type": "object", "properties": properties, "required": required}
-        }
-    })
+fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> ToolDef {
+    ToolDef {
+        name: name.to_string(),
+        description: description.to_string(),
+        parameters: json!({"type": "object", "properties": properties, "required": required}),
+    }
 }
 
-pub fn tools(config: &Config) -> Vec<Value> {
+pub fn tools(config: &Config) -> Vec<ToolDef> {
     let disabled = config.disabled_builtins();
     let mut desc = String::from(
         "Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback.",
@@ -273,10 +271,7 @@ mod tests {
         assert!(!sys.contains("`task_get("), "{sys}");
         assert!(sys.contains("`read(") && sys.contains("`write("));
 
-        let desc = tools(&config)[0]["function"]["description"]
-            .as_str()
-            .unwrap()
-            .to_string();
+        let desc = tools(&config)[0].description.clone();
         assert!(
             !desc.contains("sh(") && !desc.contains("delete()"),
             "{desc}"

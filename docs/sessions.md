@@ -7,7 +7,7 @@ Tuse persists sessions, conversation history, providers, and global defaults in 
 - **`~/.tuse/tuse.db`** — SQLite database (WAL journal mode, 5-second busy timeout) containing:
   - **Sessions table:** one row per persisted session keyed by `id`, storing JSON metadata (`id`, `cwd`, `title`, `model`, `effort`, `created`, `updated`), indexed by `cwd`.
   - **Records table:** append-only ordered log `(session, seq, body)` of durable session records (JSON).
-  - **Providers table:** connected API providers (`name`, `base_url`, `api_key`).
+  - **Providers table:** connected API providers (`name`, `base_url`, `api_key`, `api`). Older databases automatically migrate missing `api` columns to `'openai-chat'`.
   - **State table:** global key-value defaults (`model`, `effort`).
 - **`~/.tuse/<id>/`** — per-session directory holding:
   - `lock` — OS advisory file lock created when the session materializes in SQLite (or immediately on resume) and held while open.
@@ -33,7 +33,7 @@ Every persisted entry in a session's `records` log is a JSON object tagged by `"
 | `"t"` | Fields | Purpose |
 | --- | --- | --- |
 | `user` | `text`, optional `context`, optional `images` (data URLs), `at` | User message and hidden context/images. |
-| `assistant` | `text`, optional `reasoning`, optional `tool_calls`, `at` | Model response step. |
+| `assistant` | `text`, optional `reasoning`, optional `tool_calls`, optional `replay` (`{provider, api, model, items}`), `at` | Model response step and optional provider-scoped reasoning replay items. |
 | `tool` | `id`, `tool`, `input`, `output`, `code`, optional `images`, optional `diffs` (`{path, diff}`), `at` | Tool execution result. |
 | `notification` | `text` | Task notification fed to the model as a user message; hidden from TUI chat. |
 | `notice` | `text` | Informational message shown in chat (for example compaction notices). |

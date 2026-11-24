@@ -219,6 +219,7 @@ impl Session {
         self.stop_commands();
         self.cancel_turn();
         self.tasks.stop_all();
+        self.vm.call(crate::subs::stop_all);
         self.finish_hooks(reason);
         self.dir.lock().unwrap().take();
     }

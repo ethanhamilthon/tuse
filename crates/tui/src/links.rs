@@ -520,65 +520,69 @@ mod tests {
             url_boxes.len() >= 2,
             "expected wrapped url boxes: {boxes:?}"
         );
-        assert!(
-            wrapped
+        fn link_spans(lines: &[Line], id: u32) -> Vec<&Span> {
+            lines
                 .iter()
                 .flatten()
-                .filter(|s| s.style.link == Some(url_id))
+                .filter(|s| s.style.link == Some(id))
+                .collect()
+        }
+        assert!(
+            link_spans(&wrapped, url_id)
+                .iter()
                 .all(|s| s.style.underline && !s.style.bold && s.style.fg == p.accent)
         );
         highlight(&mut wrapped, Some(url_id), p.fg);
         assert!(
-            wrapped
+            link_spans(&wrapped, url_id)
                 .iter()
-                .flatten()
-                .filter(|s| s.style.link == Some(url_id))
                 .all(|s| s.style.underline && s.style.bold && s.style.fg == p.fg)
         );
         highlight(&mut wrapped, Some(url_id), None);
         assert!(
-            wrapped
+            link_spans(&wrapped, url_id)
                 .iter()
-                .flatten()
-                .filter(|s| s.style.link == Some(url_id))
                 .all(|s| s.style.underline && s.style.bold && s.style.fg.is_none())
         );
 
         let mut dup = crate::markdown::render(
-            "a https://dup.example b https://dup.example and [sec](#anchor)",
+            "https://dup.example [see `cfg`](https://dup.example) [sec](#anchor)",
             80,
             &p,
         );
         let dup_id = intern_url("https://dup.example");
-        let dup_spans: Vec<_> = dup
-            .iter()
-            .flatten()
-            .filter(|s| s.style.link == Some(dup_id))
+        let dup_texts: Vec<_> = link_spans(&dup, dup_id)
+            .into_iter()
+            .map(|s| s.text.as_str())
             .collect();
-        assert_eq!(dup_spans.len(), 2);
+        assert_eq!(dup_texts, ["https://dup.example", "see cfg"]);
         assert!(
-            dup_spans
+            link_spans(&dup, dup_id)
                 .iter()
                 .all(|s| s.style.fg == p.accent && s.style.underline)
         );
-        let anchor_span = dup
-            .iter()
-            .flatten()
-            .find(|s| s.text == "sec")
-            .expect("anchor span");
-        assert!(
-            anchor_span.style.link.is_none()
-                && anchor_span.style.underline
-                && anchor_span.style.fg == p.info
-        );
+        let sec = dup.iter().flatten().find(|s| s.text == "sec").unwrap();
+        assert!(sec.style.link.is_none() && sec.style.underline && sec.style.fg == p.info);
         highlight(&mut dup, Some(dup_id), p.fg);
         assert!(
-            dup.iter()
-                .flatten()
-                .filter(|s| s.style.link == Some(dup_id))
+            link_spans(&dup, dup_id)
+                .iter()
                 .all(|s| s.style.fg == p.fg && s.style.bold && s.style.underline)
         );
-
+        let mut p_none = Palette::new(
+            &tuse_config::Theme {
+                accent: "none".into(),
+                ..Default::default()
+            },
+            &Default::default(),
+        );
+        p_none.cwd = dir.clone();
+        let code_link = crate::markdown::render("[`cfg`](https://dup.example)", 40, &p_none);
+        assert!(
+            link_spans(&code_link, dup_id)
+                .iter()
+                .all(|s| s.style.fg.is_none() && s.style.underline)
+        );
         let ps = path_span("label", &file.display().to_string(), Style::fg(p.fg), &p);
         assert!(ps.style.link.is_some() && ps.style.fg == p.accent && ps.style.underline);
 

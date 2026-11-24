@@ -101,7 +101,7 @@ impl Renderer {
         }
         crate::links::highlight(
             &mut screen,
-            app.hover.or(app.pressed_link.map(|(_, id)| id)),
+            app.pressed_link.map(|(_, id)| id).or(app.hover),
             p.fg,
         );
         app.selection

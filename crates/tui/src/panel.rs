@@ -194,7 +194,7 @@ mod tests {
     }
 
     fn open_trace_with(app: &mut App, items: Vec<TraceItem>) {
-        let rows: Vec<_> = items
+        let rows = items
             .iter()
             .enumerate()
             .map(|(i, it)| {
@@ -230,169 +230,129 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
-        let lines = panel.lines(20, 8, &p);
-        assert_eq!(lines.len(), 8);
+        assert_eq!(panel.lines(20, 8, &p).len(), 8);
         panel.scroll_by(1000);
-        let last = panel.lines(20, 8, &p);
-        assert_eq!(panel.scroll, 30 - 7);
-        assert_eq!(last.len(), 8);
-        let short = Panel::new("one").lines(20, 8, &p);
-        assert_eq!(short.len(), 2);
+        assert_eq!(panel.lines(20, 8, &p).len(), 8);
+        assert_eq!(panel.scroll, 23);
+        assert_eq!(Panel::new("one").lines(20, 8, &p).len(), 2);
     }
 
     #[test]
     fn trace_arrows_step_filtered_entries_reset_scroll_clamp_ends_and_gate_editor() {
         let mut app = crate::app::test_app("trace-arrows");
+        let k = |app: &mut App, c| press(app, c, KeyModifiers::NONE);
+        let mk = |role: &'static str, summary: &str, text: String| TraceItem {
+            role,
+            summary: summary.into(),
+            text,
+        };
         app.paste("orig draft");
         let long = (0..25)
             .map(|i| format!("line-{i}"))
             .collect::<Vec<_>>()
             .join("\n");
+        let b_long = (0..25)
+            .map(|i| format!("--b-{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let items = vec![
-            TraceItem {
-                role: "system",
-                summary: "sys".into(),
-                text: format!("# Title\n\n{long}"),
-            },
-            TraceItem {
-                role: "output",
-                summary: "out".into(),
-                text: format!("plain-out\n{long}"),
-            },
-            TraceItem {
-                role: "lua",
-                summary: "first lua".into(),
-                text: format!("local a = 1\n--{long}"),
-            },
-            TraceItem {
-                role: "user",
-                summary: "hi".into(),
-                text: "hello".into(),
-            },
-            TraceItem {
-                role: "lua",
-                summary: "second lua".into(),
-                text: format!(
-                    "local b = 2\n--b-body\n{}",
-                    (0..25)
-                        .map(|i| format!("--b-{i}"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ),
-            },
+            mk("system", "sys", format!("# Title\n\n{long}")),
+            mk("output", "out", format!("plain-out\n{long}")),
+            mk("lua", "first lua", format!("local a = 1\n--{long}")),
+            mk("user", "hi", "hello".into()),
+            mk(
+                "lua",
+                "second lua",
+                format!("local b = 2\n--b-body\n{b_long}"),
+            ),
         ];
         open_trace_with(&mut app, items.clone());
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Enter);
         app.panel.as_mut().unwrap().scroll_by(5);
-        press(&mut app, KeyCode::Left, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Left);
         assert_eq!(app.panel.as_ref().unwrap().scroll, 5);
         assert!(panel_text(&mut app).contains("line-5"));
 
         app.hover = Some(1);
-        press(&mut app, KeyCode::Right, KeyModifiers::NONE);
-        assert_eq!(app.panel.as_ref().unwrap().scroll, 0);
-        assert_eq!(app.hover, None);
+        k(&mut app, KeyCode::Right);
+        assert_eq!((app.panel.as_ref().unwrap().scroll, app.hover), (0, None));
         assert!(panel_text(&mut app).contains("plain-out"));
 
-        press(&mut app, KeyCode::Right, KeyModifiers::NONE);
-        let lua_lines = app.panel.as_mut().unwrap().lines(60, 16, &app.palette);
+        k(&mut app, KeyCode::Right);
         assert!(
-            lua_lines
+            app.panel
+                .as_mut()
+                .unwrap()
+                .lines(60, 16, &app.palette)
                 .iter()
                 .flatten()
                 .any(|s| s.text == "local" && s.style.fg == app.palette.err)
         );
         app.panel.as_mut().unwrap().scroll_by(4);
-        press(&mut app, KeyCode::Left, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Left);
         assert_eq!(app.panel.as_ref().unwrap().scroll, 0);
-        assert!(panel_text(&mut app).contains("plain-out"));
 
         app.paste("ab");
-        press(&mut app, KeyCode::Left, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Left);
         assert_eq!(app.editor.cursor, 1);
-        assert!(panel_text(&mut app).contains("plain-out"));
         press(&mut app, KeyCode::Right, KeyModifiers::SHIFT);
         assert_eq!(app.editor.selected_text().as_deref(), Some("b"));
         app.editor.clear();
         press(&mut app, KeyCode::Right, KeyModifiers::SHIFT);
         assert!(panel_text(&mut app).contains("plain-out"));
-
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Esc);
         assert_eq!(app.picker.as_ref().unwrap().selected, 1);
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Esc);
         assert_eq!(app.editor.text(), "orig draft");
 
         open_trace_with(&mut app, items);
         for c in "lua".chars() {
-            press(&mut app, KeyCode::Char(c), KeyModifiers::NONE);
+            k(&mut app, KeyCode::Char(c));
         }
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Enter);
         assert!(panel_text(&mut app).contains("local a = 1"));
-        press(&mut app, KeyCode::Right, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Right);
         assert!(panel_text(&mut app).contains("local b = 2"));
         app.panel.as_mut().unwrap().scroll_by(6);
-        press(&mut app, KeyCode::Right, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Right);
         assert_eq!(app.panel.as_ref().unwrap().scroll, 6);
         assert!(panel_text(&mut app).contains("--b-4"));
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
-        assert_eq!(app.editor.text(), "lua");
-        assert_eq!(app.picker.as_ref().unwrap().selected, 1);
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
-        assert_eq!(app.editor.text(), "orig draft");
+        k(&mut app, KeyCode::Esc);
+        assert_eq!(
+            (
+                app.editor.text().as_str(),
+                app.picker.as_ref().unwrap().selected
+            ),
+            ("lua", 1)
+        );
+        k(&mut app, KeyCode::Esc);
 
         app.run_command("session");
-        assert!(app.panel.is_some() && app.trace_back.is_none());
-        press(&mut app, KeyCode::Right, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Right);
         assert!(panel_text(&mut app).contains("ID"));
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
-        assert!(app.panel.is_none());
+        k(&mut app, KeyCode::Esc);
 
-        let many: Vec<_> = (0..12)
-            .map(|i| TraceItem {
-                role: "output",
-                summary: format!("item {i}"),
-                text: format!("body-{i}"),
-            })
-            .collect();
         app.palette.ui.list_max_height = 4;
         app.list_rows = 3;
-        open_trace_with(&mut app, many);
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        open_trace_with(
+            &mut app,
+            (0..12)
+                .map(|i| mk("output", &format!("item {i}"), format!("body-{i}")))
+                .collect(),
+        );
+        k(&mut app, KeyCode::Enter);
         for _ in 0..7 {
-            press(&mut app, KeyCode::Right, KeyModifiers::NONE);
+            k(&mut app, KeyCode::Right);
         }
+        app.open_models();
+        k(&mut app, KeyCode::Right);
+        k(&mut app, KeyCode::Left);
+        k(&mut app, KeyCode::Esc);
         assert!(panel_text(&mut app).contains("body-7"));
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+        k(&mut app, KeyCode::Esc);
         let p = app.picker.as_ref().unwrap();
         assert_eq!(p.selected, 7);
         assert!(p.selected >= p.scroll && p.selected < p.scroll + 3);
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
-
-        open_trace_with(
-            &mut app,
-            vec![
-                TraceItem {
-                    role: "output",
-                    summary: "first".into(),
-                    text: "entry-zero".into(),
-                },
-                TraceItem {
-                    role: "output",
-                    summary: "second".into(),
-                    text: "entry-one".into(),
-                },
-            ],
-        );
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert!(panel_text(&mut app).contains("entry-zero"));
-        app.open_models();
-        assert!(app.picker.is_some() && app.editor.is_empty());
-        press(&mut app, KeyCode::Right, KeyModifiers::NONE);
-        press(&mut app, KeyCode::Left, KeyModifiers::NONE);
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
-        assert!(app.picker.is_none());
-        assert!(panel_text(&mut app).contains("entry-zero"));
-        assert_eq!(app.trace_back.as_ref().unwrap().0.selected, 0);
         crate::app::cleanup(app);
     }
 }

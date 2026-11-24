@@ -1,26 +1,19 @@
 pub(crate) mod bus;
-pub(crate) mod commands;
-pub(crate) mod config_lua;
 pub(crate) mod control;
-pub(crate) mod hook_events;
 pub(crate) mod hooks;
-pub(crate) mod host;
+pub(crate) mod launch;
+pub(crate) mod lua;
 pub(crate) mod meta;
-pub(crate) mod models;
-pub(crate) mod open;
-pub(crate) mod snapshot;
 pub(crate) mod state;
-pub(crate) mod stream;
-pub(crate) mod tool;
-pub(crate) mod trace;
 pub(crate) mod turn;
 pub(crate) mod ui;
+pub(crate) mod view;
 
-use crate::convo::history::{self, Bounds};
+use crate::convo::history::Bounds;
 use crate::convo::record::{Record, UserInput};
 use crate::event::Event;
 use crate::event::InputId;
-pub use crate::mode::{Mode, Options, Start};
+pub use crate::mode::{Mode, Options};
 use crate::session::bus::Subs;
 use crate::storage::store::{Meta, SessionDir};
 use crate::storage::tasks::{TaskInfo, Tasks};
@@ -43,7 +36,7 @@ pub struct Session {
     pub(crate) subs: Mutex<Subs>,
     pub(crate) vm: tuse_lua::Vm,
     pub(crate) hooks_on: AtomicBool,
-    pub(crate) hook_runs: crate::session::hooks::Runs,
+    pub(crate) hook_runs: crate::session::hooks::hooks::Runs,
     pub(crate) ui: Mutex<crate::session::ui::UiState>,
     pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,
     pub(crate) http: tuse_api::HttpAgent,
@@ -74,17 +67,15 @@ pub(crate) struct State {
     pub stats: (crate::convo::usage::Stats, Vec<ModelDef>),
 }
 
-pub(crate) struct Prepared {
-    opts: Options,
-    id: String,
-    meta: Meta,
-    dir: SessionDir,
-    vm: tuse_lua::Vm,
-    weak: crate::session::host::Slot,
-    config: Config,
-}
-
 impl Session {
+    pub fn open(opts: Options) -> Result<Arc<Session>, String> {
+        crate::session::launch::open(opts)
+    }
+
+    pub fn switch(self: &Arc<Self>, resume: Option<String>) -> Result<Arc<Session>, String> {
+        crate::session::launch::switch(self, resume)
+    }
+
     pub fn cwd(&self) -> &std::path::Path {
         &self.cwd
     }
@@ -95,145 +86,6 @@ impl Session {
 
     pub fn task(&self, id: &str) -> Option<crate::storage::tasks::TaskInfo> {
         self.tasks.get(id)
-    }
-
-    pub fn open(opts: Options) -> Result<Arc<Session>, String> {
-        Ok(Session::prepare(opts)?.start())
-    }
-
-    pub(crate) fn prepare(mut opts: Options) -> Result<Prepared, String> {
-        let restored = opts.resume.is_some();
-        let id = opts
-            .resume
-            .clone()
-            .unwrap_or_else(crate::convo::id::new_session_id);
-        let meta = if restored {
-            let meta =
-                crate::storage::store::read_meta(&id).ok_or_else(|| format!("no session {id}"))?;
-            let cwd = PathBuf::from(&meta.cwd);
-            if cwd.is_dir() {
-                opts.cwd = cwd;
-            }
-            meta
-        } else {
-            Meta {
-                id: id.clone(),
-                cwd: opts.cwd.display().to_string(),
-                created: crate::convo::id::now(),
-                ..Default::default()
-            }
-        };
-        let dir = SessionDir::open(&id, !restored)?;
-        let (vm, weak, config) = crate::session::config_lua::start_vm(&opts)?;
-        Ok(Prepared {
-            opts,
-            id,
-            meta,
-            dir,
-            vm,
-            weak,
-            config,
-        })
-    }
-}
-
-impl Prepared {
-    pub(crate) fn start(self) -> Arc<Session> {
-        let Prepared {
-            opts,
-            id,
-            meta,
-            mut dir,
-            vm,
-            weak,
-            config,
-        } = self;
-        let restored = opts.resume.is_some();
-        let mut records = dir.records();
-        for r in history::missing_results(&records) {
-            dir.append(&r);
-            records.push(r);
-        }
-        let default_model = crate::storage::db::default_model();
-        let default_effort = crate::storage::db::default_effort();
-        if !restored {
-            let r = Record::Settings {
-                model: default_model.clone(),
-                effort: default_effort.clone(),
-            };
-            dir.append(&r);
-            records.push(r);
-        }
-        let mut st = State {
-            bounds: Bounds::default(),
-            model: crate::session::state::or_default(&meta.model, default_model),
-            effort: crate::session::state::or_default(&meta.effort, default_effort),
-            busy: false,
-            turn_error: None,
-            generation: 0,
-            cancel: Arc::default(),
-            queue: vec![],
-            next_input: 0,
-            turn_start: Instant::now(),
-            calls: 0,
-            status: String::new(),
-            context: 0,
-            meta,
-            stats: Default::default(),
-            partial: String::new(),
-            remote: vec![],
-            records: vec![],
-        };
-        for r in &records {
-            match r {
-                Record::Compaction { prune, drop } => {
-                    st.bounds = Bounds {
-                        prune: *prune,
-                        drop: *drop,
-                    }
-                }
-                Record::Settings { model, effort } => {
-                    st.model = model.clone();
-                    st.effort = effort.clone();
-                }
-                Record::Usage {
-                    usage, llm: false, ..
-                } => st.context = usage.input + usage.output,
-                _ => {}
-            }
-        }
-        let ui = crate::session::ui::UiState::replay(&records);
-        let models = config.models.clone();
-        st.stats = (crate::convo::usage::Stats::of(&records, &models), models);
-        st.records = records;
-        let config = Arc::new(config);
-        let path = dir.path.clone();
-        let s = Arc::new_cyclic(|me| {
-            *weak.lock().unwrap() = me.clone();
-            Session {
-                id,
-                cwd: opts.cwd,
-                mode: opts.mode,
-                tasks: Tasks::new(path.join("tasks")),
-                dir: Mutex::new(Some(dir)),
-                config: RwLock::new((0, config)),
-                config_arg: opts.config,
-                state: Mutex::new(st),
-                subs: Mutex::default(),
-                vm,
-                hooks_on: AtomicBool::new(true),
-                hook_runs: Default::default(),
-                ui: Mutex::new(ui),
-                cmd_runs: Mutex::default(),
-                http: tuse_api::default_agent(),
-                next_lua: AtomicU64::new(0),
-                task_lua: Mutex::default(),
-                reload_lock: Mutex::default(),
-                reload_after_hook: AtomicBool::new(false),
-            }
-        });
-        s.start_hook(opts.start.reason(), !restored, restored);
-        s
     }
 }
 
@@ -267,17 +119,23 @@ impl Session {
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
         let _one = self.reload_lock.lock().unwrap();
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
-        let c = self
-            .vm
-            .call(move |lua| crate::session::config_lua::prepare(lua, path.as_deref(), true))?;
+        let c = self.vm.call(move |lua| {
+            crate::session::lua::config_lua::prepare(lua, path.as_deref(), true)
+        })?;
         self.finish_hooks("reload");
         let c = Arc::new(c);
         let (s2, c2) = (self.clone(), c.clone());
-        self.vm.call(move |lua| {
-            crate::session::config_lua::commit(lua, &c2)?;
+        let stopped = self.vm.call(move |lua| {
+            let stopped = crate::session::lua::config_lua::commit(lua)?;
             s2.swap_config(c2);
-            Ok::<_, String>(())
+            Ok::<_, String>(stopped)
         })?;
+        if let Some(task) = stopped {
+            let _ = self.stop_task(&task);
+            self.emit(Event::Notice(
+                "Stopped previous managed subs proxy (subs disabled or settings changed). Run /subs -> start to launch a new one.".into(),
+            ));
+        }
         self.ui_cancel_hooks(false);
         self.hooks_on.store(true, Ordering::Release);
         self.start_hook("reload", false, false);
@@ -312,26 +170,6 @@ impl Session {
         let t = self.tasks.stop(id)?;
         self.emit(Event::Tasks);
         Ok(t)
-    }
-
-    pub fn switch(self: &Arc<Self>, resume: Option<String>) -> Result<Arc<Session>, String> {
-        if resume.as_deref() == Some(self.id.as_str()) {
-            return Err(format!("session {} is already open", self.id));
-        }
-        let start = if resume.is_some() {
-            Start::Resume
-        } else {
-            Start::New
-        };
-        let next = Session::prepare(Options {
-            cwd: self.cwd.clone(),
-            config: self.config_arg.clone(),
-            mode: self.mode,
-            resume,
-            start,
-        })?;
-        self.close_for(start.reason());
-        Ok(next.start())
     }
 
     pub(crate) fn push(&self, st: &mut State, r: Record) {

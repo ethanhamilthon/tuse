@@ -10,7 +10,7 @@ impl Session {
                 name,
                 code,
             } => {
-                if name == crate::session::tool::TOOL {
+                if name == crate::session::turn::tool::TOOL {
                     self.emit(Event::ToolDelta {
                         index,
                         id: id.into(),

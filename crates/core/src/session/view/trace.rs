@@ -10,7 +10,7 @@ pub struct TraceItem {
 }
 
 fn role_of(tool: &str) -> &'static str {
-    if tool == crate::session::tool::TOOL {
+    if tool == crate::session::turn::tool::TOOL {
         "lua"
     } else {
         "tool"

@@ -429,15 +429,17 @@ fn start(
 
 pub(crate) fn lua_session(lua: &Lua) -> mlua::Result<Value> {
     let pre = lua
-        .app_data_ref::<crate::session::snapshot::LoadCtx>()
+        .app_data_ref::<crate::session::view::snapshot::LoadCtx>()
         .and_then(|ctx| {
             if ctx.loading {
-                Some(crate::session::snapshot::SessionSnapshot::pre_session(
-                    ctx.mode,
-                    ctx.configpath.clone(),
-                    &ctx.cwd,
-                    &tuse_config::tuse_home(),
-                ))
+                Some(
+                    crate::session::view::snapshot::SessionSnapshot::pre_session(
+                        ctx.mode,
+                        ctx.configpath.clone(),
+                        &ctx.cwd,
+                        &tuse_config::tuse_home(),
+                    ),
+                )
             } else {
                 None
             }
@@ -449,9 +451,9 @@ pub(crate) fn lua_session(lua: &Lua) -> mlua::Result<Value> {
         return s.snapshot(true).to_lua(lua);
     }
     let snap = lua
-        .app_data_ref::<crate::session::snapshot::LoadCtx>()
+        .app_data_ref::<crate::session::view::snapshot::LoadCtx>()
         .map(|ctx| {
-            crate::session::snapshot::SessionSnapshot::pre_session(
+            crate::session::view::snapshot::SessionSnapshot::pre_session(
                 ctx.mode,
                 ctx.configpath.clone(),
                 &ctx.cwd,

@@ -72,12 +72,6 @@ impl Session {
         });
         Ok(())
     }
-
-    pub(crate) fn stop_commands(&self) {
-        for c in self.cmd_runs.lock().unwrap().drain(..) {
-            c.store(true, Ordering::Relaxed);
-        }
-    }
 }
 
 impl Session {

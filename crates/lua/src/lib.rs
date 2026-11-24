@@ -4,7 +4,7 @@ mod sched;
 mod sh;
 mod vm;
 
-pub use api::{host, make_spawn, to_lua, wrap, yield_wait};
+pub use api::{host, to_lua, wrap, yield_wait};
 pub use job::{Done, ExtWait, Job, Out, Stop, add_wait, is_hook, is_lua_hook, stopped, with_run};
 pub use mlua;
 pub use sh::kill_group;

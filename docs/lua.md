@@ -15,10 +15,10 @@ The VM maintains two strictly isolated Lua environments:
 ### Agent Environment (`lua` tool)
 
 - Covers `lua(code)` tool calls, modules `require`d from `lua(code)`, `load`/`loadfile`/`dofile` called from `lua(code)`, and background tasks `spawn`ed by `lua(code)`.
-- Includes the safe Lua 5.4 standard libraries (`string`, `table`, `math`, `utf8`, `io`, `os`, `coroutine`) plus isolated agent-scoped `package`, `require`, `load`, `loadfile`, and `dofile`. The `debug` library is unavailable (`nil`), and `os.exit` is set to `nil`.
+- Includes separate copies of the safe Lua 5.4 standard libraries (`string`, `table`, `math`, `utf8`, `io`, `os`, `coroutine`) plus isolated agent-scoped `package`, `require`, `load`, `loadfile`, and `dofile`. Shared metatables (`string`, `FILE*`, `sh`) are protected so agent mutations cannot affect trusted code or private runtime helpers. The `debug` library is unavailable (`nil`), and `os.exit` is set to `nil`.
 - `package.path` and `package.cpath` are `""`; `require` uses Tuse's path-relative resolver ([config.md](config.md#modules-and-require)) against the agent's own `package.loaded` and `package.preload`, loading files into the agent environment.
 - Live-gated built-in host functions (subject to overrides and `false` disables in `functions`) and live-gated configured custom functions are installed as globals; the agent's own persistent globals live in this table across calls.
-- `require("tuse")` (also `package.loaded.tuse`) returns a live, read-only agent-scoped proxy table whose lookups dynamically read active built-in capabilities (overrides applied, disabled built-ins returning `nil`, custom non-built-in configured functions not exposed on `tuse`).
+- `require("tuse")` is reserved (always returning the live, genuinely read-only agent-scoped proxy regardless of `package.loaded.tuse`; also installed initially as `package.loaded.tuse`). Lookups dynamically read active built-in capabilities (overrides applied, disabled built-ins returning `nil`, custom non-built-in configured functions not exposed on `tuse`).
 
 ### Trusted Environment (Configs, Plugins, Trusted Modules, Callbacks)
 

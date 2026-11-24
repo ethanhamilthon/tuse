@@ -149,9 +149,7 @@ fn bundled_default_plugin_theme_validation_and_zero_side_effects() {
     );
     s.reload().unwrap();
     assert!(
-        !subs_dir.exists()
-            && s.tasks.list().is_empty()
-            && tuse_core::providers().unwrap().is_empty()
+        !subs_dir.exists() && s.tasks().is_empty() && tuse_core::providers().unwrap().is_empty()
     );
     s.close();
 
@@ -315,24 +313,23 @@ fn subs_setup_digest_login_streaming_ownership_reload_and_redaction() {
     assert_eq!(mode(&subs_dir.join("auth/codex.json")), 0o600);
 
     s.run_command("decoy").unwrap();
-    assert!(wait_until(5, || !s.tasks.list().is_empty()));
-    let decoy = s.tasks.list()[0].id.clone();
+    assert!(wait_until(5, || !s.tasks().is_empty()));
+    let decoy = s.tasks()[0].id.clone();
     subs(&s, &["stop"]);
     wait_md(&rx, |t| t.contains("No managed proxy"));
-    assert_eq!(s.tasks.get(&decoy).unwrap().status, "running");
+    assert_eq!(s.task(&decoy).unwrap().status, "running");
 
     let ppid_f = dir.join("proxy.pid");
     unsafe { std::env::set_var("MOCK_PROXY_PIDFILE", &ppid_f) };
     subs(&s, &["start"]);
     wait_md(&rx, |t| t.contains("Proxy started"));
     let owned = s
-        .tasks
-        .list()
+        .tasks()
         .into_iter()
         .find(|t| t.id != decoy && t.name == "subs-proxy")
         .unwrap()
         .id;
-    let log = tuse_core::tail(&s.tasks.get(&owned).unwrap().log, 50);
+    let log = tuse_core::tail(&s.task(&owned).unwrap().log, 50);
     assert!(log.contains("[REDACTED]"));
     for sec in [
         key.as_str(),
@@ -350,15 +347,15 @@ fn subs_setup_digest_login_streaming_ownership_reload_and_redaction() {
     }
 
     std::fs::write(&cfg, "return { broken = 1 }").unwrap();
-    assert!(s.reload().is_err() && s.tasks.get(&owned).unwrap().status == "running");
+    assert!(s.reload().is_err() && s.task(&owned).unwrap().status == "running");
     std::fs::write(&cfg, &on_cfg).unwrap();
     s.reload().unwrap();
-    assert_eq!(s.tasks.get(&owned).unwrap().status, "running");
+    assert_eq!(s.task(&owned).unwrap().status, "running");
     std::fs::write(&cfg, off_cfg).unwrap();
     s.reload().unwrap();
     assert!(
-        wait_until(3, || s.tasks.get(&owned).unwrap().status != "running")
-            && s.tasks.get(&decoy).unwrap().status == "running"
+        wait_until(3, || s.task(&owned).unwrap().status != "running")
+            && s.task(&decoy).unwrap().status == "running"
     );
     let mut noticed = false;
     while let Ok(ev) = rx.try_recv() {

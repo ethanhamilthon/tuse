@@ -61,7 +61,7 @@ pub struct App {
 
 impl App {
     pub fn new(session: Arc<Session>, config_arg: Option<PathBuf>) -> App {
-        let cwd = session.cwd.clone();
+        let cwd = session.cwd().to_path_buf();
         let palette = Palette::for_session(&session.config(), &cwd);
         let events = session.subscribe();
         let chat = Chat::from_session(&session);

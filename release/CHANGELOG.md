@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1
+
+- **Docs drive the prompt.** The agent's system prompt and the `docs()` topics are now built from `docs/` (`docs/system-prompt.md`), so the docs, the site, and the agent all read one source.
+- **Internal refactor.** Clearer module boundaries in `core`, `tui`, `config`, `lua`, `api`, and `cli` (private fields, no module cycles, narrower public surface). No behavior changes.
+
 ## 0.10.0
 
 - **Four API types.** Providers can use `openai-chat` (default; existing providers keep working), `openai-responses`, `anthropic-messages`, or `google-gemini`: `tuse connect --api TYPE`. Streaming, tool calls, reasoning replay, usage, and errors are handled per adapter; unsupported capabilities fail early with a clear message. New `tuse connect --replace`/`--key-stdin` and `tuse providers --json`.

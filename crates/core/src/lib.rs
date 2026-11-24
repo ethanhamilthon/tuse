@@ -22,6 +22,8 @@ mod session;
 mod snapshot;
 mod store;
 mod stream;
+mod subs;
+mod subs_proc;
 mod tasks;
 mod tool;
 mod tools;
@@ -33,7 +35,10 @@ mod validate;
 
 pub use config_lua::{config_arg, configured_models};
 pub use control::InputId;
-pub use db::{add_provider, default_effort, default_model, providers, remove_provider, set_state};
+pub use db::{
+    add_provider, default_effort, default_model, providers, providers_json, remove_provider,
+    set_state,
+};
 pub use docs::docs;
 pub use event::{Event, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 pub use hooks::EVENTS;
@@ -49,3 +54,7 @@ pub use trace::TraceItem;
 pub use tuse_config::HOST_FUNCTIONS;
 pub use tuse_config::tuse_home;
 pub use usage::{Stats, tokens};
+
+pub fn supported_efforts(api: &str) -> &'static [&'static str] {
+    tuse_api::ApiType::from_stored(api).supported_efforts()
+}

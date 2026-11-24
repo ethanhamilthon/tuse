@@ -15,7 +15,7 @@ Source of truth for Tuse's observable behavior and public contracts. All baselin
 - [Sessions & Persistence](sessions.md) — SQLite store (`~/.tuse/tuse.db`), session locks, resume, and TUI/JSON parity.
 - [Agent Loop & Tool Lifecycle](agent-loop.md) — Turn execution, streaming, tool calls, cancellation, and recovery.
 - [Prompts, Files & Images](prompts.md) — `#` prompts, `@` files/directories, pasted images, and hidden context blocks.
-- [Providers & API Client](providers.md) — Provider credentials, Chat Completions wire contract, streaming, retries, and errors.
+- [Providers & API Client](providers.md) — Provider credentials, four API adapters (`openai-chat`, `openai-responses`, `anthropic-messages`, `google-gemini`), streaming, reasoning replay, retries, and errors.
 - [Providers & Models](models.md) — Model naming, background discovery, Lua metadata, reasoning effort, and selection scoping.
 - [Usage, Cost & Context Compaction](usage.md) — Token accounting, USD cost formulas, display, and 50/25/25 compaction.
 
@@ -33,11 +33,7 @@ Source of truth for Tuse's observable behavior and public contracts. All baselin
 - [Config](config.md) — Lua config modules, `require` resolution, schema keys, strict validation, and `/reload`.
 - [Environment & Config Lookup](env.md) — Environment variables read by Tuse and config file search order.
 - [Theme & UI Settings](theme.md) — The 10-token color theme and `settings.ui` behavior and layout options.
-- [Plugins](plugins.md) — Git and local plugins, options, merge rules, reload sync, and repository plugins.
+- [Plugins](plugins.md) — Git, local, and bundled (`tuse/default`) plugins, options, merge rules, and reload sync.
 - [Plugin Authoring Guide](plugin-authoring.md) — Writing, testing, and publishing Tuse plugins.
+- [Subscription Proxy (`subs`)](subs.md) — Optional `tuse/default` CLIProxyAPI wrapper (`/subs`), loopback proxy lifecycle, and provider wiring.
 
-## Planned Changes
-
-Specifications for planned (not yet implemented) features and changes. Baseline pages above reflect only current behavior until each spec is implemented.
-
-- [02 — Support Four API Types](planned/02-api-types.md)

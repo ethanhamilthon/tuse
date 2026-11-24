@@ -172,9 +172,10 @@ pub fn list_sessions(cwd: &Path) -> Vec<Meta> {
     .collect()
 }
 
-pub(crate) fn apply_providers(config: &mut tuse_config::Config) {
-    config.connect = db::providers();
+pub(crate) fn apply_providers(config: &mut tuse_config::Config) -> Result<(), String> {
+    config.connect = db::providers()?;
     for c in &mut config.connect {
         c.api_key = tuse_config::env_value(&c.api_key);
     }
+    Ok(())
 }

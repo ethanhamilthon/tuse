@@ -207,6 +207,7 @@ mod tests {
             name: "p".into(),
             base_url: "https://x".into(),
             api_key: "sk-secret".into(),
+            ..Default::default()
         });
         cfg.prompts.insert("rev".into(), "Review code".into());
         cfg.functions.insert("helper".into(), FunctionKind::Custom);

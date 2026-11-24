@@ -44,6 +44,7 @@ pub(crate) fn prepare(
 }
 
 fn prepare_inner(lua: &Lua, path: Option<&Path>, sync_plugins: bool) -> Result<Config, String> {
+    crate::subs::begin_prepare(lua);
     let name = path.map_or("config".to_string(), |p| p.display().to_string());
     let (table, plugins, parsed) = match path {
         Some(p) => read_file(lua, p, sync_plugins)?,
@@ -57,7 +58,7 @@ fn prepare_inner(lua: &Lua, path: Option<&Path>, sync_plugins: bool) -> Result<C
     config.path = path.map(|p| p.display().to_string()).unwrap_or_default();
     lua.set_named_registry_value("tuse.next", table)
         .map_err(|e| e.to_string())?;
-    crate::store::apply_providers(&mut config);
+    crate::store::apply_providers(&mut config)?;
     Ok(config)
 }
 
@@ -105,7 +106,9 @@ pub(crate) fn commit(lua: &Lua, _config: &Config) -> Result<(), String> {
     let funcs: Value = t.raw_get("functions").map_err(|e| e.to_string())?;
     commit_agent
         .call::<()>(funcs)
-        .map_err(|e| tuse_lua::message(&e))
+        .map_err(|e| tuse_lua::message(&e))?;
+    crate::subs::reconcile(lua);
+    Ok(())
 }
 
 pub(crate) fn code_of(lua: &Lua, key: &str, name: &str) -> Option<Function> {

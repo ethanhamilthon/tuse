@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tuse_api::{ToolCall, Usage};
+use tuse_api::{Replay, ToolCall, Usage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
@@ -19,6 +19,8 @@ pub enum Record {
         reasoning: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         tool_calls: Vec<ToolCall>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        replay: Option<Replay>,
         #[serde(default)]
         at: String,
     },

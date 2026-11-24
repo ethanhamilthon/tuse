@@ -15,6 +15,8 @@ pub fn normalize_url(url: &str) -> String {
     s.trim_end_matches('/').to_string()
 }
 
+pub const BUNDLED_DEFAULT: &str = "tuse/default";
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plugin {
     pub name: String,
@@ -23,6 +25,7 @@ pub struct Plugin {
     pub sub: String,
     pub git_ref: Option<String>,
     pub enabled: bool,
+    pub bundled: bool,
 }
 
 impl Plugin {
@@ -32,6 +35,22 @@ impl Plugin {
         path: Option<&str>,
         base: &Path,
     ) -> Result<Plugin, String> {
+        if name == BUNDLED_DEFAULT {
+            if dir.is_some() || path.is_some() {
+                return Err(format!(
+                    "plugin {BUNDLED_DEFAULT}: bundled plugin does not accept ref, dir, or path"
+                ));
+            }
+            return Ok(Plugin {
+                name: BUNDLED_DEFAULT.to_string(),
+                url: None,
+                root: PathBuf::new(),
+                sub: String::new(),
+                git_ref: None,
+                enabled: true,
+                bundled: true,
+            });
+        }
         let bad = || format!("plugin `{name}`: expected owner/repo[/path], a git URL or `dir`");
         let mut p = Plugin {
             name: name.to_string(),
@@ -40,6 +59,7 @@ impl Plugin {
             sub: String::new(),
             git_ref: None,
             enabled: true,
+            bundled: false,
         };
         if let Some(d) = dir {
             p.root = resolve_path(d, base);
@@ -99,6 +119,14 @@ impl Plugin {
     }
 
     pub fn info(&self) -> crate::PluginInfo {
+        if self.bundled {
+            return crate::PluginInfo {
+                name: self.name.clone(),
+                dir: "bundled".into(),
+                git_ref: None,
+                commit: Some("bundled".into()),
+            };
+        }
         crate::PluginInfo {
             name: self.name.clone(),
             dir: self.dir().display().to_string(),

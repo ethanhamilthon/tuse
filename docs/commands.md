@@ -6,8 +6,8 @@ Quick reference for CLI subcommands and TUI slash commands (embedded as the `doc
 
 - `tuse [-c|--config PATH] [-r|--resume ID]` opens the full-screen TUI. `--config` (`-c`) picks the config file; `--resume` (`-r`) opens a saved session. Normal exit prints `tuse: session <ID>` to stderr.
 - `tuse json [-c|--config PATH] [-r|--resume ID]` serves one session over [JSON-RPC 2.0 stdio](json.md).
-- `tuse connect --base URL --key '$ENV' --name NAME` verifies an OpenAI-compatible provider against `GET <URL>/models` and saves it in SQLite ([providers.md](providers.md)).
-- `tuse providers` lists saved providers; `tuse disconnect NAME` removes one.
+- `tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--replace]` verifies a provider (`openai-chat`, `openai-responses`, `anthropic-messages`, or `google-gemini`) via its model-listing endpoint and saves (or atomically replaces with `--replace`) it in SQLite ([providers.md](providers.md)).
+- `tuse providers [--json]` lists saved providers (`<NAME>\t<BASE_URL>`, or JSON with `api` via `--json`); `tuse disconnect NAME` removes one.
 - `tuse models [-c|--config PATH]` prints the saved default model/effort and lists configured model metadata from the effective Lua config.
 - `tuse init` creates `./tuse.lua` extending the global config.
 - `tuse update` downloads, verifies, and replaces the `tuse` binary in place without touching your config ([install.md](install.md)).
@@ -29,6 +29,6 @@ Built-in slash commands run when typed as `/name` with no arguments or selected 
 - `/reload` synchronizes enabled Git plugins (installing missing checkouts and updating moving refs), validates, and re-evaluates the config in the same VM (keeping the previous working config on failure).
 - `/quit` closes the session and exits.
 
-Custom slash commands from `commands = { name = function() ... end }` appear in `/` autocomplete and run as non-blocking Lua jobs (built-in names cannot be overridden).
+Custom slash commands from `commands = { name = function() ... end }` appear in `/` autocomplete and run as non-blocking Lua jobs (built-in names cannot be overridden). When `"tuse/default"` is enabled with `subs = true` (or a table), it registers `/subs` to manage the local CLIProxyAPI subscription proxy ([subs.md](subs.md)).
 
 Picker search filters item **labels** (not details) by case-insensitive substring; modal searchable pickers reuse the input as a search box and restore your draft on close. See [tui.md](tui.md) for complete keyboard shortcuts, mouse selection, interactive links, steering, and overlay workflows.

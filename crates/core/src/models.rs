@@ -1,7 +1,7 @@
 use crate::event::Event;
 use crate::session::Session;
 use std::sync::Arc;
-use tuse_api::Client;
+use tuse_api::{ApiType, Client};
 use tuse_config::ModelDef;
 
 pub fn model_available(config: &tuse_config::Config, full: &str) -> bool {
@@ -73,8 +73,10 @@ impl Session {
         };
         for c in connect {
             let s = self.clone();
-            std::thread::spawn(
-                move || match Client::new(&c.base_url, &c.api_key).models() {
+            std::thread::spawn(move || {
+                match Client::new(&c.base_url, &c.api_key, ApiType::from_stored(c.api_type()))
+                    .models()
+                {
                     Ok(ids) => {
                         let cfg = s.config.read().unwrap();
                         if cfg.0 != config_gen {
@@ -93,8 +95,8 @@ impl Session {
                             s.emit(Event::Error(format!("{}: can't fetch models: {e}", c.name)));
                         }
                     }
-                },
-            );
+                }
+            });
         }
     }
 

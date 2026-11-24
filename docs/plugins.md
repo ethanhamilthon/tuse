@@ -100,6 +100,32 @@ Initial startup (`tuse`, `tuse json`), session switches (`/new`, `/resume`, `ses
 - **Removed plugins & failure rollback**: removing a plugin from config unloads it on reload without deleting its checkout under `~/.tuse/plugins/`. If any plugin fails sync, load, or validation, the reloading session performs in-memory rollback (keeping the previous working config active) without reverting already-synced sibling repositories on disk.
 - **Offline bootstrap**: if you want a new Git plugin present before first launch, clone it manually (`git clone <url> ~/.tuse/plugins/...`) or add it to `plugins` while running and run `/reload`. For local development, use `{ "name", dir = "~/code/my-plugin" }`.
 
+## Bundled Default Plugin: `tuse/default`
+
+`"tuse/default"` is a reserved built-in plugin embedded directly in the `tuse` binary (source under `plugins/default/`). It loads completely offline without Git or network access and exposes two optional parts:
+
+- **`theme`** (default `true`) — applies Tuse's curated 10-token color palette ([theme.md](theme.md#bundled-default-theme)); user `theme` overrides still win token-by-token.
+- **`subs`** (default `false`) — registers the `/subs` command wrapping CLIProxyAPI as a loopback-only local provider ([subs.md](subs.md)). All setup, login, proxy, and provider actions are explicit user opt-ins; loading or reloading never performs side effects.
+
+```lua
+return {
+  plugins = {
+    {
+      "tuse/default",
+      opts = {
+        theme = true,
+        subs = false,
+      },
+    },
+  },
+}
+```
+
+- Because `opts.theme` defaults to `true`, a `subs`-only configuration must set `theme = false` explicitly (`opts = { theme = false, subs = true }`).
+- `ref`, `dir`, and `path` are rejected on `"tuse/default"` during validation (`plugin tuse/default: bundled plugin does not accept ref, dir, or path`).
+- Unknown keys or invalid values inside `opts` or `opts.subs` fail config validation with diagnostics naming `plugin tuse/default` and the full key path.
+- Capability probe: `tuse models -c <temp_config>` with `{ plugins = { { "tuse/default", opts = { theme = false, subs = false } } } }` exits `0` on binaries that bundle `"tuse/default"` and non-zero on older binaries.
+
 ## Shipped Repository Plugin: `welcome`
 
 `ethanhamilthon/tuse/plugins/welcome` ships in the Tuse Git repository (`plugins/welcome`), not embedded in the binary. Add `"ethanhamilthon/tuse/plugins/welcome"` to `plugins` and run `/reload` to install it automatically, or clone it beforehand for offline startup (or point `dir` at a local checkout):

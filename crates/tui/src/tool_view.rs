@@ -312,6 +312,7 @@ mod tests {
             name: "difftest".into(),
             base_url: format!("http://{addr}"),
             api_key: "test".into(),
+            api: "openai-chat".into(),
         })
         .unwrap();
         let write_cfg = |n: i32| {

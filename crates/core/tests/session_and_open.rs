@@ -46,6 +46,7 @@ return #s2.trace
         name: "p".into(),
         base_url: format!("http://{addr}"),
         api_key: "sk-super-secret".into(),
+        ..Default::default()
     })
     .unwrap();
     let opened_log = dir.join("opened.txt");

@@ -49,6 +49,10 @@ impl Args {
             .and_then(|(_, v)| v.clone())
     }
 
+    pub fn has(&self, names: &[&str]) -> bool {
+        self.flags.iter().any(|(n, _)| names.contains(&n.as_str()))
+    }
+
     pub fn unknown(&self, known: &[&str]) -> Option<String> {
         self.flags
             .iter()

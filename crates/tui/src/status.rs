@@ -86,6 +86,7 @@ mod tests {
             name: "workind".into(),
             base_url: format!("http://{addr}"),
             api_key: "test".into(),
+            api: "openai-chat".into(),
         })
         .unwrap();
         std::fs::write(&cfg, "return {}").unwrap();

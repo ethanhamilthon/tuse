@@ -312,11 +312,16 @@ def main() -> None:
             (checkout / "init.lua").write_text(
                 f'local f = io.open("{sentinel}", "w"); if f then f:write("ran"); f:close() end; return {{}}\n'
             )
-            rc, out = run_pty(["/bin/sh", str(INSTALLER)], env)
+            rc, out = run_pty(["/bin/sh", str(INSTALLER)], env, [("[Y/n]", "y\n"), ("[y/N]", "n\n")])
             assert rc == 0, (rc, out)
-            assert "does not include the bundled default plugin; skipping first-run setup." in out, out
-            assert not sentinel.exists()
-            assert not (home / ".config/tuse/init.lua").exists()
+            assert not sentinel.exists(), out
+            cfg = (home / ".config/tuse/init.lua").read_text()
+            assert '"tuse/default"' in cfg and "theme = true" in cfg and "subs = false" in cfg, cfg
+            probe = subprocess.run(
+                [str(home / ".local/bin/tuse"), "models", "--config", str(home / ".config/tuse/init.lua")],
+                env=env, capture_output=True, text=True,
+            )
+            assert probe.returncode == 0 and not sentinel.exists(), probe.stderr
         finally:
             for s in srvs:
                 s.shutdown()

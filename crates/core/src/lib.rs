@@ -22,6 +22,7 @@ mod snapshot;
 mod store;
 mod stream;
 mod subs;
+mod subs_proc;
 mod tasks;
 mod tool;
 mod tools;

@@ -2,6 +2,7 @@ mod anthropic;
 mod args;
 mod client;
 mod gemini;
+mod http;
 mod openai_chat;
 mod openai_responses;
 mod types;

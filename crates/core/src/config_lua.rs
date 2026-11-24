@@ -12,6 +12,10 @@ pub(crate) fn file_env(lua: &Lua) -> mlua::Result<Table> {
     lua.named_registry_value(FILE_ENV)
 }
 
+pub(crate) fn agent_env(lua: &Lua) -> mlua::Result<Table> {
+    lua.named_registry_value(AGENT_ENV)
+}
+
 pub(crate) fn prepare(lua: &Lua, path: Option<&Path>) -> Result<Config, String> {
     let saved = crate::require::forget(lua).map_err(|e| e.to_string())?;
     let prev_ctx = lua.app_data_mut::<crate::snapshot::LoadCtx>().map(|mut c| {

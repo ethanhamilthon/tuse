@@ -34,6 +34,19 @@ assert(require("tuse").sh("echo b").out == "wrapped:echo b")
 assert(write("w.txt", "hello"):find("wrapped:", 1, true) == 1)
 assert(require("tuse").my_secret_fn == nil)
 assert(pcall(function() require("tuse").sh = 1 end) == false)
+assert(pcall(rawset, require("tuse"), "sh", 1) == false)
+assert(pcall(setmetatable, require("tuse"), {}) == false)
+assert(pcall(rawset, json, "encode", 1) == false)
+assert(pcall(setmetatable, json, {}) == false)
+assert(getmetatable("") == "string")
+assert(getmetatable(sh("echo m")) == nil or type(getmetatable(sh("echo m"))) == "string")
+package.loaded.tuse = { sh = function() return "hijacked" end }
+assert(require("tuse").sh("echo c").out == "wrapped:echo c")
+os.getenv = function() return "agent-env-tampered" end
+coroutine.resume = function() error("agent-co-tampered") end
+table.sort = function() error("agent-sort-tampered") end
+string.format = function() error("agent-fmt-tampered") end
+assert(trusted_stdlib_ok() == "ok")
 assert(other_fn() == "no-secret")
 package.loaded["trusted_mod"] = { val = "tampered" }
 assert(read_trusted_mod() == "original")
@@ -44,13 +57,21 @@ saved_enc = json.encode
 saved_tuse = require("tuse")
 saved_plug = plug_fn
 saved_ws = my_secret_fn
-return "ok1"
+return { b = 2, a = 1 }
+"#;
+
+    let probe_after_failed_reload = r#"
+assert(saved_plug() == "from-plugin")
+assert(saved_ws("still") == "res:still")
+assert(saved_sh("echo still").out == "wrapped:echo still")
+assert(trusted_stdlib_ok() == "ok")
+return "still-v1"
 "#;
 
     let probe2 = r#"
 assert(sh == nil and _G.sh == nil and require("tuse").sh == nil and package.loaded.tuse.sh == nil)
-assert(read == nil and json == nil and inspect == nil and plug_fn == nil)
-assert(saved_tuse.sh == nil and saved_tuse.json == nil)
+assert(read == nil and json == nil and inspect == nil and plug_fn == nil and docs == nil and task_get == nil)
+assert(saved_tuse.sh == nil and saved_tuse.json == nil and saved_tuse.docs == nil)
 assert(load("return sh")() == nil)
 assert(require("agent_check") == "all-nil")
 local ok1, e1 = pcall(saved_sh, "echo x")
@@ -65,18 +86,13 @@ local cb_res = wrap_cb(function() return tostring(sh) .. ":" .. tostring(require
 assert(cb_res == "nil:nil", cb_res)
 local t1 = spawn(function() return tostring(sh) .. ":" .. tostring(require("tuse").sh) end, "ag")
 local t2 = spawn_via_trusted(function() return tostring(sh) .. ":" .. tostring(require("tuse").sh) end)
-local dl = 0
-while dl < 50 do
-  if task_get(t1).status ~= "running" and task_get(t2).status ~= "running" then break end
-  sleep(0.02)
-  dl = dl + 1
-end
-assert(task_get(t1).output:find("nil:nil", 1, true), task_get(t1).output)
-assert(task_get(t2).output:find("nil:nil", 1, true), task_get(t2).output)
-local df = docs("functions")
-local dt = docs("tool")
-local dc = docs("config")
-assert(not df:find("`sh(", 1, true) and not df:find("`delete(", 1, true))
+local out1, out2 = wait_tasks(t1, t2)
+assert(out1:find("nil:nil", 1, true), out1)
+assert(out2:find("nil:nil", 1, true), out2)
+local df = check_docs("functions")
+local dt = check_docs("tool")
+local dc = check_docs("config")
+assert(not df:find("`sh(", 1, true) and not df:find("`delete(", 1, true) and not df:find("docs(", 1, true))
 assert(not dt:find("`sh(", 1, true) and not dt:find("`delete(", 1, true))
 assert(dc:find("Disabled in this session:", 1, true) == 1)
 return { a = 1 }
@@ -84,6 +100,7 @@ return { a = 1 }
 
     let probe3 = r#"
 assert(type(sh) == "function" and sh == require("tuse").sh and saved_tuse.sh == sh)
+assert(getmetatable(saved_sh("printf restored")) == "sh")
 assert(saved_sh("printf restored").out == "restored")
 assert(saved_enc({ x = 2 }) == '{"x":2}')
 assert(docs("functions"):find("`sh(", 1, true) ~= nil)
@@ -94,6 +111,11 @@ return "ok3"
     let addr = common::provider(vec![
         Reply::Call("lua", json!({ "code": probe1 }).to_string()),
         Reply::Text("t1"),
+        Reply::Call(
+            "lua",
+            json!({ "code": probe_after_failed_reload }).to_string(),
+        ),
+        Reply::Text("t1b"),
         Reply::Call("lua", json!({ "code": probe2 }).to_string()),
         Reply::Text("t2"),
         Reply::Call("lua", json!({ "code": probe3 }).to_string()),
@@ -132,6 +154,16 @@ return {
     my_secret_fn = function(q)
       assert(my_secret_fn == nil)
       return "res:" .. q
+    end,
+    trusted_stdlib_ok = function()
+      assert(os.getenv("THIS_PATH") ~= "agent-env-tampered")
+      local nums = { 3, 1, 2 }
+      table.sort(nums)
+      assert(nums[1] == 1 and string.format("%d", 7) == "7")
+      local co = coroutine.create(function() return "co-ok" end)
+      local ok, res = coroutine.resume(co)
+      assert(ok and res == "co-ok")
+      return "ok"
     end,
     other_fn = function()
       return my_secret_fn == nil and "no-secret" or "leaked"
@@ -196,7 +228,7 @@ return {
 
     let rx = s.subscribe();
     let (out1, diffs1) = run_lua(&s, &rx);
-    assert_eq!(out1.trim(), "ok1");
+    assert_eq!(out1.trim(), "{a = 1, b = 2}");
     assert_eq!(diffs1, 1);
 
     s.run_command("check_cmd").unwrap();
@@ -228,6 +260,9 @@ return {
     let err = s.reload().unwrap_err();
     assert!(err.contains("both define functions.plug_fn"), "{err}");
 
+    let (out1b, _) = run_lua(&s, &rx);
+    assert_eq!(out1b.trim(), "still-v1");
+
     let cfg_v2 = r#"
 local t = require("tuse")
 return {
@@ -238,6 +273,8 @@ return {
     delete = false,
     json = false,
     inspect = false,
+    docs = false,
+    task_get = false,
     plug_fn = false,
     wrap_cb = function(cb)
       assert(t.sh("printf still-trusted").out == "still-trusted")
@@ -245,6 +282,16 @@ return {
     end,
     spawn_via_trusted = function(cb)
       return t.spawn(cb, "wrapped-agent-cb")
+    end,
+    wait_tasks = function(a, b)
+      for _ = 1, 50 do
+        if t.task_get(a).status ~= "running" and t.task_get(b).status ~= "running" then break end
+        t.sleep(0.02)
+      end
+      return t.task_get(a).output, t.task_get(b).output
+    end,
+    check_docs = function(topic)
+      return t.docs(topic)
     end,
   },
 }
@@ -257,6 +304,21 @@ return {
 
     let (out2, _) = run_lua(&s, &rx);
     assert_eq!(out2.trim(), "{a = 1}");
+
+    let notifs: Vec<String> = s
+        .records()
+        .into_iter()
+        .filter_map(|r| match r {
+            Record::Notification { text } => Some(text),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        notifs
+            .iter()
+            .any(|n| n.contains("(ag)") && !n.contains("task_get")),
+        "{notifs:?}"
+    );
 
     fs::write(&cfg, "return {}").unwrap();
     s.reload().unwrap();

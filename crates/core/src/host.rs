@@ -70,10 +70,18 @@ impl Host for SessionHost {
                 error_line(&d.text)
             };
             let what = if d.ok { "finished" } else { "failed" };
-            s.submit(crate::UserInput::notification(format!(
-                "<notification>Task {} ({}) {what}. Last line: {last}. Output: `task_get(\"{}\").output`.</notification>",
-                t.id, t.name, t.id
-            )));
+            let msg = if s.config().is_disabled("task_get") {
+                format!(
+                    "<notification>Task {} ({}) {what}. Last line: {last}.</notification>",
+                    t.id, t.name
+                )
+            } else {
+                format!(
+                    "<notification>Task {} ({}) {what}. Last line: {last}. Output: `task_get(\"{}\").output`.</notification>",
+                    t.id, t.name, t.id
+                )
+            };
+            s.submit(crate::UserInput::notification(msg));
         }
     }
 }

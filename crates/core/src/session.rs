@@ -238,10 +238,12 @@ impl Session {
             .call(move |lua| crate::config_lua::prepare(lua, path.as_deref()))?;
         self.finish_hooks("reload");
         let c = Arc::new(c);
-        let c2 = c.clone();
-        self.vm
-            .call(move |lua| crate::config_lua::commit(lua, &c2))?;
-        self.swap_config(c);
+        let (s2, c2) = (self.clone(), c.clone());
+        self.vm.call(move |lua| {
+            crate::config_lua::commit(lua, &c2)?;
+            s2.swap_config(c2);
+            Ok::<_, String>(())
+        })?;
         self.ui_cancel_hooks(false);
         self.hooks_on.store(true, Ordering::Release);
         self.start_hook("reload", false, false);

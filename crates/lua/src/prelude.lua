@@ -1,6 +1,12 @@
 local tuse, SCHED = ...
-local raw_resume, raw_yield, status = coroutine.resume, coroutine.yield, coroutine.status
-local isyieldable = coroutine.isyieldable
+local type, tostring, error, pcall, select = type, tostring, error, pcall, select
+local pairs, ipairs, getmetatable = pairs, ipairs, getmetatable
+local str_format, str_gsub, str_match, str_sub, str_gmatch =
+  string.format, string.gsub, string.match, string.sub, string.gmatch
+local tbl_sort, tbl_concat = table.sort, table.concat
+local math_type = math.type
+local co_create, raw_resume, raw_yield, status, isyieldable =
+  coroutine.create, coroutine.resume, coroutine.yield, coroutine.status, coroutine.isyieldable
 
 local function pass(co, ok, ...)
   if ok and (...) == SCHED and status(co) == "suspended" then
@@ -8,17 +14,18 @@ local function pass(co, ok, ...)
   end
   return ok, ...
 end
-function coroutine.resume(co, ...)
+local function wrapped_resume(co, ...)
   return pass(co, raw_resume(co, ...))
 end
+coroutine.resume = wrapped_resume
 function coroutine.wrap(f)
-  local co = coroutine.create(f)
+  local co = co_create(f)
   return function(...)
     local function check(ok, ...)
       if not ok then error((...), 2) end
       return ...
     end
-    return check(coroutine.resume(co, ...))
+    return check(wrapped_resume(co, ...))
   end
 end
 
@@ -36,18 +43,19 @@ end
 local sh_mt = {}
 sh_mt.__index = sh_mt
 sh_mt.__name = "sh"
+sh_mt.__metatable = "sh"
 function sh_mt:__tostring()
   local note = ""
   if self.timed_out then note = "[timed out]"
   elseif self.code == nil then note = "[killed by signal]"
   elseif self.code ~= 0 then note = "[exit code " .. self.code .. "]" end
   if note == "" then return self.out end
-  if self.out ~= "" and self.out:sub(-1) ~= "\n" then return self.out .. "\n" .. note end
+  if self.out ~= "" and str_sub(self.out, -1) ~= "\n" then return self.out .. "\n" .. note end
   return self.out .. note
 end
 function sh_mt:lines()
   local t = {}
-  for l in (self.out .. "\n"):gmatch("(.-)\r?\n") do t[#t + 1] = l end
+  for l in str_gmatch(self.out .. "\n", "(.-)\r?\n") do t[#t + 1] = l end
   if t[#t] == "" then t[#t] = nil end
   return t
 end
@@ -71,10 +79,10 @@ end
 local function inspect_val(v, depth, seen)
   depth, seen = depth or 0, seen or {}
   local t = type(v)
-  if t == "string" then return depth == 0 and v or string.format("%q", v) end
+  if t == "string" then return depth == 0 and v or str_format("%q", v) end
   if t ~= "table" then return tostring(v) end
   local mt = getmetatable(v)
-  if mt and mt.__tostring then return tostring(v) end
+  if mt == "sh" or (type(mt) == "table" and mt.__tostring) then return tostring(v) end
   if seen[v] then return "<cycle>" end
   if depth > 6 then return "{...}" end
   seen[v] = true
@@ -82,15 +90,15 @@ local function inspect_val(v, depth, seen)
   for i = 1, n do parts[#parts + 1] = inspect_val(v[i], depth + 1, seen) end
   local keys = {}
   for k in pairs(v) do
-    if not (math.type(k) == "integer" and k >= 1 and k <= n) then keys[#keys + 1] = k end
+    if not (math_type(k) == "integer" and k >= 1 and k <= n) then keys[#keys + 1] = k end
   end
-  table.sort(keys, key_order)
+  tbl_sort(keys, key_order)
   for _, k in ipairs(keys) do
-    local name = type(k) == "string" and k:match("^[%a_][%w_]*$") and k or "[" .. inspect_val(k, depth + 1, seen) .. "]"
+    local name = type(k) == "string" and str_match(k, "^[%a_][%w_]*$") and k or "[" .. inspect_val(k, depth + 1, seen) .. "]"
     parts[#parts + 1] = name .. " = " .. inspect_val(v[k], depth + 1, seen)
   end
   seen[v] = nil
-  return "{" .. table.concat(parts, ", ") .. "}"
+  return "{" .. tbl_concat(parts, ", ") .. "}"
 end
 
 inspect = inspect_val
@@ -101,13 +109,13 @@ function tuse.render(...)
     local v = select(i, ...)
     if v ~= nil then out[#out + 1] = inspect_val(v) end
   end
-  return table.concat(out, "\t")
+  return tbl_concat(out, "\t")
 end
 
 local function clean(e)
   if type(e) ~= "userdata" then return e end
-  local s = tostring(e):gsub("^runtime error: ", "")
-  return (s:gsub("\nstack traceback:.*$", ""))
+  local s = str_gsub(tostring(e), "^runtime error: ", "")
+  return (str_gsub(s, "\nstack traceback:.*$", ""))
 end
 local function unwrap(ok, ...)
   if ok then return ... end
@@ -126,5 +134,10 @@ function tuse.yield_wait(start)
   end
 end
 tuse.sh_start = tuse.wrap(tuse.sh_start)
+
+local smt = getmetatable("")
+if type(smt) == "table" then smt.__metatable = "string" end
+local fmt = io and io.stdout and getmetatable(io.stdout)
+if type(fmt) == "table" then fmt.__metatable = "FILE*" end
 
 os.exit = nil

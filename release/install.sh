@@ -64,7 +64,8 @@ tar -xzf "$tmp/$name" -C "$tmp" tuse
 mkdir -p "$bin_dir"
 install -m 755 "$tmp/tuse" "$bin_dir/tuse"
 
-echo "Installed $("$bin_dir/tuse" version) to $bin_dir/tuse"
+version="$("$bin_dir/tuse" version)"
+echo "Installed $version to $bin_dir/tuse"
 case ":$PATH:" in
   *":$bin_dir:"*) ;;
   *) echo "Add $bin_dir to your PATH." ;;
@@ -110,9 +111,11 @@ else
   exit 0
 fi
 
+probe_home="$tmp/probe-home"
+mkdir -p "$probe_home"
 probe="$tmp/probe.lua"
 printf '%s\n' 'return { plugins = { { "tuse/default", opts = { theme = false, subs = false } } } }' > "$probe"
-if ! "$bin_dir/tuse" models --config "$probe" >/dev/null 2>&1; then
+if ! HOME="$probe_home" "$bin_dir/tuse" models --config "$probe" >/dev/null 2>&1; then
   echo "Installed tuse does not include the bundled default plugin; skipping first-run setup."
   exit 0
 fi
@@ -210,29 +213,18 @@ else
   }
 fi
 
-if ln "$tmp_cfg" "$cfg_path" 2>"$tmp/err"; then
+if link "$tmp_cfg" "$cfg_path" 2>"$tmp/err"; then
   rm -f "$tmp_cfg"
   tmp_cfg=""
+elif [ -e "$cfg_path" ] || [ -L "$cfg_path" ]; then
+  rm -f "$tmp_cfg"
+  tmp_cfg=""
+  echo "Keeping existing config: $cfg_path"
+  exit 0
 else
-  if [ -e "$cfg_path" ] || [ -L "$cfg_path" ]; then
-    rm -f "$tmp_cfg"
-    tmp_cfg=""
-    echo "Keeping existing config: $cfg_path"
-    exit 0
-  fi
-  if (set -C; cat "$tmp_cfg" > "$cfg_path") 2>"$tmp/err2"; then
-    rm -f "$tmp_cfg"
-    tmp_cfg=""
-  elif [ -e "$cfg_path" ] || [ -L "$cfg_path" ]; then
-    rm -f "$tmp_cfg"
-    tmp_cfg=""
-    echo "Keeping existing config: $cfg_path"
-    exit 0
-  else
-    err="$(cat "$tmp/err2" 2>/dev/null || cat "$tmp/err" 2>/dev/null || true)"
-    echo "tuse: failed to write $cfg_path: $err" >&2
-    exit 1
-  fi
+  err="$(cat "$tmp/err" 2>/dev/null || true)"
+  echo "tuse: failed to write $cfg_path: $err" >&2
+  exit 1
 fi
 
 echo "Created $cfg_path"

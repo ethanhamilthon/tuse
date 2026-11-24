@@ -23,7 +23,18 @@ impl App {
         self.palette_gen += 1;
         self.chat.invalidate();
         if let Some(panel) = &mut self.panel {
-            panel.invalidate();
+            let scroll = panel.scroll;
+            match panel.kind {
+                crate::panel::PanelKind::Config => {
+                    *panel = crate::config_view::panel(&self.session.config(), &self.palette);
+                    panel.scroll = scroll;
+                }
+                crate::panel::PanelKind::Session => {
+                    *panel = crate::session_view::panel(&self.session, &self.palette);
+                    panel.scroll = scroll;
+                }
+                crate::panel::PanelKind::Plain => panel.invalidate(),
+            }
         }
         if let Some(q) = &mut self.question {
             q.panel.invalidate();

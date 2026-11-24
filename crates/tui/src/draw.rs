@@ -89,7 +89,21 @@ impl Renderer {
         );
         screen.truncate(h);
         app.links = crate::links::scan(&screen, pad);
-        crate::links::highlight(&mut screen, app.hover.or(app.pressed_link), p.fg);
+        if let Some(id) = app.hover
+            && app.pointer.is_none_or(|pt| app.link_at(pt) != Some(id))
+        {
+            app.hover = None;
+        }
+        if let Some((pt, id)) = app.pressed_link
+            && app.link_at(pt) != Some(id)
+        {
+            app.pressed_link = None;
+        }
+        crate::links::highlight(
+            &mut screen,
+            app.hover.or(app.pressed_link.map(|(_, id)| id)),
+            p.fg,
+        );
         app.selection
             .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
 
@@ -142,7 +156,11 @@ fn put(
     cur: &mut Option<Style>,
 ) -> std::io::Result<()> {
     let eff = Style {
-        fg: s.style.fg.or(base.fg),
+        fg: if s.style.link.is_some() {
+            s.style.fg
+        } else {
+            s.style.fg.or(base.fg)
+        },
         bg: s.style.bg.or(base.bg),
         bold: s.style.bold,
         italic: s.style.italic,

@@ -171,7 +171,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             })
             .collect(),
     );
-    Panel::styled(lines)
+    Panel::styled(lines).with_kind(crate::panel::PanelKind::Config)
 }
 
 fn first_line(s: &str) -> String {

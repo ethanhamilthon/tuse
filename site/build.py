@@ -220,7 +220,9 @@ def write_redirect(out_dir: Path, src_rel: str, dst_rel: str, base: str) -> None
         f'  <p>Redirecting to <a href="{html.escape(target)}">{html.escape(target)}</a>.</p>\n'
         "</body>\n</html>\n"
     )
-    dest = out_dir / src_rel
+    dest = (out_dir / src_rel).resolve()
+    if not dest.is_relative_to(out_dir) or dest.exists():
+        raise ValueError(f"unsafe redirect source '{src_rel}'")
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(page, encoding="utf-8")
 

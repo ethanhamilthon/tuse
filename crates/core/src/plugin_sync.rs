@@ -164,20 +164,13 @@ fn update_repo(
     }
     git_ok(
         Some(root),
-        &[
-            "fetch",
-            "--prune",
-            "--prune-tags",
-            "--tags",
-            "--force",
-            "origin",
-        ],
+        &["fetch", "--prune", "--tags", "--force", "origin"],
         name,
         "fetch",
         deadline,
     )?;
     if git_ref.is_none() {
-        let _ = run_git(
+        git_ok(
             Some(root),
             &["remote", "set-head", "origin", "-a"],
             name,

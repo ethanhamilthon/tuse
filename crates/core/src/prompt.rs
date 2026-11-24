@@ -1,4 +1,5 @@
 use serde_json::{Value, json};
+use tuse_api::ToolDef;
 use tuse_config::Config;
 
 const SYSTEM: &str = include_str!("../prompts/system.md");
@@ -14,18 +15,15 @@ pub fn system_prompt(config: &Config, compacted: bool) -> String {
     out
 }
 
-fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
-    json!({
-        "type": "function",
-        "function": {
-            "name": name,
-            "description": description,
-            "parameters": {"type": "object", "properties": properties, "required": required}
-        }
-    })
+fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> ToolDef {
+    ToolDef {
+        name: name.to_string(),
+        description: description.to_string(),
+        parameters: json!({"type": "object", "properties": properties, "required": required}),
+    }
 }
 
-pub fn tools() -> Vec<Value> {
+pub fn tools() -> Vec<ToolDef> {
     vec![tool(
         "lua",
         "Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Prefer read() for file contents, grep() for search, and write()/edit()/append()/delete() for file changes so the user sees diffs. Use sh(cmd) for running programs and processing their output, not as the default for file operations; use sh([=[…]=]) when a shell command has quotes, backslashes, or regexes.",

@@ -282,6 +282,7 @@ mod tests {
             name: "steer".into(),
             base_url: format!("http://{addr}"),
             api_key: "test".into(),
+            ..Default::default()
         })
         .unwrap();
         tuse_core::set_state("model", "steer/m").unwrap();
@@ -467,6 +468,7 @@ mod tests {
             name: "switch".into(),
             base_url: format!("http://{addr}"),
             api_key: "test".into(),
+            ..Default::default()
         })
         .unwrap();
         let dir = std::env::temp_dir().join(format!("tuse-switch-{}", std::process::id()));

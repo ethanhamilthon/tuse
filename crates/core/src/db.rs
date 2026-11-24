@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS records (
 CREATE TABLE IF NOT EXISTS providers (
     name TEXT PRIMARY KEY,
     base_url TEXT NOT NULL,
-    api_key TEXT NOT NULL
+    api_key TEXT NOT NULL,
+    api TEXT NOT NULL DEFAULT 'openai-chat'
 );
 CREATE TABLE IF NOT EXISTS state (
     key TEXT PRIMARY KEY,
@@ -37,6 +38,7 @@ pub fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, 
         c.busy_timeout(std::time::Duration::from_secs(5))
             .and_then(|_| c.pragma_update(None, "journal_mode", "WAL"))
             .and_then(|_| c.execute_batch(SCHEMA))
+            .and_then(|_| migrate(&c))
             .map_err(|e| e.to_string())?;
         all.push((home.clone(), c));
     }
@@ -76,14 +78,35 @@ pub fn default_effort() -> String {
     }
 }
 
+fn migrate(c: &Connection) -> rusqlite::Result<()> {
+    let mut q = c.prepare("PRAGMA table_info(providers)")?;
+    let cols: Vec<String> = q
+        .query_map([], |r| r.get::<_, String>(1))?
+        .collect::<Result<_, _>>()?;
+    if !cols.iter().any(|col| col == "api") {
+        c.execute(
+            "ALTER TABLE providers ADD COLUMN api TEXT NOT NULL DEFAULT 'openai-chat'",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 pub fn providers() -> Vec<tuse_config::Connect> {
     with(|c| {
-        let mut q = c.prepare("SELECT name, base_url, api_key FROM providers ORDER BY rowid")?;
+        let mut q =
+            c.prepare("SELECT name, base_url, api_key, api FROM providers ORDER BY rowid")?;
         let rows = q.query_map([], |r| {
+            let api: String = r.get(3)?;
             Ok(tuse_config::Connect {
                 name: r.get(0)?,
                 base_url: r.get(1)?,
                 api_key: r.get(2)?,
+                api: if api.trim().is_empty() {
+                    tuse_config::DEFAULT_API.to_string()
+                } else {
+                    api
+                },
             })
         })?;
         rows.collect()
@@ -92,11 +115,16 @@ pub fn providers() -> Vec<tuse_config::Connect> {
 }
 
 pub fn add_provider(p: &tuse_config::Connect) -> Result<(), String> {
+    let api = if p.api.trim().is_empty() {
+        tuse_config::DEFAULT_API
+    } else {
+        p.api.as_str()
+    };
     with(|c| {
         c.execute(
-            "INSERT INTO providers(name, base_url, api_key) VALUES (?1, ?2, ?3)
-             ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3",
-            params![p.name, p.base_url, p.api_key],
+            "INSERT INTO providers(name, base_url, api_key, api) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3, api = ?4",
+            params![p.name, p.base_url, p.api_key, api],
         )
         .map(|_| ())
     })
@@ -107,4 +135,19 @@ pub fn remove_provider(name: &str) -> Result<bool, String> {
         c.execute("DELETE FROM providers WHERE name = ?1", [name])
             .map(|n| n > 0)
     })
+}
+
+pub fn providers_json() -> String {
+    let rows: Vec<_> = providers()
+        .into_iter()
+        .map(|p| {
+            let api = p.api_type().to_string();
+            serde_json::json!({
+                "name": p.name,
+                "base_url": p.base_url,
+                "api": api,
+            })
+        })
+        .collect();
+    serde_json::to_string_pretty(&rows).unwrap_or_else(|_| "[]".into())
 }

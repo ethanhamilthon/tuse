@@ -1,5 +1,5 @@
 use crate::record::Record;
-use serde_json::{Value, json};
+use tuse_api::{Message, ToolImage};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Bounds {
@@ -10,16 +10,9 @@ pub struct Bounds {
 pub const PRUNED_MARKER: &str = "\n[tool output pruned]";
 pub const PRUNED_LINE_LIMIT: usize = 200;
 
-pub fn messages(records: &[Record], b: Bounds, system: &str) -> Vec<Value> {
-    let mut out = vec![json!({"role": "system", "content": system})];
-    let mut images: Vec<(&str, &[String])> = vec![];
+pub fn messages(records: &[Record], b: Bounds) -> Vec<Message> {
+    let mut out = vec![];
     for (i, r) in records.iter().enumerate() {
-        if matches!(
-            r,
-            Record::User { .. } | Record::Assistant { .. } | Record::Notification { .. }
-        ) {
-            flush_images(&mut out, &mut images);
-        }
         let msg = if i < b.drop {
             conversation_only(r)
         } else if i < b.prune {
@@ -27,48 +20,27 @@ pub fn messages(records: &[Record], b: Bounds, system: &str) -> Vec<Value> {
         } else {
             full(r, false)
         };
-        if let Record::Tool {
-            input, images: im, ..
-        } = r
-            && i >= b.prune
-            && !im.is_empty()
-        {
-            images.push((input, im));
-        }
         out.extend(msg);
     }
-    flush_images(&mut out, &mut images);
     out
 }
 
-fn flush_images(out: &mut Vec<Value>, images: &mut Vec<(&str, &[String])>) {
-    if images.is_empty() {
-        return;
-    }
-    let mut parts = vec![json!({"type": "text", "text": "[Images from the tool results above]"})];
-    for (path, urls) in images.drain(..) {
-        parts.push(json!({"type": "text", "text": format!("[Image: {path}]")}));
-        parts.extend(
-            urls.iter()
-                .map(|u| json!({"type": "image_url", "image_url": {"url": u}})),
-        );
-    }
-    out.push(json!({"role": "user", "content": parts}));
-}
-
-fn conversation_only(r: &Record) -> Option<Value> {
+fn conversation_only(r: &Record) -> Option<Message> {
     match r {
-        Record::User { text, .. } | Record::Notification { text } => {
-            Some(json!({"role": "user", "content": text}))
-        }
-        Record::Assistant { text, .. } if !text.trim().is_empty() => {
-            Some(json!({"role": "assistant", "content": text}))
-        }
+        Record::User { text, .. } | Record::Notification { text } => Some(Message::User {
+            text: text.clone(),
+            images: vec![],
+        }),
+        Record::Assistant { text, .. } if !text.trim().is_empty() => Some(Message::Assistant {
+            text: text.clone(),
+            tool_calls: vec![],
+            replay: None,
+        }),
         _ => None,
     }
 }
 
-fn full(r: &Record, prune: bool) -> Option<Value> {
+fn full(r: &Record, prune: bool) -> Option<Message> {
     match r {
         Record::Notification { .. } => conversation_only(r),
         Record::User {
@@ -76,27 +48,40 @@ fn full(r: &Record, prune: bool) -> Option<Value> {
             context,
             images,
             ..
-        } => Some(user_message(&join_context(text, context), images)),
+        } => Some(Message::User {
+            text: join_context(text, context),
+            images: images.clone(),
+        }),
         Record::Assistant {
-            text, tool_calls, ..
-        } => {
-            let mut m = json!({"role": "assistant", "content": text});
-            if !tool_calls.is_empty() {
-                m["tool_calls"] = tool_calls
-                    .iter()
-                    .map(|c| json!({"id": c.id, "type": "function", "function": {"name": c.name, "arguments": c.arguments}}))
-                    .collect();
-            }
-            Some(m)
-        }
-        Record::Tool { id, output, .. } => {
-            let content = if prune {
+            text,
+            tool_calls,
+            replay,
+            ..
+        } => Some(Message::Assistant {
+            text: text.clone(),
+            tool_calls: tool_calls.clone(),
+            replay: replay.clone(),
+        }),
+        Record::Tool {
+            id,
+            tool,
+            input,
+            output,
+            images,
+            ..
+        } => Some(Message::ToolResult {
+            id: id.clone(),
+            name: tool.clone(),
+            output: if prune {
                 prune_output(output)
             } else {
                 output.clone()
-            };
-            Some(json!({"role": "tool", "tool_call_id": id, "content": content}))
-        }
+            },
+            images: (!prune && !images.is_empty()).then(|| ToolImage {
+                label: input.clone(),
+                urls: images.clone(),
+            }),
+        }),
         _ => None,
     }
 }
@@ -107,19 +92,6 @@ pub(crate) fn join_context(text: &str, context: &str) -> String {
         (true, false) => context.to_string(),
         _ => format!("{text}\n\n{context}"),
     }
-}
-
-fn user_message(text: &str, images: &[String]) -> Value {
-    if images.is_empty() {
-        return json!({"role": "user", "content": text});
-    }
-    let mut parts = vec![json!({"type": "text", "text": text})];
-    parts.extend(
-        images
-            .iter()
-            .map(|url| json!({"type": "image_url", "image_url": {"url": url}})),
-    );
-    json!({"role": "user", "content": parts})
 }
 
 pub fn prune_output(output: &str) -> String {
@@ -169,27 +141,41 @@ pub fn missing_results(records: &[Record]) -> Vec<Record> {
 
 const IMAGE_TOKENS: u64 = 1000;
 
-pub fn estimate_tokens(v: &[Value]) -> u64 {
-    v.iter().map(message_tokens).sum()
+pub fn estimate_tokens(system: &str, msgs: &[Message]) -> u64 {
+    (system.len() as u64 / 4) + msgs.iter().map(message_tokens).sum::<u64>()
 }
 
-fn message_tokens(m: &Value) -> u64 {
-    let Some(parts) = m["content"].as_array() else {
-        return m.to_string().len() as u64 / 4;
-    };
-    parts
-        .iter()
-        .map(|p| match p["type"].as_str() {
-            Some("image_url") => IMAGE_TOKENS,
-            _ => p.to_string().len() as u64 / 4,
-        })
-        .sum()
+fn message_tokens(m: &Message) -> u64 {
+    match m {
+        Message::User { text, images } => {
+            (text.len() as u64 / 4) + images.len() as u64 * IMAGE_TOKENS
+        }
+        Message::Assistant {
+            text, tool_calls, ..
+        } => {
+            let calls: usize = tool_calls
+                .iter()
+                .map(|c| c.id.len() + c.name.len() + c.arguments.len())
+                .sum();
+            (text.len() + calls) as u64 / 4
+        }
+        Message::ToolResult {
+            id,
+            name,
+            output,
+            images,
+        } => {
+            let img = images.as_ref().map_or(0, |im| im.urls.len() as u64) * IMAGE_TOKENS;
+            ((id.len() + name.len() + output.len()) as u64 / 4) + img
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuse_api::ToolCall;
+    use serde_json::json;
+    use tuse_api::{Replay, ToolCall};
 
     #[test]
     fn notification_history_keeps_api_role() {
@@ -197,10 +183,10 @@ mod tests {
             text: "ready".into(),
         };
         assert_eq!(serde_json::to_value(&r).unwrap()["t"], "notification");
-        assert_eq!(
+        assert!(matches!(
             full(&r, false),
-            Some(json!({"role":"user", "content":"ready"}))
-        );
+            Some(Message::User { text, images }) if text == "ready" && images.is_empty()
+        ));
     }
 
     fn user(t: &str, images: Vec<String>) -> Record {
@@ -212,7 +198,7 @@ mod tests {
         }
     }
 
-    fn call(id: &str) -> Record {
+    fn call(id: &str, replay: Option<Replay>) -> Record {
         Record::Assistant {
             text: String::new(),
             reasoning: String::new(),
@@ -221,6 +207,7 @@ mod tests {
                 name: "lua".into(),
                 arguments: r#"{"code":"read('a.png')"}"#.into(),
             }],
+            replay,
             at: String::new(),
         }
     }
@@ -238,27 +225,34 @@ mod tests {
         }
     }
 
-    fn valid(msgs: &[Value]) -> bool {
-        let mut open: Vec<String> = vec![];
+    fn valid(msgs: &[Message]) -> bool {
+        let mut open: Vec<&str> = vec![];
         for m in msgs {
-            match m["role"].as_str() {
-                Some("tool") => open.retain(|id| m["tool_call_id"] != id.as_str()),
+            match m {
+                Message::ToolResult { id, .. } => open.retain(|o| *o != id.as_str()),
                 _ if !open.is_empty() => return false,
                 _ => {}
             }
-            if let Some(calls) = m["tool_calls"].as_array() {
-                open.extend(calls.iter().map(|c| c["id"].as_str().unwrap().to_string()));
+            if let Message::Assistant { tool_calls, .. } = m {
+                open.extend(tool_calls.iter().map(|c| c.id.as_str()));
             }
         }
         open.is_empty()
     }
 
     #[test]
-    fn messages_keep_tool_results_with_their_calls() {
+    fn messages_keep_tool_results_with_their_calls_and_respect_replay_zones() {
         let png = vec!["data:image/png;base64,AA".to_string()];
+        let rep = Some(Replay {
+            api: "anthropic-messages".into(),
+            model: "claude".into(),
+            items: vec![
+                json!({"type": "thinking", "thinking": "x", "signature": "s".repeat(20000)}),
+            ],
+        });
         let records = vec![
             user("one", vec![]),
-            call("c1"),
+            call("c1", rep.clone()),
             Record::Notice { text: "n".into() },
             result("c1", png.clone()),
             Record::Hook {
@@ -269,40 +263,41 @@ mod tests {
                 ms: 1,
             },
             user("two", png),
-            call("c2"),
+            call("c2", rep),
             result("c2", vec![]),
         ];
         for drop in 0..=records.len() {
             for prune in drop..=records.len() {
-                let msgs = messages(&records, Bounds { prune, drop }, "s");
+                let msgs = messages(&records, Bounds { prune, drop });
                 assert!(valid(&msgs), "drop {drop} prune {prune}: {msgs:#?}");
             }
         }
-        let msgs = messages(&records, Bounds::default(), "s");
-        let roles: Vec<_> = msgs.iter().map(|m| m["role"].as_str().unwrap()).collect();
-        assert_eq!(
-            roles,
-            [
-                "system",
-                "user",
-                "assistant",
-                "tool",
-                "user",
-                "user",
-                "assistant",
-                "tool"
-            ]
-        );
-        assert_eq!(
-            msgs[4]["content"][0]["text"],
-            "[Images from the tool results above]"
-        );
-        assert_eq!(msgs[5]["content"][1]["type"], "image_url");
+        let msgs = messages(&records, Bounds { prune: 5, drop: 0 });
+        assert!(matches!(
+            &msgs[1],
+            Message::Assistant {
+                replay: Some(_),
+                ..
+            }
+        ));
+        assert!(matches!(&msgs[2], Message::ToolResult { images: None, .. }));
+        assert!(estimate_tokens("", &msgs) < 3000, "opaque replay ignored");
+
+        let dropped = messages(&records, Bounds { prune: 5, drop: 5 });
+        assert!(matches!(&dropped[0], Message::User { text, .. } if text == "one"));
+        assert!(matches!(&dropped[1], Message::User { text, .. } if text == "two"));
+        assert!(matches!(
+            &dropped[2],
+            Message::Assistant {
+                replay: Some(_),
+                ..
+            }
+        ));
     }
 
     #[test]
     fn a_crash_mid_step_gets_placeholder_results() {
-        let mut records = vec![user("go", vec![]), call("c1")];
+        let mut records = vec![user("go", vec![]), call("c1", None)];
         let Record::Assistant { tool_calls, .. } = &mut records[1] else {
             unreachable!()
         };
@@ -326,7 +321,7 @@ mod tests {
         );
         records.extend(missing);
         assert!(missing_results(&records).is_empty());
-        assert!(valid(&messages(&records, Bounds::default(), "s")));
+        assert!(valid(&messages(&records, Bounds::default())));
     }
 
     #[test]
@@ -338,15 +333,21 @@ mod tests {
             at: String::new(),
         };
         let both = "see #p\n\n<prompt name=\"p\">body</prompt>";
-        assert_eq!(full(&r, false).unwrap()["content"], both);
-        assert_eq!(conversation_only(&r).unwrap()["content"], "see #p");
+        assert!(matches!(full(&r, false), Some(Message::User { text, .. }) if text == both));
+        assert!(
+            matches!(conversation_only(&r), Some(Message::User { text, .. }) if text == "see #p")
+        );
         assert_eq!(join_context("", "c"), "c");
     }
 
     #[test]
-    fn old_user_records_have_no_context() {
-        let r: Record = serde_json::from_str(r#"{"t":"user","text":"hi","at":"x"}"#).unwrap();
-        assert!(matches!(&r, Record::User { context, .. } if context.is_empty()));
-        assert!(serde_json::to_value(&r).unwrap().get("context").is_none());
+    fn old_user_and_assistant_records_remain_compatible() {
+        let u: Record = serde_json::from_str(r#"{"t":"user","text":"hi","at":"x"}"#).unwrap();
+        assert!(matches!(&u, Record::User { context, .. } if context.is_empty()));
+        assert!(serde_json::to_value(&u).unwrap().get("context").is_none());
+
+        let a: Record = serde_json::from_str(r#"{"t":"assistant","text":"ok","at":"x"}"#).unwrap();
+        assert!(matches!(&a, Record::Assistant { replay: None, .. }));
+        assert!(serde_json::to_value(&a).unwrap().get("replay").is_none());
     }
 }

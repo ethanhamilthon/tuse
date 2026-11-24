@@ -26,6 +26,7 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
         name: "p".into(),
         base_url: "http://127.0.0.1:1".into(),
         api_key: "k".into(),
+        ..Default::default()
     })
     .unwrap();
     let cfg = dir.join("tuse.lua");

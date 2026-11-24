@@ -6,8 +6,8 @@ Quick reference for CLI subcommands and TUI slash commands (embedded as the `doc
 
 - `tuse [-c|--config PATH] [-r|--resume ID]` opens the full-screen TUI. `--config` (`-c`) picks the config file; `--resume` (`-r`) opens a saved session. Normal exit prints `tuse: session <ID>` to stderr.
 - `tuse json [-c|--config PATH] [-r|--resume ID]` serves one session over [JSON-RPC 2.0 stdio](json.md).
-- `tuse connect --base URL --key '$ENV' --name NAME` verifies an OpenAI-compatible provider against `GET <URL>/models` and saves it in SQLite ([providers.md](providers.md)).
-- `tuse providers` lists saved providers; `tuse disconnect NAME` removes one.
+- `tuse connect --base URL --key '$ENV' --name NAME [--api TYPE]` verifies a provider (`openai-chat`, `openai-responses`, `anthropic-messages`, or `google-gemini`) via its model-listing endpoint and saves it in SQLite ([providers.md](providers.md)).
+- `tuse providers [--json]` lists saved providers (`<NAME>\t<BASE_URL>`, or JSON with `api` via `--json`); `tuse disconnect NAME` removes one.
 - `tuse models [-c|--config PATH]` prints the saved default model/effort and lists configured model metadata from the effective Lua config.
 - `tuse init` creates `./tuse.lua` extending the global config.
 - `tuse update` downloads, verifies, and replaces the `tuse` binary in place without touching your config ([install.md](install.md)).

@@ -14,7 +14,7 @@ From top to bottom, padded horizontally on both edges by `settings.ui.pad_x`:
 
 1. **Chat history:** Scrollable viewport anchored at the bottom, separating non-empty entries by `settings.ui.message_gap` blank lines. Pinned `show(name, text, true)` blocks always render at the very bottom after new messages; unpinned `show` blocks stay in chronological order.
 2. **Optional overlay (above the input):** At most one active picker, detail panel, or `ask()` question panel, framed by a top `border` rule and capped at `settings.ui.list_max_height` rows (and available chat height).
-3. **Top input rule:** `↑N ` scroll mark on the left when scrolled up; 5-second flash notice or busy working / steering indicator on the right ([theme.md](theme.md)).
+3. **Top input rule:** `↑N ` scroll mark on the left when scrolled up; 5-second flash notice, busy working indicator (`<spinner> <elapsed>` in `accent`), or queued steering indicator on the right ([theme.md](theme.md)).
 4. **Input editor:** `› ` prefix on the first visible row (`accent` when active, `border` when disabled by `pick()`), word-wrapped to the inner width, growing up to `settings.ui.input_max_height` (`-1` = terminal height minus rules) and scrolling vertically with the cursor.
 5. **Bottom input rule:** Model, effort, context usage, and cumulative cost on the right.
 

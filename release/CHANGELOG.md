@@ -3,6 +3,7 @@
 ## 0.9.3
 
 - `/trace`: pressing `Left` or `Right` in a trace detail panel (when the input editor is empty) steps to the previous or next entry in the current filtered `/trace` list without wrapping, resetting scroll to the top and keeping the search query and picker selection in sync.
+- Simplified the TUI working indicator to show only `<spinner> <elapsed>` in `accent`, removing transient per-call activity labels (`reading ...`, `running ...`); steering, flash notices, and JSON-RPC `status` events are unchanged.
 
 ## 0.9.2
 

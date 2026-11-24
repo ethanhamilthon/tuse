@@ -22,7 +22,7 @@ Color validation is case-insensitive (surrounding whitespace ignored):
 | `surface` | `#1E1E1E` | Elevated background for user messages in chat (full-width block without `›`). Not used by pickers or panels. |
 | `fg` | `#DEDEDE` | Primary text, plain panel text, code blocks, active input text, `/session` values. |
 | `dim` | `#BDBDBD` | Secondary text: blockquotes, horizontal rules, table separators/headers in narrow mode, picker details and `no matches`, notices (`✓`), diff context lines, scroll mark (`↑N`), dimmed steering input, `/session` & `/config` secondary labels. |
-| `muted` | `#929292` | Subtle text: tool output, reasoning (`∴`, italic), Lua syntax comments, inactive picker items, turn summary (`✓ 12s · ...`), status bar labels, and working action text. |
+| `muted` | `#929292` | Subtle text: tool output, reasoning (`∴`, italic), Lua syntax comments, inactive picker items, turn summary (`✓ 12s · ...`), and status bar labels. |
 | `border` | `#333333` | Input rules, overlay top borders, disabled input `›`, `/session` & `/config` keys, diff file path headers, truncation marks (`…`, `… N more lines`). |
 | `accent` | `#BDDEAB` | Primary highlight: active input `›`, spinner and elapsed time, steering wave, used context count, flash notices, selection background, picked `#`/`@`/image atoms in input, selected picker item, Markdown list markers, Lua numbers, `show` (`◆`) and `pick`/`ask` (`?`) markers, hovered clickable links (bold), `/config` headings. |
 | `ok` | `#94B979` | Additions and success: diff `+` lines, inline Markdown `code`, Lua strings, `/session` cost (bold). |
@@ -60,7 +60,7 @@ The input area is framed by two `border`-colored horizontal rules (`─`):
   - Left side: scroll mark `↑N ` in `dim` whenever the chat is scrolled up (`N` lines above the bottom).
   - Right side: if a flash notice is active (lasts 5 seconds, for example `Copied.`, `Config reloaded.`, or retry status), it renders in `accent` here. Otherwise, while a turn is running:
     - With a queued steering message: animated wave (`●····`) in `accent` followed by `steering…` in `muted`.
-    - Without a queued steering message: spinner (`◐`, `◓`, `◑`, `◒`) and elapsed duration in `accent`, followed when available by ` · <action>` in `muted` (`reading PATH...`, `writing PATH...`, `appending PATH...`, `deleting PATH...`, `editing PATH...`, `searching PATTERN...`, `running CMD...`; first line capped at 60 characters). Each action label stays visible for at least 100 ms before being replaced.
+    - Without a queued steering message: spinner (`◐`, `◓`, `◑`, `◒`) and elapsed duration in `accent` (for example `◐ 0s`, `◓ 14s`, `◑ 1m5s`, `◒ 1h2m`).
 - **Bottom rule:**
   - Right side: model bar showing `<display> · <effort>`, optionally ` · <used>/<window>` (omitted when both `<used>` and `<window>` are `0`; shows `/?` when `<window>` is `0` and `<used> > 0`), and optionally ` · $<cost>` (2 decimal places, omitted when pricing is unknown). Everything is `muted` except `<used>`, which is `accent`.
 

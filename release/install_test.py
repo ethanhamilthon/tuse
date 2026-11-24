@@ -3,6 +3,7 @@ import hashlib
 import os
 import pty
 import select
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -216,33 +217,39 @@ def main() -> None:
             assert rc == 0 and "Keeping existing config:" in out
             assert not (home / ".config/tuse/init.lua").exists()
 
+            real_link = shutil.which("link")
+            assert real_link, "link command not found"
             for kind in ("file", "dir", "sym_file", "sym_dir", "sym_dangling"):
                 home, env = mk_env(f"race_{kind}")
                 race_target = td / f"race_tgt_{kind}"
-
-                def make_race(k=kind, h=home, tgt=race_target):
-                    cfg_dir = h / ".config/tuse"
-                    cfg_dir.mkdir(parents=True, exist_ok=True)
-                    p = cfg_dir / "init.lua"
-                    if k == "file":
-                        p.write_text("-- raced\nreturn {}\n")
-                    elif k == "dir":
-                        p.mkdir()
-                    elif k == "sym_file":
-                        tgt.write_text("-- symfile\nreturn {}\n")
-                        os.symlink(tgt, p)
-                    elif k == "sym_dir":
-                        tgt.mkdir()
-                        os.symlink(tgt, p)
-                    elif k == "sym_dangling":
-                        os.symlink(td / "missing_target.lua", p)
+                shim_dir = td / f"shim_{kind}"
+                shim_dir.mkdir()
+                called = td / f"link_called_{kind}"
+                if kind == "file":
+                    setup_race = 'printf "%s\\n" "-- raced" "return {}" > "$2"'
+                elif kind == "dir":
+                    setup_race = 'mkdir -p "$2"'
+                elif kind == "sym_file":
+                    race_target.write_text("-- symfile\nreturn {}\n")
+                    setup_race = f'ln -s "{race_target}" "$2"'
+                elif kind == "sym_dir":
+                    race_target.mkdir()
+                    setup_race = f'ln -s "{race_target}" "$2"'
+                else:
+                    setup_race = f'ln -s "{td / "missing_target.lua"}" "$2"'
+                shim = shim_dir / "link"
+                shim.write_text(
+                    f'#!/bin/sh\nset -eu\n: > "{called}"\n{setup_race}\nexec "{real_link}" "$@"\n'
+                )
+                shim.chmod(0o755)
+                env["PATH"] = f"{shim_dir}:{env['PATH']}"
 
                 rc, out = run_pty(
                     ["/bin/sh", str(INSTALLER)],
                     env,
                     [("[Y/n]", "y\n"), ("[y/N]", "n\n")],
-                    hook=("[y/N]", make_race),
                 )
+                assert called.exists(), kind
                 assert rc == 0 and "Keeping existing config:" in out, (kind, rc, out)
                 p = home / ".config/tuse/init.lua"
                 assert list((home / ".config/tuse").iterdir()) == [p], kind

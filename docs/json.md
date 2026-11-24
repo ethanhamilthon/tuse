@@ -111,6 +111,8 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
     - `"settings"`: `{ t, model, effort }` (on resume, the latest recorded `settings` wins even when `model` is `""`)
     - `"hook"`: `{ t, name, event, vars: string, error: string | null, ms }` (`vars` is a newline-separated `key=value` formatted string excluding `event` and `null` fields)
     - `"turn_end"`: `{ t, elapsed_ms, calls, model, effort, cancelled }`
+    - `"ui_markdown"`: `{ t, name, text, pin, removed }` (durable `show()` event in chronological order; backward-compatible additive v1 tag; excluded from model context and trace)
+    - `"ui_result"`: `{ t, id, kind: "picker" | "question", prompt, value }` (durable answered `pick()`/`ask()` entry in chronological order; backward-compatible additive v1 tag; excluded from model context and trace)
 - **`session.trace`**:
   - Params: `{}`.
   - Result: array of `{ role: string, summary: string, text: string }`.
@@ -133,7 +135,7 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
 - **`session.resume`**:
   - Params: `{ id: string }`.
   - Result: `{ session: SessionInfo, model: string, effort: string }`.
-  - Fails with `-32000` if `id` is already open, does not exist, is locked by another process, or config fails to load (keeping the current session active). On success, closes the current session (`reason = "resume"`), opens the resumed session (inheriting its saved `cwd` if the directory exists, plus its saved model and effort; if the last assistant message with tool calls lacks tool results, appends placeholder interrupted tool records), and switches the event stream. Read `session.records` after resuming for durable history; transient `show` blocks, pending UI prompts, and UI entries are not restored across resume.
+  - Fails with `-32000` if `id` is already open, does not exist, is locked by another process, or config fails to load (keeping the current session active). On success, closes the current session (`reason = "resume"`), opens the resumed session (inheriting its saved `cwd` if the directory exists, plus its saved model and effort; if the last assistant message with tool calls lacks tool results, appends placeholder interrupted tool records; replays persisted `ui_markdown` and `ui_result` records before `start` hooks fire while leaving pending prompts cleared), and switches the event stream. Read `session.records` for full chronological history (including interleaved `ui_markdown`/`ui_result` records) and `ui.state` for the effective restored UI blocks, answered entries, and any prompt queued by a `start` hook.
 
 ### Models
 
@@ -197,10 +199,10 @@ Success responses have `{"jsonrpc":"2.0","id":...,"result":...}`. Error response
 
 - **`ui.state`**:
   - Params: `{}`.
-  - Result: `{ markdowns: [{ name, text, pin }], active: UiRequest | null, entries: [{ id, kind, prompt, value }] }`.
+  - Result: `{ markdowns: [{ name, text, pin }], active: UiRequest | null, entries: [{ id, kind, prompt, value }] }`. On resume, persisted `ui_markdown` and `ui_result` records replay before `start` hooks run (with `active = null` at the replay boundary and the UI request ID counter initialized above all restored `ui_result.id` values), so `ui.state` reflects surviving restored blocks, restored answered entries, and any blocks or active prompt created by `start` hooks.
 - **`ui.reply`**:
   - Params: `{ id: number, value: string }`.
-  - Result: `null`. Answers the active `ui_request`, emits `ui_result`, and emits the next queued `ui_request` if any. Fails with `-32000` if there is no active request, `id` does not match the active request, or (for a picker) `value` is not in `options`.
+  - Result: `null`. Answers the active `ui_request`, persists a `ui_result` record, emits `ui_result`, and emits the next queued `ui_request` if any. Validates strictly against the current session incarnation's active queue (stale IDs from before close/switch are rejected). Fails with `-32000` if there is no active request, `id` does not match the active request, or (for a picker) `value` is not in `options`.
 - **`ui.cancel`**:
   - Params: `{ id: number }`.
   - Result: `null`. Cancels the active `ui_request` (returns `nil` to Lua, leaves no `UiEntry`, emits **no** `ui_clear`, and emits the next queued `ui_request` if any). The client clears its own prompt when `ui.cancel` succeeds. Fails with `-32000` if there is no active request or `id` does not match.

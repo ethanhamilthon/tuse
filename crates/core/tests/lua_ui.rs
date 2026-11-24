@@ -189,7 +189,18 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     })
     .unwrap();
     let rsnap = resumed.ui_snapshot();
-    assert!(rsnap.markdowns.is_empty() && rsnap.entries.is_empty() && rsnap.active.is_none());
+    assert_eq!(rsnap.markdowns, snap.markdowns);
+    assert_eq!(rsnap.entries.len(), 4);
+    assert_eq!(rsnap.entries[..3], snap.entries[..]);
+    assert_eq!(
+        (
+            rsnap.entries[3].kind,
+            rsnap.entries[3].prompt.as_str(),
+            rsnap.entries[3].value.as_str()
+        ),
+        ("picker", "Picker", "yes")
+    );
+    assert!(rsnap.active.is_none());
     resumed.close();
     common::cleanup(&dir);
 }

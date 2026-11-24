@@ -76,6 +76,18 @@ pub enum Record {
         #[serde(default)]
         cancelled: bool,
     },
+    UiMarkdown {
+        name: String,
+        text: String,
+        pin: bool,
+        removed: bool,
+    },
+    UiResult {
+        id: u64,
+        kind: String,
+        prompt: String,
+        value: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

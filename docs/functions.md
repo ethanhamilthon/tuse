@@ -86,15 +86,15 @@ Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/
   - Renders or updates a UI-only Markdown block identified by `name`.
   - Unpinned (`pin = false`) blocks stay in chat order and update in place by `name`. Pinned (`pin = true`) blocks render together at the end of chat after new messages. Changing `pin` moves the block to the new section at the current position.
   - `show(name, "", false)` (or `show(name, "")`) removes the block.
-  - Blocks survive `/reload` but are never sent to the model or saved across resume.
+  - Blocks survive `/reload` and are persisted in the session's UI history (`ui_markdown` records) so resuming in TUI or JSON-RPC restores them in their original chat positions and pin states (replayed before `start` hooks run). Blocks are never sent to the model or included in `/trace`.
 - `pick(options)` -> `string | nil`:
   - Displays a picker for a Lua list of strings (raises if any element is not a string; an empty list returns `nil` immediately without prompting).
   - In TUI, input editing is disabled; Enter returns the selected option, Esc returns `nil`.
-  - Answered pickers append a UI-only chat entry (`kind = "picker"`, `prompt = "Picker"`, `value`); cancelled pickers leave no entry.
+  - Answered pickers append and persist a UI-only chat entry (`ui_result` record with `kind = "picker"`, `prompt = "Picker"`, `value`) restored in position across resume (excluded from model context and `/trace`). Cancelled and unanswered (pending-at-close) pickers are not persisted and leave no entry.
 - `ask(text)` -> `string | nil`:
   - Displays `text` as a Markdown question panel and uses the editor for the answer (restoring any existing draft on close).
   - Enter returns the typed string to Lua without sending it to the model; Esc returns `nil`.
-  - Answered questions append a UI-only chat entry (`kind = "question"`, `prompt = text`, `value`); cancelled questions leave no entry.
+  - Answered questions append and persist a UI-only chat entry (`ui_result` record with `kind = "question"`, `prompt = text`, `value`) restored in position across resume (excluded from model context and `/trace`). Cancelled and unanswered (pending-at-close) questions are not persisted and leave no entry.
 
 `pick` and `ask` share a single FIFO queue, yield cooperatively, and **pause the calling coroutine's timeout** while waiting. They raise `"interactive wait cannot run here"` in non-yieldable contexts and `"interactive UI is unavailable during reload or close"` when called from a hook during reload or session close.
 

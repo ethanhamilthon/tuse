@@ -1,4 +1,5 @@
 use crate::event::{Event, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
+use crate::record::Record;
 use crate::session::Session;
 use std::collections::VecDeque;
 use std::sync::mpsc;
@@ -14,12 +15,68 @@ struct PendingReq {
 #[derive(Default)]
 pub(crate) struct UiState {
     next_id: u64,
-    next_seq: u64,
     closed: bool,
     deny_hooks: bool,
     markdowns: Vec<UiMarkdown>,
     entries: Vec<UiEntry>,
     queue: VecDeque<PendingReq>,
+}
+
+impl UiState {
+    pub(crate) fn apply_markdown(&mut self, name: String, text: String, pin: bool, removed: bool) {
+        if removed {
+            self.markdowns.retain(|b| b.name != name);
+            return;
+        }
+        let block = UiMarkdown {
+            name: name.clone(),
+            text: text.clone(),
+            pin,
+        };
+        match self.markdowns.iter().position(|b| b.name == name) {
+            Some(i) if self.markdowns[i].pin == pin => self.markdowns[i].text = text,
+            Some(i) => {
+                self.markdowns.remove(i);
+                self.markdowns.push(block);
+            }
+            None => self.markdowns.push(block),
+        }
+    }
+
+    pub(crate) fn replay(records: &[Record]) -> Self {
+        let mut ui = Self::default();
+        for r in records {
+            match r {
+                Record::UiMarkdown {
+                    name,
+                    text,
+                    pin,
+                    removed,
+                } => ui.apply_markdown(name.clone(), text.clone(), *pin, *removed),
+                Record::UiResult {
+                    id,
+                    kind,
+                    prompt,
+                    value,
+                } => {
+                    ui.next_id = ui.next_id.max(*id);
+                    let kind = if kind == "picker" {
+                        "picker"
+                    } else {
+                        "question"
+                    };
+                    ui.entries.push(UiEntry {
+                        id: *id,
+                        kind,
+                        prompt: prompt.clone(),
+                        value: value.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+        ui
+    }
 }
 
 impl Session {
@@ -33,30 +90,20 @@ impl Session {
     }
 
     pub(crate) fn ui_markdown(&self, name: String, text: String, pin: bool) {
-        let after_record = self.state.lock().unwrap().records.len();
         let removed = text.is_empty() && !pin;
         {
             let mut ui = self.ui.lock().unwrap();
-            if removed {
-                ui.markdowns.retain(|b| b.name != name);
-            } else {
-                ui.next_seq += 1;
-                let block = UiMarkdown {
+            ui.apply_markdown(name.clone(), text.clone(), pin, removed);
+            let mut st = self.state.lock().unwrap();
+            self.push(
+                &mut st,
+                Record::UiMarkdown {
                     name: name.clone(),
                     text: text.clone(),
                     pin,
-                    after_record,
-                    seq: ui.next_seq,
-                };
-                match ui.markdowns.iter().position(|b| b.name == name) {
-                    Some(i) if ui.markdowns[i].pin == pin => ui.markdowns[i].text = text.clone(),
-                    Some(i) => {
-                        ui.markdowns.remove(i);
-                        ui.markdowns.push(block);
-                    }
-                    None => ui.markdowns.push(block),
-                }
-            }
+                    removed,
+                },
+            );
         }
         self.emit(Event::UiMarkdown {
             name,
@@ -101,7 +148,6 @@ impl Session {
     }
 
     pub fn ui_reply(&self, id: u64, value: Option<String>) -> Result<(), String> {
-        let after_record = self.state.lock().unwrap().records.len();
         let (entry, next) = {
             let mut ui = self.ui.lock().unwrap();
             let Some(front) = ui.queue.front() else {
@@ -117,7 +163,6 @@ impl Session {
             }
             let pending = ui.queue.pop_front().unwrap();
             let entry = value.as_ref().map(|v| {
-                ui.next_seq += 1;
                 let (kind, prompt) = match pending.req.prompt {
                     UiPrompt::Picker { .. } => ("picker", "Picker".into()),
                     UiPrompt::Question { text } => ("question", text),
@@ -125,12 +170,20 @@ impl Session {
                 let e = UiEntry {
                     id,
                     kind,
-                    prompt,
+                    prompt: prompt.clone(),
                     value: v.clone(),
-                    after_record,
-                    seq: ui.next_seq,
                 };
                 ui.entries.push(e.clone());
+                let mut st = self.state.lock().unwrap();
+                self.push(
+                    &mut st,
+                    Record::UiResult {
+                        id,
+                        kind: kind.into(),
+                        prompt,
+                        value: v.clone(),
+                    },
+                );
                 e
             });
             let reply = value.map_or(serde_json::Value::Null, serde_json::Value::String);

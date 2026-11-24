@@ -22,7 +22,7 @@ fn wait_turn(rx: &std::sync::mpsc::Receiver<Event>) {
 }
 
 #[test]
-fn cross_frontend_resume_preserves_history_and_model_but_not_transient_ui() {
+fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
     let addr = common::provider(vec![
         Reply::Text("rpc reply"),
         Reply::Text("tui continued"),
@@ -85,7 +85,17 @@ fn cross_frontend_resume_preserves_history_and_model_but_not_transient_ui() {
             .iter()
             .any(|r| matches!(r, Record::Assistant { text, .. } if text == "rpc reply"))
     );
-    assert!(tui_s.ui_snapshot().markdowns.is_empty() && tui_s.ui_snapshot().active.is_none());
+    let snap = tui_s.ui_snapshot();
+    assert_eq!(snap.markdowns.len(), 1);
+    assert_eq!(
+        (
+            snap.markdowns[0].name.as_str(),
+            snap.markdowns[0].text.as_str(),
+            snap.markdowns[0].pin
+        ),
+        ("pin", "Stay?", true)
+    );
+    assert!(snap.active.is_none() && snap.entries.is_empty());
     let ev = tui_s.subscribe();
     tui_s.submit(UserInput::text("continue in tui"));
     wait_turn(&ev);
@@ -126,11 +136,10 @@ fn cross_frontend_resume_preserves_history_and_model_but_not_transient_ui() {
         (json!(id2), json!("p/m"), json!("low"))
     );
     let st = call(&tx, &out, 2, "ui.state", json!({}))["result"].clone();
-    assert!(
-        st["markdowns"].as_array().unwrap().is_empty()
-            && st["active"].is_null()
-            && st["entries"].as_array().unwrap().is_empty()
-    );
+    assert_eq!(st["markdowns"].as_array().unwrap().len(), 1);
+    assert_eq!(st["markdowns"][0]["name"], "pin");
+    assert_eq!(st["markdowns"][0]["pin"], true);
+    assert!(st["active"].is_null() && st["entries"].as_array().unwrap().is_empty());
     let recs = call(&tx, &out, 3, "session.records", json!({}))["result"].clone();
     assert!(
         recs.as_array()

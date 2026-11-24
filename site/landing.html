@@ -15,9 +15,13 @@
       </section>
 
       <section class="demo-section" aria-label="Terminal demo">
-        <div class="demo-frame">
-          <img src="{{base}}assets/demo.svg" width="880" height="500" alt="Tuse terminal UI showing a user prompt, syntax-highlighted lua tool call, colored file diff, assistant summary, and bottom model and context status bar">
-        </div>
+        <a class="demo-frame" href="{{base}}assets/demo.svg" title="Open full-size terminal view">
+          <picture>
+            <source media="(max-width: 640px)" srcset="{{base}}assets/demo-mobile.svg">
+            <img src="{{base}}assets/demo.svg" width="720" height="430" alt="Tuse terminal UI showing a user prompt, syntax-highlighted lua edit() tool call, colored file diff, assistant summary, and bottom model and context status bar">
+          </picture>
+        </a>
+        <p class="demo-caption"><a href="{{base}}assets/demo.svg">Open full-size terminal view</a></p>
       </section>
 
       <section aria-labelledby="capabilities">
@@ -66,10 +70,23 @@
         if (!btn || !code || !navigator.clipboard) return;
         btn.hidden = false;
         btn.addEventListener("click", function () {
-          navigator.clipboard.writeText(code.textContent).then(function () {
-            btn.textContent = "Copied";
-            setTimeout(function () { btn.textContent = "Copy"; }, 1800);
-          });
+          navigator.clipboard.writeText(code.textContent).then(
+            function () {
+              btn.textContent = "Copied";
+              setTimeout(function () { btn.textContent = "Copy"; }, 1800);
+            },
+            function () {
+              if (window.getSelection && document.createRange) {
+                var range = document.createRange();
+                range.selectNodeContents(code);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+              }
+              btn.textContent = "Copy manually";
+              setTimeout(function () { btn.textContent = "Copy"; }, 2500);
+            }
+          );
         });
       })();
     </script>

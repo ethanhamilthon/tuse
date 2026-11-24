@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::editor::Edit;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
 impl App {
@@ -25,7 +26,7 @@ impl App {
                 std::mem::replace(&mut self.hover, at) != at
             }
             MouseEventKind::Down(MouseButton::Left) => {
-                self.editor.clear_selection();
+                self.editor.apply(Edit::Deselect, 1);
                 self.selection = Default::default();
                 if self.pointer != Some(point) {
                     self.hover = None;
@@ -35,7 +36,7 @@ impl App {
                 self.click(point.1, point.0);
                 self.selection.drag = Some((point, point));
                 if inside && !self.input_disabled() {
-                    self.selection.input = Some(self.editor.cursor);
+                    self.selection.input = Some(self.editor.cursor());
                 }
                 true
             }
@@ -51,10 +52,10 @@ impl App {
                     }
                     if inside && let Some(index) = self.selection.input {
                         self.click(point.1, point.0);
-                        self.editor.anchor = Some(index);
+                        self.editor.apply(Edit::AnchorAt(index), 1);
                         self.selection.drag = Some((a, a));
                     } else {
-                        self.editor.clear_selection();
+                        self.editor.apply(Edit::Deselect, 1);
                         self.selection.drag = Some((a, point));
                     }
                     if matches!(m.kind, MouseEventKind::Up(_)) {
@@ -117,7 +118,13 @@ impl App {
         if y < a.row || y >= a.row + a.height || x < a.col {
             return;
         }
-        self.editor.click(y - a.row + a.top, x - a.col, a.cols);
+        self.editor.apply(
+            Edit::Click {
+                row: y - a.row + a.top,
+                col: x - a.col,
+            },
+            a.cols,
+        );
         if !self.searching() && !self.answering() {
             self.update_token_picker();
         }
@@ -356,9 +363,9 @@ mod tests {
             cols: 40,
         });
         app.mouse(event(MouseEventKind::Down(MouseButton::Left), 4, 20));
-        assert_eq!(app.editor.cursor, 2);
+        assert_eq!(app.editor.cursor(), 2);
         app.mouse(event(MouseEventKind::Down(MouseButton::Left), 4, 3));
-        assert_eq!(app.editor.cursor, 2);
+        assert_eq!(app.editor.cursor(), 2);
         crate::app::cleanup(app);
     }
 }

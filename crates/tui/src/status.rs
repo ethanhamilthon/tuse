@@ -141,11 +141,11 @@ mod tests {
         assert_eq!(working(&app).len(), 1);
 
         app.flash("Copied.");
-        let top = crate::input_view::block(&app, 40, &[String::new()], 0);
+        let top = crate::input_view::block(&app, &app.editor.view(40), 40, &[String::new()], 0);
         let top_text: String = top[0].iter().map(|s| s.text.as_str()).collect();
         assert!(top_text.contains("Copied.") && !top_text.contains(SPINNER[1]));
         app.flash = None;
-        let top = crate::input_view::block(&app, 40, &[String::new()], 0);
+        let top = crate::input_view::block(&app, &app.editor.view(40), 40, &[String::new()], 0);
         let top_text: String = top[0].iter().map(|s| s.text.as_str()).collect();
         assert!(top_text.contains(SPINNER[1]));
 

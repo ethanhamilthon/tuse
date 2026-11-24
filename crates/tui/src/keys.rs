@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::editor::Edit;
 use crate::panel::trace_panel;
 use crate::picker::Kind;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -22,7 +23,7 @@ impl App {
         let primary = ctrl || k.modifiers.contains(KeyModifiers::SUPER);
         if primary
             && k.code == KeyCode::Char('c')
-            && (!self.selection.text.is_empty() || self.editor.selection_range().is_some())
+            && (!self.selection.text.is_empty() || self.editor.has_selection())
         {
             self.copy_selection(false);
             return;
@@ -51,7 +52,7 @@ impl App {
         if self.panel_key(k.code, k.modifiers) {
             return;
         }
-        let before = self.steering.map(|_| self.editor.buf.clone());
+        let before = self.steering.map(|_| self.editor.snapshot());
         let cols = self.input_cols;
         let e = &mut self.editor;
         if matches!(
@@ -63,16 +64,12 @@ impl App {
                 | KeyCode::Home
                 | KeyCode::End
         ) {
-            if shift {
-                e.anchor.get_or_insert(e.cursor);
-            } else {
-                e.clear_selection();
-            }
+            e.apply(if shift { Edit::Anchor } else { Edit::Deselect }, cols);
         } else if matches!(k.code, KeyCode::Esc)
             || (ctrl && k.code == KeyCode::Char('e'))
             || (alt && matches!(k.code, KeyCode::Char('b' | 'f')))
         {
-            e.clear_selection();
+            e.apply(Edit::Deselect, cols);
         }
         match k.code {
             KeyCode::Esc => {
@@ -93,29 +90,25 @@ impl App {
             KeyCode::Char('v') if ctrl || k.modifiers.contains(KeyModifiers::SUPER) => {
                 return self.paste_clipboard();
             }
-            KeyCode::Char('a') if primary => e.select_all(),
+            KeyCode::Char('a') if primary => e.apply(Edit::SelectAll, cols),
             KeyCode::Char('x') if primary => self.copy_selection(true),
-            KeyCode::Char('e') if ctrl => e.end(),
-            KeyCode::Char('u') if ctrl => e.kill_to_start(),
-            KeyCode::Char('k') if ctrl => e.kill_to_end(),
-            KeyCode::Char('w') if ctrl => e.delete_word(),
-            KeyCode::Left if ctrl || alt => e.word_left(),
-            KeyCode::Right if ctrl || alt => e.word_right(),
-            KeyCode::Char('b') if alt => e.word_left(),
-            KeyCode::Char('f') if alt => e.word_right(),
-            KeyCode::Left => e.left(),
-            KeyCode::Right => e.right(),
-            KeyCode::Home => e.home(),
-            KeyCode::End => e.end(),
-            KeyCode::Backspace if alt || ctrl => e.delete_word(),
-            KeyCode::Backspace => e.backspace(),
-            KeyCode::Delete => e.delete(),
-            KeyCode::Up => {
-                e.vertical(true, cols);
-            }
-            KeyCode::Down => {
-                e.vertical(false, cols);
-            }
+            KeyCode::Char('e') if ctrl => e.apply(Edit::End, cols),
+            KeyCode::Char('u') if ctrl => e.apply(Edit::KillToStart, cols),
+            KeyCode::Char('k') if ctrl => e.apply(Edit::KillToEnd, cols),
+            KeyCode::Char('w') if ctrl => e.apply(Edit::DeleteWord, cols),
+            KeyCode::Left if ctrl || alt => e.apply(Edit::WordLeft, cols),
+            KeyCode::Right if ctrl || alt => e.apply(Edit::WordRight, cols),
+            KeyCode::Char('b') if alt => e.apply(Edit::WordLeft, cols),
+            KeyCode::Char('f') if alt => e.apply(Edit::WordRight, cols),
+            KeyCode::Left => e.apply(Edit::Left, cols),
+            KeyCode::Right => e.apply(Edit::Right, cols),
+            KeyCode::Home => e.apply(Edit::Home, cols),
+            KeyCode::End => e.apply(Edit::End, cols),
+            KeyCode::Backspace if alt || ctrl => e.apply(Edit::DeleteWord, cols),
+            KeyCode::Backspace => e.apply(Edit::Backspace, cols),
+            KeyCode::Delete => e.apply(Edit::Delete, cols),
+            KeyCode::Up => e.apply(Edit::Up, cols),
+            KeyCode::Down => e.apply(Edit::Down, cols),
             KeyCode::Tab => {}
             KeyCode::Char(c) => e.insert(&c.to_string()),
             _ => {}
@@ -135,9 +128,9 @@ impl App {
         match crate::clipboard::write(&text) {
             Ok(()) => {
                 if cut {
-                    self.editor.delete_selection();
+                    self.editor.apply(Edit::DeleteSelection, 1);
                 } else {
-                    self.editor.clear_selection();
+                    self.editor.apply(Edit::Deselect, 1);
                 }
                 self.selection = Default::default();
                 self.flash("Copied.");
@@ -267,7 +260,7 @@ mod tests {
         let mut app = App::new(session.clone(), Some(cfg));
         let press = |app: &mut App, code| app.key(KeyEvent::new(code, KeyModifiers::NONE), 0);
         app.editor.insert("draft /models after");
-        app.editor.cursor = 13;
+        app.editor.set_cursor(13);
         app.update_token_picker();
         assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Command);
         press(&mut app, KeyCode::Enter);

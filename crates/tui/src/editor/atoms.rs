@@ -40,7 +40,7 @@ impl Editor {
             .filter_map(|c| self.atom(*c).map(|a| &a.kind))
     }
 
-    pub fn prompts(&self) -> Vec<String> {
+    pub(super) fn prompts(&self) -> Vec<String> {
         self.active()
             .filter_map(|k| match k {
                 AtomKind::Prompt(n) => Some(n.clone()),
@@ -49,7 +49,7 @@ impl Editor {
             .collect()
     }
 
-    pub fn files(&self) -> Vec<PathBuf> {
+    pub(super) fn files(&self) -> Vec<PathBuf> {
         self.active()
             .filter_map(|k| match k {
                 AtomKind::File(p) => Some(p.clone()),
@@ -58,7 +58,7 @@ impl Editor {
             .collect()
     }
 
-    pub fn images(&self) -> Vec<(usize, PathBuf)> {
+    pub(super) fn images(&self) -> Vec<(usize, PathBuf)> {
         self.active()
             .filter_map(|k| match k {
                 AtomKind::Image { id, path } => Some((*id, path.clone())),
@@ -71,6 +71,20 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replacing_and_deleting_selections() {
+        let mut e = Editor::default();
+        e.insert("abc");
+        e.insert_atom("@path", AtomKind::File("path".into()));
+        e.select_all();
+        assert_eq!(e.selected_text().as_deref(), Some("abc@path"));
+        e.insert("x");
+        assert_eq!(e.text(), "x");
+        e.select_all();
+        e.backspace();
+        assert!(e.is_empty());
+    }
 
     #[test]
     fn atom_is_one_letter() {

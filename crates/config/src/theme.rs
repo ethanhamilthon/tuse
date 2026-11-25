@@ -103,6 +103,10 @@ pub struct UiSettings {
     pub list_max_height: usize,
     #[serde(deserialize_with = "crate::de::rows")]
     pub input_max_height: i32,
+    #[serde(deserialize_with = "crate::names::trace_roles")]
+    pub hide_trace: Vec<String>,
+    #[serde(deserialize_with = "crate::names::model_scope")]
+    pub scope_models: Vec<String>,
 }
 
 fn lines<'de, D: serde::Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
@@ -122,6 +126,8 @@ impl Default for UiSettings {
             message_gap: 1,
             list_max_height: 16,
             input_max_height: -1,
+            hide_trace: vec![],
+            scope_models: vec![],
         }
     }
 }

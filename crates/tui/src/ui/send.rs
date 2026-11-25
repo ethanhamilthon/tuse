@@ -79,7 +79,11 @@ impl App {
         }
         self.picker = None;
         self.scroll = 0;
-        match tuse_core::build_input(trimmed, self.refs()) {
+        let refs = match self.try_refs() {
+            Ok(r) => r,
+            Err(e) => return self.error(e),
+        };
+        match tuse_core::build_input(trimmed, refs) {
             Ok(input) => {
                 let (id, queued) = self.session.submit(input);
                 if queued {
@@ -92,17 +96,19 @@ impl App {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn refs(&self) -> Refs {
+        self.try_refs().unwrap_or_default()
+    }
+
+    fn try_refs(&self) -> Result<Refs, String> {
         let refs = self.editor.refs();
-        Refs {
-            prompts: self
-                .session
-                .resolve_prompts(&refs.prompts, false)
-                .unwrap_or_default(),
+        Ok(Refs {
+            prompts: self.session.resolve_prompts(&refs.prompts, false)?,
             images: refs.images,
             files: refs.files,
             strict: false,
             cwd: self.cwd.clone(),
-        }
+        })
     }
 }

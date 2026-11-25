@@ -60,6 +60,7 @@ pub struct App {
     pub streamed_text: bool,
     pub thinking: Option<usize>,
     pub scroll: usize,
+    pub chat_anchor: Option<(usize, usize)>,
     pub tick: usize,
     pub input_cols: usize,
     pub steering: Option<InputId>,
@@ -104,6 +105,7 @@ impl App {
             streamed_text: false,
             thinking: None,
             scroll: 0,
+            chat_anchor: None,
             tick: 0,
             input_cols: 80,
             steering: None,
@@ -149,12 +151,10 @@ impl App {
 
     pub fn notice(&mut self, text: impl Into<String>) {
         self.chat.push(Entry::Notice(text.into()));
-        self.scroll = 0;
     }
 
     pub fn error(&mut self, text: impl Into<String>) {
         self.chat.push(Entry::Error(text.into()));
-        self.scroll = 0;
     }
 
     pub fn switch(&mut self, resume: Option<String>) {

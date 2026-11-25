@@ -109,7 +109,7 @@ mod tests {
         app.editor.insert("#typed ");
         app.editor.insert_atom(
             "#review",
-            crate::kit::editor::AtomKind::Prompt("review".into()),
+            crate::kit::editor::AtomKind::Prompt("review".into(), None),
         );
         app.editor.insert(" x");
         let view = app.editor.view(60);

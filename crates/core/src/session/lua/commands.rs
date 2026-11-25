@@ -75,6 +75,42 @@ impl Session {
 }
 
 impl Session {
+    pub(crate) fn prompt_body(&self, name: &str, arg: Option<&str>) -> Result<String, String> {
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.cmd_runs.lock().unwrap().push(cancel.clone());
+        let deadline = Instant::now() + std::time::Duration::from_secs(30);
+        let stop = Stop::new(cancel, Some(deadline));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (name, arg) = (name.to_string(), arg.map(str::to_string));
+        self.vm.post(move |lua| {
+            let start = || -> mlua::Result<()> {
+                let f = crate::scripting::registry::prompt_of(lua, &name)
+                    .ok_or_else(|| mlua::Error::runtime("prompt is gone"))?;
+                let args = match &arg {
+                    Some(a) => MultiValue::from_iter([mlua::Value::String(lua.create_string(a)?)]),
+                    None => MultiValue::new(),
+                };
+                let tx2 = tx.clone();
+                let job = Job::new(lua, f, args, stop, Out::Buf(String::new()), move |_, d| {
+                    let _ = tx2.send(d);
+                })?
+                .returning();
+                tuse_lua::start(lua, job);
+                Ok(())
+            };
+            if let Err(e) = start() {
+                let _ = tx.send(Done::failed(tuse_lua::message(&e)));
+            }
+        });
+        let d = rx
+            .recv()
+            .map_err(|_| "the lua thread is gone".to_string())?;
+        if !d.ok {
+            return Err(format!("prompt: {}", crate::text::error_line(&d.text)));
+        }
+        Ok(d.text)
+    }
+
     pub(crate) fn llm(
         &self,
         prompt: &str,

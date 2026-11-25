@@ -132,8 +132,10 @@ fn block(lua: &Lua, (_, arg): (String, Value)) -> mlua::Result<(bool, Value)> {
 fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<String> {
     let h = host(lua);
     let name = name.unwrap_or_default();
+    let chunk = with_run(lua, |j| j.code()).flatten();
+    let code = source_of(&f, chunk.as_deref());
     let t = h
-        .task_start(&name, is_lua_hook(lua))
+        .task_start(&name, &code, is_lua_hook(lua))
         .map_err(mlua::Error::runtime)?;
     let id = t.id.clone();
     let job = Job::new(
@@ -144,8 +146,38 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
         Out::File(t.log),
         move |_, d: Done| h.task_end(&t.id, d),
     )?;
-    start(lua, job.as_task());
+    start(lua, job.as_task().with_code(chunk));
     Ok(id)
+}
+
+fn source_of(f: &Function, chunk: Option<&str>) -> String {
+    let info = f.info();
+    let (Some(first), Some(last)) = (info.line_defined, info.last_line_defined) else {
+        return String::new();
+    };
+    let text = match info.source.as_deref() {
+        Some(s) if s.starts_with('@') => std::fs::read_to_string(&s[1..]).ok(),
+        Some(s) if s.starts_with('=') => chunk.map(str::to_string),
+        _ => None,
+    };
+    let Some(text) = text.filter(|_| first > 0 && last >= first) else {
+        return String::new();
+    };
+    let lines: Vec<&str> = text
+        .lines()
+        .skip(first - 1)
+        .take(last - first + 1)
+        .collect();
+    let mut out = lines.join("\n");
+    if lines.len() == 1
+        && let Some(i) = out.find("function")
+    {
+        out = out[i..].to_string();
+        if let Some(e) = out.rfind("end") {
+            out.truncate(e + 3);
+        }
+    }
+    out
 }
 
 fn json(lua: &Lua) -> mlua::Result<Table> {

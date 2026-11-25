@@ -15,6 +15,22 @@ pub fn now() -> String {
     OffsetDateTime::now_utc().format(f).unwrap_or_default()
 }
 
+pub fn elapsed_since(started: &str, ended: &str) -> Option<std::time::Duration> {
+    let f = format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z");
+    let parse = |s: &str| {
+        time::PrimitiveDateTime::parse(s, f)
+            .ok()
+            .map(|t| t.assume_utc())
+    };
+    let a = parse(started)?;
+    let b = if ended.is_empty() {
+        OffsetDateTime::now_utc()
+    } else {
+        parse(ended)?
+    };
+    (b - a).try_into().ok()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

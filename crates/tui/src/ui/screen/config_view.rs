@@ -41,6 +41,13 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         ]
     };
     sec("Config file", vec![file_row]);
+    let list = |v: &[String]| {
+        if v.is_empty() {
+            "(none)".to_string()
+        } else {
+            v.join(", ")
+        }
+    };
     sec(
         "Settings",
         vec![
@@ -66,7 +73,48 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 ),
                 dim,
             ),
+            kv("ui.hide_trace", list(&ui.hide_trace), dim),
+            kv("ui.scope_models", list(&ui.scope_models), dim),
+            kv(
+                "open",
+                list(
+                    &cfg.settings
+                        .open
+                        .iter()
+                        .map(|e| format!(".{e}"))
+                        .collect::<Vec<_>>(),
+                ),
+                info,
+            ),
         ],
+    );
+    sec(
+        "Models",
+        cfg.models
+            .iter()
+            .map(|m| {
+                let mut parts = vec![];
+                if !m.display.is_empty() {
+                    parts.push(format!("display={}", m.display));
+                }
+                if m.window > 0 {
+                    parts.push(format!("window={}", tokens(m.window)));
+                }
+                if let Some(c) = m.compact_at {
+                    parts.push(format!("compact_at={}", tokens(c)));
+                }
+                if let Some(p) = &m.prices {
+                    parts.push(format!(
+                        "prices={}/{}/{}/{}",
+                        p.input, p.output, p.cache_read, p.cache_write
+                    ));
+                }
+                vec![
+                    span(format!("  {}  ", m.name), fg),
+                    span(parts.join(" "), dim),
+                ]
+            })
+            .collect(),
     );
 
     let t = &cfg.theme;
@@ -108,7 +156,14 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         "Prompts",
         cfg.prompts
             .iter()
-            .map(|(n, b)| kv(&format!("#{n}"), first_line(b), fg))
+            .map(|(n, b)| match b.kind {
+                tuse_config::PromptKind::Text => kv(&format!("#{n}"), first_line(&b.body), fg),
+                tuse_config::PromptKind::Function => kv(
+                    &format!("#{n}"),
+                    format!("fn({})", b.args.join(" | ")),
+                    info,
+                ),
+            })
             .collect(),
     );
     sec(
@@ -140,13 +195,6 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             .map(|n| vec![span(format!("  /{n}"), info)])
             .collect(),
     );
-    sec(
-        "Open",
-        cfg.open
-            .iter()
-            .map(|ext| vec![span(format!("  .{ext}"), info)])
-            .collect(),
-    );
     Panel::styled(lines).with_kind(crate::ui::panel::PanelKind::Config)
 }
 
@@ -168,17 +216,40 @@ mod tests {
         let mut cfg = Config {
             systems: vec!["Be helpful.".into()],
             commands: vec!["hello".into()],
-            open: vec!["md".into()],
             path: "/home/me/.config/tuse/init.lua".into(),
             ..Default::default()
         };
+        cfg.settings.open = vec!["md".into()];
+        cfg.settings.ui.hide_trace = vec!["usage".into()];
+        cfg.settings.ui.scope_models = vec!["p/*".into()];
+        cfg.models.push(tuse_config::ModelDef {
+            name: "p/big".into(),
+            display: "Big".into(),
+            window: 200_000,
+            prices: Some(Default::default()),
+            compact_at: Some(1000),
+        });
+        cfg.prompts.insert(
+            "spec".into(),
+            tuse_config::Prompt {
+                kind: tuse_config::PromptKind::Function,
+                body: String::new(),
+                args: vec!["apply".into()],
+            },
+        );
         cfg.connect.push(Connect {
             name: "p".into(),
             base_url: "https://x".into(),
             api_key: "sk-secret".into(),
             ..Default::default()
         });
-        cfg.prompts.insert("rev".into(), "Review code".into());
+        cfg.prompts.insert(
+            "rev".into(),
+            tuse_config::Prompt {
+                body: "Review code".into(),
+                ..Default::default()
+            },
+        );
         cfg.functions.insert("helper".into(), FunctionKind::Custom);
         cfg.functions.insert("sh".into(), FunctionKind::Override);
         cfg.functions
@@ -191,7 +262,7 @@ mod tests {
         );
         let p = Palette::from_config(&cfg);
         let mut pnl = panel(&cfg, &p);
-        let text: String = (0..80)
+        let text: String = (0..200)
             .step_by(10)
             .flat_map(|off| {
                 pnl.scroll_by(off as isize - pnl.scroll() as isize);
@@ -200,9 +271,45 @@ mod tests {
             .flatten()
             .map(|s| s.text)
             .collect();
-        for s in "Settings|Theme|System prompts|Prompts|Functions|Hooks|Commands|Open".split('|') {
+        for s in "Settings|Models|Theme|System prompts|Prompts|Functions|Hooks|Commands".split('|')
+        {
             assert!(text.contains(s), "missing {s}");
         }
+        let json: serde_json::Value = serde_json::from_str(&cfg.to_json()).unwrap();
+        let mut keys = vec![];
+        for (k, v) in json.as_object().unwrap() {
+            keys.push(k.clone());
+            if k == "settings" {
+                for (k2, v2) in v.as_object().unwrap() {
+                    keys.push(k2.clone());
+                    if k2 == "ui" {
+                        keys.extend(v2.as_object().unwrap().keys().cloned());
+                    }
+                }
+            }
+        }
+        let flat = text.replace(' ', "");
+        for k in keys {
+            let shown = match k.as_str() {
+                "ui" | "settings" | "path" | "theme" => continue,
+                "tool_line" | "diff_line" | "output_line" | "reasoning_line" => {
+                    k.trim_end_matches("_line").to_string()
+                }
+                "scroll_step" => "scroll".into(),
+                "message_gap" => "gap".into(),
+                "list_max_height" => "list_max".into(),
+                "input_max_height" => "input_max".into(),
+                "systems" => "Systemprompts".into(),
+                k => k.replace('_', ""),
+            };
+            assert!(
+                flat.to_lowercase()
+                    .replace('_', "")
+                    .contains(&shown.to_lowercase().replace('_', "")),
+                "/config misses `{k}`"
+            );
+        }
+        assert!(text.contains("p/big") && text.contains("fn(apply)") && text.contains("p/*"));
         assert!(
             text.contains("/hello")
                 && text.contains("#rev")

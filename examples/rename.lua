@@ -1,0 +1,32 @@
+-- Names the session with a small model after the first message, and adds /rename.
+-- Use: require("rename").apply(g, "openai/gpt-5-mini")
+local t = require("tuse")
+
+local M = {}
+
+local function title(text, model)
+  local out = t.llm("Give a 3-6 word title for this request. Reply with the title only.\n\n" .. text, model, "low")
+  return (out:gsub("[\r\n\"]", " "):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+function M.apply(g, model)
+  g.hooks = g.hooks or {}
+  g.commands = g.commands or {}
+  g.hooks.rename = {
+    events = { "user_message" },
+    run = function(e)
+      if e.is_first then
+        t.set_title(title(e.text, model))
+      end
+    end,
+  }
+  g.commands.rename = function()
+    local name = t.ask("New session title:")
+    if name and name ~= "" then
+      t.set_title(name)
+    end
+  end
+  return g
+end
+
+return M

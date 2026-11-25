@@ -60,14 +60,14 @@ return #s2.trace
             r#"return {{
   models = {{{{ name = "p/m", display = "M", window = 100000, compact_at = 60000,
     prices = {{ input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 }} }}}},
-  open = {{
+  settings = {{ open = {{
     md = function(path)
       local f = assert(io.open("{}", "a"))
       f:write(path, "\n")
       f:close()
     end,
     bad = function() error("opener crashed") end,
-  }},
+  }} }},
   hooks = {{
     keep = {{
       events = {{"user_message"}},

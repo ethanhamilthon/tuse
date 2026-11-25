@@ -35,6 +35,14 @@ fn item(role: &'static str, text: String) -> TraceItem {
 
 use crate::convo::history::join_context;
 
+fn first_line(s: &str) -> String {
+    s.lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
 impl Session {
     pub fn trace(&self) -> Vec<TraceItem> {
         let config = self.config();
@@ -97,6 +105,87 @@ impl Session {
                 Record::Notification { text } => items.push(item("notification", text.clone())),
                 Record::Notice { text } => items.push(item("notice", text.clone())),
                 Record::Error { text } => items.push(item("error", text.clone())),
+                Record::Compaction { prune, drop } => items.push(item(
+                    "compaction",
+                    format!("pruned up to {prune}, dropped up to {drop}"),
+                )),
+                Record::Usage { model, usage, llm } => {
+                    let src = if *llm { " (llm)" } else { "" };
+                    items.push(item(
+                        "usage",
+                        format!(
+                            "{model}{src}: input {} output {} cached {} cache_write {}",
+                            usage.input, usage.output, usage.cached, usage.cache_write
+                        ),
+                    ));
+                }
+                Record::Settings { model, effort } => {
+                    items.push(item("model", format!("{model} {effort}")))
+                }
+                Record::TurnEnd {
+                    elapsed_ms,
+                    calls,
+                    model,
+                    effort,
+                    cancelled,
+                } => {
+                    let how = if *cancelled { "cancelled" } else { "done" };
+                    items.push(item(
+                        "turn",
+                        format!("{how} in {elapsed_ms} ms, {calls} calls, {model} {effort}"),
+                    ));
+                }
+                Record::Title { new } => items.push(item("title", new.clone())),
+                Record::UiMarkdown {
+                    name,
+                    text,
+                    pin,
+                    removed,
+                } => {
+                    let body = if *removed {
+                        format!("{name} removed")
+                    } else {
+                        format!("{name}{}\n\n{text}", if *pin { " (pinned)" } else { "" })
+                    };
+                    let mut it = item("show", body);
+                    it.summary = format!("{name}{}", if *removed { " removed" } else { "" });
+                    items.push(it);
+                }
+                Record::UiResult {
+                    kind,
+                    prompt,
+                    value,
+                    ..
+                } => {
+                    let role = if kind == "picker" { "pick" } else { "ask" };
+                    let mut it = item(role, format!("{prompt}\n\n→ {value}"));
+                    it.summary = format!("{} → {value}", first_line(prompt));
+                    items.push(it);
+                }
+                Record::Job {
+                    kind,
+                    name,
+                    code,
+                    status,
+                    ms,
+                    error,
+                } => {
+                    let role = match kind.as_str() {
+                        "task" => "task",
+                        "command" => "command",
+                        _ => "open",
+                    };
+                    let mut text = format!("{name} {status} ({ms} ms)");
+                    if let Some(e) = error {
+                        text.push_str(&format!("\n\n{e}"));
+                    }
+                    if !code.is_empty() {
+                        text.push_str(&format!("\n\n{code}"));
+                    }
+                    let mut it = item(role, text);
+                    it.summary = format!("{name} {status} ({ms} ms)");
+                    items.push(it);
+                }
                 Record::Hook {
                     name,
                     event,
@@ -115,7 +204,6 @@ impl Session {
                     );
                     items.push(it);
                 }
-                _ => {}
             }
         }
         items

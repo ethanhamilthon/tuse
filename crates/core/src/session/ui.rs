@@ -249,6 +249,20 @@ impl Session {
         }
     }
 
+    pub(crate) fn ui_cancel_all(&self) {
+        let active = {
+            let mut ui = self.ui.lock().unwrap();
+            let active = ui.queue.front().map(|p| p.req.id);
+            for p in ui.queue.drain(..) {
+                let _ = p.tx.send(Err("cancelled".into()));
+            }
+            active
+        };
+        if let Some(id) = active {
+            self.emit(Event::UiClear { id });
+        }
+    }
+
     pub(crate) fn ui_close(&self) {
         let cleared = {
             let mut ui = self.ui.lock().unwrap();

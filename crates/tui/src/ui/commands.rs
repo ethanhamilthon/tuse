@@ -59,6 +59,11 @@ impl App {
                 ));
             }
             "trace" => self.open_trace(),
+            "stop" => {
+                self.session.cancel();
+                self.steering = None;
+                self.flash("Stopped.");
+            }
             "reload" => match self.session.reload() {
                 Ok(()) => {
                     self.restyle();
@@ -93,7 +98,11 @@ impl App {
     }
 
     fn open_trace(&mut self) {
-        let items = self.session.trace();
+        let hide = self.session.config().settings.ui.hide_trace.clone();
+        let mut items = self.session.trace();
+        if !hide.is_empty() {
+            items.retain(|it| !hide.iter().any(|h| h == it.role));
+        }
         let rows: Vec<_> = items
             .iter()
             .enumerate()
@@ -149,7 +158,13 @@ impl App {
             (Kind::Prompt, Some(v)) => {
                 self.cut_token();
                 self.editor
-                    .insert_atom(&format!("#{v}"), AtomKind::Prompt(v.clone()));
+                    .insert_atom(&format!("#{v}"), AtomKind::Prompt(v.clone(), None));
+                self.editor.insert(" ");
+                self.dismissed = None;
+                self.update_token_picker();
+            }
+            (Kind::PromptArg(_), Some(v)) => {
+                self.editor.set_prompt_arg(&v);
                 self.editor.insert(" ");
             }
             (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}")),
@@ -191,10 +206,9 @@ impl App {
             }
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.task(&v) {
-                    let out = tuse_core::Tasks::tail(&t.log, 200);
                     self.trace_back = None;
                     self.trace_items.clear();
-                    self.panel = Some(Panel::new(out));
+                    self.panel = Some(Panel::markdown(task_text(&t)));
                 }
             }
             (Kind::Trace, Some(v)) => {
@@ -242,6 +256,8 @@ impl App {
         let config = self.session.config();
         let (current, _) = self.session.model();
         let mut names = self.session.available_models();
+        let scope = &config.settings.ui.scope_models;
+        names.retain(|n| tuse_config::scope_matches(scope, n));
         if !names.contains(&current) {
             names.insert(0, current.clone());
         }
@@ -289,6 +305,23 @@ fn details(m: &ModelDef) -> Vec<String> {
         out.push(format!("${}/${} per 1M", p.input, p.output));
     }
     out
+}
+
+fn task_text(t: &tuse_core::TaskInfo) -> String {
+    let elapsed = tuse_core::elapsed_since(&t.started, &t.ended)
+        .map(crate::kit::rich::render::duration)
+        .unwrap_or_default();
+    let code = if t.code.trim().is_empty() {
+        "(source unavailable)".to_string()
+    } else {
+        t.code.clone()
+    };
+    let ended = if t.ended.is_empty() { "-" } else { &t.ended };
+    let log = tuse_core::Tasks::tail(&t.log, 200);
+    format!(
+        "**{}** `{}` · {} · {elapsed}\n\nstarted {} · ended {ended}\n\n```lua\n{code}\n```\n\n```text\n{log}\n```",
+        t.name, t.id, t.status, t.started
+    )
 }
 
 #[cfg(test)]

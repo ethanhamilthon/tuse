@@ -122,8 +122,8 @@ fn require_session_validation_and_reload_rollback() {
         let cfg = s.config();
         assert_eq!(cfg.systems, ["first", name, "last"]);
         assert_eq!((cfg.settings.ui.pad_x, cfg.settings.ui.scroll_step), (3, 5));
-        assert_eq!(cfg.prompts["local_wins"], "from project");
-        assert_eq!(cfg.prompts["rex"], "rex-v1");
+        assert_eq!(cfg.prompts["local_wins"].body, "from project");
+        assert_eq!(cfg.prompts["rex"].body, "rex-v1");
         if mode == Mode::Tui {
             let events = s.subscribe();
             s.submit(UserInput::text("test"));
@@ -138,7 +138,7 @@ fn require_session_validation_and_reload_rollback() {
             ));
             fs::write(shared.join("rex.lua"), "return { tag = 'rex-v2' }").unwrap();
             s.reload().unwrap();
-            assert_eq!(s.config().prompts["rex"], "rex-v2");
+            assert_eq!(s.config().prompts["rex"].body, "rex-v2");
             let saved_root = fs::read_to_string(&root).unwrap();
             fs::write(&root, "return { unknown_typo = 123 }").unwrap();
             let err = s.reload().unwrap_err();
@@ -146,7 +146,7 @@ fn require_session_validation_and_reload_rollback() {
                 err.contains("tuse.lua") && err.contains("unknown_typo: unknown key"),
                 "{err}"
             );
-            assert_eq!(s.config().prompts["rex"], "rex-v2");
+            assert_eq!(s.config().prompts["rex"].body, "rex-v2");
             s.run_command("ping").unwrap();
             let dl = std::time::Instant::now() + std::time::Duration::from_secs(3);
             while std::time::Instant::now() < dl {

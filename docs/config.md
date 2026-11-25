@@ -58,15 +58,14 @@ All keys are optional. Unknown keys, wrong types, and out-of-range values fail w
 
 | Key | Type | Meaning |
 | --- | --- | --- |
-| `settings` | table | `compact_at` and `ui` (below). |
+| `settings` | table | `compact_at`, `ui`, and `open` (below). |
 | `theme` | table | Colors (below). |
 | `models` | list | Model metadata ([Connect](connect.md#model-metadata)). |
 | `systems` | list of strings | Text appended to the system prompt, in order ([Lua](lua.md#what-the-agent-sees)). |
-| `prompts` | `name -> string` | Prompts for the `#` picker and JSON-RPC `turn.submit`. |
+| `prompts` | `name -> string \| { args?, run }` | Prompts for the `#` picker and JSON-RPC `turn.submit` (below). |
 | `functions` | `name -> function \| false` | Extra agent functions, overrides, and disabled built-ins (below). |
 | `hooks` | `name -> { events, run }` | Lifecycle hooks ([Lua](lua.md#hooks)). |
 | `commands` | `name -> function` | Custom slash commands (below). |
-| `open` | `ext -> function(path)` | Handlers for clicked file paths (below). |
 
 ### `settings.compact_at`
 
@@ -105,6 +104,8 @@ A color is `#rgb`, `#rrggbb`, an ANSI index `"0"`–`"255"`, or a name: `black`,
 | `message_gap` | `1` | Blank lines between entries. |
 | `list_max_height` | `16` | Max rows for pickers and panels (`>= 1`). |
 | `input_max_height` | `-1` | Max input rows (`-1` or `>= 1`). |
+| `hide_trace` | `{}` | Trace roles left out of `/trace`, such as `{ "usage", "hook" }` ([Session](session.md#trace-and-session-data)). Unknown roles fail. |
+| `scope_models` | `{}` | `provider/model` or `provider/*` patterns. When set, `/models` lists only matching models plus the current one. JSON-RPC ignores it. |
 
 ```lua
 return {
@@ -112,6 +113,27 @@ return {
   settings = { compact_at = 150000, ui = { output_line = 3, pad_x = 1 } },
 }
 ```
+
+### `prompts`
+
+A prompt is a string, or a table with an optional `args` list and a `run` function:
+
+```lua
+return {
+  prompts = {
+    review = "Check the change for bugs.",
+    today = { run = function() return "Today is " .. os.date("%F") end },
+    openspec = {
+      args = { "explore", "propose", "apply" },
+      run = function(arg) return "OpenSpec " .. (arg or "explore") .. ": …" end,
+    },
+  },
+}
+```
+
+- `args` are unique strings without spaces. In the TUI you pick one after the prompt (`#openspec propose`). JSON-RPC sends `"openspec propose"`, and an arg not in the list fails.
+- When the message is sent, `run(arg)` runs (`arg` is `nil` if none was picked) and must return a string. The model only sees that string, as `<prompt name="openspec" arg="propose">…</prompt>`, never the function.
+- If `run` fails or does not return a string, the message is not sent and the error is shown.
 
 ### `functions`
 
@@ -141,10 +163,10 @@ return {
 - Custom functions are not announced to the agent. Describe them in `systems` or `prompts`.
 - This limits what the agent sees. It is not a sandbox: the agent still has `io` and `os`.
 
-### `commands` and `open`
+### `commands` and `settings.open`
 
-- `commands = { name = function() ... end }` adds `/name` to the TUI and JSON-RPC `commands.run`. Commands run as Lua jobs with no deadline. `print` is not shown, so use `show()`. Esc cancels them. Built-in names (`config`, `new`, `resume`, `models`, `tasks`, `session`, `trace`, `reload`, `quit`) are reserved.
-- `open = { md = function(path) ... end }` handles clicks on local files with that extension (case-insensitive) in the TUI. Without a handler, the OS opener is used. URLs always go to the OS opener.
+- `commands = { name = function() ... end }` adds `/name` to the TUI and JSON-RPC `commands.run`. Commands run as Lua jobs with no deadline. `print` is not shown, so use `show()`. Esc cancels them. Built-in names (`config`, `new`, `resume`, `models`, `tasks`, `session`, `trace`, `reload`, `stop`, `quit`) are reserved.
+- `settings = { open = { md = function(path) ... end } }` handles clicks on local files with that extension (case-insensitive) in the TUI. Without a handler, the OS opener is used. URLs always go to the OS opener. A top-level `open` key fails with `open: moved to settings.open`.
 
 ## Reload
 

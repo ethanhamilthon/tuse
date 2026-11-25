@@ -11,10 +11,21 @@ impl Session {
         let mut st = self.state.lock().unwrap();
         st.next_input += 1;
         let id = InputId(st.next_input);
+        if input.notification && !st.busy {
+            self.pending.lock().unwrap().push(input.text);
+            return (id, false);
+        }
         if !input.notification
             && let Some(request) = &st.tool_handoff
         {
             request.store(true, Ordering::Release);
+        }
+        if !input.notification {
+            for text in self.pending.lock().unwrap().drain(..) {
+                st.next_input += 1;
+                let nid = InputId(st.next_input);
+                st.queue.push((nid, UserInput::notification(text)));
+            }
         }
         st.queue.push((id, input));
         if st.busy || self.dir.lock().unwrap().is_none() {
@@ -45,7 +56,10 @@ impl Session {
     pub fn cancel(self: &Arc<Self>) {
         self.stop_commands();
         self.stop_hook_runs();
-        self.cancel_turn(true);
+        self.ui_cancel_all();
+        self.cancel_turn(false);
+        self.tasks.stop_all();
+        self.emit(Event::Tasks);
     }
 
     pub(crate) fn cancel_turn(self: &Arc<Self>, handoff: bool) {
@@ -69,7 +83,15 @@ impl Session {
         st.busy = false;
         st.queue.clear();
         let partial = std::mem::take(&mut st.partial);
-        for r in history::missing_results(&st.records) {
+        for (i, mut r) in history::missing_results(&st.records)
+            .into_iter()
+            .enumerate()
+        {
+            if i == 0
+                && let Record::Tool { output, .. } = &mut r
+            {
+                *output = "[cancelled]".into();
+            }
             self.push(&mut st, r);
         }
         let elapsed = st.turn_start.elapsed();

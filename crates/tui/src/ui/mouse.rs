@@ -161,7 +161,7 @@ mod tests {
         );
         std::fs::write(&note, "hi").unwrap();
         std::fs::write(&other, "hi2").unwrap();
-        std::fs::write(&cfg, "local t=require('tuse')\nreturn { open={ txt=function(p) t.write('opened.txt', p) end } }").unwrap();
+        std::fs::write(&cfg, "local t=require('tuse')\nreturn { settings={ open={ txt=function(p) t.write('opened.txt', p) end } } }").unwrap();
         app.run_command("reload");
 
         let mut r = crate::frame::draw::Renderer::default();

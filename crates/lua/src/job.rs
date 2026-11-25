@@ -82,6 +82,19 @@ pub struct ExtWait {
     pub on_cancel: Option<Box<dyn FnOnce() + Send>>,
 }
 
+impl Done {
+    pub fn failed(text: String) -> Self {
+        Self {
+            ok: false,
+            text,
+            stop: None,
+            handed_off: false,
+            diffs: vec![],
+            images: vec![],
+        }
+    }
+}
+
 pub type OnDone = Box<dyn FnOnce(&Lua, Done)>;
 
 pub struct Job {
@@ -96,6 +109,8 @@ pub struct Job {
     done: Option<OnDone>,
     task: bool,
     resumed: bool,
+    code: Option<Arc<str>>,
+    returning: bool,
     pub(crate) nested_yield: Option<Thread>,
 }
 
@@ -120,6 +135,8 @@ impl Job {
             done: Some(Box::new(done)),
             task: false,
             resumed: false,
+            code: None,
+            returning: false,
             nested_yield: None,
         })
     }
@@ -132,6 +149,20 @@ impl Job {
         self.is_hook = true;
         self.is_lua_hook = lua_hook;
         self
+    }
+
+    pub fn returning(mut self) -> Self {
+        self.returning = true;
+        self
+    }
+
+    pub fn with_code(mut self, code: Option<Arc<str>>) -> Self {
+        self.code = code;
+        self
+    }
+
+    pub fn code(&self) -> Option<Arc<str>> {
+        self.code.clone()
     }
 
     pub fn print(&mut self, s: &str) {
@@ -200,7 +231,8 @@ impl Job {
         };
         self.stop.handoff = None;
         let host = crate::host(lua);
-        let Ok(t) = host.task_start(&name, true) else {
+        let code = self.code.as_deref().unwrap_or_default().to_string();
+        let Ok(t) = host.task_start(&name, &code, true) else {
             return false;
         };
         let mut out = Out::File(t.log);
@@ -231,6 +263,22 @@ impl Job {
     }
 
     pub(crate) fn finish(mut self, lua: &Lua, r: Result<MultiValue, String>) {
+        let r = match r {
+            Ok(vals) if self.returning => match vals.into_iter().next() {
+                Some(Value::String(s)) => {
+                    self.out = Out::Buf(s.to_string_lossy());
+                    Ok(MultiValue::new())
+                }
+                other => Err(format!(
+                    "must return a string, got {}",
+                    other.map_or("nil", |v| v.type_name())
+                )),
+            },
+            r => r,
+        };
+        if self.returning && r.is_err() {
+            self.out = Out::Buf(String::new());
+        }
         let stop = self.stop.reason();
         let ok = r.is_ok();
         let tail = match r {

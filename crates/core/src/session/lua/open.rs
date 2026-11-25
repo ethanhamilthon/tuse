@@ -41,6 +41,7 @@ impl Session {
         if let Some(ext) = ext
             && let Some(key) = self
                 .config()
+                .settings
                 .open
                 .iter()
                 .find(|k| k.eq_ignore_ascii_case(&ext))

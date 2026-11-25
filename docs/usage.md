@@ -60,7 +60,7 @@ How many lines of code, output, diffs, and reasoning appear is set by `settings.
 ## Typing a message
 
 - `Enter` sends the message, or runs an exact `/command`. `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` inserts a newline.
-- `#` opens a picker of your configured `prompts`. The picked `#name` is sent with the prompt body attached.
+- `#` opens a picker of your configured `prompts`. The picked `#name` is sent with the prompt body attached. A prompt with `args` then opens a picker of its args, and a space after the prompt opens it again. The result is one atom such as `#openspec propose`, drawn in the accent color.
 - `@` opens a file picker for the session folder. `@dir/q` browses `dir/`, and `@/` or `@~/` go outside the project. `Tab` completes a folder or attaches a file. `Enter` attaches the highlighted file or folder.
 - `Ctrl+V`/`Cmd+V` pastes an image from the clipboard as `[Image #N]` (saved under `~/.tuse/<id>/images/`), or pastes text otherwise.
 
@@ -80,7 +80,9 @@ Text files send their first 1,024 bytes (`truncated="true" size="…"` when long
 ## While the agent works
 
 - **Steering.** Press `Enter` while a turn runs and your message is queued (dimmed, with `steering…` in the top rule). The agent gets it at its next step. If you edit the dimmed text, it leaves the queue.
-- **Esc** closes the open picker, question, or panel first. Otherwise it cancels the turn, hooks, and custom commands. A running `lua` call is not killed: it keeps going as a background task in `/tasks` ([Lua](lua.md#background-tasks)). Steering does the same handoff.
+- **Steering** hands a running `lua` call off to a background task in `/tasks`, so the agent can read your message right away ([Lua](lua.md#background-tasks)).
+- **Esc** closes the open picker, question, or panel first. Otherwise it stops everything: the turn, the running `lua` call, background tasks, hooks, custom commands, and open `pick`/`ask` prompts. `/stop` does the same.
+- **Scrolling.** The chat follows new output only while you are at the bottom. Scrolled up, the view stays where it is until you scroll back down.
 - **Quit** with `/quit`, or `Ctrl+C`/`Ctrl+D` on an empty input.
 
 ## Keys
@@ -97,7 +99,7 @@ Text files send their first 1,024 bytes (`truncated="true" size="…"` when long
 | `Ctrl+X` / `Cmd+X` | Cut. In `/tasks`, stop the selected task. |
 | `Ctrl+W`, `Alt+Backspace`, `Ctrl+Backspace` | Delete the previous word. |
 | `Ctrl+U` / `Ctrl+K` | Delete to start / end of line. |
-| `Esc` | Close, cancel, or hand off (see above). |
+| `Esc` | Close, or stop everything (see above). |
 
 Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text (copy with `Ctrl+C`). Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/trace` opens it, using a matching `open.<ext>` handler from config or the OS opener.
 
@@ -107,12 +109,13 @@ Type `/` to get a picker. Pickers filter by label, ignoring case.
 
 - `/new` starts a fresh session in the current folder.
 - `/resume` picks another titled session from this folder, newest first.
-- `/models` picks a model, then an effort (`default`, `low`, `medium`, `high`, `xhigh`, `max`). The choice applies to this session and becomes the default for new ones.
-- `/tasks` lists background tasks. `Enter` shows the last 200 log lines, `Ctrl+X` stops one.
+- `/models` picks a model (limited by `settings.ui.scope_models`), then an effort (`default`, `low`, `medium`, `high`, `xhigh`, `max`). The choice applies to this session and becomes the default for new ones.
+- `/tasks` lists background tasks. `Enter` shows the task: id, name, status, start and end, how long it has run, the source of its function, and the last 200 log lines. `Ctrl+X` stops one.
 - `/session` shows the session: ID, name, folder, config, model, context, turns, usage, cost.
-- `/trace` lists everything in the session, starting with the system prompt. `Enter` opens an entry, `Left`/`Right` step through entries, `Esc` goes back.
+- `/trace` lists everything in the session, starting with the system prompt. `Enter` opens an entry, `Left`/`Right` step through entries, `Esc` goes back. Roles in `settings.ui.hide_trace` are left out.
 - `/config` shows the resolved config, without secrets or Lua bodies.
 - `/reload` runs the config again. If it fails, the old config stays.
+- `/stop` stops the turn, background tasks, hooks, and commands, also when the session is idle.
 - `/quit` exits.
 
-Custom commands from `commands = { name = function() ... end }` show up in the same picker and run as Lua jobs ([Config](config.md#commands-and-open)). Built-in names cannot be overridden.
+Custom commands from `commands = { name = function() ... end }` show up in the same picker and run as Lua jobs ([Config](config.md#commands-and-settingsopen)). Built-in names cannot be overridden.

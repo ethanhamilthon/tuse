@@ -6,11 +6,19 @@ Documentation topics shared by the agent (`docs()`) and the site, and the agent 
 ## Requirements
 
 ### Requirement: Documentation topics
-Tuse SHALL ship exactly seven documentation topics, in this order: `readme`, `usage`, `connect`, `config`, `lua`, `session`, `json`. `readme` SHALL be the content of `README.md` and every other topic the content of `docs/<topic>.md`, embedded at build time. The build MUST fail when a listed page is missing or when `docs/` holds any other `.md` file.
+Tuse SHALL ship exactly eight documentation topics, in this order: `readme`, `usage`, `connect`, `config`, `lua`, `session`, `json`, `examples`. `readme` SHALL be the content of `README.md` and every other topic the content of `docs/<topic>.md`, embedded at build time. The build MUST fail when a listed page is missing or when `docs/` holds any other `.md` file.
 
 #### Scenario: Listing topics
 - **WHEN** the agent calls `docs()`
-- **THEN** it gets one `- <topic> — <summary>` line per topic in the fixed order, where the summary is the first paragraph after the page title, followed by the `Call docs("<topic>")` hint
+- **THEN** it gets one `- <topic> — <summary>` line per topic in the fixed order, ending with `examples`, followed by the `Call docs("<topic>")` hint
+
+#### Scenario: Reading examples
+- **WHEN** the agent calls `docs("examples")`
+- **THEN** it gets the content of `docs/examples.md`
+
+#### Scenario: Stray page
+- **WHEN** `docs/extra.md` exists or `docs/examples.md` is missing
+- **THEN** `cargo build` fails
 
 #### Scenario: Reading a topic
 - **WHEN** the agent calls `docs(" Config.md ")`
@@ -23,10 +31,6 @@ Tuse SHALL ship exactly seven documentation topics, in this order: `readme`, `us
 #### Scenario: Reading the README
 - **WHEN** the agent calls `docs("README.md")` or `docs("readme")`
 - **THEN** it gets the content of `README.md`
-
-#### Scenario: Stray page
-- **WHEN** `docs/extra.md` exists or `docs/json.md` is missing
-- **THEN** `cargo build` fails
 
 ### Requirement: Topics cover the public surface
 The topics SHALL document every public surface: `usage` every CLI subcommand and every built-in slash command, `lua` every host function in `HOST_FUNCTIONS`, `config` every `require("tuse")` export, and `json` every JSON-RPC method.

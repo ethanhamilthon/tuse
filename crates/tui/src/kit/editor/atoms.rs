@@ -8,7 +8,7 @@ pub struct Atom {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AtomKind {
-    Prompt(String),
+    Prompt(String, Option<String>),
     File(PathBuf),
     Image { id: usize, path: PathBuf },
 }
@@ -43,10 +43,40 @@ impl Editor {
     pub(super) fn prompts(&self) -> Vec<String> {
         self.active()
             .filter_map(|k| match k {
-                AtomKind::Prompt(n) => Some(n.clone()),
+                AtomKind::Prompt(n, None) => Some(n.clone()),
+                AtomKind::Prompt(n, Some(a)) => Some(format!("{n} {a}")),
                 _ => None,
             })
             .collect()
+    }
+
+    pub fn prompt_before_token(&self) -> Option<String> {
+        let (start, _) = self.token();
+        if start < 2 || self.buf[start - 1] != ' ' {
+            return None;
+        }
+        match self.atom(self.buf[start - 2]).map(|a| &a.kind) {
+            Some(AtomKind::Prompt(n, None)) => Some(n.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn set_prompt_arg(&mut self, arg: &str) {
+        let (start, _) = self.token();
+        if self.prompt_before_token().is_none() {
+            return;
+        }
+        let c = self.buf[start - 2];
+        let end = self.cursor;
+        self.buf.drain(start - 1..end);
+        self.cursor = start - 1;
+        if let Some(i) = super::atom_index(c)
+            && let Some(atom) = self.atoms.get_mut(i)
+            && let AtomKind::Prompt(n, _) = &atom.kind
+        {
+            atom.label = format!("#{n} {arg}");
+            atom.kind = AtomKind::Prompt(n.clone(), Some(arg.to_string()));
+        }
     }
 
     pub(super) fn files(&self) -> Vec<PathBuf> {
@@ -120,12 +150,18 @@ mod tests {
         let mut e = Editor::default();
         e.insert("#typed @typed ");
         e.insert_atom("@b.txt", AtomKind::File("b.txt".into()));
-        e.insert_atom("#p", AtomKind::Prompt("p".into()));
-        e.insert_atom("#q", AtomKind::Prompt("q".into()));
+        e.insert_atom("#p", AtomKind::Prompt("p".into(), None));
+        e.insert_atom("#q", AtomKind::Prompt("q".into(), None));
         e.backspace();
         assert_eq!(e.prompts(), ["p"]);
+        e.insert(" ap");
+        assert_eq!(e.prompt_before_token().as_deref(), Some("p"));
+        e.set_prompt_arg("apply");
+        assert_eq!(e.prompts(), ["p apply"]);
+        assert_eq!(e.text(), "#typed @typed @b.txt#p apply");
+        e.insert(" ");
+        assert_eq!(e.prompt_before_token(), None);
         assert_eq!(e.files(), [PathBuf::from("b.txt")]);
         assert!(e.images().is_empty());
-        assert_eq!(e.text(), "#typed @typed @b.txt#p");
     }
 }

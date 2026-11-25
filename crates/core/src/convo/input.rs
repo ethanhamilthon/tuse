@@ -7,7 +7,7 @@ pub const FILE_LIMIT: usize = 1024;
 
 #[derive(Debug, Default)]
 pub struct Refs {
-    pub prompts: Vec<(String, String)>,
+    pub prompts: Vec<(String, Option<String>, String)>,
     pub images: Vec<(usize, PathBuf)>,
     pub files: Vec<PathBuf>,
     pub strict: bool,
@@ -18,11 +18,15 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
     let mut input = UserInput::text(text);
     let mut blocks: Vec<String> = vec![];
     let mut seen: Vec<&str> = vec![];
-    for (name, body) in &refs.prompts {
+    for (name, arg, body) in &refs.prompts {
         if !seen.contains(&name.as_str()) {
             seen.push(name);
+            let arg = arg
+                .as_deref()
+                .map(|a| format!(" arg=\"{}\"", esc(a)))
+                .unwrap_or_default();
             blocks.push(format!(
-                "<prompt name=\"{}\">{}</prompt>",
+                "<prompt name=\"{}\"{arg}>{}</prompt>",
                 esc(name),
                 body.trim_end()
             ));
@@ -156,9 +160,9 @@ mod tests {
     fn prompts_are_deduplicated_and_text_stays_clean() {
         let refs = Refs {
             prompts: vec![
-                ("a".into(), "one\nline  \n".into()),
-                ("b\"".into(), "two".into()),
-                ("a".into(), "again".into()),
+                ("a".into(), None, "one\nline  \n".into()),
+                ("b\"".into(), Some("x".into()), "two".into()),
+                ("a".into(), None, "again".into()),
             ],
             ..Refs::default()
         };
@@ -166,7 +170,7 @@ mod tests {
         assert_eq!(i.text, "#a #b #a");
         assert_eq!(
             i.context,
-            "<prompt name=\"a\">one\nline</prompt>\n<prompt name=\"b&quot;\">two</prompt>"
+            "<prompt name=\"a\">one\nline</prompt>\n<prompt name=\"b&quot;\" arg=\"x\">two</prompt>"
         );
     }
 

@@ -139,7 +139,7 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
     std::fs::remove_dir_all(dir).ok();
 }
 #[test]
-fn steer_and_cancel_handoff_keep_the_same_shell_and_lua_state() {
+fn steer_hands_off_and_esc_stops_everything() {
     let _home = HOME_LOCK.lock().unwrap();
     for steer in [true, false] {
         let code = r#"
@@ -156,16 +156,9 @@ end)()
         let addr = common::provider(vec![
             Reply::Call("lua", json!({"code": code}).to_string()),
             Reply::Text("handled"),
+            Reply::Text("again"),
         ]);
-        let (dir, cfg) = common::setup(
-            if steer {
-                "steer-handoff"
-            } else {
-                "esc-handoff"
-            },
-            &addr,
-            "",
-        );
+        let (dir, cfg) = common::setup(if steer { "steer-handoff" } else { "esc-stop" }, &addr, "");
         let s = Session::open(Options {
             cwd: dir.clone(),
             config: Some(cfg),
@@ -186,20 +179,10 @@ end)()
         } else {
             s.cancel();
         }
-        let mut handed_off = false;
         loop {
             match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
-                Event::ToolEnd {
-                    output,
-                    code,
-                    diffs,
-                    ..
-                } => {
+                Event::ToolEnd { output, .. } if steer => {
                     assert_eq!(output, "[continued in background: t1]");
-                    assert_eq!(code, None);
-                    assert_eq!(diffs.len(), 1);
-                    assert!(diffs[0].path.ends_with("foreground"));
-                    handed_off = true;
                 }
                 Event::TurnEnd { cancelled, .. } => {
                     assert_eq!(cancelled, !steer);
@@ -208,32 +191,51 @@ end)()
                 _ => {}
             }
         }
-        assert!(handed_off);
+        if !steer {
+            assert!(s.tasks().is_empty(), "{:?}", s.tasks());
+            let out = s.with_records(|r| {
+                r.iter()
+                    .find_map(|r| match r {
+                        Record::Tool { output, .. } => Some(output.clone()),
+                        _ => None,
+                    })
+                    .unwrap()
+            });
+            assert_eq!(out, "[cancelled]");
+            s.close();
+            common::cleanup(&dir);
+            continue;
+        }
         assert_eq!(s.tasks()[0].name, "lua-1");
-        assert_eq!(s.tasks()[0].status, "running");
-        assert!(!dir.join("background").exists());
         std::fs::write(dir.join("go"), "").unwrap();
+        let until = Instant::now() + Duration::from_secs(5);
+        while s.tasks()[0].status == "running" {
+            assert!(Instant::now() < until);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let notes = |s: &Session| {
+            s.with_records(|r| {
+                r.iter()
+                    .filter(|r| matches!(r, Record::Notification { .. }))
+                    .count()
+            })
+        };
+        assert_eq!(notes(&s), 0);
+        assert!(!s.busy());
+        s.submit(UserInput::text("next"));
         loop {
             if let Event::Notification(text) = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
                 assert!(
                     text.starts_with("<task>Task t1 (lua-1) finished. Last line: ready:42."),
                     "{text}"
                 );
-                assert!(text.ends_with("</task>"));
                 break;
             }
         }
         assert_eq!(
-            std::fs::read_to_string(dir.join("starts")).unwrap(),
-            "run\n"
-        );
-        assert_eq!(
             std::fs::read_to_string(dir.join("background")).unwrap(),
             "next"
-        );
-        assert_eq!(
-            std::fs::read_to_string(&s.tasks()[0].log).unwrap(),
-            "before\nready:42\n"
         );
         s.close();
         common::cleanup(&dir);

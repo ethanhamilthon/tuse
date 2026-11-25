@@ -49,13 +49,13 @@ Send `initialize` first. Only `shutdown` is accepted before it. `protocolVersion
 ### Turns
 
 - `turn.submit` `{text, prompts?, images?, files?}` → `{inputId, queued}`.
-  - `prompts` are names from config `prompts`.
+  - `prompts` are names from config `prompts`, or `"name arg"` for a prompt with `args`. An unknown arg or a failing `run` fails with `-32000`.
   - `images` are `data:` URLs or file paths.
   - `files` are files or folders, attached like `@` in the TUI ([Usage](usage.md#typing-a-message)).
   - Unknown or missing references fail with `-32000`, and so does empty input.
   - `queued: true` means a turn was already running, so this is a steering message.
 - `turn.withdraw` `{inputId}` → `true` if the queued message was removed before the agent read it.
-- `turn.cancel` → `null`. Cancels the turn, hooks, and commands, and hands off a running `lua` call ([Session](session.md#a-turn)).
+- `turn.cancel` → `null`. Stops everything like Esc: the turn, the running `lua` call, tasks, hooks, and commands ([Session](session.md#a-turn)).
 
 ### Sessions
 
@@ -82,13 +82,13 @@ For `session.new` and `session.resume`, events left over from the old session ar
 
 ### Config
 
-- `config.get` → the resolved config: `settings`, `theme`, `models`, `systems`, `prompts`, `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands`, `open`, and `path` (`""` when the defaults are used). Secrets and Lua function bodies are left out.
+- `config.get` → the resolved config: `settings`, `theme`, `models`, `systems`, `prompts` (`{kind: "text" | "function", body, args}`), `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands`, `settings.open`, and `path` (`""` when the defaults are used). Secrets and Lua function bodies are left out.
 - `config.reload` → `null`, or `-32000` with the reason. If the reload fails, the old config stays.
 - `config.set` `{key: "model" | "effort", value}` → `null`. Deprecated, use `model.set`.
 
 ### Tasks and commands
 
-- `tasks.list` → `[{id, name, status, started, ended, log}]`.
+- `tasks.list` → `[{id, name, status, started, ended, log, code}]`.
 - `tasks.get` `{id, lines?}` → the same fields plus `output`, the last `lines` lines of the log (default 50).
 - `tasks.stop` `{id}` → the task.
 - `commands.list` → names of the custom commands.

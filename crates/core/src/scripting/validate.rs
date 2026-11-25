@@ -9,6 +9,13 @@ pub(crate) fn table(lua: &Lua, t: &Table, source: &str) -> Result<tuse_config::C
     {
         return fail("plugins".into(), "unknown key");
     }
+    if !t
+        .raw_get::<Value>("open")
+        .map_err(|e| e.to_string())?
+        .is_nil()
+    {
+        return fail("open".into(), "moved to settings.open");
+    }
     validate_functions(t, source)?;
     for (name, v) in entries(t, "hooks") {
         let Value::Table(entry) = v else { continue };
@@ -19,14 +26,77 @@ pub(crate) fn table(lua: &Lua, t: &Table, source: &str) -> Result<tuse_config::C
             Err(e) => return fail(format!("hooks.{name}.run"), &e.to_string()),
         }
     }
-    for key in ["commands", "open"] {
-        for (name, v) in entries(t, key) {
+    for (name, v) in entries(t, "commands") {
+        if !matches!(v, Value::Function(_)) {
+            return fail(format!("commands.{name}"), &expected(&v));
+        }
+    }
+    if let Some(s) = sub(t, "settings") {
+        for (name, v) in entries(&s, "open") {
             if !matches!(v, Value::Function(_)) {
-                return fail(format!("{key}.{name}"), &expected(&v));
+                return fail(format!("settings.open.{name}"), &expected(&v));
             }
         }
     }
+    for (name, v) in entries(t, "prompts") {
+        if let Value::Table(p) = v {
+            validate_prompt(&p).map_err(|(k, m)| format!("{source}: prompts.{name}{k}: {m}"))?;
+        }
+    }
     tuse_config::from_value(json(lua, t), source)
+}
+
+fn sub(t: &Table, key: &str) -> Option<Table> {
+    match t.raw_get::<Value>(key) {
+        Ok(Value::Table(s)) => Some(s),
+        _ => None,
+    }
+}
+
+fn validate_prompt(p: &Table) -> Result<(), (String, String)> {
+    for pair in p.pairs::<Value, Value>().flatten() {
+        let k = key_str(&pair.0);
+        if k != "args" && k != "run" {
+            return Err((format!(".{k}"), "unknown key".into()));
+        }
+    }
+    match p.raw_get::<Value>("run") {
+        Ok(Value::Function(_)) => {}
+        Ok(Value::Nil) => return Err((".run".into(), "is required".into())),
+        Ok(other) => return Err((".run".into(), expected(&other))),
+        Err(e) => return Err((".run".into(), e.to_string())),
+    }
+    let args = match p.raw_get::<Value>("args") {
+        Ok(Value::Nil) => return Ok(()),
+        Ok(Value::Table(a)) => a,
+        Ok(other) => {
+            return Err((
+                ".args".into(),
+                format!("expected list of strings, got {}", other.type_name()),
+            ));
+        }
+        Err(e) => return Err((".args".into(), e.to_string())),
+    };
+    let mut seen = vec![];
+    for (i, v) in args.sequence_values::<Value>().enumerate() {
+        let at = format!(".args[{}]", i + 1);
+        let s = match v {
+            Ok(Value::String(s)) => s.to_string_lossy(),
+            Ok(other) => return Err((at, format!("expected string, got {}", other.type_name()))),
+            Err(e) => return Err((at, e.to_string())),
+        };
+        if s.is_empty() {
+            return Err((at, "must not be empty".into()));
+        }
+        if s.chars().any(char::is_whitespace) {
+            return Err((at, "must not contain whitespace".into()));
+        }
+        if seen.contains(&s) {
+            return Err((at, format!("duplicate arg `{s}`")));
+        }
+        seen.push(s);
+    }
+    Ok(())
 }
 
 fn validate_functions(t: &Table, source: &str) -> Result<(), String> {
@@ -111,12 +181,35 @@ fn json(lua: &Lua, t: &Table) -> serde_json::Value {
             }
             obj.insert("functions".into(), serde_json::Value::Object(map));
         }
-        for key in ["commands", "open"] {
-            if t.raw_get::<Value>(key).is_ok_and(|v| v.is_table()) {
-                let mut names: Vec<String> = entries(t, key).into_iter().map(|e| e.0).collect();
-                names.sort();
-                obj.insert(key.into(), serde_json::json!(names));
+        if t.raw_get::<Value>("commands").is_ok_and(|v| v.is_table()) {
+            let mut names: Vec<String> = entries(t, "commands").into_iter().map(|e| e.0).collect();
+            names.sort();
+            obj.insert("commands".into(), serde_json::json!(names));
+        }
+        if let Some(s) = sub(t, "settings")
+            && let Some(so) = obj.get_mut("settings").and_then(|v| v.as_object_mut())
+            && s.raw_get::<Value>("open").is_ok_and(|v| v.is_table())
+        {
+            let mut names: Vec<String> = entries(&s, "open").into_iter().map(|e| e.0).collect();
+            names.sort();
+            so.insert("open".into(), serde_json::json!(names));
+        }
+        if sub(t, "prompts").is_some() {
+            let mut map = serde_json::Map::new();
+            for (name, v) in entries(t, "prompts") {
+                let p = match v {
+                    Value::Table(p) => {
+                        let args = match p.raw_get::<Value>("args") {
+                            Ok(a @ Value::Table(_)) => to_json(lua, a),
+                            _ => serde_json::json!([]),
+                        };
+                        serde_json::json!({"kind": "function", "args": args})
+                    }
+                    other => to_json(lua, other),
+                };
+                map.insert(name, p);
             }
+            obj.insert("prompts".into(), serde_json::Value::Object(map));
         }
     }
     raw

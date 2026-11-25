@@ -271,7 +271,6 @@ impl App {
                     prompt: entry.prompt,
                     value: entry.value,
                 });
-                self.scroll = 0;
             }
         }
     }

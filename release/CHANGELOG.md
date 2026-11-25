@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.5
+
+- **Examples.** New `examples/` folder (skills, MCP, themes, rename, notifications, tmux, Zellij, cmux, Herdr, Orca, Rex, web search, sandbox, commands, open handlers, OpenSpec, project config) and a new `examples` docs topic that links them.
+- **Esc stops everything.** Esc, the new `/stop`, and `turn.cancel` stop the turn, the running `lua` call (`[cancelled]`), background tasks, hooks, commands, and open prompts. Steering still hands the running call off to `/tasks`.
+- **Task messages wait.** A task that finishes while the session is idle no longer starts a turn. Its message goes with your next message.
+- **Prompts with args.** `prompts = { openspec = { args = { "propose", "apply" }, run = function(arg) ... end } }`. Pick `#openspec propose` in the TUI or send `"openspec propose"` over JSON-RPC. The model only sees what `run` returns.
+- **Breaking: `open` moved to `settings.open`.** A top-level `open` key now fails with `open: moved to settings.open`.
+- **New UI settings.** `settings.ui.hide_trace` hides trace roles in `/trace`, and `settings.ui.scope_models` limits `/models`.
+- **Full trace.** The trace now also shows task, command, and `open` runs (with code), compaction, usage, model changes, turn ends, titles, `show()` blocks, and `pick`/`ask` answers.
+- **TUI.** `/tasks` shows task details with its source and elapsed time. `/config` lists models and every setting. The chat no longer jumps to new output while you are scrolled up.
+
 ## 0.10.4
 
 - **New docs.** Six pages in `docs/` (`usage`, `connect`, `config`, `lua`, `session`, `json`) plus the README. The agent reads the same pages with `docs("<topic>")`, and the site is built from them with mdBook (`make site`). Old `docs()` topics such as `functions`, `tool`, `commands`, and `hooks` are gone.

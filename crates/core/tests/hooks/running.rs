@@ -41,9 +41,9 @@ return {{
   commands = {{
     boom = function() error("cmd fail") end,
   }},
-  open = {{
+  settings = {{ open = {{
     md = function(path) return "opened:" .. path end,
-  }},
+  }} }},
   hooks = {{
     watch = {{
       events = {{"lua_start", "lua_end"}},
@@ -107,7 +107,7 @@ return {{
     assert!(
         lines
             .iter()
-            .any(|l| l.starts_with("start|") && l.contains("|task|bg|false")),
+            .any(|l| l.starts_with("start|") && l.contains("|task|bg|true")),
         "{all}"
     );
     assert!(

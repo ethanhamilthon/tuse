@@ -56,20 +56,25 @@ impl App {
             out
         };
         let mut out = vec![vec![span(format!("╭{}╮", RULE_CHAR.repeat(w)), border)]];
-        out.extend(self.input_rows(view, rows, top).into_iter().map(surround));
-        out.resize_with(3, || surround(vec![]));
+        out.extend(
+            self.input_rows(view, rows, top, true)
+                .into_iter()
+                .map(surround),
+        );
+        out.push(surround(vec![]));
         let (mark, mut activity, model) = self.input_status(w);
         if !mark.is_empty() && !activity.is_empty() {
             activity.push(span(" ", Style::default()));
         }
         activity.extend(mark);
-        let split = if activity.is_empty() {
-            0
+        let gap = 3;
+        let model_room = if activity.is_empty() {
+            w
         } else {
-            w.div_ceil(2)
+            w.saturating_sub(line_width(&activity) + gap).max(w / 2)
         };
-        let model = label(model, w - split);
-        let room = w.saturating_sub(line_width(&model) + usize::from(!model.is_empty()));
+        let model = label(model, model_room);
+        let room = w.saturating_sub(line_width(&model) + if model.is_empty() { 0 } else { gap });
         let mut status = label(activity, room);
         status.push(span(
             " ".repeat(w - line_width(&status) - line_width(&model)),
@@ -91,7 +96,7 @@ impl App {
         let (mark, working, model) = self.input_status(w);
         let working = label(working, w.saturating_sub(line_width(&mark)));
         let mut out = vec![rule(&self.palette, w, mark, working)];
-        out.extend(self.input_rows(view, rows, top));
+        out.extend(self.input_rows(view, rows, top, false));
         out.push(rule(&self.palette, w, vec![], label(model, w)));
         out
     }
@@ -101,14 +106,19 @@ impl App {
         view: &crate::kit::editor::View,
         rows: &[String],
         top: usize,
+        boxed: bool,
     ) -> Vec<Line> {
         let p = &self.palette;
         let dim = self.steering.is_some() && self.saved_editor.is_none();
         let style = Style::fg(if dim { p.dim } else { p.fg });
-        let left = crate::kit::text::width(INPUT_PREFIX);
+        let left = if boxed {
+            1
+        } else {
+            crate::kit::text::width(INPUT_PREFIX)
+        };
         let mut out = vec![];
         for (i, text) in rows.iter().enumerate() {
-            let prefix = if i == 0 {
+            let prefix = if i == 0 && !boxed {
                 INPUT_PREFIX.to_string()
             } else {
                 " ".repeat(left)

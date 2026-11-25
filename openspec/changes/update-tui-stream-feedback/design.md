@@ -12,4 +12,4 @@ Keep pending Lua call metadata and leading whitespace off-screen until there is 
 
 ## Boxed geometry
 
-Use one geometry calculation for the frame, wrapped editor rows, cursor, selections and hit testing. At normal size the box takes exactly five rows regardless of draft length or phase. The editor scrolls within its two-row viewport; `input_max_height` can reduce visible draft rows but cannot expand the box. The lower status row is above the bottom border. At insufficient width or height, use the classic layout without changing the configured style. Size changes and config reload recalculate geometry without dropping the draft.
+Use one geometry calculation for the frame, wrapped editor rows, cursor, selections and hit testing. The box takes the editor rows plus four: top border, blank row, status row, bottom border. Editor rows grow with the draft up to `input_max_height` and the viewport, then scroll. Boxed rows have a one-column left padding instead of the prompt arrow. At insufficient width or height, use the classic layout without changing the configured style. Size changes and config reload recalculate geometry without dropping the draft.

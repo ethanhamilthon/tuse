@@ -42,11 +42,11 @@ The TUI MUST NOT reserve a chat row or show an inline Lua star for a tool announ
 - **THEN** the pending preview is discarded without ever appearing in chat
 
 ### Requirement: Boxed input composer
-When `settings.ui.input_style` is `boxed` and the viewport fits, the composer SHALL occupy exactly five terminal rows: a top border, two editor rows, a status row inside the border, and a bottom border. Side borders SHALL enclose the three interior rows. The status row SHALL place activity and notices on the left and the model/context label on the right; labels MUST be clipped rather than overlap. A longer draft SHALL scroll inside the editor area with the cursor visible. `input_max_height` MAY limit the visible draft rows but MUST NOT expand or shrink the box. The classic composer SHALL be used when the box cannot fit, without changing the configured style or losing the draft. Both styles SHALL retain editing, completion, mouse and selection behavior.
+When `settings.ui.input_style` is `boxed` and the viewport fits, the composer SHALL consist of a top border, the editor rows, one blank row, a status row, and a bottom border. Editor rows SHALL have no prompt arrow. The editor SHALL grow with the draft like the classic composer, limited by `input_max_height` and the viewport, and scroll beyond that with the cursor visible. Exactly one blank row SHALL separate the last editor row from the status row. Side borders SHALL enclose all interior rows. The status row SHALL place activity and notices on the left and the model/context label on the right; labels MUST be clipped rather than overlap. The classic composer SHALL be used when the box cannot fit, without changing the configured style or losing the draft. Both styles SHALL retain editing, completion, mouse and selection behavior.
 
 #### Scenario: Boxed composer with a multiline draft
-- **WHEN** boxed input is configured in a terminal with sufficient space and the draft wraps to more than two rows
-- **THEN** the five-row box stays fixed, the editor scrolls to keep the cursor visible, and the status row keeps activity on the left and model/context on the right
+- **WHEN** boxed input is configured in a terminal with sufficient space and the draft wraps to more than one row
+- **THEN** the box grows by one row per draft row, one blank row stays above the status row, and the status row keeps activity on the left and model/context on the right
 
 #### Scenario: Resize or reload
 - **WHEN** the terminal becomes too small for the box, grows again, or `/reload` changes the input style

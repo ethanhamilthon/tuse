@@ -23,8 +23,12 @@ impl App {
         let ui = &p.ui;
         let pad = ui.pad_x as usize;
         let inner = w.saturating_sub(pad * 2).max(1);
-        let left = crate::kit::text::width(crate::kit::style::INPUT_PREFIX);
-        let boxed = ui.input_style == tuse_config::InputStyle::Boxed && h >= 5 && inner >= left + 3;
+        let boxed = ui.input_style == tuse_config::InputStyle::Boxed && h >= 5 && inner >= 4;
+        let left = if boxed {
+            1
+        } else {
+            crate::kit::text::width(crate::kit::style::INPUT_PREFIX)
+        };
         let editor_w = inner - if boxed { 2 } else { 0 };
         let input_col = pad + left + usize::from(boxed);
         let text_w = editor_w.saturating_sub(left).max(1);
@@ -34,18 +38,21 @@ impl App {
         let head = usize::from(h > 1);
         let foot = usize::from(h > 2);
         let editor_room = if boxed {
-            2
+            h - 4
         } else {
             h.saturating_sub(head + foot).max(1)
         };
-        let editor_rows = if boxed { 2 } else { view.rows.len() };
-        let input_h = tuse_config::limit(ui.input_max_height, editor_rows)
+        let input_h = tuse_config::limit(ui.input_max_height, view.rows.len())
             .max(1)
             .min(editor_room);
         let input_top = crow
             .saturating_sub(input_h.saturating_sub(1))
             .min(view.rows.len().saturating_sub(input_h));
-        let fixed = if boxed { 5 } else { input_h + head + foot };
+        let fixed = if boxed {
+            input_h + 4
+        } else {
+            input_h + head + foot
+        };
         let chat_h = h.saturating_sub(fixed);
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
@@ -121,7 +128,7 @@ impl App {
             .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
 
         let first = if boxed {
-            h - 4
+            h - input_h - 3
         } else {
             h.saturating_sub(input_h + foot)
         };
@@ -159,10 +166,12 @@ mod tests {
         app.display_flash("Waiting");
         let frame = app.compose(80, 10);
         let area = app.input_area.unwrap();
-        assert_eq!((area.row, area.col, area.height, area.top), (6, 3, 2, 2));
-        assert_eq!(frame.cursor, Some((7, 7)));
-        assert!(frame.screen[5..].iter().all(|row| line_width(row) == 80));
-        assert!(frame.screen[5][0].text.starts_with('╭'));
+        assert_eq!((area.row, area.col, area.height, area.top), (3, 2, 4, 0));
+        assert_eq!(frame.cursor, Some((6, 6)));
+        assert!(frame.screen[2..].iter().all(|row| line_width(row) == 80));
+        assert!(frame.screen[2][0].text.starts_with('╭'));
+        assert_eq!(frame.screen[3][1].text, " ");
+        assert!(frame.screen[7][1].text.trim().is_empty());
         assert_eq!(frame.screen[8][1].text, "Waiting");
         assert!(frame.screen[9][0].text.starts_with('╰'));
         assert!(
@@ -172,7 +181,7 @@ mod tests {
                 .flatten()
                 .any(|s| s.text.starts_with('╭'))
         );
-        assert!(app.compose(80, 10).screen[5][0].text.starts_with('╭'));
+        assert!(app.compose(80, 10).screen[2][0].text.starts_with('╭'));
         assert_eq!(app.editor.text(), "one\ntwo\nthree\nfour");
         cleanup(app);
     }

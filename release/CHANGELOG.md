@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.4
+
+- Boxed input drops the prompt arrow, grows with the draft like the classic input, and keeps one blank row above its status bar. Its status labels keep a three-column gap and are no longer clipped while they fit.
+
 ## 0.11.3
 
 - The terminal draws the first streamed content without waiting for keyboard polling. Empty Lua previews no longer flash in the chat.

@@ -18,6 +18,13 @@ impl App {
             pump.dirty = true;
             pump.immediate |= !stream;
         }
+        if std::mem::take(&mut self.refresh_history) {
+            self.chat = crate::ui::chat::Chat::from_session(&self.session);
+            self.streaming = None;
+            self.thinking = None;
+            self.pending_tools.clear();
+            self.streamed_text = false;
+        }
         if self.flash.as_ref().is_some_and(|(_, since)| {
             since.elapsed() >= std::time::Duration::from_secs(crate::kit::style::FLASH_SECS)
         }) {
@@ -188,13 +195,13 @@ impl App {
                 }
             }
             Event::Status(_) => {}
-            Event::Flash(t) => self.flash(t),
-            Event::Notice(t) => self.notice(t),
+            Event::Flash(t) => self.display_flash(t),
+            Event::Notice(t) => self.chat.push(Entry::Notice(t)),
             Event::Notification(_) => {}
             Event::Error(t) => {
                 self.turn_error = Some(t.clone());
                 self.drop_pending();
-                self.error(t)
+                self.chat.push(Entry::Error(t));
             }
             Event::TurnEnd {
                 elapsed,
@@ -224,6 +231,9 @@ impl App {
             }
             Event::Usage => {}
             Event::Reloaded => self.restyle(),
+            Event::HistoryReplaced => {
+                self.refresh_history = true;
+            }
             Event::Models => {
                 if matches!(&self.picker, Some(p) if p.kind == crate::ui::picker::Kind::Model) {
                     self.open_models();

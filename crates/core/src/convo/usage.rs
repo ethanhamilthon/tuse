@@ -1,5 +1,5 @@
 use tuse_api::Usage;
-use tuse_config::{ModelDef, Prices};
+use tuse_config::Prices;
 
 pub fn cost(u: &Usage, p: &Prices) -> f64 {
     let plain = u.input.saturating_sub(u.cached + u.cache_write);
@@ -24,49 +24,28 @@ pub struct Stats {
     pub calls: usize,
 }
 
-fn find_model<'a>(models: &'a [ModelDef], full: &str) -> Option<&'a ModelDef> {
-    models.iter().rev().find(|m| m.name == full)
-}
-
 impl Stats {
-    pub(crate) fn add(&mut self, r: &crate::convo::record::Record, models: &[ModelDef]) {
+    pub(crate) fn of(m: &crate::storage::store::Meta, records: &[crate::Record]) -> Self {
         use crate::convo::record::Record;
-        match r {
-            Record::Usage {
-                model,
-                usage: u,
-                llm,
-            } => {
-                self.totals.add(u);
-                if *llm {
-                    self.llm_requests += 1;
-                } else {
-                    self.requests += 1;
-                }
-                if let Some(p) = find_model(models, model).and_then(|d| d.prices.as_ref()) {
-                    let c = cost(u, p);
-                    self.cost += c;
-                    if *llm {
-                        self.llm_cost += c;
-                    }
-                    self.priced = true;
-                }
-            }
-            Record::Assistant { .. } => {
-                self.steps += 1;
-            }
-            Record::TurnEnd { calls, .. } => {
-                self.turns += 1;
-                self.calls += calls;
-            }
-            _ => {}
-        }
-    }
-
-    pub(crate) fn of(records: &[crate::convo::record::Record], models: &[ModelDef]) -> Stats {
-        let mut s = Stats::default();
+        let mut s = Self {
+            totals: m.usage,
+            cost: m.cost,
+            llm_cost: m.llm_cost,
+            priced: m.priced,
+            context: m.ctx,
+            ..Self::default()
+        };
         for r in records {
-            s.add(r, models);
+            match r {
+                Record::Usage { llm: true, .. } => s.llm_requests += 1,
+                Record::Usage { .. } => s.requests += 1,
+                Record::Assistant { .. } => s.steps += 1,
+                Record::TurnEnd { calls, .. } => {
+                    s.turns += 1;
+                    s.calls += calls;
+                }
+                _ => {}
+            }
         }
         s
     }

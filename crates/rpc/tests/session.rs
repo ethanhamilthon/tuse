@@ -78,13 +78,19 @@ fn a_client_drives_a_session() {
         ),
         (json!("json"), json!("p/m"), json!("p"), json!(2), json!(1))
     );
-    assert!(snap["trace"].as_array().unwrap().len() >= 4);
+    assert!(snap["history"].as_array().unwrap().len() >= 4);
     assert_eq!(snap["ctx_size"], 50000);
     let config = call(62, "config.get", json!({}))["result"].clone();
     assert_eq!(config["models"][0]["display"], "M");
     assert!(config.get("plugins").is_none());
-    let records = call(7, "session.records", json!({}))["result"].clone();
-    assert!(records.as_array().unwrap().iter().any(|r| r["t"] == "tool"));
+    let records = call(7, "session.history", json!({}))["result"].clone();
+    assert!(
+        records
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["role"] == "lua")
+    );
     assert_eq!(
         call(8, "tasks.get", json!({"id": "t9"}))["error"]["code"],
         -32000

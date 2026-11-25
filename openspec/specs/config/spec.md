@@ -5,6 +5,8 @@ Config keys and their validation.
 
 ## Requirements
 
+1
+
 ### Requirement: Open handlers under settings
 `open` SHALL be read from `settings.open` (`ext -> function(path)`). A top-level `open` key MUST fail with `open: moved to settings.open`.
 
@@ -16,16 +18,20 @@ Config keys and their validation.
 - **WHEN** a config returns `{ settings = { open = { md = f } } }` and a `.md` path is clicked
 - **THEN** `f` is called with the path
 
-### Requirement: Trace filter setting
-`settings.ui.hide_trace` SHALL be a list of trace roles hidden from the TUI `/trace` list. Unknown roles MUST fail validation. `session().trace` and `session.trace` stay complete.
+### Requirement: History filter setting
+`settings.ui.hide_history` SHALL be a list of history roles hidden from the TUI `/history` list. Unknown roles MUST fail validation. `session().history` and `session.history` stay complete. `hide_trace` is removed.
 
 #### Scenario: Hiding hooks
-- **WHEN** `hide_trace = { "hook", "usage" }` and the user opens `/trace`
-- **THEN** no `hook` or `usage` entry is listed, while `session().trace` still has them
+- **WHEN** `hide_history = { "hook", "usage" }` and the user opens `/history`
+- **THEN** no `hook` or `usage` entry is listed, while `session().history` still has them
 
 #### Scenario: Unknown role
-- **WHEN** `hide_trace = { "hooks" }`
-- **THEN** loading fails with ``settings.ui.hide_trace[1]: unknown trace role `hooks` ``
+- **WHEN** `hide_history = { "hooks" }`
+- **THEN** loading fails with ``settings.ui.hide_history[1]: unknown history role `hooks` ``
+
+#### Scenario: Old key
+- **WHEN** a config sets `settings.ui.hide_trace`
+- **THEN** loading fails with an unknown-key error
 
 ### Requirement: Model scope setting
 `settings.ui.scope_models` SHALL be a list of `provider/model` or `provider/*` patterns. When it is non-empty, `/models` SHALL list only matching models plus the current one. `model.list` and `model.set` MUST ignore it.
@@ -54,7 +60,7 @@ A `prompts` value SHALL be a string or a table `{ args?, run }`. `args` is an op
 - **THEN** `run("propose")` builds the body; an arg not in `args` fails with `-32000`
 
 ### Requirement: Config view is complete
-`/config` and `config.get` SHALL show every resolved config field, including `models` (name, display, window, compact_at, prices), `settings.open`, `hide_trace`, `scope_models`, and prompt kinds and args. Secrets and Lua bodies MUST stay hidden.
+`/config` and `config.get` SHALL show every resolved config field, including `models` (name, display, window, prices), `settings.open`, `hide_history`, `scope_models`, and prompt kinds and args. Secrets and Lua bodies MUST stay hidden.
 
 #### Scenario: Models shown
 - **WHEN** the config has `models` and the user opens `/config`
@@ -63,3 +69,15 @@ A `prompts` value SHALL be a string or a table `{ args?, run }`. `args` is an op
 #### Scenario: No field forgotten
 - **WHEN** a field is added to `Config`, `Settings`, or `UiSettings` but not to `/config`
 - **THEN** `cargo test` fails
+
+### Requirement: No compaction settings
+`compact_at` MUST NOT be accepted in `models` entries or in `settings`.
+
+#### Scenario: Old key
+- **WHEN** a config sets `settings.compact_at = 100000`
+- **THEN** loading fails with an unknown-key error for `settings.compact_at`
+
+### Requirement: Trace filter setting`
+- TO: `
+
+### Requirement: History filter setting`

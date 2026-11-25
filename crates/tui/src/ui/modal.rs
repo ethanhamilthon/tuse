@@ -43,8 +43,8 @@ impl App {
     pub(crate) fn open_lua_picker(&mut self, id: u64, options: Vec<String>) {
         self.question = None;
         self.panel = None;
-        self.trace_back = None;
-        self.trace_items.clear();
+        self.history_back = None;
+        self.history_items.clear();
         let items = options
             .into_iter()
             .map(|s| item(s.clone(), "", s))
@@ -55,8 +55,8 @@ impl App {
     pub(crate) fn open_question(&mut self, id: u64, text: String) {
         self.picker = None;
         self.panel = None;
-        self.trace_back = None;
-        self.trace_items.clear();
+        self.history_back = None;
+        self.history_items.clear();
         if self.saved_editor.is_none() {
             self.saved_editor = Some(std::mem::take(&mut self.editor));
         } else {
@@ -105,7 +105,7 @@ mod tests {
     fn search_is_edited_in_the_editor_and_esc_restores_the_draft() {
         let mut app = crate::ui::app::test_app("modal-search");
         app.paste("my draft");
-        let items = ["alpha beta", "gallery", "/trace +lua"]
+        let items = ["alpha beta", "gallery", "/history +lua"]
             .map(|s| item(s, "", s))
             .to_vec();
         app.open_modal(Picker::new(Kind::Resume, items));
@@ -125,10 +125,10 @@ mod tests {
         press(&mut app, KeyCode::Enter, KeyModifiers::SHIFT);
         press(&mut app, KeyCode::End, KeyModifiers::NONE);
         press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
-        app.paste("/trace\n+lu");
-        assert_eq!(app.editor.text(), "/trace +lu");
+        app.paste("/history\n+lu");
+        assert_eq!(app.editor.text(), "/history +lu");
         assert_eq!(app.picker.as_ref().unwrap().kind, Kind::Resume);
-        assert_eq!(labels(&app), ["/trace +lua"]);
+        assert_eq!(labels(&app), ["/history +lua"]);
         press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
         press(&mut app, KeyCode::Char('c'), KeyModifiers::CONTROL);
         assert!(!app.quit && app.picker.is_some());
@@ -226,28 +226,31 @@ mod tests {
     }
 
     #[test]
-    fn trace_picker_opens_detail_panel_and_esc_preserves_selection() {
-        let mut app = crate::ui::app::test_app("modal-trace");
+    fn history_picker_opens_detail_panel_and_esc_preserves_selection() {
+        let mut app = crate::ui::app::test_app("modal-history");
         app.paste("draft");
-        app.trace_items = vec![
-            tuse_core::TraceItem {
+        app.history_items = vec![
+            tuse_core::HistoryItem {
                 role: "system",
                 summary: "You are Tuse".into(),
-                text: "# Heading\n\nBody".into(),
+                fields: Default::default(),
+                detail: "# Heading\n\nBody".into(),
             },
-            tuse_core::TraceItem {
+            tuse_core::HistoryItem {
                 role: "lua",
                 summary: "local x = 1".into(),
-                text: "local x = 1\nlocal s = [[\nline1\nline2\n]]\nreturn x".into(),
+                fields: Default::default(),
+                detail: "local x = 1\nlocal s = [[\nline1\nline2\n]]\nreturn x".into(),
             },
-            tuse_core::TraceItem {
+            tuse_core::HistoryItem {
                 role: "output",
                 summary: "exit 0".into(),
-                text: "exit 0\n\nok".into(),
+                fields: Default::default(),
+                detail: "exit 0\n\nok".into(),
             },
         ];
         let rows: Vec<_> = app
-            .trace_items
+            .history_items
             .iter()
             .enumerate()
             .map(|(i, it)| {
@@ -258,7 +261,7 @@ mod tests {
                 )
             })
             .collect();
-        app.open_modal(Picker::new(Kind::Trace, rows));
+        app.open_modal(Picker::new(Kind::History, rows));
         assert_eq!(labels(&app)[0], "0  system  You are Tuse");
         assert_eq!(labels(&app)[1], "1  lua  local x = 1");
 

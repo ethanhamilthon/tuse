@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn builds_from_a_table_and_checks_it() {
         let c = from_value(
-            json!({"settings": {"ui": {"tool_line": 7, "hide_trace": ["hook"], "scope_models": ["a/*"]}, "open": ["md"]},
+            json!({"settings": {"ui": {"tool_line": 7, "hide_history": ["hook"], "scope_models": ["a/*"]}, "open": ["md"]},
                 "theme": {"accent": "blue", "info": "green"},
                 "prompts": {"a": "x", "b": {"kind": "function", "args": ["p"]}},
                 "systems": {}, "hooks": {"h": {"events": ["user_message"]}}}),
@@ -74,7 +74,13 @@ mod tests {
         assert_eq!(c.prompts["b"].args, ["p"]);
         assert!(crate::scope_matches(&c.settings.ui.scope_models, "a/m"));
         assert!(!crate::scope_matches(&c.settings.ui.scope_models, "b/m"));
-        assert!(from_value(json!({"settings": {"ui": {"hide_trace": ["hooks"]}}}), "t").is_err());
+        assert!(
+            from_value(
+                json!({"settings": {"ui": {"hide_history": ["hooks"]}}}),
+                "t"
+            )
+            .is_err()
+        );
         assert!(from_value(json!("x"), "t").is_err());
         assert!(from_value(json!({"unknown_key": 1}), "t").is_err());
     }

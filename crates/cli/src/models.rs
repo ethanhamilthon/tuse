@@ -22,13 +22,6 @@ pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
         if m.window > 0 {
             parts.push(format!("{} ctx", tuse_core::tokens(m.window)));
         }
-        if let Some(c) = m.compact_at {
-            parts.push(if c == 0 {
-                "compact off".into()
-            } else {
-                format!("compact {}", tuse_core::tokens(c))
-            });
-        }
         if let Some(p) = m.prices {
             parts.push(format!(
                 "${}/${} (cache ${}/${}) per 1M",

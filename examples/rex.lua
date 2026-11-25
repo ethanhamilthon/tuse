@@ -11,14 +11,13 @@ end
 function M.apply(g)
   g.hooks = g.hooks or {}
   g.hooks.rex = {
-    events = { "user_message", "agent_message", "name_change" },
+    events = { "user_message", "agent_message" },
     run = function(e)
+      run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"$N\"", { N = t.session().name or "Tuse" })
       if e.event == "user_message" then
         run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"tuse: $S\"", { S = "working" })
       elseif e.event == "agent_message" and e.status ~= "working" then
         run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"tuse: $S\"", { S = e.status })
-      elseif e.event == "name_change" then
-        run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"$N\"", { N = e.new })
       end
     end,
   }

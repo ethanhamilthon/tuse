@@ -140,12 +140,12 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
     assert_eq!(st["markdowns"][0]["name"], "pin");
     assert_eq!(st["markdowns"][0]["pin"], true);
     assert!(st["active"].is_null() && st["entries"].as_array().unwrap().is_empty());
-    let recs = call(&tx, &out, 3, "session.records", json!({}))["result"].clone();
+    let recs = call(&tx, &out, 3, "session.history", json!({}))["result"].clone();
     assert!(
         recs.as_array()
             .unwrap()
             .iter()
-            .any(|r| r["t"] == "user" && r["text"] == "hello from tui")
+            .any(|r| r["role"] == "user" && r["text"] == "hello from tui")
     );
     assert!(
         call(

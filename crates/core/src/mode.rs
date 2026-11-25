@@ -30,13 +30,3 @@ pub enum Start {
     New,
     Resume,
 }
-
-impl Start {
-    pub fn reason(self) -> &'static str {
-        match self {
-            Start::Launch => "launch",
-            Start::New => "new",
-            Start::Resume => "resume",
-        }
-    }
-}

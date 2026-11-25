@@ -35,8 +35,8 @@ impl App {
     pub fn run_command(&mut self, name: &str) {
         match name {
             "config" => {
-                self.trace_back = None;
-                self.trace_items.clear();
+                self.history_back = None;
+                self.history_items.clear();
                 self.panel = Some(crate::ui::screen::config_view::panel(
                     &self.session.config(),
                     &self.palette,
@@ -51,30 +51,25 @@ impl App {
             }
             "tasks" => self.open_tasks(),
             "session" => {
-                self.trace_back = None;
-                self.trace_items.clear();
+                self.history_back = None;
+                self.history_items.clear();
                 self.panel = Some(crate::ui::screen::session_view::panel(
                     &self.session,
                     &self.palette,
                 ));
             }
-            "trace" => self.open_trace(),
+            "history" => self.open_history(),
             "stop" => {
                 self.session.cancel();
                 self.steering = None;
                 self.flash("Stopped.");
             }
-            "reload" => match self.session.reload() {
-                Ok(()) => {
+            "reload" => {
+                if self.session.reload().is_ok() {
                     self.restyle();
-                    self.chat = crate::ui::chat::Chat::from_session(&self.session);
-                    self.streaming = None;
-                    self.thinking = None;
-                    self.pending_tools.clear();
                     self.flash("Config reloaded.");
                 }
-                Err(e) => self.error(format!("Reload failed: {e}")),
-            },
+            }
             other if self.session.config().commands.iter().any(|c| c == other) => {
                 if let Err(e) = self.session.run_command(other) {
                     self.error(e);
@@ -97,9 +92,9 @@ impl App {
         self.open_modal(Picker::new(Kind::Resume, items));
     }
 
-    fn open_trace(&mut self) {
-        let hide = self.session.config().settings.ui.hide_trace.clone();
-        let mut items = self.session.trace();
+    fn open_history(&mut self) {
+        let hide = self.session.config().settings.ui.hide_history.clone();
+        let mut items = self.session.history();
         if !hide.is_empty() {
             items.retain(|it| !hide.iter().any(|h| h == it.role));
         }
@@ -114,9 +109,9 @@ impl App {
                 )
             })
             .collect();
-        self.trace_items = items;
-        self.trace_back = None;
-        self.open_modal(Picker::new(Kind::Trace, rows));
+        self.history_items = items;
+        self.history_back = None;
+        self.open_modal(Picker::new(Kind::History, rows));
     }
 
     pub fn open_tasks(&mut self) {
@@ -145,7 +140,7 @@ impl App {
 
     pub fn choose(&mut self) {
         let Some(p) = self.picker.take() else { return };
-        let keep_draft = matches!(p.kind, Kind::Model | Kind::Trace) && p.current().is_some();
+        let keep_draft = matches!(p.kind, Kind::Model | Kind::History) && p.current().is_some();
         if !keep_draft {
             self.restore_draft();
         }
@@ -206,18 +201,18 @@ impl App {
             }
             (Kind::Task, Some(v)) => {
                 if let Some(t) = self.session.task(&v) {
-                    self.trace_back = None;
-                    self.trace_items.clear();
+                    self.history_back = None;
+                    self.history_items.clear();
                     self.panel = Some(Panel::markdown(task_text(&t)));
                 }
             }
-            (Kind::Trace, Some(v)) => {
+            (Kind::History, Some(v)) => {
                 if let Ok(idx) = v.parse::<usize>()
-                    && let Some(it) = self.trace_items.get(idx)
+                    && let Some(it) = self.history_items.get(idx)
                 {
-                    let panel = crate::ui::panel::trace_panel(it);
+                    let panel = crate::ui::panel::history_panel(it);
                     let search = std::mem::take(&mut self.editor);
-                    self.trace_back = Some((p, search));
+                    self.history_back = Some((p, search));
                     self.panel = Some(panel);
                 } else {
                     self.restore_draft();

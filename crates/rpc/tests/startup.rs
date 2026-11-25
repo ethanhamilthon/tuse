@@ -10,8 +10,7 @@ use support::{call, event, spawn};
 #[test]
 fn startup_errors_arrive_after_the_initialize_answer() {
     let addr = common::provider(vec![]);
-    let extra =
-        "  hooks = { broken = { events = {'start'}, run = function() error('boom') end } },";
+    let extra = "  hooks = { broken = { events = {'process_start'}, run = function() error('boom') end } },";
     let (dir, cfg) = common::setup("rpc-early", &addr, extra);
     let session = Session::open(Options {
         cwd: dir.clone(),

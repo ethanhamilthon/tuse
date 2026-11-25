@@ -7,7 +7,7 @@ Blocks are fenced `text` sections under `### name`. Placeholders: `{{names:text}
 ### context-intro
 
 ```text
-This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order, and the compaction note is added once earlier records were dropped. Inside a session this section is rendered for that session's config.
+This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order,. The prompt is stored as the first `system` history record and rebuilt on session creation, resume, and config load. Inside a session this section is rendered for that session's config.
 ```
 
 ### prefix
@@ -31,12 +31,6 @@ The full Lua standard library is there (`string`, `table`, `math`, `io`, `os`, `
 ```text
 # Functions in `lua`
 They are Lua globals, not tools: call them inside `lua` code. Errors are Lua errors (catch them with `pcall`).{{prefer}}{{sh: Use `sh` for running programs and processing their output, not as the default for file operations.}}
-```
-
-### compacted
-
-```text
-Earlier parts of this conversation were compacted to save context: old tool calls and their outputs were removed and some later outputs were cut to their first line.
 ```
 
 ### prefer
@@ -83,5 +77,6 @@ The Lua code to run.
 - `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
 - `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text; `model` and `effort` default to the session's.
 - `reload()`: reload the config like `/reload`; raises if it is invalid.
-- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `trace`).
+- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `started`, `created`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `history`).
+- `set_session({title, model, effort, history})`: update any of these fields; `history` replaces the stored list with structured records from `session().history`.
 - `docs(topic)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.

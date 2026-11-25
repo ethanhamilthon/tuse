@@ -95,7 +95,7 @@ return {{
     assert!(
         lines
             .iter()
-            .any(|l| l.starts_with("start|") && l.contains("|tool||true")),
+            .any(|l| l.starts_with("start|") && l.contains("|tool|lua|true")),
         "{all}"
     );
     assert!(
@@ -119,7 +119,7 @@ return {{
     assert!(
         lines
             .iter()
-            .any(|l| l.starts_with("start|") && l.contains("|command|boom|false")),
+            .any(|l| l.starts_with("start|") && l.contains("|command|boom|true")),
         "{all}"
     );
     assert!(
@@ -131,7 +131,7 @@ return {{
     assert!(
         lines
             .iter()
-            .any(|l| l.starts_with("start|") && l.contains("|open|md|false")),
+            .any(|l| l.starts_with("start|") && l.contains("|open|md|true")),
         "{all}"
     );
     assert!(

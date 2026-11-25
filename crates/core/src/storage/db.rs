@@ -6,12 +6,25 @@ static DB: OnceLock<Mutex<Vec<(std::path::PathBuf, Connection)>>> = OnceLock::ne
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
-    meta TEXT NOT NULL,
     cwd TEXT NOT NULL,
-    updated TEXT NOT NULL DEFAULT ''
+    title TEXT NOT NULL,
+    model TEXT NOT NULL,
+    effort TEXT NOT NULL,
+    started INTEGER NOT NULL DEFAULT 0,
+    usage_input INTEGER NOT NULL DEFAULT 0,
+    usage_output INTEGER NOT NULL DEFAULT 0,
+    usage_cached INTEGER NOT NULL DEFAULT 0,
+    usage_cache_write INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0,
+    llm_cost REAL NOT NULL DEFAULT 0,
+    priced INTEGER NOT NULL DEFAULT 0,
+    ctx INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 0,
+    created TEXT NOT NULL,
+    updated TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_cwd ON sessions(cwd);
-CREATE TABLE IF NOT EXISTS records (
+CREATE TABLE IF NOT EXISTS history (
     session TEXT NOT NULL,
     seq INTEGER NOT NULL,
     body TEXT NOT NULL,
@@ -37,8 +50,7 @@ pub(super) fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Res
         let mut c = Connection::open(home.join("tuse.db")).map_err(|e| e.to_string())?;
         c.busy_timeout(std::time::Duration::from_secs(5))
             .and_then(|_| c.pragma_update(None, "journal_mode", "WAL"))
-            .and_then(|_| c.execute_batch(SCHEMA))
-            .and_then(|_| migrate(&mut c))
+            .and_then(|_| initialize_schema(&mut c))
             .map_err(|e| e.to_string())?;
         all.push((home.clone(), c));
     }
@@ -46,19 +58,30 @@ pub(super) fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Res
     f(c).map_err(|e| e.to_string())
 }
 
-fn migrate(c: &mut Connection) -> rusqlite::Result<()> {
+fn initialize_schema(c: &mut Connection) -> rusqlite::Result<()> {
     let tx = c.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let cols: Vec<String> = tx
-        .prepare("PRAGMA table_info(providers)")?
-        .query_map([], |r| r.get(1))?
-        .collect::<Result<_, _>>()?;
-    if !cols.iter().any(|col| col == "api") {
-        tx.execute(
-            "ALTER TABLE providers ADD COLUMN api TEXT NOT NULL DEFAULT 'openai-chat'",
-            [],
+    let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version == 0 {
+        tx.execute_batch(
+            "DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS records;
+            DROP TABLE IF EXISTS providers; DROP TABLE IF EXISTS state;",
         )?;
+        tx.execute_batch(SCHEMA)?;
+        tx.pragma_update(None, "user_version", 1)?;
     }
+
     tx.commit()
+}
+
+pub(super) fn transaction<R>(
+    f: impl FnOnce(&rusqlite::Transaction<'_>) -> rusqlite::Result<R>,
+) -> Result<R, String> {
+    with(|c| {
+        let tx = rusqlite::Transaction::new_unchecked(c, TransactionBehavior::Immediate)?;
+        let result = f(&tx)?;
+        tx.commit()?;
+        Ok(result)
+    })
 }
 
 pub struct Prefs;
@@ -166,7 +189,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn concurrent_migrations_upgrade_legacy_providers_safely() {
+    fn schema_reset_discards_legacy_data() {
         let dir = std::env::temp_dir().join(format!("tuse-db-mig-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -175,7 +198,11 @@ mod tests {
             let c = Connection::open(&path).unwrap();
             c.execute_batch(
                 "CREATE TABLE providers (name TEXT PRIMARY KEY, base_url TEXT NOT NULL, api_key TEXT NOT NULL);
-                 INSERT INTO providers VALUES ('old', 'http://127.0.0.1:1', 'k');",
+                 INSERT INTO providers VALUES ('old', 'http://127.0.0.1:1', 'k');
+                 CREATE TABLE sessions (id TEXT PRIMARY KEY, meta TEXT NOT NULL);
+                 INSERT INTO sessions VALUES ('old', '{}');
+                 CREATE TABLE records (session TEXT, seq INTEGER, body TEXT);
+                 INSERT INTO records VALUES ('old', 1, '{}');",
             )
             .unwrap();
         }
@@ -188,7 +215,7 @@ mod tests {
                     let mut c = Connection::open(&p).unwrap();
                     c.busy_timeout(std::time::Duration::from_secs(5)).unwrap();
                     b.wait();
-                    migrate(&mut c).unwrap();
+                    initialize_schema(&mut c).unwrap();
                 })
             })
             .collect();
@@ -196,12 +223,12 @@ mod tests {
             h.join().unwrap();
         }
         let c = Connection::open(&path).unwrap();
-        let api: String = c
-            .query_row("SELECT api FROM providers WHERE name = 'old'", [], |r| {
-                r.get(0)
-            })
-            .unwrap();
-        assert_eq!(api, "openai-chat");
+        for table in ["sessions", "history", "providers", "state"] {
+            let count: i64 = c
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(count, 0);
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

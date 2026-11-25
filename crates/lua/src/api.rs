@@ -150,7 +150,7 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
     Ok(id)
 }
 
-fn source_of(f: &Function, chunk: Option<&str>) -> String {
+pub fn source_of(f: &Function, chunk: Option<&str>) -> String {
     let info = f.info();
     let (Some(first), Some(last)) = (info.line_defined, info.last_line_defined) else {
         return String::new();

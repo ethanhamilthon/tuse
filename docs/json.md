@@ -11,7 +11,7 @@ tuse json [-c|--config PATH] [-r|--resume ID]
 - Stdout carries only JSON-RPC frames, and diagnostics go to stderr. Lua that writes straight to `io.stdout` would break this, so don't.
 - Blank lines are ignored. Requests are handled while turns, hooks, and tasks run in the background.
 - A request without `id` is a notification: it runs, but gets no reply. Note that `"id": null` does get a reply.
-- EOF on stdin, `shutdown`, or `SIGINT`/`SIGTERM`/`SIGHUP` closes the session (waiting for `close` hooks) and exits.
+- EOF on stdin, `shutdown`, or `SIGINT`/`SIGTERM`/`SIGHUP` closes the session and exits. Only `shutdown` runs `process_end`.
 
 ```text
 > {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}
@@ -60,11 +60,10 @@ Send `initialize` first. Only `shutdown` is accepted before it. `protocolVersion
 ### Sessions
 
 - `session.info` → `SessionInfo`.
-- `session.snapshot` → the `session()` table, `trace` included ([Lua](lua.md#session-and-utilities)).
-- `session.records` → every record so far ([Session](session.md#records)).
-- `session.trace` → `[{role, summary, text}]`.
+- `session.snapshot` → the `session()` table, `history` included ([Lua](lua.md#session-and-utilities)).
+- `session.history` → the structured records from `session().history` ([History](session.md#history-and-session-data)).
 - `session.stats` → `{input, output, cached, cacheWrite, cost, llmCost, requests, llmRequests, context, turns, calls}`, where `cost` is `null` until prices are known.
-- `session.list` `{cwd?}` → titled sessions in that folder, newest first: `[{id, cwd, title, model, effort, created, updated}]`.
+- `session.list` `{cwd?}` → started sessions in that folder, newest first: `[{id, cwd, title, model, effort, started, created, updated}]`.
 - `session.new` → `{session, model, effort}`.
 - `session.resume` `{id}` → `{session, model, effort}`.
 
@@ -84,7 +83,6 @@ For `session.new` and `session.resume`, events left over from the old session ar
 
 - `config.get` → the resolved config: `settings`, `theme`, `models`, `systems`, `prompts` (`{kind: "text" | "function", body, args}`), `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands`, `settings.open`, and `path` (`""` when the defaults are used). Secrets and Lua function bodies are left out.
 - `config.reload` → `null`, or `-32000` with the reason. If the reload fails, the old config stays.
-- `config.set` `{key: "model" | "effort", value}` → `null`. Deprecated, use `model.set`.
 
 ### Tasks and commands
 
@@ -119,7 +117,7 @@ Events come as `{"jsonrpc":"2.0","method":"event","params":{"type": …}}`:
 | `tool_start` | `timeout`, `id`, `tool`, `input` | A tool call started. |
 | `tool_end` | `id`, `output`, `code`, `diffs` | A tool call ended. |
 | `status` | `text` | What the tool is doing right now, such as `reading path...`. |
-| `notice` | `text` | Information, such as compaction or a hook error. |
+| `notice` | `text` | Information, such as a hook error. |
 | `flash` | `text` | Short banner, such as a retry countdown. |
 | `error` | `text` | A turn, provider, command, or reload error. |
 | `turn_end` | `elapsedMs`, `calls`, `model`, `effort`, `cancelled` | The turn ended. |
@@ -127,6 +125,7 @@ Events come as `{"jsonrpc":"2.0","method":"event","params":{"type": …}}`:
 | `tasks` | | Tasks changed: read `tasks.list`. |
 | `models` | | A provider listed its models: read `model.list {cached: true}`. |
 | `reloaded` | | The config was reloaded. |
+| `history_replaced` | | Lua replaced the stored history; call `session.history` to refresh. |
 | `ui_markdown` | `name`, `text`, `pin`, `removed` | A `show()` block changed. |
 | `ui_request` | `id`, `kind`, plus `options` (`picker`) or `text` (`question`) | A prompt became active. |
 | `ui_clear` | `id` | Tuse withdrew the active prompt. |

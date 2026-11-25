@@ -38,10 +38,6 @@ where
     T::try_from(n).map_err(|_| D::Error::custom(format!("value {n} out of range")))
 }
 
-pub fn opt_u64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
-    int::<D, u64, 0, { i64::MAX }>(d).map(Some)
-}
-
 pub fn rows<'de, D: Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
     let n = int::<D, i32, -1, { i32::MAX as i64 }>(d)?;
     if n == 0 {

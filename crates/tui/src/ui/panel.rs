@@ -109,11 +109,11 @@ impl Panel {
     }
 }
 
-pub(crate) fn trace_panel(it: &tuse_core::TraceItem) -> Panel {
+pub(crate) fn history_panel(it: &tuse_core::HistoryItem) -> Panel {
     match it.role {
-        "system" | "user" | "agent" => Panel::markdown(it.text.clone()),
-        "lua" => Panel::lua(it.text.clone()),
-        _ => Panel::new(it.text.clone()),
+        "system" | "user" | "agent" => Panel::markdown(it.detail.clone()),
+        "lua" => Panel::lua(it.detail.clone()),
+        _ => Panel::new(it.detail.clone()),
     }
 }
 
@@ -124,13 +124,13 @@ mod tests {
     use crate::ui::picker::{Kind, Picker, item};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use tuse_config::{Theme, UiSettings};
-    use tuse_core::TraceItem;
+    use tuse_core::HistoryItem;
 
     fn press(app: &mut App, code: KeyCode, mods: KeyModifiers) {
         app.key(KeyEvent::new(code, mods), 10);
     }
 
-    fn open_trace_with(app: &mut App, items: Vec<TraceItem>) {
+    fn open_history_with(app: &mut App, items: Vec<HistoryItem>) {
         let rows = items
             .iter()
             .enumerate()
@@ -142,9 +142,9 @@ mod tests {
                 )
             })
             .collect();
-        app.trace_items = items;
-        app.trace_back = None;
-        app.open_modal(Picker::new(Kind::Trace, rows));
+        app.history_items = items;
+        app.history_back = None;
+        app.open_modal(Picker::new(Kind::History, rows));
     }
 
     fn panel_text(app: &mut App) -> String {
@@ -175,13 +175,14 @@ mod tests {
     }
 
     #[test]
-    fn trace_arrows_step_filtered_entries_reset_scroll_clamp_ends_and_gate_editor() {
-        let mut app = crate::ui::app::test_app("trace-arrows");
+    fn history_arrows_step_filtered_entries_reset_scroll_clamp_ends_and_gate_editor() {
+        let mut app = crate::ui::app::test_app("history-arrows");
         let k = |app: &mut App, c| press(app, c, KeyModifiers::NONE);
-        let mk = |role: &'static str, summary: &str, text: String| TraceItem {
+        let mk = |role: &'static str, summary: &str, text: String| HistoryItem {
             role,
             summary: summary.into(),
-            text,
+            fields: Default::default(),
+            detail: text,
         };
         app.paste("orig draft");
         let long = (0..25)
@@ -203,7 +204,7 @@ mod tests {
                 format!("local b = 2\n--b-body\n{b_long}"),
             ),
         ];
-        open_trace_with(&mut app, items.clone());
+        open_history_with(&mut app, items.clone());
         k(&mut app, KeyCode::Enter);
         app.panel.as_mut().unwrap().scroll_by(5);
         k(&mut app, KeyCode::Left);
@@ -242,7 +243,7 @@ mod tests {
         k(&mut app, KeyCode::Esc);
         assert_eq!(app.editor.text(), "orig draft");
 
-        open_trace_with(&mut app, items);
+        open_history_with(&mut app, items);
         for c in "lua".chars() {
             k(&mut app, KeyCode::Char(c));
         }
@@ -271,7 +272,7 @@ mod tests {
 
         app.palette.ui.list_max_height = 4;
         app.list_rows = 3;
-        open_trace_with(
+        open_history_with(
             &mut app,
             (0..12)
                 .map(|i| mk("output", &format!("item {i}"), format!("body-{i}")))

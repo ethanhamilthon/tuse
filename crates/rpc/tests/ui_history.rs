@@ -123,7 +123,7 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
     call(&tx0, &out0, 5, "shutdown", json!({}));
     srv0.join().unwrap();
     assert!(tuse_core::Meta::list(&dir).iter().all(|m| m.id != only_id));
-    assert!(!tuse_core::tuse_home().join(&only_id).join("lock").exists());
+    assert!(tuse_core::tuse_home().join(&only_id).join("lock").exists());
 
     let s1 = Session::open(Options {
         cwd: dir.clone(),
@@ -210,20 +210,20 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
             .any(|m| m["name"] == "keep_pin" && m["pin"] == true)
     );
 
-    let recs = call(&tx, &out, 3, "session.records", json!({}))["result"]
+    let recs = call(&tx, &out, 3, "session.history", json!({}))["result"]
         .as_array()
         .unwrap()
         .clone();
     let tags: Vec<&str> = recs
         .iter()
-        .filter_map(|r| r["t"].as_str())
-        .filter(|t| matches!(*t, "user" | "ui_markdown" | "ui_result"))
+        .filter_map(|r| r["role"].as_str())
+        .filter(|t| matches!(*t, "user" | "show" | "ask"))
         .collect();
     assert_eq!(tags[0], "user");
-    assert!(tags.contains(&"ui_markdown") && tags.contains(&"ui_result"));
+    assert!(tags.contains(&"show") && tags.contains(&"ask"));
 
-    let trace = call(&tx, &out, 4, "session.trace", json!({}))["result"].to_string();
-    assert!(trace.contains("SECRET_UI_BLOCK") && trace.contains("SECRET_ANSWER"));
+    let history = call(&tx, &out, 4, "session.history", json!({}))["result"].to_string();
+    assert!(history.contains("SECRET_UI_BLOCK") && history.contains("SECRET_ANSWER"));
 
     assert_eq!(
         call(&tx, &out, 5, "ui.reply", json!({"id": 3, "value": "stale"}))["error"]["code"],
@@ -269,13 +269,11 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
 {cfg_body}
   hooks = {{
     on_resume = {{
-      events = {{"start"}},
-      run = function(e)
-        if e.restored then
-          local t = require("tuse")
-          t.show("from_hook", "hook-block", false)
-          t.ask("HOOK_PROMPT")
-        end
+      events = {{"session_resumed"}},
+      run = function()
+        local t = require("tuse")
+        t.show("from_hook", "hook-block", false)
+        t.ask("HOOK_PROMPT")
       end,
     }},
   }},

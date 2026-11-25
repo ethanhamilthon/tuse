@@ -58,11 +58,6 @@ impl Connect {
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::de::opt_u64"
-    )]
-    pub compact_at: Option<u64>,
     pub ui: UiSettings,
     #[serde(deserialize_with = "crate::names::open")]
     pub open: Vec<String>,
@@ -97,8 +92,6 @@ pub struct ModelDef {
     pub window: u64,
     #[serde(default)]
     pub prices: Option<Prices>,
-    #[serde(default)]
-    pub compact_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
@@ -138,10 +131,6 @@ impl Config {
         self.models.iter().rev().find(|m| m.name == full)
     }
 
-    pub fn compact_at(&self, def: Option<&ModelDef>) -> u64 {
-        compact_at(def, self.settings.compact_at)
-    }
-
     pub fn is_disabled(&self, name: &str) -> bool {
         self.functions.get(name) == Some(&FunctionKind::Disabled)
     }
@@ -153,12 +142,6 @@ impl Config {
             .filter(|n| self.is_disabled(n))
             .collect()
     }
-}
-
-pub fn compact_at(def: Option<&ModelDef>, setting: Option<u64>) -> u64 {
-    def.and_then(|m| m.compact_at)
-        .or(setting)
-        .unwrap_or_else(|| def.map_or(0, |m| (u128::from(m.window) * 6 / 10) as u64))
 }
 
 pub fn display_name(def: Option<&ModelDef>, full: &str) -> String {

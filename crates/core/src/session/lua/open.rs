@@ -1,4 +1,3 @@
-use crate::event::Event;
 use crate::session::Session;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -19,7 +18,7 @@ pub fn openable_url(url: &str) -> bool {
 impl Session {
     pub fn open_url(self: &Arc<Self>, url: &str) {
         if !openable_url(url) {
-            self.emit(Event::Error(format!("cannot open URL `{url}`")));
+            self.error(format!("cannot open URL `{url}`"));
             return;
         }
         self.spawn_os_open(url.to_string());
@@ -28,10 +27,10 @@ impl Session {
     pub fn open_path(self: &Arc<Self>, path: &Path) {
         let resolved = resolve_local(path, &self.cwd);
         if !resolved.exists() {
-            self.emit(Event::Error(format!(
+            self.error(format!(
                 "cannot open {}: file not found",
                 resolved.display()
-            )));
+            ));
             return;
         }
         let ext = resolved
@@ -64,19 +63,20 @@ impl Session {
         let weak = Arc::downgrade(self);
         let exec_id = self.next_lua_id();
         let started = Instant::now();
-        self.lua_start_hook(exec_id.clone(), "open", None, Some(ext.clone()));
         let path_str = path.display().to_string();
         self.vm.post(move |lua| {
+            if let Some(s) = weak.upgrade() {
+                let code = crate::scripting::registry::open_of(lua, &ext)
+                    .map(|f| tuse_lua::source_of(&f, None));
+                s.lua_start_hook(exec_id.clone(), "open", code, Some(ext.clone()));
+            }
             let (s2, e2, flag, id2) = (weak.clone(), ext.clone(), cancel.clone(), exec_id.clone());
             let done = move |_: &Lua, d: Done| {
                 flag.store(true, Ordering::Relaxed);
                 if let Some(s) = s2.upgrade() {
                     s.lua_end_done(&id2, "open", started.elapsed(), &d);
                     if !d.ok && d.stop != Some("cancelled") {
-                        s.emit(Event::Error(format!(
-                            "open.{e2}: {}",
-                            crate::text::error_line(&d.text)
-                        )));
+                        s.error(format!("open.{e2}: {}", crate::text::error_line(&d.text)));
                     }
                 }
             };
@@ -107,7 +107,7 @@ impl Session {
                         None,
                         Some(msg.clone()),
                     );
-                    s.emit(Event::Error(format!("open.{ext}: {msg}")));
+                    s.error(format!("open.{ext}: {msg}"));
                 }
             }
         });
@@ -117,7 +117,7 @@ impl Session {
         let s = self.clone();
         std::thread::spawn(move || {
             if let Err(e) = os_open(&target) {
-                s.emit(Event::Error(format!("failed to open `{target}`: {e}")));
+                s.error(format!("failed to open `{target}`: {e}"));
             }
         });
     }

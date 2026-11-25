@@ -63,7 +63,7 @@ fn require_session_validation_and_reload_rollback() {
         assert(os.getenv('TUSE_MODE') == nil and os.getenv('TUSE_SESSION') == nil)
         assert(os.getenv('CUSTOM_USER_VAR') == 'kept_val')
         local s = t.session()
-        assert(s.id == nil and s.model == nil and s.trace == nil, 'pre-session snapshot')
+        assert(s.id == nil and s.model == nil and s.history == nil, 'pre-session snapshot')
         assert(s.mode == 'tui' or s.mode == 'json')
         assert(s.cwd ~= nil and s.home ~= nil and s.configpath ~= nil)
         for name in pairs(t) do assert(_G[name] == nil, name) end

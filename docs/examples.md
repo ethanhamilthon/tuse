@@ -80,4 +80,8 @@ One `#openspec` prompt with args (`explore`, `propose`, `apply`, `verify`, `arch
 
 ## Project config
 
-A per-project `tuse.lua` on top of `require("global")`, with `hide_trace` and `scope_models`. [`project.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/project.lua)
+A per-project `tuse.lua` on top of `require("global")`, with `hide_history` and `scope_models`. [`project.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/project.lua)
+
+## Compaction
+
+`require("compaction").apply(g, 0.8, 20)` summarizes older conversation records after a finished reply when `ctx` reaches 80% of `ctx_size`. It uses `llm` for the summary and `set_session` to replace the older history, retaining the system prompt and recent records without splitting tool calls from their results. [`compaction.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/compaction.lua)

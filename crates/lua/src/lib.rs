@@ -5,6 +5,7 @@ mod sh;
 mod value;
 mod vm;
 
+pub use api::source_of;
 pub use api::{host, wrap, yield_wait};
 pub use job::{Done, ExtWait, Job, Out, Stop};
 pub use mlua;

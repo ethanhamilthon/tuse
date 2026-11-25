@@ -400,9 +400,9 @@ mod tests {
             stored
                 && app2
                     .session
-                    .trace()
+                    .history()
                     .iter()
-                    .any(|t| t.text.contains("row19"))
+                    .any(|t| t.detail.contains("row19"))
         );
         crate::ui::app::cleanup(app2);
     }

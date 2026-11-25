@@ -45,7 +45,7 @@ An unsupported level fails before any request is sent, with ``provider `<name>` 
 
 ## Model metadata
 
-Context window, display name, compaction threshold, and prices come from the `models` list in your config:
+Context window, display name, and prices come from the `models` list in your config:
 
 ```lua
 return {
@@ -54,7 +54,6 @@ return {
       name = "openai/gpt-5",
       display = "GPT-5",
       window = 400000,
-      compact_at = 200000,
       prices = { input = 1.25, output = 10, cache_read = 0.125, cache_write = 0 },
     },
   },
@@ -66,7 +65,6 @@ return {
 | `name` | required | `provider/model`. If two entries share a name, the last one wins. |
 | `display` | `name` | Label in the status bar, `/models`, and turn summaries. |
 | `window` | `0` (unknown) | Context window in tokens. |
-| `compact_at` | unset | Compaction threshold for this model. It wins over `settings.compact_at`, and `0` turns compaction off. |
 | `prices` | unset | USD per 1M tokens: `input`, `output`, `cache_read`, `cache_write` (each defaults to `0`). |
 
 `tuse models` prints this metadata. Changes take effect on `/reload`, which also recomputes the session's cost.

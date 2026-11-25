@@ -1,6 +1,7 @@
 use crate::convo::record::Record;
 use crate::event::{Event, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 use crate::session::Session;
+use crate::session::bus::Signal;
 use std::collections::VecDeque;
 use std::sync::mpsc;
 
@@ -17,12 +18,16 @@ pub(crate) struct UiState {
     next_id: u64,
     closed: bool,
     deny_hooks: bool,
-    markdowns: Vec<UiMarkdown>,
-    entries: Vec<UiEntry>,
     queue: VecDeque<PendingReq>,
 }
 
-impl UiState {
+#[derive(Default)]
+struct UiHistory {
+    markdowns: Vec<UiMarkdown>,
+    entries: Vec<UiEntry>,
+}
+
+impl UiHistory {
     pub(crate) fn apply_markdown(&mut self, name: String, text: String, pin: bool, removed: bool) {
         if removed {
             self.markdowns.retain(|b| b.name != name);
@@ -43,7 +48,7 @@ impl UiState {
         }
     }
 
-    pub(crate) fn replay(records: &[Record]) -> Self {
+    fn read(records: &[Record]) -> Self {
         let mut ui = Self::default();
         for r in records {
             match r {
@@ -59,7 +64,6 @@ impl UiState {
                     prompt,
                     value,
                 } => {
-                    ui.next_id = ui.next_id.max(*id);
                     let kind = if kind == "picker" {
                         "picker"
                     } else {
@@ -82,35 +86,30 @@ impl UiState {
 impl Session {
     pub fn ui_snapshot(&self) -> UiSnapshot {
         let ui = self.ui.lock().unwrap();
+        let history = self.with_records(UiHistory::read);
         UiSnapshot {
-            markdowns: ui.markdowns.clone(),
+            markdowns: history.markdowns,
             active: ui.queue.front().map(|p| p.req.clone()),
-            entries: ui.entries.clone(),
+            entries: history.entries,
         }
     }
 
     pub(crate) fn ui_markdown(&self, name: String, text: String, pin: bool) {
         let removed = text.is_empty() && !pin;
-        {
-            let mut ui = self.ui.lock().unwrap();
-            ui.apply_markdown(name.clone(), text.clone(), pin, removed);
-            let mut st = self.state.lock().unwrap();
-            self.push(
-                &mut st,
-                Record::UiMarkdown {
-                    name: name.clone(),
-                    text: text.clone(),
-                    pin,
-                    removed,
-                },
-            );
-        }
-        self.emit(Event::UiMarkdown {
-            name,
-            text,
-            pin,
-            removed,
-        });
+        self.message(
+            Record::UiMarkdown {
+                name: name.clone(),
+                text: text.clone(),
+                pin,
+                removed,
+            },
+            Event::UiMarkdown {
+                name,
+                text,
+                pin,
+                removed,
+            },
+        );
     }
 
     pub(crate) fn ui_enqueue(
@@ -126,7 +125,16 @@ impl Session {
             if is_hook && ui.deny_hooks {
                 return Err("interactive UI is unavailable during reload or close".into());
             }
-            ui.next_id += 1;
+            let last = self.with_records(|rs| {
+                rs.iter()
+                    .filter_map(|r| match r {
+                        Record::UiResult { id, .. } => Some(*id),
+                        _ => None,
+                    })
+                    .max()
+                    .unwrap_or(0)
+            });
+            ui.next_id = ui.next_id.max(last) + 1;
             let req = UiRequest {
                 id: ui.next_id,
                 prompt,
@@ -142,13 +150,13 @@ impl Session {
         };
         let id = req.id;
         if active {
-            self.emit(Event::UiRequest(req));
+            self.emit(Signal::UiRequest(req));
         }
         Ok((id, rx))
     }
 
     pub fn ui_reply(&self, id: u64, value: Option<String>) -> Result<(), String> {
-        let (entry, next) = {
+        let next = {
             let mut ui = self.ui.lock().unwrap();
             let Some(front) = ui.queue.front() else {
                 return Err(format!("no active UI request {id}"));
@@ -162,7 +170,7 @@ impl Session {
                 return Err(format!("invalid picker option `{v}`"));
             }
             let pending = ui.queue.pop_front().unwrap();
-            let entry = value.as_ref().map(|v| {
+            if let Some(v) = &value {
                 let (kind, prompt) = match pending.req.prompt {
                     UiPrompt::Picker { .. } => ("picker", "Picker".into()),
                     UiPrompt::Question { text } => ("question", text),
@@ -173,28 +181,22 @@ impl Session {
                     prompt: prompt.clone(),
                     value: v.clone(),
                 };
-                ui.entries.push(e.clone());
-                let mut st = self.state.lock().unwrap();
-                self.push(
-                    &mut st,
+                self.message(
                     Record::UiResult {
                         id,
                         kind: kind.into(),
                         prompt,
                         value: v.clone(),
                     },
+                    Event::UiResult(e),
                 );
-                e
-            });
+            }
             let reply = value.map_or(serde_json::Value::Null, serde_json::Value::String);
             let _ = pending.tx.send(Ok(reply));
-            (entry, ui.queue.front().map(|p| p.req.clone()))
+            ui.queue.front().map(|p| p.req.clone())
         };
-        if let Some(e) = entry {
-            self.emit(Event::UiResult(e));
-        }
         if let Some(req) = next {
-            self.emit(Event::UiRequest(req));
+            self.emit(Signal::UiRequest(req));
         }
         Ok(())
     }
@@ -212,9 +214,9 @@ impl Session {
             (pos == 0, next)
         };
         if cleared {
-            self.emit(Event::UiClear { id });
+            self.emit(Signal::UiClear { id });
             if let Some(req) = next {
-                self.emit(Event::UiRequest(req));
+                self.emit(Signal::UiRequest(req));
             }
         }
     }
@@ -242,9 +244,9 @@ impl Session {
             )
         };
         if let Some(id) = cleared {
-            self.emit(Event::UiClear { id });
+            self.emit(Signal::UiClear { id });
             if let Some(req) = next {
-                self.emit(Event::UiRequest(req));
+                self.emit(Signal::UiRequest(req));
             }
         }
     }
@@ -259,7 +261,7 @@ impl Session {
             active
         };
         if let Some(id) = active {
-            self.emit(Event::UiClear { id });
+            self.emit(Signal::UiClear { id });
         }
     }
 
@@ -275,7 +277,7 @@ impl Session {
             active
         };
         if let Some(id) = cleared {
-            self.emit(Event::UiClear { id });
+            self.emit(Signal::UiClear { id });
         }
     }
 }

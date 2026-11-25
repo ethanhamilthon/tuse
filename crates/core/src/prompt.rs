@@ -179,27 +179,21 @@ fn base_prompt(disabled: &[&str]) -> String {
     base
 }
 
-pub fn system_prompt(config: &Config, compacted: bool) -> String {
+pub fn system_prompt(config: &Config) -> String {
     let mut parts = vec![base_prompt(&config.disabled_builtins())];
     parts.extend(config.systems.iter().map(|s| s.trim_end().to_string()));
-    let mut out = parts.join("\n\n");
-    if compacted {
-        out.push_str("\n\n");
-        out.push_str(block("compacted"));
-    }
-    out
+    parts.join("\n\n")
 }
 
 pub(crate) const AGENT_CONTEXT: &str = "## What the agent sees";
 
 pub(crate) fn agent_context(disabled: &[&str]) -> String {
     format!(
-        "{AGENT_CONTEXT}\n\n{}\n\n### System prompt\n\n```text\n{}\n```\n\n### Tool description\n\nThe one tool is `lua`. Its single required string argument `code` is described as \"{}\".\n\n```text\n{}\n```\n\n### Compaction note\n\n```text\n{}\n```\n",
+        "{AGENT_CONTEXT}\n\n{}\n\n### System prompt\n\n```text\n{}\n```\n\n### Tool description\n\nThe one tool is `lua`. Its single required string argument `code` is described as \"{}\".\n\n```text\n{}\n```\n",
         block("context-intro"),
         base_prompt(disabled),
         block("tool-code-parameter"),
         expand(block("tool-description"), disabled),
-        block("compacted"),
     )
 }
 
@@ -244,7 +238,7 @@ mod tests {
         config
             .functions
             .insert("task_get".into(), FunctionKind::Disabled);
-        let sys = system_prompt(&config, false);
+        let sys = system_prompt(&config);
         assert!(!sys.contains("secret"), "{sys}");
         assert!(!sys.contains("`sh`") && !sys.contains("`sh("), "{sys}");
         assert!(

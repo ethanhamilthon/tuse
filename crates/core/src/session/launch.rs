@@ -1,5 +1,5 @@
-use crate::convo::history::{self, Bounds};
 use crate::convo::record::Record;
+use crate::convo::wire;
 use crate::mode::{Options, Start};
 use crate::session::{Session, State};
 use crate::storage::store::{Meta, SessionDir};
@@ -13,7 +13,6 @@ use tuse_config::Config;
 pub(crate) struct Prepared {
     opts: Options,
     id: String,
-    meta: Meta,
     dir: SessionDir,
     vm: tuse_lua::Vm,
     weak: crate::session::lua::host::Slot,
@@ -21,7 +20,7 @@ pub(crate) struct Prepared {
 }
 
 pub fn open(opts: Options) -> Result<Arc<Session>, String> {
-    Ok(prepare(opts)?.start())
+    prepare(opts)?.start()
 }
 
 pub fn switch(session: &Arc<Session>, resume: Option<String>) -> Result<Arc<Session>, String> {
@@ -40,8 +39,8 @@ pub fn switch(session: &Arc<Session>, resume: Option<String>) -> Result<Arc<Sess
         resume,
         start,
     })?;
-    session.close_for(start.reason());
-    Ok(next.start())
+    session.close_for(Some("session_close"));
+    next.start()
 }
 
 fn prepare(mut opts: Options) -> Result<Prepared, String> {
@@ -52,7 +51,7 @@ fn prepare(mut opts: Options) -> Result<Prepared, String> {
         .unwrap_or_else(crate::id::new_session_id);
     let meta = if restored {
         let meta =
-            crate::storage::store::Meta::read(&id).ok_or_else(|| format!("no session {id}"))?;
+            crate::storage::store::Meta::read(&id)?.ok_or_else(|| format!("no session {id}"))?;
         let cwd = PathBuf::from(&meta.cwd);
         if cwd.is_dir() {
             opts.cwd = cwd;
@@ -63,15 +62,16 @@ fn prepare(mut opts: Options) -> Result<Prepared, String> {
             id: id.clone(),
             cwd: opts.cwd.display().to_string(),
             created: crate::id::now(),
+            model: crate::storage::Prefs::model(),
+            effort: crate::storage::Prefs::effort(),
             ..Default::default()
         }
     };
-    let dir = SessionDir::open(&id, !restored)?;
     let (vm, weak, config) = crate::session::lua::config_lua::start_vm(&opts)?;
+    let dir = SessionDir::open(&id, (!restored).then_some(&meta))?;
     Ok(Prepared {
         opts,
         id,
-        meta,
         dir,
         vm,
         weak,
@@ -80,38 +80,31 @@ fn prepare(mut opts: Options) -> Result<Prepared, String> {
 }
 
 impl Prepared {
-    pub(crate) fn start(self) -> Arc<Session> {
+    pub(crate) fn start(self) -> Result<Arc<Session>, String> {
         let Prepared {
             opts,
             id,
-            meta,
-            mut dir,
+            dir,
             vm,
             weak,
             config,
         } = self;
         let restored = opts.resume.is_some();
-        let mut records = dir.records();
-        for r in history::missing_results(&records) {
-            dir.append(&r);
-            records.push(r);
+        dir.system(&Record::System {
+            text: crate::prompt::system_prompt(&config),
+        })?;
+        if restored {
+            let cache = SessionDir::read(&id)?;
+            let missing = wire::missing_results(&cache.records);
+            if !missing.is_empty() {
+                dir.append(&missing, &config)?;
+            }
         }
-        let default_model = crate::storage::Prefs::model();
-        let default_effort = crate::storage::Prefs::effort();
-        if !restored {
-            let r = Record::Settings {
-                model: default_model.clone(),
-                effort: default_effort.clone(),
-            };
-            dir.append(&r);
-            records.push(r);
-        }
-        let mut st = State {
-            bounds: Bounds::default(),
-            model: crate::session::state::or_default(&meta.model, default_model),
-            effort: crate::session::state::or_default(&meta.effort, default_effort),
+        let st = State {
+            cache: None,
+            pending_history: None,
+            tool_step: false,
             busy: false,
-            turn_error: None,
             generation: 0,
             cancel: Arc::default(),
             tool_handoff: None,
@@ -121,37 +114,13 @@ impl Prepared {
             turn_start: Instant::now(),
             calls: 0,
             status: String::new(),
-            context: 0,
-            meta,
-            stats: Default::default(),
             partial: String::new(),
+            reasoning: String::new(),
+            streaming: false,
             remote: vec![],
-            records: vec![],
         };
-        for r in &records {
-            match r {
-                Record::Compaction { prune, drop } => {
-                    st.bounds = Bounds {
-                        prune: *prune,
-                        drop: *drop,
-                    }
-                }
-                Record::Settings { model, effort } => {
-                    st.model = model.clone();
-                    st.effort = effort.clone();
-                }
-                Record::Usage {
-                    usage, llm: false, ..
-                } => st.context = usage.input + usage.output,
-                _ => {}
-            }
-        }
-        let ui = crate::session::ui::UiState::replay(&records);
-        let models = config.models.clone();
-        st.stats = (crate::convo::usage::Stats::of(&records, &models), models);
-        st.records = records;
         let config = Arc::new(config);
-        let path = dir.path.clone();
+        let path = dir.path();
         let s = Arc::new_cyclic(|me| {
             *weak.lock().unwrap() = me.clone();
             Session {
@@ -166,8 +135,9 @@ impl Prepared {
                 subs: Mutex::default(),
                 vm,
                 hooks_on: AtomicBool::new(true),
+                lifecycle_job: Mutex::default(),
                 hook_runs: Default::default(),
-                ui: Mutex::new(ui),
+                ui: Mutex::default(),
                 cmd_runs: Mutex::default(),
                 http: tuse_api::default_agent(),
                 next_lua: AtomicU64::new(0),
@@ -178,7 +148,7 @@ impl Prepared {
                 reload_after_hook: AtomicBool::new(false),
             }
         });
-        s.start_hook(opts.start.reason(), !restored, restored);
-        s
+        s.lifecycle(opts.start == Start::Launch, restored);
+        Ok(s)
     }
 }

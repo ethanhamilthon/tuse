@@ -1,3 +1,4 @@
+use crate::session::bus::Signal;
 pub(crate) mod bus;
 pub(crate) mod control;
 pub(crate) mod hooks;
@@ -9,20 +10,18 @@ pub(crate) mod turn;
 pub(crate) mod ui;
 pub(crate) mod view;
 
-use crate::convo::history::Bounds;
 use crate::convo::record::{Record, UserInput};
-use crate::event::Event;
 use crate::event::InputId;
 pub use crate::mode::{Mode, Options};
 use crate::session::bus::Subs;
-use crate::storage::store::{Meta, SessionDir};
+use crate::storage::store::{ReadCache, SessionDir};
 use crate::storage::tasks::{TaskInfo, Tasks};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
-use tuse_config::{Config, ModelDef};
+use tuse_config::Config;
 
 pub struct Session {
     pub id: String,
@@ -36,6 +35,7 @@ pub struct Session {
     pub(crate) subs: Mutex<Subs>,
     pub(crate) vm: tuse_lua::Vm,
     pub(crate) hooks_on: AtomicBool,
+    pub(crate) lifecycle_job: Mutex<Option<std::thread::JoinHandle<()>>>,
     pub(crate) hook_runs: crate::session::hooks::lanes::Runs,
     pub(crate) ui: Mutex<crate::session::ui::UiState>,
     pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,
@@ -49,12 +49,10 @@ pub struct Session {
 }
 
 pub(crate) struct State {
-    pub records: Vec<Record>,
-    pub bounds: Bounds,
-    pub model: String,
-    pub effort: String,
+    pub cache: Option<Arc<ReadCache>>,
+    pub pending_history: Option<Vec<Record>>,
+    pub tool_step: bool,
     pub busy: bool,
-    pub turn_error: Option<String>,
     pub generation: u64,
     pub cancel: Arc<AtomicBool>,
     pub tool_handoff: Option<Arc<AtomicBool>>,
@@ -64,11 +62,10 @@ pub(crate) struct State {
     pub turn_start: Instant,
     pub calls: usize,
     pub status: String,
-    pub context: u64,
-    pub meta: Meta,
     pub partial: String,
+    pub reasoning: String,
+    pub streaming: bool,
     pub remote: Vec<String>,
-    pub stats: (crate::convo::usage::Stats, Vec<ModelDef>),
 }
 
 impl Session {
@@ -99,7 +96,7 @@ impl Session {
         format!("lua-{n}")
     }
 
-    pub fn close_for(self: &Arc<Self>, reason: &'static str) {
+    pub(crate) fn close_for(self: &Arc<Self>, event: Option<&'static str>) {
         if self.dir.lock().unwrap().is_none() {
             return;
         }
@@ -107,12 +104,16 @@ impl Session {
         self.stop_commands();
         self.cancel_turn(false);
         self.tasks.stop_all();
-        self.finish_hooks(reason);
+        self.finish_hooks(event);
         self.dir.lock().unwrap().take();
     }
 
     pub fn close(self: &Arc<Self>) {
-        self.close_for("exit");
+        self.close_for(Some("process_end"));
+    }
+
+    pub fn disconnect(self: &Arc<Self>) {
+        self.close_for(None);
     }
 
     pub fn config(&self) -> Arc<Config> {
@@ -120,23 +121,30 @@ impl Session {
     }
 
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
+        let result = self.reload_config();
+        if let Err(e) = &result {
+            self.error(format!("Reload failed: {e}"));
+        }
+        result
+    }
+
+    fn reload_config(self: &Arc<Self>) -> Result<(), String> {
         let _one = self.reload_lock.lock().unwrap();
         let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
         let c = self
             .vm
             .call(move |lua| crate::session::lua::config_lua::prepare(lua, path.as_deref()))?;
-        self.finish_hooks("reload");
+        self.finish_hooks(None);
         let c = Arc::new(c);
         let (s2, c2) = (self.clone(), c.clone());
         self.vm.call(move |lua| {
             crate::session::lua::config_lua::commit(lua)?;
-            s2.swap_config(c2);
-            Ok::<_, String>(())
+            s2.swap_config(c2)
         })?;
         self.ui_cancel_hooks(false);
         self.hooks_on.store(true, Ordering::Release);
-        self.start_hook("reload", false, false);
-        self.emit(crate::Event::Reloaded);
+        self.simple_hook("config_load");
+        self.emit(Signal::Reloaded);
         Ok(())
     }
 }
@@ -180,24 +188,7 @@ impl Session {
 
     pub fn stop_task(&self, id: &str) -> Result<TaskInfo, String> {
         let t = self.tasks.stop(id)?;
-        self.emit(Event::Tasks);
+        self.emit(Signal::Tasks);
         Ok(t)
-    }
-
-    pub(crate) fn push(&self, st: &mut State, r: Record) {
-        if let Some(d) = self.dir.lock().unwrap().as_mut() {
-            d.append(&r);
-        }
-        st.stats.0.add(&r, &st.stats.1);
-        st.records.push(r);
-    }
-
-    pub(crate) fn save_meta(&self, st: &mut State) {
-        st.meta.model = st.model.clone();
-        st.meta.effort = st.effort.clone();
-        st.meta.updated = crate::id::now();
-        if let Some(d) = self.dir.lock().unwrap().as_mut() {
-            d.write_meta(&st.meta);
-        }
     }
 }

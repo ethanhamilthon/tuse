@@ -241,3 +241,45 @@ end)()
         common::cleanup(&dir);
     }
 }
+
+#[test]
+fn tool_history_write_waits_for_the_tool_result() {
+    let _home = HOME_LOCK.lock().unwrap();
+    let args = json!({"code": "set_session{history={{role='system', text='short'}}}; assert(session().history[1].text ~= 'short'); return 'tool finished'"}).to_string();
+    let addr = common::provider(vec![Reply::Call("lua", args), Reply::Text("done")]);
+    let (dir, cfg) = common::setup("pending-history", &addr, "");
+    let session = Session::open(Options {
+        cwd: dir.clone(),
+        config: Some(cfg),
+        mode: tuse_core::Mode::Json,
+        resume: None,
+        start: Default::default(),
+    })
+    .unwrap();
+    let rx = session.subscribe();
+    session.submit(UserInput::text("go"));
+    let mut result = false;
+    let mut replaced = false;
+    loop {
+        match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
+            Event::ToolEnd { output, .. } => {
+                assert_eq!(output, "tool finished");
+                result = true;
+            }
+            Event::HistoryReplaced => {
+                assert!(result);
+                replaced = true;
+            }
+            Event::TurnEnd { .. } => break,
+            Event::Error(e) => panic!("{e}"),
+            _ => {}
+        }
+    }
+    assert!(replaced);
+    let snap = session.snapshot(true);
+    assert_eq!(snap.history.unwrap()[0].fields["text"], "short");
+    assert_eq!(snap.usage.unwrap().input, 20);
+    assert_eq!(snap.started, Some(true));
+    session.close();
+    common::cleanup(&dir);
+}

@@ -38,7 +38,6 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
         name = "p/a",
         display = "Model A",
         window = 200000,
-        compact_at = 120000,
         prices = { input = 3, output = 15, cache_read = 0.3, cache_write = 3.75 },
     }}"#,
     )
@@ -55,7 +54,6 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
             name: "p/a".into(),
             display: "Model A".into(),
             window: 200_000,
-            compact_at: Some(120_000),
             prices: Some(Prices {
                 input: 3.0,
                 output: 15.0,
@@ -84,7 +82,8 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     let fresh = open(&cfg, &dir, None);
     assert_eq!(fresh.model(), ("p/b".into(), "low".into()));
     fresh.close();
-    assert!(!home.join(".tuse").join(&fresh.id).exists());
+    assert!(home.join(".tuse").join(&fresh.id).exists());
+    assert_eq!(fresh.snapshot(false).started, Some(false));
     assert!(tuse_core::Meta::list(&dir).iter().all(|m| m.id != fresh.id));
     std::fs::remove_dir_all(dir).ok();
 }

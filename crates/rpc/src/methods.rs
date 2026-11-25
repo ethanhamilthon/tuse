@@ -12,8 +12,7 @@ pub const METHODS: &[&str] = &[
     "turn.cancel",
     "session.info",
     "session.snapshot",
-    "session.records",
-    "session.trace",
+    "session.history",
     "session.stats",
     "session.list",
     "session.new",
@@ -23,7 +22,6 @@ pub const METHODS: &[&str] = &[
     "model.list",
     "config.get",
     "config.reload",
-    "config.set",
     "tasks.list",
     "tasks.get",
     "tasks.stop",
@@ -144,14 +142,9 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         "session.snapshot" => {
             serde_json::to_value(s.snapshot(true)).map_err(|e| Fail::session(e.to_string()))
         }
-        "session.records" => s
-            .with_records(|r| serde_json::to_value(r))
-            .map_err(|e| Fail::session(e.to_string())),
-        "session.trace" => Ok(s
-            .trace()
-            .into_iter()
-            .map(|t| json!({"role": t.role, "summary": t.summary, "text": t.text}))
-            .collect()),
+        "session.history" => {
+            serde_json::to_value(s.history()).map_err(|e| Fail::session(e.to_string()))
+        }
         "session.stats" => Ok(stats(s)),
         "session.list" => {
             let cwd = p["cwd"]
@@ -192,16 +185,6 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             serde_json::to_value(&*s.config()).map_err(|e| Fail::session(e.to_string()))
         }
         "config.reload" => s.reload().map(|_| Value::Null).map_err(Fail::session),
-        "config.set" => {
-            let key = str_param(p, "key")?;
-            let value = str_param(p, "value")?;
-            let (model, effort) = s.model();
-            match key.as_str() {
-                "model" => set_model(s, &value, &effort, true),
-                "effort" => set_model(s, &model, &value, true),
-                _ => Err(Fail::params("`key` must be `model` or `effort`")),
-            }
-        }
         "tasks.list" => serde_json::to_value(s.tasks()).map_err(|e| Fail::session(e.to_string())),
         "tasks.get" => {
             let id = str_param(p, "id")?;

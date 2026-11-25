@@ -44,9 +44,8 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
   },
   hooks = {
     interactive = {
-      events = {"start", "close"},
+      events = {"process_start", "process_end"},
       run = function(e)
-        if e.event == "start" and e.reason == "reload" then return end
         require("tuse").ask("hook " .. e.event)
       end,
     },

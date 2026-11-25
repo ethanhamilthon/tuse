@@ -26,11 +26,6 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
     };
     let kv = |k: &str, v: String, st: Style| vec![span(format!("  {k:<18}"), key), span(v, st)];
 
-    let compact = match cfg.settings.compact_at {
-        Some(0) => "off".into(),
-        Some(n) => tokens(n),
-        None => "auto (60% window)".into(),
-    };
     let ui = &cfg.settings.ui;
     let file_row = if cfg.path.is_empty() {
         vec![span("  (none, defaults)", dim)]
@@ -51,7 +46,6 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
     sec(
         "Settings",
         vec![
-            kv("compact_at", compact, fg),
             kv(
                 "ui.lines",
                 format!(
@@ -73,7 +67,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 ),
                 dim,
             ),
-            kv("ui.hide_trace", list(&ui.hide_trace), dim),
+            kv("ui.hide_history", list(&ui.hide_history), dim),
             kv("ui.scope_models", list(&ui.scope_models), dim),
             kv(
                 "open",
@@ -99,9 +93,6 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 }
                 if m.window > 0 {
                     parts.push(format!("window={}", tokens(m.window)));
-                }
-                if let Some(c) = m.compact_at {
-                    parts.push(format!("compact_at={}", tokens(c)));
                 }
                 if let Some(p) = &m.prices {
                     parts.push(format!(
@@ -220,14 +211,13 @@ mod tests {
             ..Default::default()
         };
         cfg.settings.open = vec!["md".into()];
-        cfg.settings.ui.hide_trace = vec!["usage".into()];
+        cfg.settings.ui.hide_history = vec!["usage".into()];
         cfg.settings.ui.scope_models = vec!["p/*".into()];
         cfg.models.push(tuse_config::ModelDef {
             name: "p/big".into(),
             display: "Big".into(),
             window: 200_000,
             prices: Some(Default::default()),
-            compact_at: Some(1000),
         });
         cfg.prompts.insert(
             "spec".into(),

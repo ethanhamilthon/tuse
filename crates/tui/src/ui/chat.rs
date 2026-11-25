@@ -314,7 +314,6 @@ mod tests {
             text: t.into(),
             context: String::new(),
             images: vec![],
-            at: String::new(),
         };
         let md = |name: &str, text: &str, pin: bool, removed: bool| Record::UiMarkdown {
             name: name.into(),

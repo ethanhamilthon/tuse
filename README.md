@@ -2,6 +2,8 @@
 
 ![Tuse](docs/screenshot.png)
 
+![Tuse demo](docs/demo.gif)
+
 The simplest, most powerful AI coding agent for the terminal.
 
 Tuse is a minimal layer that is all a modern model needs to do real work: files and a shell. Everything else you shape yourself with a small Lua config.

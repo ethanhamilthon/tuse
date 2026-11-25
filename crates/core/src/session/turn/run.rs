@@ -149,13 +149,14 @@ impl Session {
         };
         st.streaming = true;
         drop(st);
-        let result = client.complete(
+        let result = client.complete_observed(
             &req,
             tuse_api::RETRY_DELAYS.len(),
             cancel,
             &mut |d| self.on_delta(generation, d),
             &mut |r| {
                 if let Some(mut st) = self.lock_live(generation) {
+                    self.set_activity(&mut st, crate::Activity::Retry);
                     st.partial.clear();
                     st.reasoning.clear();
                     let text =
@@ -165,6 +166,11 @@ impl Session {
                         &[Record::Flash { text: text.clone() }],
                         [Event::StreamReset, Event::Flash(text)],
                     );
+                }
+            },
+            &mut || {
+                if let Some(mut st) = self.lock_live(generation) {
+                    self.set_activity(&mut st, crate::Activity::Provider);
                 }
             },
         );
@@ -177,6 +183,7 @@ impl Session {
             return Step::Stale;
         };
         st.streaming = false;
+        self.set_activity(&mut st, crate::Activity::Idle);
         let mut records = Vec::with_capacity(2);
         if let Some(usage) = reply.usage {
             records.push(Record::Usage {
@@ -232,6 +239,7 @@ impl Session {
             return Step::Stale;
         };
         st.streaming = false;
+        self.set_activity(&mut st, crate::Activity::Idle);
         let saved = self.record(
             &mut st,
             &[Record::Error { text: text.clone() }],

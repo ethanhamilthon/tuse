@@ -81,9 +81,27 @@ pub fn valid_color(s: &str) -> bool {
     false
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InputStyle {
+    #[default]
+    Classic,
+    Boxed,
+}
+
+impl InputStyle {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Classic => "classic",
+            Self::Boxed => "boxed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct UiSettings {
+    pub input_style: InputStyle,
     pub fold_strings: bool,
     #[serde(deserialize_with = "lines")]
     pub tool_line: i32,
@@ -116,6 +134,7 @@ fn lines<'de, D: serde::Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
 impl Default for UiSettings {
     fn default() -> Self {
         Self {
+            input_style: InputStyle::default(),
             fold_strings: true,
             tool_line: -1,
             diff_line: 12,

@@ -1,0 +1,6 @@
+- [x] 1. Add a wake path for session events, terminal input, and timer deadlines; verify event ordering, bounded draining, and lifecycle cleanup on session switch and quit.
+- [x] 2. Track current provider attempt, response streaming, retry, and foreground Lua execution; render the matching status in a stable slot and preserve steering, prompts, and notices.
+- [x] 3. Add and validate `settings.ui.input_style`; expose the resolved value in `/config` and `config.get` and document both styles in `docs/config.md`.
+- [x] 4. Add the five-row boxed composer and compact fallback; share geometry between drawing, cursor, mouse, and the editor viewport.
+- [x] 5. Keep empty Lua previews off-screen and reveal the inline star and code in one frame; test metadata-only and whitespace-only deltas, first code at `ToolStart`, and reset before any code.
+- [x] 6. Test an isolated first SSE delta before the response ends, burst pacing, phase transitions, and boxed geometry at normal and small sizes. Recheck cancellation, session switch, scrollback, config reload, and JSON-RPC compatibility.

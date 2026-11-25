@@ -11,5 +11,5 @@ pub use names::{
     BUILTIN_COMMANDS, FunctionKind, HISTORY_ROLES, HOOK_EVENTS, HOST_FUNCTIONS,
     check_function_name, scope_matches, split_model,
 };
-pub use theme::{Theme, UiSettings, limit};
+pub use theme::{InputStyle, Theme, UiSettings, limit};
 pub use types::*;

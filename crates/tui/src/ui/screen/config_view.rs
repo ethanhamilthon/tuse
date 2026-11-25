@@ -67,6 +67,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 ),
                 dim,
             ),
+            kv("ui.input_style", ui.input_style.as_str().into(), dim),
             kv("ui.hide_history", list(&ui.hide_history), dim),
             kv("ui.scope_models", list(&ui.scope_models), dim),
             kv(

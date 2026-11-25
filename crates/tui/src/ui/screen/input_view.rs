@@ -21,13 +21,7 @@ fn rule(p: &Palette, w: usize, mut left: Line, mut right: Line) -> Line {
 }
 
 impl App {
-    pub(crate) fn input_block(
-        &self,
-        view: &crate::kit::editor::View,
-        w: usize,
-        rows: &[String],
-        top: usize,
-    ) -> Vec<Line> {
+    fn input_status(&self, w: usize) -> (Line, Line, Line) {
         let p = &self.palette;
         let mark = if self.scroll > 0 {
             vec![span(
@@ -42,12 +36,77 @@ impl App {
             Some((text, _)) => vec![span(text, Style::fg(p.accent))],
             None => self.working(),
         };
+        (mark, working, self.model_label())
+    }
+
+    pub(crate) fn boxed_input(
+        &self,
+        view: &crate::kit::editor::View,
+        w: usize,
+        rows: &[String],
+        top: usize,
+    ) -> Vec<Line> {
+        let border = Style::fg(self.palette.border);
+        let surround = |line: Line| {
+            let mut out = vec![span("│", border)];
+            let fill = w.saturating_sub(line_width(&line));
+            out.extend(line);
+            out.push(span(" ".repeat(fill), Style::default()));
+            out.push(span("│", border));
+            out
+        };
+        let mut out = vec![vec![span(format!("╭{}╮", RULE_CHAR.repeat(w)), border)]];
+        out.extend(self.input_rows(view, rows, top).into_iter().map(surround));
+        out.resize_with(3, || surround(vec![]));
+        let (mark, mut activity, model) = self.input_status(w);
+        if !mark.is_empty() && !activity.is_empty() {
+            activity.push(span(" ", Style::default()));
+        }
+        activity.extend(mark);
+        let split = if activity.is_empty() {
+            0
+        } else {
+            w.div_ceil(2)
+        };
+        let model = label(model, w - split);
+        let room = w.saturating_sub(line_width(&model) + usize::from(!model.is_empty()));
+        let mut status = label(activity, room);
+        status.push(span(
+            " ".repeat(w - line_width(&status) - line_width(&model)),
+            Style::default(),
+        ));
+        status.extend(model);
+        out.push(surround(status));
+        out.push(vec![span(format!("╰{}╯", RULE_CHAR.repeat(w)), border)]);
+        out
+    }
+
+    pub(crate) fn input_block(
+        &self,
+        view: &crate::kit::editor::View,
+        w: usize,
+        rows: &[String],
+        top: usize,
+    ) -> Vec<Line> {
+        let (mark, working, model) = self.input_status(w);
         let working = label(working, w.saturating_sub(line_width(&mark)));
-        let model = label(self.model_label(), w);
+        let mut out = vec![rule(&self.palette, w, mark, working)];
+        out.extend(self.input_rows(view, rows, top));
+        out.push(rule(&self.palette, w, vec![], label(model, w)));
+        out
+    }
+
+    fn input_rows(
+        &self,
+        view: &crate::kit::editor::View,
+        rows: &[String],
+        top: usize,
+    ) -> Vec<Line> {
+        let p = &self.palette;
         let dim = self.steering.is_some() && self.saved_editor.is_none();
         let style = Style::fg(if dim { p.dim } else { p.fg });
         let left = crate::kit::text::width(INPUT_PREFIX);
-        let mut out = vec![rule(p, w, mark, working)];
+        let mut out = vec![];
         for (i, text) in rows.iter().enumerate() {
             let prefix = if i == 0 {
                 INPUT_PREFIX.to_string()
@@ -62,13 +121,13 @@ impl App {
             out.push(vec![span(prefix, Style::fg(pfx_color)), span(text, style)]);
         }
         if !dim {
-            for (line, ranges) in out.iter_mut().skip(1).zip(view.atoms.iter().skip(top)) {
+            for (line, ranges) in out.iter_mut().zip(view.atoms.iter().skip(top)) {
                 for &(a, b) in ranges {
                     crate::kit::selection::highlight(line, left + a, left + b, Style::fg(p.accent));
                 }
             }
         }
-        for (line, &(a, b)) in out.iter_mut().skip(1).zip(view.selected.iter().skip(top)) {
+        for (line, &(a, b)) in out.iter_mut().zip(view.selected.iter().skip(top)) {
             crate::kit::selection::highlight(
                 line,
                 left + a,
@@ -76,7 +135,6 @@ impl App {
                 Style::fg(p.bg).on(p.accent),
             );
         }
-        out.push(rule(p, w, vec![], model));
         out
     }
 }

@@ -6,28 +6,53 @@ use tuse_core::{Event, UiPrompt};
 impl App {
     pub fn pump(&mut self, last_tick: &mut std::time::Instant) -> Pump {
         let mut pump = Pump::default();
-        while let Ok(e) = self.events.try_recv() {
+        for i in 0..256 {
+            let Ok(e) = self.events.try_recv() else { break };
+            pump.more = i == 255;
             if matches!(e, Event::Status(_)) {
                 continue;
             }
-            let stream = matches!(
-                e,
-                Event::Text(_) | Event::Reasoning(_) | Event::ToolDelta { .. }
-            );
+            let visible = match &e {
+                Event::Text(t) => Some(!t.trim().is_empty()),
+                Event::Reasoning(t) => {
+                    Some(self.palette.ui.reasoning_line != 0 && !t.trim().is_empty())
+                }
+                Event::ToolDelta { code, .. } => {
+                    Some(self.palette.ui.tool_line != 0 && !code.trim().is_empty())
+                }
+                _ => None,
+            };
+            pump.immediate |= match visible {
+                None => true,
+                Some(true) => !std::mem::replace(&mut self.visible_stream, true),
+                Some(false) => false,
+            };
             self.handle_event(e);
             pump.dirty = true;
-            pump.immediate |= !stream;
+        }
+        let activity = self.session.activity();
+        if self.activity != activity {
+            self.activity = activity;
+            pump.dirty = true;
+            pump.immediate = true;
+        }
+        if activity == tuse_core::Activity::Provider && self.has_retry_notice() {
+            self.flash = None;
+            pump.dirty = true;
         }
         if std::mem::take(&mut self.refresh_history) {
             self.chat = crate::ui::chat::Chat::from_session(&self.session);
             self.streaming = None;
             self.thinking = None;
             self.pending_tools.clear();
+            self.hidden_tool_code.clear();
             self.streamed_text = false;
         }
-        if self.flash.as_ref().is_some_and(|(_, since)| {
-            since.elapsed() >= std::time::Duration::from_secs(crate::kit::style::FLASH_SECS)
-        }) {
+        if !self.retry_notice_active()
+            && self.flash.as_ref().is_some_and(|(_, since)| {
+                since.elapsed() >= std::time::Duration::from_secs(crate::kit::style::FLASH_SECS)
+            })
+        {
             self.flash = None;
             pump.dirty = true;
         }
@@ -39,6 +64,16 @@ impl App {
             pump.immediate = true;
         }
         pump
+    }
+
+    pub(crate) fn retry_notice_active(&self) -> bool {
+        self.activity == tuse_core::Activity::Retry && self.has_retry_notice()
+    }
+
+    fn has_retry_notice(&self) -> bool {
+        self.flash
+            .as_ref()
+            .is_some_and(|(text, _)| text.starts_with("Retry "))
     }
 
     pub(super) fn stream(&mut self, t: String, reasoning: bool) {
@@ -69,6 +104,7 @@ impl App {
         }
     }
     fn drop_pending(&mut self) {
+        self.hidden_tool_code.clear();
         self.pending_tools.sort_by_key(|(_, pos)| *pos);
         for (_, pos) in self.pending_tools.drain(..).rev() {
             self.chat.remove(pos);
@@ -93,12 +129,15 @@ impl App {
                 self.scroll = 0;
             }
             Event::TurnStart => {
+                self.visible_stream = false;
                 self.turn_error = None;
             }
             Event::Text(t) => self.stream(t, false),
             Event::Reasoning(t) => self.stream(t, true),
             Event::StreamReset => {
+                self.visible_stream = false;
                 self.streamed_text = false;
+                self.hidden_tool_code.clear();
                 let mut drop: Vec<usize> = [self.streaming.take(), self.thinking.take()]
                     .into_iter()
                     .flatten()
@@ -110,6 +149,8 @@ impl App {
                 }
             }
             Event::Assistant { text } => {
+                self.hidden_tool_code.clear();
+                self.visible_stream = false;
                 if !self.streamed_text && self.streaming.is_none() && !text.trim().is_empty() {
                     self.chat.push(Entry::Assistant(text));
                 }
@@ -119,12 +160,28 @@ impl App {
                 self.chat.settle();
             }
             Event::ToolDelta {
-                index, id, code, ..
+                index,
+                id,
+                mut code,
+                ..
             } => {
                 let pos =
                     if let Some((_, pos)) = self.pending_tools.iter().find(|(i, _)| *i == index) {
                         *pos
                     } else {
+                        if code.trim().is_empty() {
+                            if !code.is_empty() {
+                                self.hidden_tool_code
+                                    .entry(index)
+                                    .or_default()
+                                    .push_str(&code);
+                            }
+                            return;
+                        }
+                        if let Some(mut prefix) = self.hidden_tool_code.remove(&index) {
+                            prefix.push_str(&code);
+                            code = prefix;
+                        }
                         self.streaming = None;
                         self.thinking = None;
                         let pos = self.chat.len();
@@ -133,7 +190,7 @@ impl App {
                             id: if id.is_empty() {
                                 format!("stream-{index}")
                             } else {
-                                id
+                                id.clone()
                             },
                             input: String::new(),
                             output: None,
@@ -142,17 +199,22 @@ impl App {
                         });
                         pos
                     };
-                if let Some(Entry::Tool { input, .. }) = self.chat.get_mut(pos) {
+                if let Some(Entry::Tool { id: old, input, .. }) = self.chat.get_mut(pos) {
+                    if !id.is_empty() {
+                        *old = id;
+                    }
                     input.push_str(&code);
                 }
             }
             Event::ToolStart { id, input, .. } => {
-                if let Some((n, _)) = self
-                    .pending_tools
-                    .iter()
-                    .enumerate()
-                    .min_by_key(|(_, x)| x.0)
-                {
+                let slot = self.pending_tools.iter().position(|&(_, pos)| {
+                    matches!(self.chat.entry(pos), Some(Entry::Tool { id: old, .. }) if old == &id)
+                }).or_else(|| {
+                    self.pending_tools.iter().enumerate().filter(|&(_, &(index, pos))| {
+                        matches!(self.chat.entry(pos), Some(Entry::Tool { id: old, .. }) if old == &format!("stream-{index}"))
+                    }).min_by_key(|(_, entry)| entry.0).map(|(n, _)| n)
+                });
+                if let Some(n) = slot {
                     let (_, pos) = self.pending_tools.remove(n);
                     if let Some(Entry::Tool {
                         id: old,
@@ -161,9 +223,15 @@ impl App {
                     }) = self.chat.get_mut(pos)
                     {
                         *old = id;
-                        *text = input;
+                        if !input.trim().is_empty() {
+                            *text = input;
+                        }
                         return;
                     }
+                }
+                if input.trim().is_empty() {
+                    self.empty_tool = Some(id);
+                    return;
                 }
                 self.chat.push(Entry::Tool {
                     id,
@@ -190,6 +258,15 @@ impl App {
                     *o = Some(output);
                     *c = code;
                     *d = diffs;
+                } else if self.empty_tool.as_ref() == Some(&id) {
+                    self.empty_tool = None;
+                    self.chat.push(Entry::Tool {
+                        id,
+                        input: String::new(),
+                        output: Some(output),
+                        code,
+                        diffs,
+                    });
                 }
                 if handed_off {
                     self.drop_pending();
@@ -214,6 +291,15 @@ impl App {
                 self.streaming = None;
                 self.thinking = None;
                 self.drop_pending();
+                self.empty_tool = None;
+                self.visible_stream = false;
+                if self
+                    .flash
+                    .as_ref()
+                    .is_some_and(|(text, _)| text.starts_with("Retry "))
+                {
+                    self.flash = None;
+                }
                 self.chat.settle();
                 if cancelled {
                     self.chat.finish_interrupted_tools();
@@ -285,5 +371,30 @@ impl App {
                 });
             }
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn burst_drains_in_order_in_bounded_batches() {
+        let mut app = crate::ui::app::test_app("stream-burst");
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.events = rx;
+        for n in 0..300 {
+            tx.send(Event::Text(format!("{n} "))).unwrap();
+        }
+        let mut tick = Instant::now();
+        let first = app.pump(&mut tick);
+        assert!(first.dirty && first.immediate && first.more);
+        let second = app.pump(&mut tick);
+        assert!(second.dirty && !second.immediate && !second.more);
+        let expected: String = (0..300).map(|n| format!("{n} ")).collect();
+        assert!(
+            matches!(app.chat.entry(app.streaming.unwrap()), Some(Entry::Assistant(t)) if t == &expected)
+        );
+        crate::ui::app::cleanup(app);
     }
 }

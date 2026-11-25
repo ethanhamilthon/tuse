@@ -47,7 +47,17 @@ pub struct Session {
     pub(crate) reload_after_hook: AtomicBool,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum Activity {
+    #[default]
+    Idle,
+    Provider,
+    Retry,
+    Lua,
+}
+
 pub(crate) struct State {
+    pub activity: Activity,
     pub cache: Option<Arc<ReadCache>>,
     pub pending_history: Option<Vec<Record>>,
     pub tool_step: bool,

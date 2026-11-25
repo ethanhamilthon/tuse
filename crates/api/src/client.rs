@@ -75,20 +75,43 @@ impl Client {
         on_delta: &mut dyn FnMut(Delta),
         on_retry: &mut dyn FnMut(Retry),
     ) -> Result<Reply, Error> {
-        self.complete_with_delays(req, retries, &RETRY_DELAYS, cancel, on_delta, on_retry)
+        self.complete_observed(req, retries, cancel, on_delta, on_retry, &mut || {})
     }
 
-    pub(crate) fn complete_with_delays(
+    pub fn complete_observed(
         &self,
         req: &Request,
         retries: usize,
+        cancel: &AtomicBool,
+        on_delta: &mut dyn FnMut(Delta),
+        on_retry: &mut dyn FnMut(Retry),
+        on_attempt: &mut dyn FnMut(),
+    ) -> Result<Reply, Error> {
+        self.complete_with_delays(
+            req,
+            &RETRY_DELAYS[..retries.min(RETRY_DELAYS.len())],
+            cancel,
+            on_delta,
+            on_retry,
+            on_attempt,
+        )
+    }
+
+    fn complete_with_delays(
+        &self,
+        req: &Request,
         delays: &[u64],
         cancel: &AtomicBool,
         on_delta: &mut dyn FnMut(Delta),
         on_retry: &mut dyn FnMut(Retry),
+        on_attempt: &mut dyn FnMut(),
     ) -> Result<Reply, Error> {
-        let (mut attempt, max) = (0, retries.min(delays.len()));
+        let (mut attempt, max) = (0, delays.len());
         loop {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(Error::Cancelled);
+            }
+            on_attempt();
             match self.once(req, cancel, on_delta) {
                 Err(e) if e.retryable() && attempt < max => {
                     let delay = delays[attempt];
@@ -246,7 +269,14 @@ mod tests {
             let (url, hits) = mock(resps);
             let mut n = 0;
             let r = Client::new(&url, "k", api)
-                .complete_with_delays(&req, 5, &[0; 5], &cancel, &mut |_| {}, &mut |_| n += 1)
+                .complete_with_delays(
+                    &req,
+                    &[0; 5],
+                    &cancel,
+                    &mut |_| {},
+                    &mut |_| n += 1,
+                    &mut || {},
+                )
                 .unwrap();
             assert!(r.text == wt && n == wn && hits.load(Ordering::SeqCst) == wn + 1);
         }
@@ -267,7 +297,14 @@ mod tests {
             let (url, hits) = mock(vec![resp.clone(), resp]);
             let mut n = 0;
             let e = Client::new(&url, "k", api)
-                .complete_with_delays(&req, 5, &[0; 2], &cancel, &mut |_| {}, &mut |_| n += 1)
+                .complete_with_delays(
+                    &req,
+                    &[0; 2],
+                    &cancel,
+                    &mut |_| {},
+                    &mut |_| n += 1,
+                    &mut || {},
+                )
                 .unwrap_err();
             assert!(!e.retryable() && n == 0 && hits.load(Ordering::SeqCst) == 1);
         }

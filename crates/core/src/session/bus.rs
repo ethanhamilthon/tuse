@@ -1,11 +1,16 @@
 use crate::convo::record::Record;
 use crate::event::{Event, UiRequest};
 use crate::session::{Session, State};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender, SyncSender, channel};
 
 pub(crate) enum Subs {
     Pending(Vec<Event>),
-    Live(Vec<Sender<Event>>),
+    Live(Vec<Subscriber>),
+}
+
+pub(crate) struct Subscriber {
+    tx: Sender<Event>,
+    wake: Option<SyncSender<()>>,
 }
 
 impl Default for Subs {
@@ -108,21 +113,48 @@ impl Session {
                     buf.push(e);
                 }
             }
-            Subs::Live(subs) => subs.retain(|tx| tx.send(e.clone()).is_ok()),
+            Subs::Live(subs) => subs.retain(|sub| {
+                if sub.tx.send(e.clone()).is_err() {
+                    return false;
+                }
+                if let Some(wake) = &sub.wake {
+                    let _ = wake.try_send(());
+                }
+                true
+            }),
+        }
+    }
+
+    pub(crate) fn wake_ui(&self) {
+        if let Subs::Live(subs) = &*self.subs.lock().unwrap() {
+            for sub in subs {
+                if let Some(wake) = &sub.wake {
+                    let _ = wake.try_send(());
+                }
+            }
         }
     }
 
     pub fn subscribe(&self) -> Receiver<Event> {
+        self.subscribe_inner(None)
+    }
+
+    pub fn subscribe_ui(&self, wake: SyncSender<()>) -> Receiver<Event> {
+        self.subscribe_inner(Some(wake))
+    }
+
+    fn subscribe_inner(&self, wake: Option<SyncSender<()>>) -> Receiver<Event> {
         let (tx, rx) = channel();
+        let sub = Subscriber { tx, wake };
         let mut subs = self.subs.lock().unwrap();
         match &mut *subs {
             Subs::Pending(buf) => {
                 for e in buf.drain(..) {
-                    let _ = tx.send(e);
+                    let _ = sub.tx.send(e);
                 }
-                *subs = Subs::Live(vec![tx]);
+                *subs = Subs::Live(vec![sub]);
             }
-            Subs::Live(list) => list.push(tx),
+            Subs::Live(list) => list.push(sub),
         }
         rx
     }

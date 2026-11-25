@@ -41,6 +41,17 @@ impl Session {
         (cache.meta.model.clone(), cache.meta.effort.clone())
     }
 
+    pub fn activity(&self) -> crate::Activity {
+        self.state.lock().unwrap().activity
+    }
+
+    pub(crate) fn set_activity(&self, st: &mut State, activity: crate::Activity) {
+        if st.activity != activity {
+            st.activity = activity;
+            self.wake_ui();
+        }
+    }
+
     pub fn busy(&self) -> bool {
         self.state.lock().unwrap().busy
     }

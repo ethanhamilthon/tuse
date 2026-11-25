@@ -32,7 +32,7 @@ pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Resul
         prev(info);
     }));
     let dog = frame::watchdog::Watchdog::start(session.clone(), stop.clone());
-    main_loop(ui::app::App::new(session, config_arg), &stop, &dog)
+    main_loop(session, config_arg, &stop, &dog)
 }
 
 struct RestoreGuard;
@@ -75,11 +75,61 @@ fn restore() {
     let _ = terminal::disable_raw_mode();
 }
 
+struct TerminalInput {
+    stop: Arc<std::sync::atomic::AtomicBool>,
+    worker: Option<std::thread::JoinHandle<()>>,
+    events: std::sync::mpsc::Receiver<std::io::Result<TermEvent>>,
+}
+
+impl TerminalInput {
+    fn start(wake: std::sync::mpsc::SyncSender<()>) -> std::io::Result<Self> {
+        use std::sync::atomic::Ordering::Relaxed;
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let done = stop.clone();
+        let (tx, events) = std::sync::mpsc::channel();
+        let worker = std::thread::Builder::new()
+            .name("tuse-input".into())
+            .spawn(move || {
+                while !done.load(Relaxed) {
+                    let next = match event::poll(Duration::from_millis(50)) {
+                        Ok(false) => continue,
+                        Ok(true) => event::read(),
+                        Err(e) => Err(e),
+                    };
+                    let failed = next.is_err();
+                    let sent = tx.send(next).is_ok();
+                    let _ = wake.try_send(());
+                    if failed || !sent {
+                        break;
+                    }
+                }
+            })?;
+        Ok(Self {
+            stop,
+            worker: Some(worker),
+            events,
+        })
+    }
+}
+
+impl Drop for TerminalInput {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}
+
 fn main_loop(
-    mut app: ui::app::App,
+    session: Arc<Session>,
+    config_arg: Option<PathBuf>,
     stop: &std::sync::atomic::AtomicBool,
     dog: &frame::watchdog::Watchdog,
 ) -> std::io::Result<String> {
+    let (wake, wake_rx) = std::sync::mpsc::sync_channel(1);
+    let input = TerminalInput::start(wake.clone())?;
+    let mut app = ui::app::App::with_wake(session, config_arg, Some(wake));
     let mut out = BufWriter::with_capacity(1 << 16, stdout());
     let mut renderer = frame::draw::Renderer::default();
     let (mut w, mut h) = terminal::size()?;
@@ -103,11 +153,14 @@ fn main_loop(
         if app.wants_quit() || stop.load(std::sync::atomic::Ordering::Relaxed) {
             break;
         }
-        if !event::poll(Duration::from_millis(kit::style::FRAME_MS))? {
+        let Ok(next) = input.events.try_recv() else {
+            if !pumped.more {
+                let _ = wake_rx.recv_timeout(redraw_wait(dirty, last_draw, last_tick, &app));
+            }
             continue;
-        }
-        let page = h.saturating_sub(4) as usize;
-        let changed = match event::read()? {
+        };
+        let page = app.overlay_rows.end.saturating_sub(1).max(1);
+        let changed = match next? {
             TermEvent::Key(k) => {
                 app.key(k, page);
                 true
@@ -129,6 +182,7 @@ fn main_loop(
             immediate = true;
         }
     }
+    drop(input);
     let session = app.session();
     let id = app.finish();
     if !dog.claim_close() {
@@ -138,4 +192,26 @@ fn main_loop(
     }
     session.close();
     Ok(id)
+}
+fn redraw_wait(
+    dirty: bool,
+    last_draw: Instant,
+    last_tick: Instant,
+    app: &ui::app::App,
+) -> Duration {
+    let mut wait = Duration::from_millis(250);
+    if dirty {
+        wait = wait
+            .min(Duration::from_millis(kit::style::FRAME_MS).saturating_sub(last_draw.elapsed()));
+    }
+    if app.session.busy() {
+        wait = wait.min(Duration::from_millis(100).saturating_sub(last_tick.elapsed()));
+    }
+    if !app.retry_notice_active()
+        && let Some((_, since)) = &app.flash
+    {
+        wait =
+            wait.min(Duration::from_secs(kit::style::FLASH_SECS).saturating_sub(since.elapsed()));
+    }
+    wait
 }

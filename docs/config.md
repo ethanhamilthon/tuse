@@ -99,7 +99,8 @@ A color is `#rgb`, `#rrggbb`, an ANSI index `"0"`–`"255"`, or a name: `black`,
 | `pad_x` | `0` | Side padding in columns. |
 | `message_gap` | `1` | Blank lines between entries. |
 | `list_max_height` | `16` | Max rows for pickers and panels (`>= 1`). |
-| `input_max_height` | `-1` | Max input rows (`-1` or `>= 1`). |
+| `input_max_height` | `-1` | Max visible input rows (`-1` or `>= 1`). Boxed input scrolls within at most two editor rows. |
+| `input_style` | `classic` | `classic` uses the original input layout. `boxed` adds a five-row border with an inside status bar; it falls back to classic if the terminal is too small. |
 | `hide_history` | `{}` | History roles left out of `/history`, such as `{ "usage", "hook" }` ([Session](session.md#history-and-session-data)). Unknown roles fail. |
 | `scope_models` | `{}` | `provider/model` or `provider/*` patterns. When set, `/models` lists only matching models plus the current one. JSON-RPC ignores it. |
 

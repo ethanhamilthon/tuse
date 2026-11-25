@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.3
+
+- The terminal draws the first streamed content without waiting for keyboard polling. Empty Lua previews no longer flash in the chat.
+- The activity indicator distinguishes provider wait, streaming, and foreground Lua execution.
+- Set `settings.ui.input_style = "boxed"` for a five-row composer with a built-in status bar.
+
 ## 0.11.2
 
 - **Faster streaming.** Long replies no longer slow down while they stream: lists, code blocks, reasoning, and `lua` tool code re-render only their unfinished end, and file path checks for clickable links are cached. Up to 150x less work per frame on long replies.

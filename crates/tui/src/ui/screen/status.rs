@@ -44,7 +44,14 @@ impl App {
                 span(STEERING_LABEL, Style::fg(p.muted)),
             ];
         }
-        let spin = SPINNER[self.tick % SPINNER.len()];
+        use crate::kit::style::{STREAM_PULSE, TOOL_STARS};
+        let frames = match self.activity {
+            tuse_core::Activity::Provider if self.visible_stream => STREAM_PULSE,
+            tuse_core::Activity::Provider => SPINNER,
+            tuse_core::Activity::Lua => TOOL_STARS,
+            _ => return vec![],
+        };
+        let spin = frames[self.tick % frames.len()];
         vec![span(
             format!("{spin} {}", duration(elapsed)),
             Style::fg(p.accent),
@@ -74,8 +81,10 @@ mod tests {
 
     #[test]
     fn working_indicator_omits_transient_actions_and_keeps_steering_and_flash() {
+        use std::io::{BufRead, BufReader, Read, Write};
         use std::net::TcpListener;
-        use std::time::Duration;
+        use std::sync::mpsc::{channel, sync_channel};
+        use std::time::{Duration, Instant};
         use tuse_core::{Event, Options, Session, UserInput};
 
         crate::ui::app::test_home();
@@ -101,15 +110,46 @@ mod tests {
         })
         .unwrap();
         session.set_model("workind/m", "default");
-        let mut app = App::new(session.clone(), Some(cfg));
+        let (wake, wake_rx) = sync_channel(1);
+        let mut app = App::with_wake(session.clone(), Some(cfg), Some(wake));
         assert!(app.working().is_empty());
 
-        let (id, _) = session.submit(UserInput::text("go"));
-        loop {
-            if matches!(app.events.recv_timeout(Duration::from_secs(5)).unwrap(), Event::User { id: got, .. } if got == id)
-            {
-                break;
+        let (send_delta, await_delta) = channel();
+        let (finish, await_finish) = channel();
+        let server = std::thread::spawn(move || {
+            let (socket, _) = listener.accept().unwrap();
+            let mut socket = BufReader::new(socket);
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                assert!(socket.read_line(&mut line).unwrap() > 0);
+                if line.trim().is_empty() {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap();
+                }
             }
+            socket.read_exact(&mut vec![0; length]).unwrap();
+            await_delta.recv_timeout(Duration::from_secs(5)).unwrap();
+            let out = socket.get_mut();
+            write!(
+                out,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+            )
+            .unwrap();
+            out.write_all(b"data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n\n")
+                .unwrap();
+            out.flush().unwrap();
+            await_finish.recv_timeout(Duration::from_secs(5)).unwrap();
+            out.write_all(b"data: [DONE]\n\n").unwrap();
+        });
+
+        let (id, _) = session.submit(UserInput::text("go"));
+        let mut tick = Instant::now();
+        while app.activity != tuse_core::Activity::Provider {
+            wake_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            app.pump(&mut tick);
         }
         app.handle_event(Event::Status("reading a.txt...".into()));
         app.handle_event(Event::Status("running cargo test...".into()));
@@ -150,9 +190,41 @@ mod tests {
         let top = app.input_block(&app.editor.view(40), 40, &[String::new()], 0);
         let top_text: String = top[0].iter().map(|s| s.text.as_str()).collect();
         assert!(top_text.contains(SPINNER[1]));
+        send_delta.send(()).unwrap();
+        while !app.visible_stream {
+            wake_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            tick = Instant::now();
+            let pump = app.pump(&mut tick);
+            if app.visible_stream {
+                assert!(pump.dirty && pump.immediate);
+            }
+        }
+        let frame = app.compose(50, 12);
+        assert!(
+            frame
+                .screen
+                .iter()
+                .flatten()
+                .any(|span| span.text == "first")
+        );
+        assert!(session.busy());
+        assert!(
+            app.working()[0]
+                .text
+                .starts_with(crate::kit::style::STREAM_PULSE[1])
+        );
+        app.activity = tuse_core::Activity::Lua;
+        assert!(
+            app.working()[0]
+                .text
+                .starts_with(crate::kit::style::TOOL_STARS[1])
+        );
+        app.activity = tuse_core::Activity::Idle;
+        assert!(app.working().is_empty());
 
+        finish.send(()).unwrap();
+        server.join().unwrap();
         session.close();
-        drop(listener);
         std::fs::remove_dir_all(tuse_core::tuse_home().join(&session.id)).ok();
         std::fs::remove_dir_all(dir).ok();
     }

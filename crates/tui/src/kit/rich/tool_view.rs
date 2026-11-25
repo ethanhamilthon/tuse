@@ -12,7 +12,11 @@ pub fn tool(
 ) -> Vec<Line> {
     let failed = output.is_some() && code != Some(0);
     let head = Style::fg(if failed { p.err } else { p.info });
-    let lines = source(input.trim(), true, width, head, failed, p);
+    let lines = if input.trim().is_empty() {
+        vec![]
+    } else {
+        source(input.trim(), true, width, head, failed, p)
+    };
     finish(lines, output, diffs, width, p)
 }
 

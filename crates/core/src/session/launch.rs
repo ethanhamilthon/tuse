@@ -101,6 +101,7 @@ impl Prepared {
             }
         }
         let st = State {
+            activity: Default::default(),
             cache: None,
             pending_history: None,
             tool_step: false,

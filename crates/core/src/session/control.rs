@@ -71,6 +71,7 @@ impl Session {
         st.cancel.store(true, Ordering::Relaxed);
         st.generation += 1;
         st.busy = false;
+        self.set_activity(&mut st, crate::Activity::Idle);
         st.queue.clear();
         let cache = self.cached(&mut st);
         for (i, mut r) in wire::missing_results(&cache.records)

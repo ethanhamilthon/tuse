@@ -22,6 +22,7 @@ pub struct InputArea {
 pub struct Pump {
     pub dirty: bool,
     pub immediate: bool,
+    pub more: bool,
 }
 
 pub struct QuestionPrompt {
@@ -32,6 +33,7 @@ pub struct QuestionPrompt {
 pub struct App {
     pub session: Arc<Session>,
     pub events: Receiver<Event>,
+    wake: Option<std::sync::mpsc::SyncSender<()>>,
     pub cwd: PathBuf,
     pub config_arg: Option<PathBuf>,
     pub palette: Palette,
@@ -58,8 +60,12 @@ pub struct App {
     pub turn_error: Option<String>,
     pub flash: Option<(String, std::time::Instant)>,
     pub pending_tools: Vec<(usize, usize)>,
+    pub hidden_tool_code: std::collections::BTreeMap<usize, String>,
+    pub empty_tool: Option<String>,
     pub streaming: Option<usize>,
     pub streamed_text: bool,
+    pub visible_stream: bool,
+    pub activity: tuse_core::Activity,
     pub thinking: Option<usize>,
     pub scroll: usize,
     pub chat_anchor: Option<(usize, usize)>,
@@ -70,14 +76,27 @@ pub struct App {
 }
 
 impl App {
+    #[cfg(test)]
     pub fn new(session: Arc<Session>, config_arg: Option<PathBuf>) -> App {
+        Self::with_wake(session, config_arg, None)
+    }
+
+    pub fn with_wake(
+        session: Arc<Session>,
+        config_arg: Option<PathBuf>,
+        wake: Option<std::sync::mpsc::SyncSender<()>>,
+    ) -> App {
         let cwd = session.cwd().to_path_buf();
         let palette = Palette::for_session(&session.config(), &cwd);
-        let events = session.subscribe();
+        let events = match &wake {
+            Some(wake) => session.subscribe_ui(wake.clone()),
+            None => session.subscribe(),
+        };
         let chat = Chat::from_session(&session);
         App {
             session,
             events,
+            wake,
             cwd,
             config_arg,
             palette,
@@ -104,8 +123,12 @@ impl App {
             turn_error: None,
             flash: None,
             pending_tools: vec![],
+            hidden_tool_code: Default::default(),
+            empty_tool: None,
             streaming: None,
             streamed_text: false,
+            visible_stream: false,
+            activity: Default::default(),
             thinking: None,
             scroll: 0,
             chat_anchor: None,
@@ -170,7 +193,7 @@ impl App {
 
     pub fn switch(&mut self, resume: Option<String>) {
         match self.session.switch(resume) {
-            Ok(s) => *self = App::new(s, self.config_arg.clone()),
+            Ok(s) => *self = App::with_wake(s, self.config_arg.clone(), self.wake.clone()),
             Err(e) => self.error(e),
         }
     }

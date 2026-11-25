@@ -66,6 +66,7 @@ impl Session {
                 Some(call.name.clone()),
             );
             let s = self.clone();
+            let running = self.clone();
             let (owned_call, owned_input) = (call.clone(), input.clone());
             return self
                 .vm
@@ -73,8 +74,17 @@ impl Session {
                     code,
                     "lua",
                     stop,
-                    crate::scripting::registry::agent_env,
+                    move |lua| {
+                        let env = crate::scripting::registry::agent_env(lua)?;
+                        if let Some(mut st) = running.lock_live(generation) {
+                            running.set_activity(&mut st, crate::Activity::Lua);
+                        }
+                        Ok(env)
+                    },
                     move |d| {
+                        if let Some(mut st) = s.lock_live(generation) {
+                            s.set_activity(&mut st, crate::Activity::Idle);
+                        }
                         s.lua_end_done(&exec_id, "tool", started.elapsed(), &d);
                         let handed_off = d.handed_off;
                         s.tool_done(
@@ -130,6 +140,7 @@ impl Session {
     ) -> Option<bool> {
         let mut st = self.lock_live(generation)?;
         st.tool_handoff = None;
+        self.set_activity(&mut st, crate::Activity::Idle);
         st.calls += 1;
         self.record(
             &mut st,

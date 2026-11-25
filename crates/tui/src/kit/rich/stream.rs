@@ -105,9 +105,6 @@ pub fn tool(cache: &mut Option<Prefix>, input: &str, width: usize, p: &Palette) 
             let first = c.at == base;
             match body(input, c.at, end) {
                 Some(b) => crate::kit::rich::tool_view::source(b, first, width, head, false, p),
-                None if first => {
-                    crate::kit::rich::tool_view::source("", true, width, head, false, p)
-                }
                 None => vec![],
             }
         },

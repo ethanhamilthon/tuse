@@ -108,6 +108,10 @@ impl Chat {
         self.entries.len()
     }
 
+    pub(crate) fn entry(&self, i: usize) -> Option<&Entry> {
+        self.entries.get(i).map(|(entry, _)| entry)
+    }
+
     pub fn get_mut(&mut self, i: usize) -> Option<&mut Entry> {
         let slot = self.entries.get_mut(i)?;
         slot.1 = None;
@@ -201,10 +205,10 @@ impl Chat {
         if matches!(e, Entry::Tool { output: None, .. })
             && let Some(prefix) = lines.first_mut().and_then(|line| line.first_mut())
         {
-            const STARS: [&str; 4] = ["✦ ", "✧ ", "✦ ", "✶ "];
-            let frame = STARS[self.tick % STARS.len()];
+            let stars = crate::kit::style::TOOL_STARS;
+            let frame = stars[self.tick % stars.len()];
             let rest: String = prefix.text.chars().skip(2).collect();
-            prefix.text = format!("{frame}{rest}");
+            prefix.text = format!("{frame} {rest}");
         }
         lines
     }
@@ -421,6 +425,38 @@ mod tests {
         assert_eq!(app.chat.len(), n);
         app.handle_event(tuse_core::Event::Notice("notice".into()));
         assert!(matches!(&app.chat.entries[n].0, Entry::Notice(t) if t == "notice"));
+        crate::ui::app::cleanup(app);
+    }
+
+    #[test]
+    fn empty_lua_previews_do_not_take_a_row() {
+        use tuse_core::Event;
+        let mut app = crate::ui::app::test_app("empty-tool-chat");
+        let n = app.chat.len();
+        let delta = |code: &str| Event::ToolDelta {
+            index: 0,
+            id: "id".into(),
+            name: "lua".into(),
+            code: code.into(),
+        };
+        app.handle_event(delta(""));
+        app.handle_event(delta(" \n"));
+        assert_eq!(app.chat.len(), n);
+        app.handle_event(Event::StreamReset);
+        assert!(app.hidden_tool_code.is_empty());
+        app.handle_event(delta(""));
+        app.handle_event(Event::ToolStart {
+            timeout: 120,
+            id: "id".into(),
+            tool: "lua".into(),
+            input: "print(1)".into(),
+        });
+        assert_eq!(app.chat.len(), n + 1);
+        let line = &app.chat.lines(n, 40, &app.palette)[0];
+        assert_eq!(
+            line.iter().map(|s| s.text.as_str()).collect::<String>(),
+            "✦ print(1)"
+        );
         crate::ui::app::cleanup(app);
     }
 

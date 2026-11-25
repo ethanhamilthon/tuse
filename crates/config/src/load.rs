@@ -86,6 +86,22 @@ mod tests {
     }
 
     #[test]
+    fn input_style_defaults_validates_and_serializes() {
+        let cfg = |v| from_value(v, "test");
+        assert_eq!(
+            cfg(json!({})).unwrap().settings.ui.input_style,
+            crate::InputStyle::Classic
+        );
+        let boxed = cfg(json!({"settings":{"ui":{"input_style":"boxed"}}})).unwrap();
+        assert_eq!(
+            serde_json::to_value(boxed).unwrap()["settings"]["ui"]["input_style"],
+            "boxed"
+        );
+        let err = cfg(json!({"settings":{"ui":{"input_style":"other"}}})).unwrap_err();
+        assert!(err.contains("settings.ui.input_style"), "{err}");
+    }
+
+    #[test]
     fn find_order() {
         let d = std::env::temp_dir().join(format!("tuse-find-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();

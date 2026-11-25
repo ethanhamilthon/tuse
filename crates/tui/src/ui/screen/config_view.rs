@@ -83,6 +83,12 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             ),
         ],
     );
+    let name_w = cfg
+        .models
+        .iter()
+        .map(|m| crate::kit::text::width(&m.name))
+        .max()
+        .unwrap_or(0);
     sec(
         "Models",
         cfg.models
@@ -102,7 +108,14 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                     ));
                 }
                 vec![
-                    span(format!("  {}  ", m.name), fg),
+                    span(
+                        format!(
+                            "  {}{}  ",
+                            m.name,
+                            " ".repeat(name_w - crate::kit::text::width(&m.name))
+                        ),
+                        fg,
+                    ),
                     span(parts.join(" "), dim),
                 ]
             })
@@ -194,7 +207,20 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         "Commands",
         cfg.commands
             .iter()
-            .map(|n| vec![span(format!("  /{n}"), info)])
+            .map(|(n, c)| {
+                let mut row = vec![span(format!("  /{n}"), info)];
+                let args = c.args.join(" | ");
+                let detail = [c.desc.as_str(), args.as_str()]
+                    .iter()
+                    .filter(|s| !s.is_empty())
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join("  ");
+                if !detail.is_empty() {
+                    row.push(span(format!("  {detail}"), dim));
+                }
+                row
+            })
             .collect(),
     );
     Panel::styled(lines).with_kind(crate::ui::panel::PanelKind::Config)
@@ -214,10 +240,35 @@ mod tests {
     use tuse_config::{Connect, FunctionKind, Hook};
 
     #[test]
+    fn model_details_start_in_one_column() {
+        let mut cfg = Config::default();
+        for name in ["p/a", "p/much-longer"] {
+            cfg.models.push(tuse_config::ModelDef {
+                name: name.into(),
+                window: 1_000_000,
+                ..Default::default()
+            });
+        }
+        let p = Palette::from_config(&cfg);
+        let mut pnl = panel(&cfg, &p);
+        let rows: Vec<String> = (0..60)
+            .step_by(10)
+            .flat_map(|off| {
+                pnl.scroll_by(off as isize - pnl.scroll() as isize);
+                pnl.lines(80, 16, &p)
+            })
+            .map(|l| l.into_iter().map(|s| s.text).collect::<String>())
+            .filter(|r| r.contains("window="))
+            .collect();
+        assert!(rows.len() >= 2, "{rows:?}");
+        assert_eq!(rows[0].find("window="), rows[1].find("window="));
+    }
+
+    #[test]
     fn renders_all_sections_without_secrets() {
         let mut cfg = Config {
             systems: vec!["Be helpful.".into()],
-            commands: vec!["hello".into()],
+            commands: [("hello".to_string(), Default::default())].into(),
             path: "/home/me/.config/tuse/init.lua".into(),
             ..Default::default()
         };

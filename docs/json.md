@@ -81,7 +81,7 @@ For `session.new` and `session.resume`, events left over from the old session ar
 
 ### Config
 
-- `config.get` → the resolved config: `settings`, `theme`, `models`, `systems`, `prompts` (`{kind: "text" | "function", body, args}`), `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands`, `settings.open`, and `path` (`""` when the defaults are used). Secrets and Lua function bodies are left out.
+- `config.get` → the resolved config: `settings`, `theme`, `models`, `systems`, `prompts` (`{kind: "text" | "function", body, args}`), `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands` (`{desc, args, params}` per name), `settings.open`, and `path` (`""` when the defaults are used). Secrets and Lua function bodies are left out.
 - `config.reload` → `null`, or `-32000` with the reason. If the reload fails, the old config stays.
 
 ### Tasks and commands
@@ -89,8 +89,8 @@ For `session.new` and `session.resume`, events left over from the old session ar
 - `tasks.list` → `[{id, name, status, started, ended, log, code}]`.
 - `tasks.get` `{id, lines?}` → the same fields plus `output`, the last `lines` lines of the log (default 50).
 - `tasks.stop` `{id}` → the task.
-- `commands.list` → names of the custom commands.
-- `commands.run` `{name}` → `null`. Starts the command.
+- `commands.list` → `[{name, desc, args, params}]` for the custom commands. `params` is the number of parameters `run` declares, or `null` when it takes `...`.
+- `commands.run` `{name, argv?}` → `null`. Starts the command with the words in `argv`. Words the command does not accept fail with `-32000`.
 
 ### Interactive UI
 

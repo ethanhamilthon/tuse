@@ -45,10 +45,14 @@ impl Drop for RestoreGuard {
 
 fn setup() -> std::io::Result<()> {
     terminal::enable_raw_mode()?;
-    let mut out = stdout();
+    enter_modes(&mut stdout())
+}
+
+fn enter_modes(out: &mut impl Write) -> std::io::Result<()> {
     execute!(
         out,
         EnterAlternateScreen,
+        terminal::DisableLineWrap,
         EnableBracketedPaste,
         EnableMouseCapture,
         SetCursorStyle::SteadyBar
@@ -61,18 +65,21 @@ fn setup() -> std::io::Result<()> {
 }
 
 fn restore() {
-    let mut out = stdout();
+    leave_modes(&mut stdout());
+    let _ = terminal::disable_raw_mode();
+}
 
+fn leave_modes(out: &mut impl Write) {
     let _ = execute!(
         out,
         PopKeyboardEnhancementFlags,
         DisableMouseCapture,
         DisableBracketedPaste,
         SetCursorStyle::DefaultUserShape,
+        terminal::EnableLineWrap,
         LeaveAlternateScreen,
         crossterm::cursor::Show
     );
-    let _ = terminal::disable_raw_mode();
 }
 
 struct TerminalInput {
@@ -159,7 +166,7 @@ fn main_loop(
             }
             continue;
         };
-        let page = app.overlay_rows.end.saturating_sub(1).max(1);
+        let page = app.page_rows.saturating_sub(1).max(1);
         let changed = match next? {
             TermEvent::Key(k) => {
                 app.key(k, page);
@@ -214,4 +221,22 @@ fn redraw_wait(
             wait.min(Duration::from_secs(kit::style::FLASH_SECS).saturating_sub(since.elapsed()));
     }
     wait
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_terminal_does_not_wrap_while_the_ui_runs() {
+        let mut entered = vec![];
+        enter_modes(&mut entered).unwrap();
+        let mut left = vec![];
+        leave_modes(&mut left);
+        let (entered, left) = (
+            String::from_utf8_lossy(&entered),
+            String::from_utf8_lossy(&left),
+        );
+        assert!(entered.contains("\x1b[?7l") && !entered.contains("\x1b[?7h"));
+        assert!(left.contains("\x1b[?7h"));
+    }
 }

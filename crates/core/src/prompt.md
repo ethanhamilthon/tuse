@@ -24,6 +24,9 @@ The full Lua standard library is there (`string`, `table`, `math`, `io`, `os`, `
 - Prefer short, multi-step scripts over one big call. Create a file and extend it in small chunks instead of writing a 1000-line file in a single call.
 {{spawn:- Prefer asynchronous work: start long jobs with `spawn` and keep working on anything that does not depend on them.}}
 - If all that remains is waiting for a background task, briefly tell the user what is pending and end the turn. Do not poll or block waiting for it; task completion will wake the agent.
+{{docs:- Answer questions about Tuse itself from `docs()`, never from memory.}}
+{{docs:- To change how the agent behaves (prompt, functions, hooks, commands, models), edit the Lua config as `docs("config")` and `docs("examples")` describe, then `/reload`.}}
+{{docs:- To change the UI (theme, input style, limits), set `theme` and `settings.ui` in that config; keys and slash commands are in `docs("usage")`.}}
 ```
 
 ### functions-header

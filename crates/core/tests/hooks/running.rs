@@ -82,7 +82,7 @@ return {{
     let events = s.subscribe();
     s.submit(UserInput::text("run"));
     wait_turn(&events);
-    s.run_command("boom").unwrap();
+    s.run_command("boom", &[]).unwrap();
     s.open_path(&note);
     let lines = wait_lifecycle(&log);
     std::thread::sleep(Duration::from_millis(150));

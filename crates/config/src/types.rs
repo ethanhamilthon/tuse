@@ -20,7 +20,7 @@ pub struct Config {
     pub functions: BTreeMap<String, FunctionKind>,
     pub hooks: BTreeMap<String, Hook>,
     #[serde(deserialize_with = "crate::names::commands")]
-    pub commands: Vec<String>,
+    pub commands: BTreeMap<String, Command>,
     #[serde(skip_deserializing)]
     pub path: String,
 }
@@ -71,6 +71,74 @@ pub struct Prompt {
     pub body: String,
     #[serde(default)]
     pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Command {
+    pub desc: String,
+    pub args: Vec<String>,
+    pub params: Option<usize>,
+}
+
+impl Command {
+    pub fn check(&self, name: &str, words: &[String]) -> Result<(), String> {
+        if !self.args.is_empty() {
+            return match words {
+                [] => Ok(()),
+                [w] if self.args.contains(w) => Ok(()),
+                [w] => Err(format!("Unknown arg {w} for /{name}")),
+                _ => Err(format!("/{name} takes at most 1 word")),
+            };
+        }
+        match self.params {
+            Some(0) if !words.is_empty() => Err(format!("/{name} takes no words")),
+            Some(n) if words.len() > n => Err(format!(
+                "/{name} takes at most {n} word{}",
+                if n == 1 { "" } else { "s" }
+            )),
+            _ => Ok(()),
+        }
+    }
+}
+
+pub fn command_words(text: &str) -> Result<Vec<String>, &'static str> {
+    let mut words = vec![];
+    let mut word = String::new();
+    let mut started = false;
+    let mut quote: Option<char> = None;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(q) if c == '\\' && chars.peek() == Some(&q) => {
+                word.push(q);
+                chars.next();
+            }
+            Some(_) => word.push(c),
+            None if c == '"' || c == '\'' => {
+                quote = Some(c);
+                started = true;
+            }
+            None if c.is_whitespace() => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            None => {
+                word.push(c);
+                started = true;
+            }
+        }
+    }
+    if quote.is_some() {
+        return Err("unclosed quote");
+    }
+    if started {
+        words.push(word);
+    }
+    Ok(words)
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
@@ -161,5 +229,59 @@ pub fn env_value(v: &str) -> String {
             std::env::var(n).unwrap_or_default()
         }
         _ => v.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn words(text: &str) -> Vec<String> {
+        command_words(text).unwrap()
+    }
+
+    #[test]
+    fn words_split_on_whitespace_and_honor_quotes() {
+        assert_eq!(words("  a  b "), ["a", "b"]);
+        assert_eq!(words(r#"fix "the bug" 'x y'"#), ["fix", "the bug", "x y"]);
+        assert_eq!(words(r#""say \"hi\"" """#), [r#"say "hi""#, ""]);
+        assert!(words("").is_empty());
+        assert_eq!(command_words(r#"a "b"#), Err("unclosed quote"));
+    }
+
+    #[test]
+    fn commands_accept_words_by_args_or_parameter_count() {
+        let w = |s: &[&str]| s.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let free = Command {
+            params: Some(2),
+            ..Default::default()
+        };
+        assert!(free.check("mv", &w(&["a", "b"])).is_ok());
+        assert_eq!(
+            free.check("mv", &w(&["a", "b", "c"])),
+            Err("/mv takes at most 2 words".into())
+        );
+        let none = Command {
+            params: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(
+            none.check("diff", &w(&["x"])),
+            Err("/diff takes no words".into())
+        );
+        let variadic = Command::default();
+        assert!(variadic.check("run", &w(&["a", "b", "c"])).is_ok());
+        let listed = Command {
+            args: w(&["staging", "prod"]),
+            params: Some(1),
+            ..Default::default()
+        };
+        assert!(listed.check("deploy", &w(&["prod"])).is_ok());
+        assert!(listed.check("deploy", &[]).is_ok());
+        assert_eq!(
+            listed.check("deploy", &w(&["nope"])),
+            Err("Unknown arg nope for /deploy".into())
+        );
+        assert!(listed.check("deploy", &w(&["staging", "prod"])).is_err());
     }
 }

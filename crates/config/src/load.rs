@@ -92,7 +92,12 @@ mod tests {
             cfg(json!({})).unwrap().settings.ui.input_style,
             crate::InputStyle::Boxed
         );
-        for (given, shown) in [("fill", "fill"), ("lines", "lines"), ("classic", "lines")] {
+        for (given, shown) in [
+            ("fill", "fill"),
+            ("bar", "bar"),
+            ("lines", "lines"),
+            ("classic", "lines"),
+        ] {
             let c = cfg(json!({"settings":{"ui":{"input_style":given}}})).unwrap();
             assert_eq!(
                 serde_json::to_value(c).unwrap()["settings"]["ui"]["input_style"],

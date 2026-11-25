@@ -180,11 +180,15 @@ When `settings.ui.input_style` is `lines`, or a framed style does not fit, the c
 - **THEN** the lines composer is drawn and the configured style is unchanged
 
 ### Requirement: Fill input composer
-When `settings.ui.input_style` is `fill` and the viewport fits, the composer SHALL draw one blank row, the editor rows, and one blank row, all with the `border` color as background across the full width. The first editor row SHALL start with the prompt arrow. One row without background SHALL follow, then the status row with the activity on the left and the model/context label on the right.
+When `settings.ui.input_style` is `fill` and the viewport fits, the composer SHALL draw one blank row, the editor rows, and one blank row, all with the `border` color as background across the full width. The first editor row SHALL start with the prompt arrow. One row without background SHALL follow, then the status row with the activity on the left and the model/context label on the right. While a picker, question, or panel is open, its rows and one border rule row SHALL take the place of that unfilled row.
 
 #### Scenario: Fill composer with a multiline draft
 - **WHEN** fill input is configured in a terminal with sufficient space and the draft wraps to more than one row
 - **THEN** the filled block grows by one row per draft row, one unfilled row separates it from the status row, and the cursor and mouse hit testing match the editor rows
+
+#### Scenario: Fill composer with an open list
+- **WHEN** fill input is configured and a picker is open
+- **THEN** the list is drawn between the filled block and the status row, and one border rule row closes it
 
 ### Requirement: Idle status shows the project directory
 When no activity indicator or notice is shown and no turn is running, the composer SHALL show the session working directory in the `muted` color without an icon, with the home directory written as `~`, in the place of the indicator in every input style.
@@ -194,3 +198,104 @@ When no activity indicator or notice is shown and no turn is running, the compos
 - **THEN** the status shows the directory
 - **WHEN** a turn starts or a notice appears
 - **THEN** the indicator or notice replaces the directory
+
+### Requirement: Lists open below the input
+A picker, question, or panel SHALL open below the input, never between the chat and the input. With `lines` and `boxed` its rows SHALL follow the last row of the composer. With `fill` and `bar` its rows SHALL sit between the editor block and the status row, followed by one row drawn as a rule in the `border` color. Its height SHALL stay limited by `list_max_height` and the viewport, and the chat SHALL keep the rows that remain. The wheel over the list and paging SHALL use the rows where the list is drawn.
+
+#### Scenario: Picker with boxed input
+- **WHEN** the style is `boxed` and the user types `/`
+- **THEN** the command list is drawn directly under the bottom border of the box and the chat above is not covered
+
+#### Scenario: Picker with fill input
+- **WHEN** the style is `fill` and the user types `/`
+- **THEN** the order from the top is the filled block, the command list, one border rule row, and the status row
+
+### Requirement: Blank row above the composer
+Every input style SHALL draw one empty row above the first row of the composer: the top rule, the top border, the filled block, or the first bar row. The row holds no text and no color other than the terminal background. It MUST NOT count toward `input_max_height`. When the viewport is too small, this row SHALL be the first one dropped.
+
+#### Scenario: All styles
+- **WHEN** the style is `lines`, `boxed`, `fill`, or `bar`
+- **THEN** one blank row separates the chat from the composer
+
+#### Scenario: Tiny terminal
+- **WHEN** the viewport has no room for the blank row
+- **THEN** the composer is drawn without it and the draft is kept
+
+### Requirement: Bar input composer
+When `settings.ui.input_style` is `bar` and the viewport fits, the composer SHALL draw each editor row as `▌` in the `accent` color at column 0 with no padding before it, one space, then the text, without a prompt arrow. The height SHALL follow the draft, limited by `input_max_height` and the viewport, and scroll beyond that with the cursor visible. One blank row SHALL follow the editor rows, then the status row as in `fill`, with the activity and notices on the left and the model/context label on the right. The lines composer SHALL be used when the bar cannot fit, without changing the configured style or losing the draft.
+
+#### Scenario: Multiline draft
+- **WHEN** bar input is configured and the draft wraps to three rows
+- **THEN** three rows each start with `▌ `, one blank row follows, and then the status row
+
+#### Scenario: Small terminal
+- **WHEN** the terminal is too small for the bar
+- **THEN** the lines composer is drawn and the configured style is unchanged
+
+### Requirement: Picker columns are aligned
+A picker list SHALL draw each item as columns. Every cell of a column SHALL start at the same display column on every row, padded to the widest cell of that column among all items of the picker, with two spaces between columns. The last column is free text clipped at the row end. A column wider than half of the row width SHALL be clipped with the ellipsis so the next column keeps its room. `/history` rows SHALL have the columns index, role, and summary. Items with a label and a detail SHALL align the detail as the second column. Search SHALL match the cells joined by a space.
+
+#### Scenario: History rows
+- **WHEN** `/history` lists records 0 to 14
+- **THEN** the roles start at one column and the summaries at one column, for example `0   system  …` and `10  hook    …`
+
+#### Scenario: Command list
+- **WHEN** the user types `/`
+- **THEN** every command description starts at the same column
+
+#### Scenario: Scrolling and filtering
+- **WHEN** the list scrolls or the search narrows it
+- **THEN** the column positions stay the same
+
+#### Scenario: Narrow terminal
+- **WHEN** the first column is wider than half of the row
+- **THEN** it is clipped with the ellipsis and the second column still starts at one column on every row
+
+### Requirement: Config models are aligned
+The `Models` section of the `/config` panel SHALL pad every model name to the widest name in the section and start the details (`display=…`, `window=…`, `prices=…`) at one column after two spaces. The other sections of `/config` and the `/session` panel keep their current alignment.
+
+#### Scenario: Models of different length
+- **WHEN** the config has `openai/gpt-6.2-sol` and `claude/claude-sonnet-5-5`
+- **THEN** both `window=…` details start at the same column
+
+### Requirement: Command descriptions and words
+The `/` picker SHALL show the `desc` of a custom command as its detail. Picking a command with `args` SHALL put `/name ` in the input and open a picker of its `args`; a space typed after `/name` SHALL reopen that picker, filtered by the typed text. Choosing an arg SHALL clear the input and run the command with it. Esc in that picker SHALL leave `/name ` in the input, and Enter then SHALL run the command with no arg. Enter on `/name` followed by words SHALL run the command with those words as the config spec describes, and a word list the command does not accept MUST NOT run it and MUST NOT be sent as a message. Enter on the exact `/name`, or picking a command without `args` from the `/` picker, SHALL run it with no words. JSON-RPC `commands.run` SHALL accept `{name, argv?}` with a list of words, apply the same checks, and fail with `-32000` when they fail; `commands.list` SHALL return `[{name, desc, args, params}]`.
+
+#### Scenario: Pick an arg
+- **WHEN** the user picks `/deploy` and then `prod`
+- **THEN** `run("prod")` is called and the input is cleared
+
+#### Scenario: Esc then Enter
+- **WHEN** the user picks `/deploy`, presses Esc in the arg picker, and presses Enter
+- **THEN** `run(nil)` is called
+
+#### Scenario: Type words
+- **WHEN** the user types `/mv a.txt b.txt` and presses Enter
+- **THEN** `run("a.txt", "b.txt")` is called and the text is not sent to the agent
+
+#### Scenario: Rejected words
+- **WHEN** the user sends `/deploy nope`
+- **THEN** nothing runs and an error naming the command is shown
+
+#### Scenario: Description in the picker
+- **WHEN** the user types `/`
+- **THEN** `/deploy` is listed with `ship it` as its description
+
+#### Scenario: JSON-RPC
+- **WHEN** a client calls `commands.run` with `{"name": "mv", "argv": ["a.txt", "b.txt"]}`
+- **THEN** `run("a.txt", "b.txt")` is called; `{"name": "deploy", "argv": ["nope"]}` fails with `-32000`
+
+### Requirement: Frames stay in sync with the terminal
+The TUI SHALL write each frame with a single write. It SHALL turn the terminal's automatic line wrap off while it runs and on again when it exits or panics, so text that overflows a row is clipped and MUST NOT scroll the screen. It SHALL repaint every row, not only the changed ones, at least every five seconds.
+
+#### Scenario: One write per frame
+- **WHEN** the TUI draws a frame
+- **THEN** the whole frame, from the synchronized-update start to its end, reaches the output in one write
+
+#### Scenario: Stray text
+- **WHEN** another writer leaves text on a row that the renderer considers unchanged
+- **THEN** the row is repainted within five seconds
+
+#### Scenario: Line wrap
+- **WHEN** the TUI starts
+- **THEN** it sends the sequence that turns line wrap off, and it sends the one that turns it on when it exits or panics

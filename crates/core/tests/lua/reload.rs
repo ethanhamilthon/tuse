@@ -48,7 +48,7 @@ fn reload_from_the_agent_commands_and_hooks() {
     let rx = s.subscribe();
 
     std::fs::write(&cfg, config("v2")).unwrap();
-    s.run_command("again").unwrap();
+    s.run_command("again", &[]).unwrap();
     wait_tag(&s, "v2");
 
     std::fs::write(&cfg, config("v3").replace("on_user", "on_user2")).unwrap();
@@ -72,7 +72,7 @@ fn reload_from_the_agent_commands_and_hooks() {
     wait_tag(&s, "v4");
 
     std::fs::write(&cfg, "return { typo_key = 1 }").unwrap();
-    s.run_command("again").unwrap();
+    s.run_command("again", &[]).unwrap();
     let end = Instant::now() + Duration::from_secs(5);
     loop {
         match rx.recv_timeout(end - Instant::now()).expect("an error") {

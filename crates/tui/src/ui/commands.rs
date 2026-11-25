@@ -70,13 +70,15 @@ impl App {
                     self.flash("Config reloaded.");
                 }
             }
-            other if self.session.config().commands.iter().any(|c| c == other) => {
-                if let Err(e) = self.session.run_command(other) {
-                    self.error(e);
-                }
+            other if self.session.config().commands.contains_key(other) => {
+                self.run_custom(other, vec![]);
             }
             other => self.error(format!("Unknown command /{other}")),
         }
+    }
+
+    pub(crate) fn run_custom(&mut self, name: &str, words: Vec<String>) {
+        let _ = self.session.run_command(name, &words);
     }
 
     fn open_resume(&mut self) {
@@ -101,13 +103,7 @@ impl App {
         let rows: Vec<_> = items
             .iter()
             .enumerate()
-            .map(|(i, it)| {
-                item(
-                    format!("{i}  {}  {}", it.role, it.summary),
-                    "",
-                    i.to_string(),
-                )
-            })
+            .map(|(i, it)| history_row(i, it))
             .collect();
         self.history_items = items;
         self.history_back = None;
@@ -146,9 +142,30 @@ impl App {
         }
         let value = p.current().map(|i| i.value.clone());
         match (&p.kind, value) {
+            (Kind::Command, Some(v))
+                if self
+                    .session
+                    .config()
+                    .commands
+                    .get(&v)
+                    .is_some_and(|c| !c.args.is_empty()) =>
+            {
+                self.replace_token(&format!("/{v} "));
+                self.dismissed = None;
+                self.update_token_picker();
+            }
             (Kind::Command, Some(v)) => {
                 self.cut_token();
                 self.run_command(&v);
+            }
+            (Kind::CommandArg(name), Some(v)) => {
+                self.editor.clear();
+                self.run_custom(name, vec![v]);
+            }
+            (Kind::CommandArg(name), None) => {
+                let typed = self.editor.token().1;
+                self.editor.clear();
+                self.run_custom(name, vec![typed]);
             }
             (Kind::Prompt, Some(v)) => {
                 self.cut_token();
@@ -273,6 +290,10 @@ impl App {
         self.open_modal(Picker::new(Kind::Model, items))
             .select(&selected);
     }
+}
+
+pub(crate) fn history_row(index: usize, it: &tuse_core::HistoryItem) -> Item {
+    item(it.role, it.summary.as_str(), index.to_string()).lead(index.to_string())
 }
 
 fn model_item(def: Option<&ModelDef>, name: &str, available: bool) -> Item {

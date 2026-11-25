@@ -7,6 +7,7 @@ pub const LIST_INDENT: usize = 2;
 pub const CODE_INDENT: usize = 2;
 
 pub const INPUT_PREFIX: &str = "› ";
+pub const BAR_PREFIX: &str = "▌ ";
 pub const TOOL_PREFIX: &str = "* ";
 pub const REASONING_PREFIX: &str = "∴ ";
 pub const UI_RESULT_PREFIX: &str = "? ";

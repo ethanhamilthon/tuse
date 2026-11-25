@@ -245,7 +245,11 @@ mod tests {
             !sys.contains("`delete`") && !sys.contains("`delete("),
             "{sys}"
         );
-        assert!(!sys.contains("`docs("), "{sys}");
+        assert!(
+            !sys.contains("`docs(") && !sys.contains("Tuse itself"),
+            "{sys}"
+        );
+        assert!(system_prompt(&Config::default()).contains("Tuse itself"));
         assert!(!sys.contains("`task_get("), "{sys}");
         assert!(sys.contains("`read(") && sys.contains("`write("));
 

@@ -1,0 +1,7 @@
+- [x] 1. Give `Item` a list of cells and keep the `item(label, detail, value)` helper
+- [x] 2. Build `/history` rows as index, role, and summary cells
+- [x] 3. Pad every column to its widest cell over all items in `screen/list.rs` and clip over-wide columns
+- [x] 4. Align the `Models` rows of `/config` the same way
+- [x] 5. Keep search, selection, and the `value` lookup working on joined text
+- [x] 6. Add one rendering test for `/history` and one for the command list
+- [x] 7. Update the tui spec

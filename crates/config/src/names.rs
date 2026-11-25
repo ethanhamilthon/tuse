@@ -240,10 +240,17 @@ pub fn functions<'de, D: Deserializer<'de>>(
     Ok(map)
 }
 
-pub fn commands<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-    let list: Vec<String> = list(d)?;
-    names(&list, check_command_name)?;
-    Ok(list)
+pub fn commands<'de, D: Deserializer<'de>>(
+    d: D,
+) -> Result<BTreeMap<String, crate::types::Command>, D::Error> {
+    let map = BTreeMap::<String, crate::types::Command>::deserialize(d)?;
+    if let Some((name, reason)) = map
+        .keys()
+        .find_map(|n| check_command_name(n).map(|r| (n, r)))
+    {
+        return Err(D::Error::custom(format!("`{name}`: {reason}")));
+    }
+    Ok(map)
 }
 
 pub fn open<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {

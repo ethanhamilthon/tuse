@@ -46,3 +46,50 @@ return {{}}",
     s.close();
     common::cleanup(&dir);
 }
+
+fn json_keys<T: serde::Serialize>(value: &T) -> Vec<String> {
+    serde_json::to_value(value)
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect()
+}
+
+#[test]
+fn docs_cover_the_config_keys_tokens_events_and_roles() {
+    let config = tuse_core::docs(Some("config"));
+    let lua = tuse_core::docs(Some("lua"));
+    let session = tuse_core::docs(Some("session"));
+    let mut keys = json_keys(&tuse_config::Config::default());
+    keys.retain(|k| k != "path");
+    keys.extend(json_keys(&tuse_config::UiSettings::default()));
+    keys.extend(json_keys(&tuse_config::Theme::default()));
+    keys.retain(|k| k != "lua");
+    keys.extend(tuse_config::LuaTheme::TOKENS.iter().map(|t| t.to_string()));
+    for key in keys {
+        assert!(
+            config.contains(&format!("`{key}`")),
+            "docs(\"config\") misses `{key}`"
+        );
+    }
+    for event in tuse_config::HOOK_EVENTS {
+        assert!(
+            lua.contains(&format!("`{event}`")),
+            "docs(\"lua\") misses `{event}`"
+        );
+    }
+    for role in tuse_config::HISTORY_ROLES {
+        assert!(
+            session.contains(&format!("`{role}`")),
+            "docs(\"session\") misses `{role}`"
+        );
+    }
+    for color in ["gray", "dark_gray"] {
+        assert!(
+            config.contains(&format!("`{color}`")),
+            "docs(\"config\") misses `{color}`"
+        );
+    }
+}

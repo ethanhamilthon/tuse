@@ -1,4 +1,4 @@
-use crate::kit::style::{INPUT_PREFIX, MORE, Palette, RULE_CHAR, SCROLL_MARK, Style};
+use crate::kit::style::{BAR_PREFIX, INPUT_PREFIX, MORE, Palette, RULE_CHAR, SCROLL_MARK, Style};
 use crate::kit::text::{Line, clip_line, line_width, span};
 use crate::ui::app::App;
 use tuse_config::InputStyle;
@@ -70,6 +70,7 @@ impl App {
         w: usize,
         rows: &[String],
         top: usize,
+        overlay: Vec<Line>,
     ) -> Vec<Line> {
         let bg = Style::default().on(self.palette.border);
         let blank = || vec![span(" ".repeat(w), bg)];
@@ -82,7 +83,30 @@ impl App {
             out.push(row);
         }
         out.push(blank());
-        out.push(vec![]);
+        out.extend(self.status_tail(w, overlay));
+        out
+    }
+
+    pub(crate) fn bar_input(
+        &self,
+        view: &crate::kit::editor::View,
+        w: usize,
+        rows: &[String],
+        top: usize,
+        overlay: Vec<Line>,
+    ) -> Vec<Line> {
+        let mut out = self.input_rows(view, rows, top, InputStyle::Bar);
+        out.extend(self.status_tail(w, overlay));
+        out
+    }
+
+    fn status_tail(&self, w: usize, overlay: Vec<Line>) -> Vec<Line> {
+        let mut out = overlay;
+        if out.is_empty() {
+            out.push(vec![]);
+        } else {
+            out.push(rule(&self.palette, w, vec![], vec![]));
+        }
         out.push(self.status_row(w));
         out
     }
@@ -133,6 +157,7 @@ impl App {
     pub(crate) fn input_left(&self, mode: InputStyle) -> usize {
         match mode {
             InputStyle::Boxed => 0,
+            InputStyle::Bar => crate::kit::text::width(BAR_PREFIX),
             _ => crate::kit::text::width(INPUT_PREFIX),
         }
     }
@@ -150,13 +175,15 @@ impl App {
         let left = self.input_left(mode);
         let mut out = vec![];
         for (i, text) in rows.iter().enumerate() {
-            let prefix = if i == 0 && left > 0 {
+            let prefix = if mode == InputStyle::Bar {
+                BAR_PREFIX.to_string()
+            } else if i == 0 && left > 0 {
                 INPUT_PREFIX.to_string()
             } else {
                 " ".repeat(left)
             };
             let pfx_color = if self.input_disabled() {
-                if mode == InputStyle::Fill {
+                if mode != InputStyle::Lines && mode != InputStyle::Boxed {
                     p.muted
                 } else {
                     p.border

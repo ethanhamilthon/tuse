@@ -86,7 +86,7 @@ impl Panel {
 
     pub fn lines(&mut self, width: usize, max_rows: usize, p: &Palette) -> Vec<Line> {
         let inner = width.max(1);
-        let body = max_rows.min(p.ui.list_max_height).max(2) - 1;
+        let body = max_rows.min(p.ui.list_max_height).max(1);
         let all = self.wrapped(inner, p).to_vec();
         let body = body.min(all.len());
         self.scroll = self.scroll.min(all.len().saturating_sub(body));
@@ -121,7 +121,7 @@ pub(crate) fn history_panel(it: &tuse_core::HistoryItem) -> Panel {
 mod tests {
     use super::*;
     use crate::ui::app::App;
-    use crate::ui::picker::{Kind, Picker, item};
+    use crate::ui::picker::{Kind, Picker};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use tuse_config::{Theme, UiSettings};
     use tuse_core::HistoryItem;
@@ -134,13 +134,7 @@ mod tests {
         let rows = items
             .iter()
             .enumerate()
-            .map(|(i, it)| {
-                item(
-                    format!("{i}  {}  {}", it.role, it.summary),
-                    "",
-                    i.to_string(),
-                )
-            })
+            .map(|(i, it)| crate::ui::commands::history_row(i, it))
             .collect();
         app.history_items = items;
         app.history_back = None;
@@ -170,8 +164,8 @@ mod tests {
         assert_eq!(panel.lines(20, 8, &p).len(), 8);
         panel.scroll_by(1000);
         assert_eq!(panel.lines(20, 8, &p).len(), 8);
-        assert_eq!(panel.scroll(), 23);
-        assert_eq!(Panel::new("one").lines(20, 8, &p).len(), 2);
+        assert_eq!(panel.scroll(), 22);
+        assert_eq!(Panel::new("one").lines(20, 8, &p).len(), 1);
     }
 
     #[test]

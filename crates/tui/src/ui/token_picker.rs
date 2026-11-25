@@ -30,6 +30,16 @@ impl App {
                 .get(n)
                 .is_some_and(|p| !p.args.is_empty())
         });
+        let command_arg = match arg_of {
+            Some(_) => None,
+            None => self.editor.command_before_token().filter(|n| {
+                self.session
+                    .config()
+                    .commands
+                    .get(n)
+                    .is_some_and(|c| !c.args.is_empty())
+            }),
+        };
         let mut chars = token.chars();
         let first = if arg_of.is_some() {
             Some(' ')
@@ -37,6 +47,10 @@ impl App {
             chars.next()
         };
         let (kind, query) = match first {
+            _ if command_arg.is_some() => (
+                Kind::CommandArg(command_arg.unwrap_or_default()),
+                token.as_str(),
+            ),
             Some(' ') => (Kind::PromptArg(arg_of.unwrap_or_default()), token.as_str()),
             Some('/') => (Kind::Command, chars.as_str()),
             Some('#') if !self.session.config().prompts.is_empty() => {
@@ -72,8 +86,8 @@ impl App {
                     .iter()
                     .map(|(n, d)| item(format!("/{n}"), *d, *n))
                     .collect();
-                for name in &self.session.config().commands {
-                    items.push(item(format!("/{name}"), "", name.clone()));
+                for (name, c) in &self.session.config().commands {
+                    items.push(item(format!("/{name}"), c.desc.as_str(), name.clone()));
                 }
                 items
             }
@@ -92,6 +106,13 @@ impl App {
                     })
                     .collect()
             }
+            Kind::CommandArg(name) => self
+                .session
+                .config()
+                .commands
+                .get(name)
+                .map(|c| c.args.iter().map(|a| item(a, "", a)).collect())
+                .unwrap_or_default(),
             Kind::PromptArg(name) => self
                 .session
                 .config()

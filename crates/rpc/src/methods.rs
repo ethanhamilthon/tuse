@@ -201,10 +201,21 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             let t = s.stop_task(&id).map_err(Fail::session)?;
             serde_json::to_value(t).map_err(|e| Fail::session(e.to_string()))
         }
-        "commands.list" => Ok(json!(s.config().commands)),
+        "commands.list" => Ok(json!(
+            s.config()
+                .commands
+                .iter()
+                .map(|(name, c)| json!({
+                    "name": name,
+                    "desc": c.desc,
+                    "args": c.args,
+                    "params": c.params,
+                }))
+                .collect::<Vec<_>>()
+        )),
         "commands.run" => {
             let name = str_param(p, "name")?;
-            s.run_command(&name)
+            s.run_command(&name, &str_list(p, "argv")?)
                 .map(|_| Value::Null)
                 .map_err(Fail::session)
         }

@@ -209,7 +209,7 @@ return {
     assert_eq!(out1.trim(), "{a = 1, b = 2}");
     assert_eq!(diffs1, 1);
 
-    s.run_command("check_cmd").unwrap();
+    s.run_command("check_cmd", &[]).unwrap();
     s.open_path(&dir.join("note.md"));
     let dl = Instant::now() + Duration::from_secs(5);
     while Instant::now() < dl {

@@ -9,28 +9,38 @@ use crossterm::style::{
 };
 use crossterm::terminal::{BeginSynchronizedUpdate, Clear, ClearType, EndSynchronizedUpdate};
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 pub struct Renderer {
     prev: Vec<Line>,
     size: (usize, usize),
     palette_gen: u64,
+    repainted: Option<Instant>,
 }
+
+const REPAINT_EVERY: Duration = Duration::from_secs(5);
 
 impl Renderer {
     pub fn draw(
         &mut self,
         app: &mut App,
-        out: &mut impl Write,
+        sink: &mut impl Write,
         w: u16,
         h: u16,
     ) -> std::io::Result<()> {
         let (w, h) = (w as usize, h as usize);
+        let mut frame = Vec::with_capacity(8 << 10);
+        let out = &mut frame;
         if self.size != (w, h) || self.palette_gen != app.palette_gen() {
             app.reset_for_resize();
             self.prev.clear();
             self.size = (w, h);
             self.palette_gen = app.palette_gen();
+        }
+        if self.repainted.is_none_or(|t| t.elapsed() >= REPAINT_EVERY) {
+            self.prev.clear();
+            self.repainted = Some(Instant::now());
         }
         let Frame {
             screen,
@@ -67,7 +77,8 @@ impl Renderer {
             out.queue(Show)?;
         }
         out.queue(EndSynchronizedUpdate)?;
-        out.flush()
+        sink.write_all(&frame)?;
+        sink.flush()
     }
 }
 
@@ -139,4 +150,42 @@ fn apply_style(out: &mut impl Write, eff: Style, cur: &mut Option<Style>) -> std
     }
     *cur = Some(eff);
     Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Writes(Vec<u8>, usize);
+
+    impl Write for Writes {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.1 += 1;
+            self.0.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn frame(renderer: &mut Renderer, app: &mut App) -> (String, usize) {
+        let mut out = Writes(vec![], 0);
+        renderer.draw(app, &mut out, 40, 10).unwrap();
+        (String::from_utf8_lossy(&out.0).into_owned(), out.1)
+    }
+
+    #[test]
+    fn a_frame_is_one_write_and_everything_repaints_periodically() {
+        let mut app = crate::ui::app::test_app("draw-frame");
+        app.notice("hello there");
+        let mut renderer = Renderer::default();
+        let (first, writes) = frame(&mut renderer, &mut app);
+        assert_eq!(writes, 1);
+        assert!(first.contains("hello there"));
+        assert!(!frame(&mut renderer, &mut app).0.contains("hello there"));
+        renderer.repainted = Some(Instant::now() - REPAINT_EVERY - Duration::from_secs(1));
+        assert!(frame(&mut renderer, &mut app).0.contains("hello there"));
+        crate::ui::app::cleanup(app);
+    }
 }

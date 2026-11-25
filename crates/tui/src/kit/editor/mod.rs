@@ -280,6 +280,16 @@ impl Editor {
         (start, self.buf[start..self.cursor].iter().collect())
     }
 
+    pub fn command_before_token(&self) -> Option<String> {
+        let (start, _) = self.token();
+        if start < 2 || self.buf[start - 1] != ' ' || self.buf[0] != '/' {
+            return None;
+        }
+        let name: String = self.buf[1..start - 1].iter().collect();
+        let plain = |c: char| !c.is_whitespace() && atom_index(c).is_none();
+        (!name.is_empty() && name.chars().all(plain)).then_some(name)
+    }
+
     pub fn replace_token(&mut self, with: &str) {
         let (start, _) = self.token();
         let end = self.cursor;

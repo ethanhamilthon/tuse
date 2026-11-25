@@ -113,7 +113,7 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
     let ev2 = tui_s2.subscribe();
     tui_s2.submit(UserInput::text("hello from tui"));
     wait_turn(&ev2);
-    tui_s2.run_command("ui").unwrap();
+    tui_s2.run_command("ui", &[]).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while tui_s2.ui_snapshot().active.is_none() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));

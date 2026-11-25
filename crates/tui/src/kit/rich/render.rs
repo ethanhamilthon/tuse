@@ -1,7 +1,7 @@
 use crate::kit::entry::Entry;
 use crate::kit::style::{
-    ERROR_PREFIX, INPUT_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, RULE_CHAR,
-    Style, UI_MARKDOWN_PREFIX, UI_RESULT_PREFIX,
+    ERROR_PREFIX, INPUT_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style,
+    UI_MARKDOWN_PREFIX, UI_RESULT_PREFIX,
 };
 use crate::kit::text::{Line, line_width, span, wrap};
 use std::time::Duration;
@@ -156,7 +156,6 @@ pub fn framed(rows: Vec<Line>, w: usize, p: &Palette) -> Vec<Line> {
         let fill = w.saturating_sub(line_width(l));
         l.push(span(" ".repeat(fill), base));
     }
-    out.insert(0, vec![span(RULE_CHAR.repeat(w), Style::fg(p.border))]);
     out
 }
 

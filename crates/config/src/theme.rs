@@ -154,6 +154,7 @@ pub enum InputStyle {
     #[serde(alias = "classic")]
     Lines,
     Fill,
+    Bar,
 }
 
 impl InputStyle {
@@ -162,6 +163,7 @@ impl InputStyle {
             Self::Boxed => "boxed",
             Self::Lines => "lines",
             Self::Fill => "fill",
+            Self::Bar => "bar",
         }
     }
 }

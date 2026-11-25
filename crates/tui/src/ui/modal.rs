@@ -253,17 +253,10 @@ mod tests {
             .history_items
             .iter()
             .enumerate()
-            .map(|(i, it)| {
-                item(
-                    format!("{i}  {}  {}", it.role, it.summary),
-                    "",
-                    i.to_string(),
-                )
-            })
+            .map(|(i, it)| crate::ui::commands::history_row(i, it))
             .collect();
         app.open_modal(Picker::new(Kind::History, rows));
-        assert_eq!(labels(&app)[0], "0  system  You are Tuse");
-        assert_eq!(labels(&app)[1], "1  lua  local x = 1");
+        assert_eq!(labels(&app), ["system", "lua", "output"]);
 
         press(&mut app, KeyCode::Down, KeyModifiers::NONE);
         assert_eq!(app.picker.as_ref().unwrap().selected, 1);
@@ -310,6 +303,78 @@ mod tests {
         type_text(&mut app, "/");
         let all = labels(&app);
         assert!(all.contains(&"/fresh_cmd".to_string()) && !all.contains(&"/hello_ui".to_string()));
+        crate::ui::app::cleanup(app);
+    }
+    #[test]
+    fn commands_show_desc_open_the_arg_picker_and_run_with_words() {
+        let mut app = crate::ui::app::test_app("modal-cmd-args");
+        std::fs::write(
+            app.cwd.join("tuse.lua"),
+            r#"return { commands = {
+                deploy = { desc = "ship it", args = { "staging", "prod" },
+                    run = function(env) require("tuse").show("d", "ran:" .. tostring(env), false) end },
+                mv = function(a, b) require("tuse").show("m", tostring(a) .. "|" .. tostring(b), false) end,
+            } }"#,
+        )
+        .unwrap();
+        app.run_command("reload");
+        let shown = |app: &crate::ui::app::App, text: &str| {
+            let end = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            while std::time::Instant::now() < end {
+                if app
+                    .session()
+                    .ui_snapshot()
+                    .markdowns
+                    .iter()
+                    .any(|m| m.text == text)
+                {
+                    return true;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            false
+        };
+
+        type_text(&mut app, "/dep");
+        let current = app.picker.as_ref().unwrap().current().unwrap();
+        assert_eq!(
+            (current.label.as_str(), current.detail.as_str()),
+            ("/deploy", "ship it")
+        );
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(
+            app.picker.as_ref().unwrap().kind,
+            Kind::CommandArg("deploy".into())
+        );
+        assert_eq!(app.editor.text(), "/deploy ");
+        assert_eq!(labels(&app), ["staging", "prod"]);
+        type_text(&mut app, "pr");
+        assert_eq!(labels(&app), ["prod"]);
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.editor.is_empty());
+        assert!(shown(&app, "ran:prod"));
+
+        type_text(&mut app, "/mv a.txt 'b c'");
+        assert!(app.picker.is_none());
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.editor.is_empty());
+        assert!(shown(&app, "a.txt|b c"));
+
+        type_text(&mut app, "/deploy ");
+        assert_eq!(
+            app.picker.as_ref().unwrap().kind,
+            Kind::CommandArg("deploy".into())
+        );
+        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+        assert_eq!(app.editor.text(), "/deploy ");
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.editor.is_empty());
+        assert!(shown(&app, "ran:nil"));
+
+        type_text(&mut app, "/deploy nope");
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.editor.is_empty());
+        assert!(!shown(&app, "ran:nope"));
         crate::ui::app::cleanup(app);
     }
 }

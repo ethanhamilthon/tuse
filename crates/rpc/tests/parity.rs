@@ -13,6 +13,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     let extra = r#"
   prompts = { review = "Check edge cases." },
   commands = {
+    deploy = { desc = "ship it", args = { "staging", "prod" }, run = function(env) end },
     rewrite = function()
       local t = require("tuse")
       local s = t.session()
@@ -51,7 +52,31 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     );
     assert_eq!(
         call(&tx, &out, 2, "commands.list", json!({}))["result"],
-        json!(["rewrite", "ui_demo"])
+        json!([
+            {"name": "deploy", "desc": "ship it", "args": ["staging", "prod"], "params": 1},
+            {"name": "rewrite", "desc": "", "args": [], "params": 0},
+            {"name": "ui_demo", "desc": "", "args": [], "params": 0},
+        ])
+    );
+    assert!(
+        call(
+            &tx,
+            &out,
+            901,
+            "commands.run",
+            json!({"name": "deploy", "argv": ["prod"]})
+        )["error"]
+            .is_null()
+    );
+    assert_eq!(
+        call(
+            &tx,
+            &out,
+            902,
+            "commands.run",
+            json!({"name": "deploy", "argv": ["nope"]})
+        )["error"]["code"],
+        -32000
     );
 
     assert!(call(&tx, &out, 3, "commands.run", json!({"name": "ui_demo"}))["error"].is_null());

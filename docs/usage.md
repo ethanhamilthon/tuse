@@ -50,10 +50,11 @@ Every command accepts `-h`/`--help`, which prints its usage and exits without re
 From top to bottom:
 
 - **Chat.** Your messages sit on a `surface` block. Agent replies render as Markdown, and a Markdown image `![alt](path)` shows as a clickable `alt` (or the path when `alt` is empty). Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
-- **Overlay.** At most one picker, panel, or `ask()` question, shown above the input.
+- **Gap.** One empty row above the input in every style.
 - **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`.
 - **Input.** Grows with the text up to `settings.ui.input_max_height`.
 - **Bottom rule.** `<model> · <effort> · <used>/<window> · $<cost>`. The context and cost parts are hidden while unknown.
+- **Overlay.** At most one picker, panel, or `ask()` question, shown below the input. With `fill` and `bar` it sits between the input and the status line and ends with a rule ([Config](config.md#theme-and-ui)).
 
 How many lines of code, output, diffs, and reasoning appear is set by `settings.ui`, and the colors by `theme` ([Config](config.md#theme-and-ui)).
 
@@ -105,7 +106,7 @@ Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. W
 
 ## Slash commands
 
-Type `/` to get a picker. Pickers filter by label, ignoring case.
+Type `/` to get a picker. Pickers filter by their text, ignoring case, and show it in aligned columns.
 
 - `/new` starts a fresh session in the current folder.
 - `/resume` picks another titled session from this folder, newest first.
@@ -118,4 +119,4 @@ Type `/` to get a picker. Pickers filter by label, ignoring case.
 - `/stop` stops the turn, background tasks, hooks, and commands, also when the session is idle.
 - `/quit` exits.
 
-Custom commands from `commands = { name = function() ... end }` show up in the same picker and run as Lua jobs ([Config](config.md#commands-and-settingsopen)). Built-in names cannot be overridden.
+Custom commands from `commands` show up in the same picker with their `desc`, and run as Lua jobs. `/name words` passes the words to the command, and a command with `args` opens a picker of them ([Config](config.md#commands-and-settingsopen)). Built-in names cannot be overridden.

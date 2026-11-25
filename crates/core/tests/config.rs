@@ -147,7 +147,7 @@ fn require_session_validation_and_reload_rollback() {
                 "{err}"
             );
             assert_eq!(s.config().prompts["rex"].body, "rex-v2");
-            s.run_command("ping").unwrap();
+            s.run_command("ping", &[]).unwrap();
             let dl = std::time::Instant::now() + std::time::Duration::from_secs(3);
             while std::time::Instant::now() < dl {
                 if s.ui_snapshot().markdowns.iter().any(|m| m.text == "rex-v2") {

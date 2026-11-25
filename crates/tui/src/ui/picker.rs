@@ -3,6 +3,7 @@ pub enum Kind {
     Command,
     Prompt,
     PromptArg(String),
+    CommandArg(String),
     File,
     Resume,
     Model,
@@ -16,7 +17,7 @@ impl Kind {
     pub fn is_token(&self) -> bool {
         matches!(
             self,
-            Kind::Command | Kind::Prompt | Kind::PromptArg(_) | Kind::File
+            Kind::Command | Kind::CommandArg(_) | Kind::Prompt | Kind::PromptArg(_) | Kind::File
         )
     }
 
@@ -27,13 +28,30 @@ impl Kind {
 
 #[derive(Debug, Clone)]
 pub struct Item {
+    pub lead: Vec<String>,
     pub label: String,
     pub detail: String,
     pub value: String,
 }
 
+impl Item {
+    pub fn lead(mut self, cell: impl Into<String>) -> Self {
+        self.lead.push(cell.into());
+        self
+    }
+
+    pub fn cells(&self) -> Vec<String> {
+        self.lead
+            .iter()
+            .chain([&self.label, &self.detail])
+            .map(|c| c.replace('\n', " "))
+            .collect()
+    }
+}
+
 pub fn item(label: impl Into<String>, detail: impl Into<String>, value: impl Into<String>) -> Item {
     Item {
+        lead: vec![],
         label: label.into(),
         detail: detail.into(),
         value: value.into(),
@@ -46,13 +64,24 @@ pub struct Picker {
     pub shown: Vec<usize>,
     pub selected: usize,
     pub scroll: usize,
+    pub widths: Vec<usize>,
 }
 
 impl Picker {
     pub fn new(kind: Kind, items: Vec<Item>) -> Self {
         let shown = (0..items.len()).collect();
+        let mut widths: Vec<usize> = vec![];
+        for it in &items {
+            for (c, cell) in it.cells().iter().enumerate() {
+                if widths.len() <= c {
+                    widths.resize(c + 1, 0);
+                }
+                widths[c] = widths[c].max(crate::kit::text::width(cell));
+            }
+        }
         Picker {
             kind,
+            widths,
             items,
             shown,
             selected: 0,
@@ -66,7 +95,9 @@ impl Picker {
             .items
             .iter()
             .enumerate()
-            .filter(|(_, item)| query.is_empty() || item.label.to_lowercase().contains(&query))
+            .filter(|(_, item)| {
+                query.is_empty() || item.cells().join(" ").to_lowercase().contains(&query)
+            })
             .map(|(i, _)| i)
             .collect();
         self.selected = 0;
@@ -131,5 +162,12 @@ mod tests {
         assert_eq!(picker.shown, [0, 2]);
         picker.filter("m One");
         assert!(picker.shown.is_empty());
+
+        let items = vec![item("a", "needle here", "a"), item("bb", "", "b")];
+        let mut picker = Picker::new(Kind::Resume, items);
+        let widths = picker.widths.clone();
+        picker.filter("needle");
+        assert_eq!(picker.shown, [0]);
+        assert_eq!(picker.widths, widths);
     }
 }

@@ -67,7 +67,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     s.reload().unwrap();
     assert!(t0.elapsed() < Duration::from_secs(3), "reload deadlocked");
 
-    s.run_command("ask_flow").unwrap();
+    s.run_command("ask_flow", &[]).unwrap();
     let r1 = next_req(&rx);
     assert_eq!(
         r1.prompt,
@@ -75,7 +75,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
             options: vec!["alpha".into(), "beta".into()]
         }
     );
-    s.run_command("second").unwrap();
+    s.run_command("second", &[]).unwrap();
     std::thread::sleep(Duration::from_millis(50));
     assert_eq!(s.ui_snapshot().active.as_ref().map(|r| r.id), Some(r1.id));
 
@@ -148,7 +148,10 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     )
     .unwrap();
     s.reload().unwrap();
-    assert_eq!(s.config().commands, ["updated_cmd"]);
+    assert_eq!(
+        s.config().commands.keys().collect::<Vec<_>>(),
+        ["updated_cmd"]
+    );
     let after_reload = s.ui_snapshot();
     assert_eq!(after_reload.markdowns, snap.markdowns);
     assert_eq!(after_reload.entries, snap.entries);
@@ -170,7 +173,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(answered());
-    s.run_command("updated_cmd").unwrap();
+    s.run_command("updated_cmd", &[]).unwrap();
     let pending = next_req(&rx);
     assert_eq!(
         s.ui_snapshot().active.as_ref().map(|r| r.id),

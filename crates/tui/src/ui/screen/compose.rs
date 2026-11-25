@@ -29,7 +29,6 @@ impl App {
             framed if h >= 5 && inner >= 4 => framed,
             _ => InputStyle::Lines,
         };
-        let framed = style != InputStyle::Lines;
         let boxed = style == InputStyle::Boxed;
         let left = self.input_left(style);
         let editor_w = inner - if boxed { 2 } else { 0 };
@@ -38,30 +37,26 @@ impl App {
         self.input_cols = text_w;
         let mut view = self.editor.view(text_w);
         let (crow, ccol) = view.cursor;
-        let head = usize::from(h > 1);
-        let foot = usize::from(h > 2);
-        let editor_room = if framed {
-            h - 4
-        } else {
-            h.saturating_sub(head + foot).max(1)
+        let (lead, extra) = match style {
+            InputStyle::Boxed | InputStyle::Fill => (1, 4),
+            InputStyle::Bar => (0, 2),
+            InputStyle::Lines => (usize::from(h > 1), usize::from(h > 1) + usize::from(h > 2)),
         };
+        let gap = usize::from(h >= extra + 2);
+        let editor_room = h.saturating_sub(extra + gap).max(1);
         let input_h = tuse_config::limit(ui.input_max_height, view.rows.len())
             .max(1)
             .min(editor_room);
         let input_top = crow
             .saturating_sub(input_h.saturating_sub(1))
             .min(view.rows.len().saturating_sub(input_h));
-        let fixed = if framed {
-            input_h + 4
-        } else {
-            input_h + head + foot
-        };
-        let chat_h = h.saturating_sub(fixed);
+        let chat_h = h.saturating_sub(extra + gap + input_h);
+        self.page_rows = chat_h;
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
         let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.list_max_height);
         let mut overlay = if let Some(pk) = &mut self.picker {
-            let rows = cap.saturating_sub(1).max(1);
+            let rows = cap.max(1);
             let lines = crate::ui::screen::list::options(pk, rows, inner, p);
             self.list_rows = rows;
             crate::kit::rich::render::framed(lines, inner, p)
@@ -77,7 +72,15 @@ impl App {
         };
         overlay.truncate(cap);
         let history_h = chat_h - overlay.len();
-        self.overlay_rows = history_h..chat_h;
+        let below = matches!(style, InputStyle::Lines | InputStyle::Boxed);
+        let start = history_h
+            + gap
+            + match style {
+                InputStyle::Lines | InputStyle::Boxed => extra + input_h,
+                InputStyle::Fill => input_h + 2,
+                InputStyle::Bar => input_h,
+            };
+        self.overlay_rows = start..start + overlay.len();
         if history_h > 0 {
             if self.scroll > 0 {
                 let total = self.chat.total(inner, p);
@@ -96,24 +99,35 @@ impl App {
             screen.resize_with(history_h - view.len(), Vec::new);
             screen.extend(view);
         }
-        screen.extend(overlay);
+        if gap == 1 {
+            screen.push(Vec::new());
+        }
         view.rows
             .resize_with(view.rows.len().max(input_h), String::new);
         let shown = &view.rows[input_top..input_top + input_h];
+        let tail = if below {
+            vec![]
+        } else {
+            std::mem::take(&mut overlay)
+        };
         match style {
             InputStyle::Boxed => {
                 screen.extend(self.boxed_input(&view, editor_w, shown, input_top));
             }
             InputStyle::Fill => {
-                screen.extend(self.fill_input(&view, editor_w, shown, input_top));
+                screen.extend(self.fill_input(&view, editor_w, shown, input_top, tail));
+            }
+            InputStyle::Bar => {
+                screen.extend(self.bar_input(&view, editor_w, shown, input_top, tail));
             }
             InputStyle::Lines => screen.extend(
                 self.input_block(&view, editor_w, shown, input_top)
                     .into_iter()
-                    .skip(1 - head)
-                    .take(head + input_h + foot),
+                    .skip(1 - lead)
+                    .take(extra + input_h),
             ),
         }
+        screen.extend(overlay);
         screen.truncate(h);
         self.links = crate::kit::links::scan(&screen, pad);
         if let Some(id) = self.hover
@@ -134,11 +148,7 @@ impl App {
         self.selection
             .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
 
-        let first = if framed {
-            h - input_h - 3
-        } else {
-            h.saturating_sub(input_h + foot)
-        };
+        let first = history_h + gap + lead;
         self.input_area = Some(crate::ui::app::InputArea {
             row: first,
             col: input_col,
@@ -221,6 +231,112 @@ mod tests {
                 .flatten()
                 .any(|s| s.style.bg == bg && bg.is_some())
         );
+        cleanup(app);
+    }
+    fn open_list(app: &mut crate::ui::app::App) {
+        use crate::ui::picker::{Kind, Picker, item};
+        let items = ["one", "two", "three"].map(|s| item(s, "", s)).to_vec();
+        app.open_modal(Picker::new(Kind::Resume, items));
+    }
+
+    fn text(row: &[crate::kit::text::Span]) -> String {
+        row.iter().map(|s| s.text.as_str()).collect()
+    }
+
+    #[test]
+    fn every_style_has_an_empty_row_above_the_composer() {
+        for (style, lead) in [
+            (InputStyle::Lines, 1),
+            (InputStyle::Boxed, 1),
+            (InputStyle::Fill, 1),
+            (InputStyle::Bar, 0),
+        ] {
+            let mut app = test_app("gap-layout");
+            app.palette.ui.input_style = style;
+            app.notice("history");
+            let frame = app.compose(40, 14);
+            let row = app.input_area.unwrap().row - lead - 1;
+            assert!(
+                frame.screen[row].iter().all(|s| s.text.trim().is_empty()),
+                "{style:?}"
+            );
+            assert_eq!(frame.screen.len(), 14);
+            cleanup(app);
+        }
+    }
+
+    #[test]
+    fn lists_open_below_the_input() {
+        let mut app = test_app("list-below");
+        app.palette.ui.input_style = InputStyle::Boxed;
+        open_list(&mut app);
+        let frame = app.compose(40, 20);
+        let bottom = frame
+            .screen
+            .iter()
+            .position(|r| text(r).starts_with('╰'))
+            .unwrap();
+        assert_eq!(app.overlay_rows.start, bottom + 1);
+        assert!(text(&frame.screen[bottom + 1]).contains("one"));
+        assert_eq!(frame.screen.len(), 20);
+
+        app.palette.ui.input_style = InputStyle::Fill;
+        let frame = app.compose(40, 20);
+        let list = app.overlay_rows.clone();
+        assert!(text(&frame.screen[list.start]).contains("one"));
+        assert!(text(&frame.screen[list.end]).starts_with('─'));
+        assert_eq!(text(&frame.screen[list.start - 1]).trim(), "");
+        assert!(
+            frame.screen[list.start - 1]
+                .iter()
+                .all(|s| s.style.bg == app.palette.border)
+        );
+        assert_eq!(frame.screen.len(), 20);
+        cleanup(app);
+    }
+
+    #[test]
+    fn bar_rows_start_with_the_accent_bar_and_the_status_follows_a_gap() {
+        let mut app = test_app("bar-layout");
+        app.palette.ui.input_style = InputStyle::Bar;
+        app.editor.insert("one\ntwo\nthree");
+        app.display_flash("Waiting");
+        let frame = app.compose(40, 12);
+        let area = app.input_area.unwrap();
+        assert_eq!((area.col, area.height), (2, 3));
+        for (i, want) in ["one", "two", "three"].iter().enumerate() {
+            let row = &frame.screen[area.row + i];
+            assert_eq!(
+                (row[0].text.as_str(), row[0].style.fg),
+                ("▌ ", app.palette.accent)
+            );
+            assert_eq!(row[1].text, *want);
+        }
+        assert!(frame.screen[area.row + 3].is_empty());
+        assert_eq!(frame.screen[area.row + 4][0].text, "Waiting");
+        assert_eq!(frame.screen.len(), 12);
+        open_list(&mut app);
+        let frame = app.compose(40, 12);
+        let list = app.overlay_rows.clone();
+        let area = app.input_area.unwrap();
+        assert_eq!(list.start, area.row + area.height);
+        assert!(text(&frame.screen[list.end]).starts_with('─'));
+        cleanup(app);
+    }
+    #[test]
+    fn small_viewports_drop_the_gap_and_fall_back_without_losing_the_draft() {
+        let mut app = test_app("small-layout");
+        app.editor.insert("draft");
+        app.palette.ui.input_style = InputStyle::Boxed;
+        let frame = app.compose(40, 5);
+        assert!(text(&frame.screen[0]).starts_with('╭'));
+        app.palette.ui.input_style = InputStyle::Bar;
+        let frame = app.compose(40, 4);
+        assert!(!frame.screen.iter().any(|r| text(r).contains('▌')));
+        assert_eq!(frame.screen.len(), 4);
+        assert_eq!(app.editor.text(), "draft");
+        let frame = app.compose(40, 12);
+        assert!(frame.screen.iter().any(|r| text(r).starts_with("▌ draft")));
         cleanup(app);
     }
 }

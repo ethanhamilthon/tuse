@@ -67,15 +67,23 @@ impl App {
         if trimmed.is_empty() {
             return;
         }
-        if let Some(cmd) = trimmed.strip_prefix('/')
-            && let name = cmd.split(' ').next().unwrap_or("")
-            && name == cmd
-            && (crate::ui::picker::COMMANDS.iter().any(|(n, _)| *n == name)
-                || self.session.config().commands.iter().any(|n| n == name))
-        {
-            self.editor.clear();
-            self.run_command(cmd);
-            return;
+        if let Some(cmd) = trimmed.strip_prefix('/') {
+            let (name, tail) = cmd.split_once(char::is_whitespace).unwrap_or((cmd, ""));
+            if tail.is_empty() && crate::ui::picker::COMMANDS.iter().any(|(n, _)| *n == name) {
+                self.editor.clear();
+                self.run_command(cmd);
+                return;
+            }
+            if self.session.config().commands.contains_key(name) {
+                match tuse_config::command_words(tail) {
+                    Ok(words) => {
+                        self.editor.clear();
+                        self.run_custom(name, words);
+                    }
+                    Err(e) => self.error(format!("/{name}: {e}")),
+                }
+                return;
+            }
         }
         self.picker = None;
         self.scroll = 0;

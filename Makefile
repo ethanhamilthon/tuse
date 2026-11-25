@@ -29,7 +29,7 @@ site:
 	rm -rf target/book-src
 	mkdir -p target/book-src
 	cp README.md target/book-src/README.md
-	mkdir -p target/book-src/docs && cp docs/screenshot.png docs/demo.gif target/book-src/docs/
+	mkdir -p target/book-src/docs && cp docs/screenshot.png target/book-src/docs/
 	printf '# Summary\n\n[Tuse](README.md)\n\n' > target/book-src/SUMMARY.md
 	for d in $(DOCS); do \
 		cp docs/$$d.md target/book-src/$$d.md; \

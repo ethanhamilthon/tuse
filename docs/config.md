@@ -64,8 +64,8 @@ All keys are optional. Unknown keys, wrong types, and out-of-range values fail w
 | `systems` | list of strings | Text appended to the system prompt, in order ([Lua](lua.md#what-the-agent-sees)). |
 | `prompts` | `name -> string \| { args?, run }` | Prompts for the `#` picker and JSON-RPC `turn.submit` (below). |
 | `functions` | `name -> function \| false` | Extra agent functions, overrides, and disabled built-ins (below). |
-| `hooks` | `name -> { events, run }` | Lifecycle hooks ([Lua](lua.md#hooks)). |
-| `commands` | `name -> function` | Custom slash commands (below). |
+| `hooks` | `name -> { events, run }` | Lifecycle hooks ([Lua](lua.md#hooks)). `events` needs at least one known event, and `run` is required. |
+| `commands` | `name -> function \| { args?, desc?, run }` | Custom slash commands (below). |
 
 ### Theme and UI
 
@@ -85,7 +85,7 @@ All keys are optional. Unknown keys, wrong types, and out-of-range values fail w
 | `info` | `#97BEDC` | Headings, Lua functions. |
 | `user` | `"fg"` | Text of your messages and of the input. `fg` stays for the agent's text. |
 
-A color is `#rgb`, `#rrggbb`, an ANSI index `"0"`–`"255"`, or a name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `grey`, `dark_grey`, and `bright_*`. It can also be `"accent"` (the accent color) or `"none"` (the terminal default).
+A color is `#rgb`, `#rrggbb`, an ANSI index `"0"`–`"255"`, or a name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `grey` (or `gray`), `dark_grey` (or `dark_gray`), and `bright_red`, `bright_green`, `bright_yellow`, `bright_blue`, `bright_magenta`, `bright_cyan`, `bright_white`. It can also be `"accent"` (the accent color) or `"none"` (the terminal default).
 
 `user` and every `lua` token can also name another theme color: `bg`, `surface`, `fg`, `dim`, `muted`, `border`, `accent`, `ok`, `err`, or `info`. The link follows that color when you change it.
 
@@ -125,7 +125,7 @@ A color is `#rgb`, `#rrggbb`, an ANSI index `"0"`–`"255"`, or a name: `black`,
 | `message_gap` | `1` | Blank lines between entries. |
 | `list_max_height` | `16` | Max rows for pickers and panels (`>= 1`). |
 | `input_max_height` | `-1` | Max visible input rows (`-1` or `>= 1`). |
-| `input_style` | `boxed` | `boxed` draws a border around the growing input with an inside status bar. `lines` puts a rule above and below the input. `fill` draws the input on a `border`-colored background with the status line below it. `classic` still works as an alias of `lines`. `boxed` and `fill` fall back to `lines` if the terminal is too small. |
+| `input_style` | `boxed` | `boxed` draws a border around the growing input with an inside status bar. `lines` puts a rule above and below the input. `fill` draws the input on a `border`-colored background with the status line below it. `bar` puts an accent `▌` before each input row, then a blank row and the status line. `classic` still works as an alias of `lines`. `boxed`, `fill`, and `bar` fall back to `lines` if the terminal is too small. Every style leaves one empty row above the input. Pickers, questions, and panels open below the input: under the box or rules with `lines` and `boxed`, and between the input and the status line, closed by a rule, with `fill` and `bar`. |
 | `hide_history` | `{}` | History roles left out of `/history`, such as `{ "usage", "hook" }` ([Session](session.md#history-and-session-data)). Unknown roles fail. |
 | `scope_models` | `{}` | `provider/model` or `provider/*` patterns. When set, `/models` lists only matching models plus the current one. JSON-RPC ignores it. |
 
@@ -153,6 +153,7 @@ return {
 }
 ```
 
+- A prompt name is not empty and has no whitespace.
 - `args` are unique strings without spaces. In the TUI you pick one after the prompt (`#openspec propose`). JSON-RPC sends `"openspec propose"`, and an arg not in the list fails.
 - When the message is sent, `run(arg)` runs (`arg` is `nil` if none was picked) and must return a string. The model only sees that string, as `<prompt name="openspec" arg="propose">…</prompt>`, never the function.
 - If `run` fails or does not return a string, the message is not sent and the error is shown.
@@ -187,8 +188,29 @@ return {
 
 ### `commands` and `settings.open`
 
-- `commands = { name = function() ... end }` adds `/name` to the TUI and JSON-RPC `commands.run`. Commands run as Lua jobs with no deadline. `print` is not shown, and host functions are not globals here, so use `t.show()`. Esc cancels them. Built-in names (`config`, `new`, `resume`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`) are reserved.
-- `settings = { open = { md = function(path) ... end } }` handles clicks on local files with that extension (case-insensitive) in the TUI. Without a handler, the OS opener is used. URLs always go to the OS opener. A top-level `open` key fails with `open: moved to settings.open`.
+- A command is a function, or a table `{ args?, desc?, run }` like a prompt, plus `desc`. It adds `/name` to the TUI and JSON-RPC `commands.run`:
+
+```lua
+return {
+  commands = {
+    diff = function() ... end,
+    mv = function(from, to) ... end,
+    deploy = {
+      desc = "ship it",
+      args = { "staging", "prod" },
+      run = function(env) ... end,
+    },
+  },
+}
+```
+
+- `desc` is shown next to `/name` in the `/` picker.
+- Without `args`, the words typed after the name (`/mv a.txt b.txt`) are passed to `run` in order, as many as `run` declares (any number if it takes `...`). Missing words are `nil`. Too many words fail with `/mv takes at most 2 words`, and a function without parameters fails with `/diff takes no words`. A word in `"…"` or `'…'` keeps its spaces, `\"` or `\'` inside the same quotes is a literal quote, and an unclosed quote is an error.
+- With `args`, only one word is accepted, it must be one of `args`, and `run` gets it as its first parameter. In the TUI, picking the command opens a picker of its `args`, and a space after `/name` opens it again. Choosing an arg runs the command. Esc leaves `/name ` in the input, and Enter then runs it with no arg. An unknown arg fails with `Unknown arg x for /deploy`.
+- `args` are unique strings without spaces, `desc` is a string, and `run` is required in the table form.
+- Commands run as Lua jobs with no deadline. `print` is not shown, and host functions are not globals here, so use `t.show()`. Esc cancels them. The return value is ignored.
+- A command name is not empty, does not start with `/`, has no whitespace or control characters, and is not a built-in name (`config`, `new`, `resume`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`).
+- `settings = { open = { md = function(path) ... end } }` handles clicks on local files with that extension (case-insensitive) in the TUI. An extension is not empty, does not start with `.`, and has no `/`, `\`, whitespace, or control characters. Without a handler, the OS opener is used. URLs always go to the OS opener. A top-level `open` key fails with `open: moved to settings.open`.
 
 ## Reload
 

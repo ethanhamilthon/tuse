@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.6
+
+- **Commands take arguments.** A `commands` entry is a function or `{ args?, desc?, run }`, like a prompt plus `desc`. `desc` shows in the `/` picker. Without `args`, `/mv a.txt "b c"` passes the typed words (quotes keep spaces) to `run(from, to)`; with `args`, one word from the list is accepted and the TUI opens a picker for it. JSON-RPC `commands.run` takes `argv`, and `commands.list` returns `{name, desc, args, params}` objects (**breaking** for clients that read names).
+- **Pickers below the input.** Pickers, questions, and panels open under the input: under the box or rules with `lines` and `boxed`, and between the input and the status line, closed by a rule, with `fill` and `bar`. Every style keeps one empty row above the input.
+- **New `bar` input style.** `settings.ui.input_style = "bar"` puts an accent `▌` before each input row, then a blank row and the status line.
+- **Aligned columns in lists.** `/history` shows index, role, and text in columns, command and model lists align their descriptions, and the Models section of `/config` lines up its details.
+- **Terminal redraw fix.** Output from another writer (such as a hook writing to `/dev/tty`) could leave stray text, scroll the screen, and duplicate the input. Frames are now written at once, line wrap is off while Tuse runs, and every row is repainted every five seconds.
+- **The agent knows where to look.** The system prompt now tells it to answer questions about Tuse from `docs()` and how to change behavior or the UI through the Lua config. The config docs also cover name rules and color aliases, and a test keeps them complete.
+
 ## 0.11.5
 
 - **Hooks never block a turn.** Hooks run fully in the background: a message, a reply, and a launch no longer wait for them, so the activity indicator no longer appears seconds after you press Enter. On quit, Tuse still waits for running hooks.

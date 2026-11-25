@@ -9,12 +9,16 @@ use tuse_lua::mlua::{self, Lua, MultiValue};
 use tuse_lua::{Done, Job, Out, Stop};
 
 impl Session {
-    pub fn run_command(self: &Arc<Self>, name: &str) -> Result<(), String> {
-        if !self.config().commands.iter().any(|c| c == name) {
-            let error = format!("unknown command /{name}");
+    pub fn run_command(self: &Arc<Self>, name: &str, argv: &[String]) -> Result<(), String> {
+        let checked = match self.config().commands.get(name) {
+            Some(command) => command.check(name, argv),
+            None => Err(format!("unknown command /{name}")),
+        };
+        if let Err(error) = checked {
             self.error(error.clone());
             return Err(error);
         }
+        let argv = argv.to_vec();
         let cancel = Arc::new(AtomicBool::new(false));
         {
             let mut list = self.cmd_runs.lock().unwrap();
@@ -45,10 +49,14 @@ impl Session {
             let start = || -> mlua::Result<()> {
                 let f = crate::scripting::registry::command_of(lua, &cmd)
                     .ok_or_else(|| mlua::Error::runtime("command is gone"))?;
+                let args = argv
+                    .iter()
+                    .map(|a| lua.create_string(a).map(mlua::Value::String))
+                    .collect::<mlua::Result<Vec<_>>>()?;
                 let job = Job::new(
                     lua,
                     f,
-                    MultiValue::new(),
+                    MultiValue::from_iter(args),
                     stop,
                     Out::Buf(String::new()),
                     done,

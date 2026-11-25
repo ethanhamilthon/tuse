@@ -143,7 +143,7 @@ fn replay_resume_provider_isolation_and_truncation() {
     )
     .unwrap();
     s.reload().unwrap();
-    s.run_command("rewrite").unwrap();
+    s.run_command("rewrite", &[]).unwrap();
     loop {
         match rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap() {
             Event::HistoryReplaced => break,

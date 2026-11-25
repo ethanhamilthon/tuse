@@ -3,13 +3,13 @@ use tuse_core::{HOST_FUNCTIONS, Mode, Options, Session, Start};
 
 #[test]
 fn docs_cover_the_host_functions_and_the_vm_exports_them() {
-    let functions = tuse_core::docs(Some("functions"));
+    let functions = tuse_core::docs(Some("lua"));
     let config = tuse_core::docs(Some("config"));
     for name in HOST_FUNCTIONS {
         let documented = functions.contains(&format!("`{name}("))
             || functions.contains(&format!("`{name}."))
             || functions.contains(&format!("and `{name}("));
-        assert!(documented, "docs(\"functions\") misses `{name}`");
+        assert!(documented, "docs(\"lua\") misses `{name}`");
         assert!(
             config.contains(&format!("`{name}`")) || name.starts_with("task_"),
             "docs(\"config\") require(\"tuse\") row misses `{name}`"

@@ -29,7 +29,7 @@ fn run_lua(s: &std::sync::Arc<Session>, rx: &std::sync::mpsc::Receiver<Event>) -
 fn agent_only_functions_isolation_overrides_disables_and_reload() {
     let probe1 = r#"
 assert(my_secret_fn("hi") == "res:hi")
-assert(docs("functions"):find("my_secret_fn", 1, true) == nil)
+assert(docs("lua"):find("my_secret_fn", 1, true) == nil)
 assert(sh("echo a").out == "wrapped:echo a")
 assert(require("tuse").sh("echo b").out == "wrapped:echo b")
 assert(write("w.txt", "hello"):find("wrapped:", 1, true) == 1)
@@ -85,12 +85,11 @@ local t2 = spawn_via_trusted(function() return tostring(sh) .. ":" .. tostring(r
 local out1, out2 = wait_tasks(t1, t2)
 assert(out1:find("nil:nil", 1, true), out1)
 assert(out2:find("nil:nil", 1, true), out2)
-local df = check_docs("functions")
-local dt = check_docs("tool")
-local dc = check_docs("config")
-assert(not df:find("`sh(", 1, true) and not df:find("`delete(", 1, true) and not df:find("docs(", 1, true))
-assert(not dt:find("`sh(", 1, true) and not dt:find("`delete(", 1, true))
-assert(dc:find("Disabled in this session:", 1, true) == 1)
+local dl = check_docs("lua")
+local seen = dl:sub(dl:find("What the agent sees", 1, true))
+assert(not seen:find("`sh(", 1, true) and not seen:find("`delete(", 1, true) and not seen:find("`docs(", 1, true))
+assert(seen:find("`read(", 1, true) == nil)
+assert(check_docs("config"):find("Disabled in this session:", 1, true) == 1)
 return { a = 1 }
 "#;
 
@@ -99,8 +98,8 @@ assert(type(sh) == "function" and sh == require("tuse").sh and saved_tuse.sh == 
 assert(getmetatable(saved_sh("printf restored")) == "sh")
 assert(saved_sh("printf restored").out == "restored")
 assert(saved_enc({ x = 2 }) == '{"x":2}')
-assert(docs("functions"):find("`sh(", 1, true) ~= nil)
-assert(docs("functions"):find("`delete(", 1, true) ~= nil)
+assert(docs("lua"):find("`sh(", 1, true) ~= nil)
+assert(docs("lua"):find("`delete(", 1, true) ~= nil)
 return "ok3"
 "#;
 

@@ -1,86 +1,118 @@
-# Usage, Cost & Context Compaction
+# Usage
 
-Tuse tracks token usage and USD cost across main turns and `llm()` calls, and automatically compacts older tool output when a session's context grows past its compaction threshold.
+How to install and update Tuse, use the terminal UI, and run the `tuse` command line. For providers and models see [Connect](connect.md), for config files see [Config](config.md).
 
-## Usage accounting
+## Install
 
-### Token extraction
+Prebuilt binaries exist for macOS 11+ (`arm64`, `amd64`) and Linux with glibc 2.35+ (`amd64`, `arm64`):
 
-When an API response includes a `usage` object, Tuse records:
-
-- `input` (`prompt_tokens`) — total input tokens, including cached reads and cache writes.
-- `output` (`completion_tokens`) — completion tokens generated.
-- `cache_read` (`prompt_tokens_details.cached_tokens`) — cached prompt tokens read.
-- `cache_write` — `max(prompt_tokens_details.cache_write_tokens, prompt_tokens_details.cached_creation_tokens)`.
-
-Main turn steps persist a main `usage` record (`llm = false`) and update the session's live context size to `input + output`. Lua `llm()` calls persist a `usage` record marked `llm = true` (and emit `usage`) only when the reply supplies usage, counting toward cumulative totals and spend without changing the session's `context`.
-
-### Cost calculation
-
-For each `usage` record whose `model` matches a configured entry with `prices`:
-
-```text
-plain_input = max(0, input - (cache_read + cache_write))
-cost_usd = (plain_input * prices.input
-          + cache_read  * prices.cache_read
-          + cache_write * prices.cache_write
-          + output      * prices.output) / 1,000,000
+```sh
+curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 ```
 
-- `session().usage.cost` is the cumulative total across main turns and `llm()` calls; `session().usage.llm_cost` is the `llm()` portion alone.
-- Cost is `nil` / `(unknown)` (and omitted from the TUI model bar) until at least one usage record matches a model with configured `prices`.
-- Updating `models[].prices` and running `/reload` recomputes cumulative costs across all records in the session immediately.
+The script picks the archive for your OS and CPU, checks its SHA-256 against the release's `checksums.txt`, and installs `tuse` into `~/.local/bin`. It only installs the binary and never creates or changes config files. Settings:
 
-### Token formatting and display
+| Variable | Meaning |
+| --- | --- |
+| `TUSE_BIN_DIR` | Install directory (default `~/.local/bin`). |
+| `TUSE_VERSION` | Version to install, such as `0.10.3` or `v0.10.3` (default: latest). |
+| `TUSE_RELEASE_URL` | Base download URL. Wins over `TUSE_VERSION`. |
 
-Token counts format compactly:
+To build from source you need the Rust toolchain from `rust-toolchain.toml`. Run `cargo install --locked --git https://github.com/ethanhamilthon/tuse tuse`, or `make install` in a checkout (`BIN_DIR` defaults to `~/.local/bin`).
 
-- `< 1,000`: exact integer (`999`)
-- `1,000`–`999,999`: `k` with up to 1 decimal, dropping `.0` (`5.2k`, `200k`)
-- `>= 1,000,000`: `m` with up to 1 decimal, dropping `.0` (`1m`, `1.5m`)
+`tuse update` downloads the latest release (or `TUSE_RELEASE_URL`) and checks and unpacks it in-process. It then atomically replaces the running binary and prints `<old> -> <new>`. It never touches `~/.tuse` or your config.
 
-Where usage appears:
+## First run
 
-- **TUI bottom status bar:** `<display> · <effort> [· <used>/<window>] [· $<cost>]`. The context segment is omitted completely when both `<used>` and `<window>` are `0`; when `<window>` is `0` and `<used> > 0`, it shows `<used>/?`. Cost renders to 2 decimal places when priced (omitted otherwise); `<used>` is colored `accent`.
-- **`/session` panel:** `Context` (`<used> / <window> (<pct>%), compacts at <threshold>`), `Turns` and `steps`, `Usage` (`in`, `cache read`, `cache write`, `out`), and `Cost` (`$<total>` to 4 decimal places plus `($<main> + $<llm> llm)`).
-- **Lua / JSON-RPC:** `session().ctx`, `session().ctx_size`, `session().usage`, `session().steps`, `session().turns`, and `session.stats` / `session.snapshot`.
+1. Connect a provider: `tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai` ([Connect](connect.md)).
+2. Run `tuse` in your project and pick a model with `/models`.
+3. Optionally add a config: `tuse init` creates `./tuse.lua` that extends your global config ([Config](config.md)).
 
-## Context compaction (50/25/25)
+## Command line
 
-Compaction reduces what is sent to the model on future steps without altering or deleting any saved records in SQLite or `/trace`.
+Every command accepts `-h`/`--help`, which prints its usage and exits without reading config or state. Flags take `--flag VALUE` or `--flag=VALUE`. When a flag is repeated the last value wins, and `--` ends flag parsing. Unknown commands, unknown flags, and missing or extra arguments print `tuse: <message>` with the usage line to stderr and exit with 1.
 
-### Compaction threshold
+- `tuse [-c|--config PATH] [-r|--resume ID]` opens the TUI in the current folder. `-r ID` opens a saved session instead, using its saved folder if that still exists. On exit it prints `tuse: session <ID>` to stderr.
+- `tuse json [-c|--config PATH] [-r|--resume ID]` serves one session over JSON-RPC on stdin/stdout ([JSON mode](json.md)).
+- `tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--replace]` checks a provider and saves it ([Connect](connect.md)).
+- `tuse disconnect NAME` removes a provider.
+- `tuse providers [--json]` lists providers as `NAME<TAB>BASE_URL`, or as JSON with `api`. Keys are never printed.
+- `tuse models [-c|--config PATH]` prints the saved default model and effort and the `models` metadata from the effective config.
+- `tuse init` writes `./tuse.lua`, which loads the global config with `pcall(require, "global")`. It fails if the file exists.
+- `tuse update` updates the binary (see above).
+- `tuse version` (`-V`, `--version`) prints `tuse <version>`.
+- `tuse help` (`-h`, `--help`) prints the full usage. `tuse COMMAND -h` prints the usage of one command.
 
-After tool execution finishes at the end of a tool-using step, Tuse resolves the compaction threshold (`compact_at`):
+`-c PATH` is resolved from the current folder, and `~/` expands to your home. Without it, Tuse uses `./tuse.lua`, then `~/.config/tuse.lua`, then `~/.config/tuse/init.lua`, then built-in defaults.
 
-1. Active model's `models[].compact_at` if set. This takes precedence over `settings.compact_at` in **both** directions: a positive per-model threshold overrides a global `settings.compact_at = 0`, and a per-model `compact_at = 0` disables compaction for that model even if `settings.compact_at` is positive.
-2. Otherwise `settings.compact_at` if set (`0` disables compaction globally unless overridden per model).
-3. Otherwise `floor(model.window * 6 / 10)` (60% of the configured `window`), or `0` (disabled) when `window` is unknown (`0`).
+## The screen
 
-If `threshold > 0` and the latest `context >= threshold`, compaction runs.
+From top to bottom:
 
-### Token estimation and three-zone algorithm
+- **Chat.** Your messages sit on a `surface` block. Agent replies render as Markdown. Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
+- **Overlay.** At most one picker, panel, or `ask()` question, shown above the input.
+- **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`.
+- **Input.** Grows with the text up to `settings.ui.input_max_height`.
+- **Bottom rule.** `<model> · <effort> · <used>/<window> · $<cost>`. The context and cost parts are hidden while unknown.
 
-Tuse walks backward from the newest record, estimating tokens per message as:
+How many lines of code, output, diffs, and reasoning appear is set by `settings.ui`, and the colors by `theme` ([Config](config.md#theme-and-ui)).
 
-- **Non-multipart messages** (string `content`, or assistant messages with `tool_calls`): `floor(serialized_message_json_bytes / 4)`.
-- **Multipart messages** (`content` is a JSON array, such as user messages with attached images): sum across `content` parts—each `image_url` part counts as `1,000` tokens, and every other part counts as `floor(serialized_part_json_bytes / 4)`.
+## Typing a message
 
-Using these estimates, Tuse computes monotonic record index bounds `(drop, prune)`:
+- `Enter` sends the message, or runs an exact `/command`. `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` inserts a newline.
+- `#` opens a picker of your configured `prompts`. The picked `#name` is sent with the prompt body attached.
+- `@` opens a file picker for the session folder. `@dir/q` browses `dir/`, and `@/` or `@~/` go outside the project. `Tab` completes a folder or attaches a file. `Enter` attaches the highlighted file or folder.
+- `Ctrl+V`/`Cmd+V` pastes an image from the clipboard as `[Image #N]` (saved under `~/.tuse/<id>/images/`), or pastes text otherwise.
 
-- **Fresh zone (newest ~25% of `threshold`, `index >= prune`):** Sent in full—user text with hidden context and images, assistant text and tool calls, full tool outputs, and images returned by `read()`.
-- **Pruned middle zone (from ~25% to ~50% of `threshold`, `drop <= index < prune`):** Keeps user messages, hidden context, assistant messages, and tool-call structure, omits images from tool results, and shortens each tool result output to its first line (up to 200 characters) plus `\n[tool output pruned]` whenever the output is multiline or longer than 200 characters.
-- **Dropped old zone (older than ~50% of `threshold`, `index < drop`):** Anchored at a `user` or `notification` record boundary so assistant `tool_calls` and their matching `tool` results are never split. Keeps only plain conversation text: user `text` (without hidden `context` or `images`), `notification` text, and non-empty assistant `text`. All tool calls and tool results in this zone are omitted.
+Picked prompts, files, and images are atoms: arrows and Backspace treat each one as a single unit. Typing `#name` or `@path` by hand is plain text. The model receives the attachments in a hidden block after your text:
 
-Bounds only advance forward (`max` with previous bounds). If neither `drop` nor `prune` advances, nothing changes.
+```text
+fix this #review @notes.txt [Image #1]
 
-### Effects of compaction and resume
+<prompt name="review">Check the change for bugs.</prompt>
+<image id="1" path="/home/me/.tuse/ID/images/image-1.png"/>
+<file path="notes.txt">hello world
+</file>
+```
 
-When bounds advance:
+Text files send their first 1,024 bytes (`truncated="true" size="…"` when longer), and binary files only their size. Folders send a sorted listing of up to 1,024 bytes. Images are attached as base64 data. Missing references are skipped.
 
-1. Appends a `compaction` record (`prune`, `drop`) to the session log (restored automatically on resume).
-2. Subsequent API requests append a note to the system prompt when `drop > 0`: *"Earlier parts of this conversation were compacted to save context: old tool calls and their outputs were removed and some later outputs were cut to their first line."*
-3. Updates the live session's `context` counter in memory to the estimated token count of the compacted message list.
-4. Appends and emits a notice: `Context compacted at <threshold> tokens; now about <estimated>.`
+## While the agent works
 
-On **resume**, Tuse restores the `compaction` bounds from `compaction` records, while `context` is restored from the last non-`llm` `usage` record (`input + output`), **not** from the temporary post-compaction estimate.
+- **Steering.** Press `Enter` while a turn runs and your message is queued (dimmed, with `steering…` in the top rule). The agent gets it at its next step. If you edit the dimmed text, it leaves the queue.
+- **Esc** closes the open picker, question, or panel first. Otherwise it cancels the turn, hooks, and custom commands. A running `lua` call is not killed: it keeps going as a background task in `/tasks` ([Lua](lua.md#background-tasks)). Steering does the same handoff.
+- **Quit** with `/quit`, or `Ctrl+C`/`Ctrl+D` on an empty input.
+
+## Keys
+
+| Key | Action |
+| --- | --- |
+| `PageUp` / `PageDown` | Scroll the chat. `Shift+` scrolls the open panel. |
+| `Up` / `Down` | Move through wrapped lines, picker items, or (with empty input) scroll a panel. |
+| `Ctrl+P` / `Ctrl+N` | Move in a picker. |
+| `Home` / `End`, `Ctrl+E` | Start / end of line. |
+| `Ctrl` or `Alt` + `Left`/`Right`, `Alt+B`/`Alt+F` | Move by word. |
+| `Shift` + arrows / `Home` / `End`, `Ctrl+A` | Select input. |
+| `Ctrl+C` / `Cmd+C` | Copy the selection, else clear the input, else quit. |
+| `Ctrl+X` / `Cmd+X` | Cut. In `/tasks`, stop the selected task. |
+| `Ctrl+W`, `Alt+Backspace`, `Ctrl+Backspace` | Delete the previous word. |
+| `Ctrl+U` / `Ctrl+K` | Delete to start / end of line. |
+| `Esc` | Close, cancel, or hand off (see above). |
+
+Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text (copy with `Ctrl+C`). Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/trace` opens it, using a matching `open.<ext>` handler from config or the OS opener.
+
+## Slash commands
+
+Type `/` to get a picker. Pickers filter by label, ignoring case.
+
+- `/new` starts a fresh session in the current folder.
+- `/resume` picks another titled session from this folder, newest first.
+- `/models` picks a model, then an effort (`default`, `low`, `medium`, `high`, `xhigh`, `max`). The choice applies to this session and becomes the default for new ones.
+- `/tasks` lists background tasks. `Enter` shows the last 200 log lines, `Ctrl+X` stops one.
+- `/session` shows the session: ID, name, folder, config, model, context, turns, usage, cost.
+- `/trace` lists everything in the session, starting with the system prompt. `Enter` opens an entry, `Left`/`Right` step through entries, `Esc` goes back.
+- `/config` shows the resolved config, without secrets or Lua bodies.
+- `/reload` runs the config again. If it fails, the old config stays.
+- `/quit` exits.
+
+Custom commands from `commands = { name = function() ... end }` show up in the same picker and run as Lua jobs ([Config](config.md#commands-and-open)). Built-in names cannot be overridden.

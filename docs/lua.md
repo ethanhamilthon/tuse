@@ -1,105 +1,171 @@
-# Lua Runtime
+# Lua
 
-Tuse embeds a Lua 5.4 VM per session. The agent's single tool (`lua`), config files, hooks, custom slash commands, local file openers, and background tasks all share this VM through a cooperative coroutine scheduler.
+The agent's single `lua` tool, the persistent VM, every built-in function, background tasks, and hooks. The page ends with the exact prompt and tool description the model gets.
 
-## VM Lifecycle
+## The VM
 
-- **One VM per session**: created on a dedicated thread when a session opens, initialized with built-in host functions and the resolved config, and destroyed when the session closes (process exit, `/new`, `/resume`, `session.new`, or `session.resume`).
-- **Persistence**: globals created by the agent persist across `lua(code)` tool calls for the lifetime of the session, and are shared with background tasks spawned in that VM. Resuming or switching sessions starts a fresh VM (agent globals are not persisted; the config is re-evaluated).
-- **Resilience**: Lua syntax errors, runtime errors, timeouts, and cancellations never terminate the VM.
+Each session has one Lua 5.4 VM. It runs the agent's `lua` tool calls, your config, hooks, commands, `open` handlers, and background tasks, all as coroutines on one scheduler. Globals the agent creates last until the session closes. Resuming a session starts a fresh VM. Errors, timeouts, and cancels never kill the VM.
 
-## Execution Environments
+The VM has two environments:
 
-The VM maintains two strictly isolated Lua environments:
+- **Agent**: `lua` tool calls, the modules and files they load, and tasks they spawn. Built-ins are globals, together with the agent-only `functions` from the config. `require("tuse")` returns a read-only view of the same built-ins.
+- **Trusted**: the config, its modules, hooks, commands, `open` handlers, and the bodies of configured `functions`. Built-ins are only reachable through `require("tuse")`, always as the originals. Agent-only functions are invisible here.
 
-### Agent Environment (`lua` tool)
+Each environment has its own `package.loaded`, so neither side can change the other's modules. A function keeps the environment it was defined in, including when it is passed across. Both sides get `string`, `table`, `math`, `utf8`, `io`, `os` (without `os.exit`), and `coroutine`. `debug` is not available.
 
-- Covers `lua(code)` tool calls, modules `require`d from `lua(code)`, `load`/`loadfile`/`dofile` called from `lua(code)`, and background tasks `spawn`ed by `lua(code)`.
-- Includes separate copies of the safe Lua 5.4 standard libraries (`string`, `table`, `math`, `utf8`, `io`, `os`, `coroutine`) plus isolated agent-scoped `package`, `require`, `load`, `loadfile`, and `dofile`. Shared metatables (`string`, `FILE*`, `sh`) are protected so agent mutations cannot affect trusted code or private runtime helpers. The `debug` library is unavailable (`nil`), and `os.exit` is set to `nil`.
-- `package.path` and `package.cpath` are `""`; `require` uses Tuse's path-relative resolver ([config.md](config.md#modules-and-require)) against the agent's own `package.loaded` and `package.preload`, loading files into the agent environment.
-- Live-gated built-in host functions (subject to overrides and `false` disables in `functions`) and live-gated configured custom functions are installed as globals; the agent's own persistent globals live in this table across calls.
-- `require("tuse")` is reserved (always returning the live, genuinely read-only agent-scoped proxy regardless of `package.loaded.tuse`; also installed initially as `package.loaded.tuse`). Lookups dynamically read active built-in capabilities (overrides applied, disabled built-ins returning `nil`, custom non-built-in configured functions not exposed on `tuse`).
+## The `lua` tool
 
-### Trusted Environment (Configs, Trusted Modules, Callbacks)
+The model has exactly one tool, `lua`, which takes `{"code": "..."}`.
 
-- Covers config files, modules `require`d by trusted code, hooks, custom `commands`, `open` handlers, configured `functions` bodies themselves, and background tasks spawned via `require("tuse").spawn`.
-- Has its own isolated `_G`/`_ENV`, `package`, `package.loaded`, `package.preload`, `require`, `load`, `loadfile`, `dofile`, and `tuse`. Agent code cannot inspect or mutate trusted `package.loaded`, cannot share module cache entries with trusted code, and cannot obtain the raw trusted `tuse` table.
-- Built-in host function names are **not** globals; code imports the unmodified original built-ins via `require("tuse")`.
-- Configured `functions` are **never** visible here — not as globals, not on `require("tuse")`, and not to other configured functions. Share helper code via `local` functions or `require`d helper modules.
+- Tuse first tries to run `return <code>`, so a lone expression returns its value. Otherwise it runs the code as statements.
+- The result is everything printed with `print`/`io.write`, then each non-nil return value formatted with `inspect`. On error it is the message and a traceback. Output is never cut.
+- Exit code: `0` on success, `1` on error or timeout, `null` when cancelled or handed off.
+- Each call has a 120-second deadline. Waiting in `pick`, `ask`, or `reload` pauses the deadline. Tight loops are interrupted too.
+- A file change by `write`, `append`, `edit`, or `delete` during a tool call adds a diff to the result, which the user sees. An image read with `read` is sent to the model on the next step. From hooks, tasks, and commands these functions still work, but they attach nothing.
+- Unknown tools, bad JSON, or a missing `code` fail with code `1` and nothing runs.
 
-### Callback Provenance and `spawn` vs `t.spawn`
+## Functions
 
-- Every Lua function keeps the lexical `_ENV` where it was defined:
-  - Passing an agent callback `cb` into a configured wrapper `wrap(cb)` runs `wrap` with trusted `_ENV` while `cb` retains agent `_ENV` (cannot see trusted `require("tuse")` or call disabled built-ins).
-  - Returning a trusted closure from a configured wrapper retains its trusted `_ENV`.
-- A task started via the agent's `spawn(fn, name)` runs in the agent job context; a task started via trusted `t.spawn(fn, name)` runs in the trusted job context. In both cases, `fn` retains its lexical `_ENV` (so `t.spawn(cb)` on an agent closure still runs `cb` in agent `_ENV`).
+Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~/…`, or relative to the session folder. Built-ins removed with `functions = { name = false }` are gone in the agent's environment.
 
-### Environment Variables (`os.getenv`)
+### Files
 
-- `os.getenv("THIS_PATH")` inspects the Lua call stack for the nearest file-loaded Lua frame and returns its path (resolved against `cwd` if relative), or `nil` for inline `lua` tool code.
-- All other `os.getenv(name)` calls read the ordinary process environment unchanged. Tuse does not inject `TUSE_*` variables into Lua or `sh`.
+- `read(path)` / `read(path, {lines=true, offset=1, limit=2000})`: Returns the full text by default. With `lines=true` it returns numbered lines, a page at a time, ending with `[lines a-b of n; continue with offset=…]`. For an image (`png`, `jpg`, `jpeg`, `gif`, `webp`, up to 5 MiB) it returns `[image: path, N KB]` and the model sees the image. Binary files return `[binary file, N bytes]`. Directories raise an error.
+- `write(path, content)`: Creates or overwrites a file atomically, creating parent folders and keeping permissions. Returns `created …` or `overwrote … (a -> b lines)`.
+- `append(path, text)`: Appends text, creating the file if needed.
+- `delete(path)`: Deletes one file. It refuses directories.
+- `edit(path, old, new, {all=false})`: Replaces exact text. `old` must occur exactly once unless `all=true`. If it is missing or appears more than once, it raises an error listing the matching lines. CRLF files keep their line endings.
+- `grep(pattern, {path=".", glob=nil, ignore_case=false, literal=false, context=0, limit=100})`: Searches with a regex, or plain text when `literal=true`. It respects `.gitignore`, includes hidden files, and skips `.git` and binary files. Returns `path:line: text` lines, `[no matches]`, or a note when it stopped at `limit`. `path` can also be a list.
 
-## Coroutine Scheduler & Cooperative Yielding
+### Shell and tasks
 
-Every executable Lua job runs as a Lua coroutine inside one scheduler on the VM thread (polling approximately every 5 ms while any job is active).
+- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: Runs `bash -c cmd` with stdin closed, merging stdout and stderr. Returns `{out, code, ok, timed_out}` plus `:lines()`. `tostring(r)` adds `[exit code N]` or `[timed out]`. `code` is `nil` when the process was killed. `env` is added to the inherited environment. The command is killed (with its whole process group) on timeout, at the caller's deadline, or on cancel. Use long strings `sh([=[ … ]=])` for commands with quotes or backslashes.
+- `spawn(fn, name)`: Runs `fn` as a background task with no deadline and returns its id (`t1`, `t2`, …).
+- `task_get(id, lines=50)`: `{id, name, status, started, ended, output}`, where `output` is the end of the log.
+- `task_stop(id)`: Stops a task.
+- `task_list()`: Lists all tasks of the session.
 
-- **Yielding waits**: `sh()`, `pick()`, `ask()`, `llm()`, and `reload()` yield the calling coroutine to the scheduler so other coroutines (background tasks, hooks, commands, tool calls) keep making progress concurrently.
-- **User coroutines**: `coroutine.resume` and `coroutine.wrap` are wrapped so scheduler yields pass transparently through user-created coroutines; calling `sh()` inside `coroutine.wrap(...)` works without blocking other jobs.
-- **Non-yieldable contexts** (top-level config evaluation or inside a C callback such as `string.gsub`):
-  - `sh()` falls back to blocking the VM thread while still honoring timeouts and cancellation.
-  - `pick()`, `ask()`, `llm()`, and `reload()` cannot block and raise `"interactive wait cannot run here"`.
-- **Timeout pausing**: while a coroutine is yielded inside `pick()`, `ask()`, or `reload()`, its remaining deadline budget is paused and resumed once the wait finishes. `sh()` and `llm()` do not pause the deadline.
-- **CPU loop interruption**: a VM instruction hook checks cancellation and deadlines every 1,000 instructions, so tight loops (`while true do end`) still terminate promptly on timeout or job cancellation. The same hook can also recognize a handoff without stopping the Lua code.
-- **Wait cancellation**: cancelling or timing out a yielded job kills any running `sh()` child process group (`SIGKILL`), removes and clears a pending `pick()`/`ask()` request, signals cancellation to an in-flight `llm()` request (checked cooperatively between streamed SSE lines and retry sleeps, not an immediate socket abort—blocking reads and non-SSE JSON responses finish before noticing cancellation), and wakes the coroutine with `"cancelled"` or `"timed out"`.
+### UI
 
-An agent tool job handed off on steering or cancellation is not interrupted by that action; its coroutine becomes a task instead. See [tasks.md](tasks.md) for what is preserved.
+- `show(name, text, pin)`: Shows or updates a Markdown block by name. `pin=true` keeps it at the bottom of the chat, and `show(name, "")` removes it. Blocks survive reload and resume and are never sent to the model.
+- `pick(options)`: Shows a list of strings and returns the chosen one, or `nil` on Esc or an empty list.
+- `ask(text)`: Shows a Markdown question and returns the typed answer, or `nil` on Esc. The answer is not sent to the model.
 
-## Job Kinds, Deadlines, and Cancellation
+`pick` and `ask` share one queue. Answered prompts are saved in the chat history.
 
-| Kind | Trigger | Deadline | Output sink | Error handling | Stopped by | Emits `lua_start` / `lua_end` |
-| --- | --- | --- | --- | --- | --- | --- |
-| `tool` | Model calls `lua(code)` with valid JSON and string `code` | 120 s (paused in `pick`/`ask`/`reload`) | Returned to model as tool output | Returned to model (`code = 1`, or `nil` if cancelled) | Session close; Esc / `turn.cancel` hands off to a task | Yes (`code` set) |
-| `task` | `spawn(fn, name?)` or tool handoff | None | Appended to task log file | Logged + agent notification | `task_stop`, `/tasks` Ctrl+X, `tasks.stop`, session close | Yes (`name` set), unless spawned in `lua_start`/`lua_end` hook |
-| `command` | `/name` or `commands.run` | None | Buffered (not shown in chat) | Emits `error` event `/<name>: <error>` (unless cancelled) | Esc / `turn.cancel`, session close | Yes (`name` set) |
-| `open` | Clicking a matching local path in TUI | None | Buffered (not shown in chat) | Emits `error` event `open.<ext>: <error>` (unless cancelled) | Esc / `turn.cancel`, session close | Yes (`name` = configured ext) |
-| `hook` | Lifecycle event | None | Buffered (not shown in chat) | Emits `notice` event `hook <name>: <error>` + trace entry | Esc / `turn.cancel` (cancels active run in each lane; queued runs proceed); `close` hooks finish on close/reload | Never |
+### Session and utilities
 
-## The `lua` Tool Contract
+- `session()`: Returns a fresh snapshot (changing it does nothing) with `mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage` (`input`, `output`, `cache_read`, `cache_write`, `cost`, `llm_cost`), `model_info`, `steps`, `turns`, and `trace` (`{role, summary, text}` list). It never contains keys. During config evaluation only the first four fields are set.
+- `llm(prompt, model, effort)`: Sends one prompt to a model, with no tools, history, or system prompt, and returns the text. `model` and `effort` default to the session's. It uses the same retries as turns, and its usage is counted as `llm_cost`.
+- `reload()`: Reloads the config like `/reload` and raises an error if the config is invalid. Inside a hook, it runs after the hook returns.
+- `set_title(text)`: Sets the session title (one line, up to 80 characters).
+- `docs(topic)`: `docs()` lists the topics and `docs("lua")` reads one. These are the pages of this documentation.
+- `json.encode(value)` / `json.decode(text)`: JSON, where `null` becomes `nil`.
+- `inspect(value)`: Formats any value readably, the same formatting used for tool results.
 
-The model is given a single tool named `lua` with one required string parameter `code`.
+`sh`, `pick`, `ask`, `llm`, and `reload` yield, so other jobs keep running while they wait, even inside your own coroutines. Where yielding is impossible (top-level config, or inside `string.gsub` callbacks), `sh` blocks and the others raise `interactive wait cannot run here`.
 
-- **Unknown tools or bad arguments**: calling any tool name other than `lua` fails with exit code `1` and an error telling the model to call functions inside `lua`. Invalid JSON arguments or a missing/non-string `code` also fail with exit code `1`. None of these start a Lua job or emit `lua_start`/`lua_end`.
-- **Expression convenience**: Tuse first tries to compile `return <code>` so a lone expression (such as `x + 1` or `{a = 1}`) returns its value directly; if that is not a valid expression, it compiles `<code>` as statements.
-- **Output & return rendering**:
-  - `print(...)` converts arguments with `tostring`, joins them with `\t`, appends `\n`, and writes to the job's output sink (or `stderr` if called outside any job, such as during config load).
-  - `io.write(...)` converts arguments with `tostring`, concatenates them with no separator, and writes to the same sink.
-  - Non-`nil` return values are formatted with `inspect(value)`, joined with `\t`, and appended after printed output (adding a separating newline if needed). If all return values are `nil`, nothing is appended.
-  - On handoff, the tool result identifies the task instead of waiting for the final Lua return value. On error, the error message and stack traceback are appended (or `[cancelled]` / `[timed out]` when stopped by cancellation/deadline).
-  - Tool output is **never truncated** by the runtime.
-- **Side-channel attachments (agent `tool` jobs only)**:
-  - Every `write()`, `append()`, `edit()`, and `delete()` during an agent `lua` tool call appends a `(path, diff)` entry to the tool result's `diffs` list (displayed in TUI and included in `tool_end` and durable records; the Lua function returns only a confirmation string).
-  - Every `read()` of an image during an agent `lua` tool call appends a base64 `data:<mime>;base64,...` URL to the tool result's `images` list so the model receives the image on the next step.
-  - Calls to `read`/`write`/`append`/`edit`/`delete` from hooks, commands, tasks, or `open` handlers perform the filesystem operation normally, but do not attach chat diffs or model images.
-- **Result exit code**: `0` on normal completion, `nil` (`null` in JSON) on cancellation or handoff, `1` on runtime/syntax/timeout/argument error.
+## Background tasks
 
-## Custom Slash Commands (`commands`)
+```lua
+local id = spawn(function()
+  local r = sh("cargo test")
+  print(r.out)
+  if not r.ok then error("tests failed") end
+  return "tests passed"
+end, "tests")
+```
 
-Configured as `commands = { name = function() ... end }`:
+- A task shares the VM and its globals. `print` writes to `~/.tuse/<session>/tasks/<id>.log`, and the return value or error is appended at the end.
+- Status is `running`, `done`, `failed`, or `stopped`. `started` and `ended` are UTC timestamps, with `ended` empty while the task runs.
+- When a task ends on its own, the agent gets a message, which starts a turn if the session is idle:
+  ``<task>Task t1 (tests) finished. Last line: tests passed. Output: `task_get("t1").output`.</task>``
+  The last line comes from the return value or the error, not from the log. Stopped tasks send no message.
+- **Handoff.** If you steer or press Esc while a `lua` tool call runs, the whole call keeps running as a task named after its run, such as `lua-3`. Locals, a running `sh`, and the rest of the script all continue. The tool result becomes `[continued in background: tN]`. A call is handed off at most once.
+- Stop tasks with `task_stop`, with `Ctrl+X` in `/tasks`, or with JSON-RPC `tasks.stop`. Esc and reload do not stop tasks, but closing or switching the session does.
 
-- Names appear in TUI `/` autocomplete and JSON-RPC `commands.list`.
-- Invoked with `/name` in TUI or `commands.run { name = "name" }` in JSON-RPC. Commands take no arguments.
-- Execute asynchronously as non-blocking Lua jobs with no deadline; multiple commands can run concurrently.
-- May call `show`, `pick`, `ask`, `sh`, `llm`, `reload`, `spawn`, and all other host functions via `require("tuse")`.
-- Output from `print()` is not shown in chat (though `lua_end` hooks receive it in `result`); use `show()` to display content in the UI.
-- Cancelled by Esc / `turn.cancel` and session close; unaffected by `/reload` (though invoking the command afterward runs the updated function).
+## Hooks
 
-## Local File Openers (`open`)
+Hooks are config functions that run on session events:
 
-Configured as `open = { ext = function(path) ... end }` (TUI-only):
+```lua
+local t = require("tuse")
+return {
+  hooks = {
+    notify = {
+      events = { "agent_message" },
+      run = function(e)
+        if e.status == "finished" then t.sh([[osascript -e 'display notification "done"']]) end
+      end,
+    },
+  },
+}
+```
 
-- Triggered when clicking a linkified local file path in TUI (agent messages, `show` blocks, `/config`, `/session`, and `system`/`user`/`agent` entries in `/trace`).
-- The clicked path is resolved against the session `cwd` and canonicalized. If the file does not exist, Tuse emits an `error` event (`cannot open <path>: file not found`).
-- The file extension is matched case-insensitively against configured `open` keys.
-- If a handler matches, it runs as a non-blocking Lua job with `(canonical_path)` and no deadline (cancelled by Esc / `turn.cancel` and session close). Errors emit `open.<ext>: <message>`.
-- If no handler matches, Tuse falls back to the OS default opener (`open` on macOS, `xdg-open` on Linux, `cmd /C start` on Windows).
-- Clicked URLs (`http://`, `https://`, `mailto:` under 2,000 characters) always use the OS opener and never invoke `open.<ext>`; unsupported URL schemes emit `cannot open URL \`...\``.
+| Event | When | Fields of `e` |
+| --- | --- | --- |
+| `start` | A session opened, or a reload committed. | `reason` (`launch`, `new`, `resume`, `reload`), `is_new`, `restored` |
+| `close` | A session is closing, or a reload is about to replace the config. | `reason` (`exit`, `new`, `resume`, `reload`) |
+| `user_message` | A turn takes a user message. | `text`, `is_first` |
+| `agent_message` | A model step ended, or a turn was cancelled. | `text`, `status` (`working`, `finished`, `cancelled`), `tool_calls` |
+| `model_change` | The model or effort changed. | `previous`, `new` (`{model, provider, effort}`) |
+| `name_change` | The session title changed. | `previous`, `new` |
+| `lua_start` | A tool call, command, task, or `open` handler started. | `id` (`lua-N`), `kind` (`tool`, `command`, `task`, `open`), `code`, `name` |
+| `lua_end` | One of those ended. | `id`, `kind`, `status` (`success`, `error`, `cancelled`), `duration_ms`, `result`, `error` |
+
+Call `t.session()` inside a hook to get session data. Each hook handles its events one at a time, in order, while different hooks run concurrently. Hooks have no deadline, and Esc cancels the running ones. An error shows up as the notice `hook <name>: <error>` and does not stop anything else. Every run is recorded in `/trace`. When a session closes, Tuse waits for all hooks to finish. Hook runs never fire `lua_start`/`lua_end`.
+
+## What the agent sees
+
+This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order, and the compaction note is added once earlier records were dropped. Inside a session this section is rendered for that session's config.
+
+### System prompt
+
+```text
+You are running inside Tuse, a coding agent.
+
+# Tool
+You have one tool, `lua`: it runs Lua 5.4 code in the session's persistent VM, so globals stay between calls (use `local` for scratch values). You get what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Nothing is cut, so keep big outputs short yourself. A call is stopped after 120 seconds; start a long job in the background with `spawn`.
+
+The full Lua standard library is there (`string`, `table`, `math`, `io`, `os`, `utf8`, `coroutine`), plus `json.encode`/`json.decode` and `inspect(value)`. Lua patterns are not regexes: use `grep` or `sh` for those.
+
+# Rules
+- Prefer short, multi-step scripts over one big call. Create a file and extend it in small chunks instead of writing a 1000-line file in a single call.
+- Prefer asynchronous work: start long jobs with `spawn` and keep working on anything that does not depend on them.
+- If all that remains is waiting for a background task, briefly tell the user what is pending and end the turn. Do not poll or block waiting for it; task completion will wake the agent.
+
+# Functions in `lua`
+They are Lua globals, not tools: call them inside `lua` code. Errors are Lua errors (catch them with `pcall`). Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/`delete` for file changes so the user sees diffs. Use `sh` for running programs and processing their output, not as the default for file operations.
+- `read(path)` / `read(path, {lines=true, offset=1, limit=2000})`: returns raw text by default, or an image (png, jpg, gif, webp) that you then see. Pass `{lines=true}` for numbered, paginated lines (ending with the next `offset`).
+- `write(path, content)`: create a file or replace it completely; missing folders are created.
+- `append(path, text)`: append text to a file (creating it if missing) and show the change as a diff.
+- `delete(path)`: delete a single file and show its removal as a diff (does not delete directories).
+- `edit(path, old, new, {all=false})`: replace exact text in a file. `old` must be unique unless `all` is set; read the file first. A wrong `old` raises an error.
+- `grep(pattern, {path=".", glob=nil, ignore_case=false, literal=false, context=0, limit=100})`: search file contents with a regex (or plain text with `literal=true`); `path` can be a string or list of paths. Returns `path:line: text` per match and respects `.gitignore`.
+- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E "foo\\bar" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. A command is killed at its explicit timeout or the foreground Lua deadline, whichever comes first. Steering or cancelling the turn can move the whole Lua call to a background task, where the foreground deadline no longer applies.
+- `spawn(fn, name)`: runs `fn` in the background as a task in this same VM (it sees your globals); returns its ID. A task has no deadline; its `print` goes to its log, and you get a message when it ends.
+- `task_get(id, lines=50)`: return `{ id, name, status, started, ended, output }` with the log tail in `.output`.
+- `task_stop(id)`: stop a running background task and return its task info.
+- `task_list()`: list all tasks in the session with `.id`, `.name`, and `.status` (`running`, `done`, `failed`, `stopped`).
+- `show(name, text, pin)`: render or update a UI-only Markdown block by name (`pin=true` keeps it at the end of the chat after new messages; `show(name, "", false)` removes it).
+- `pick(options)`: show a list of strings to the user and return the selected string, or `nil` on Esc (pauses your timeout while waiting).
+- `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
+- `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text; `model` and `effort` default to the session's.
+- `reload()`: reload the config like `/reload`; raises if it is invalid.
+- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `trace`).
+- `docs(topic)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.
+```
+
+### Tool description
+
+The one tool is `lua`. Its single required string argument `code` is described as "The Lua code to run.".
+
+```text
+Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Prefer read() for file contents, grep() for search, and write()/edit()/append()/delete() for file changes so the user sees diffs. Use sh(cmd) for running programs and processing their output, not as the default for file operations; use sh([=[…]=]) when a shell command has quotes, backslashes, or regexes.
+```
+
+### Compaction note
+
+```text
+Earlier parts of this conversation were compacted to save context: old tool calls and their outputs were removed and some later outputs were cut to their first line.
+```

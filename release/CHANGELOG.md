@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.4
+
+- **New docs.** Six pages in `docs/` (`usage`, `connect`, `config`, `lua`, `session`, `json`) plus the README. The agent reads the same pages with `docs("<topic>")`, and the site is built from them with mdBook (`make site`). Old `docs()` topics such as `functions`, `tool`, `commands`, and `hooks` are gone.
+- **The prompt is shown in full.** `docs("lua")` and the site end with the exact system prompt and `lua` tool description. The prompt template moved into the code. A test keeps the docs and the prompt in sync.
+
 ## 0.10.3
 
 - **Background Lua handoff.** Steering or pressing Esc during an agent Lua call moves the whole call to `/tasks`. The current shell process keeps running and later Lua statements still execute. Use `/tasks` to stop the task.

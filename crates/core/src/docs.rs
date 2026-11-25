@@ -1,5 +1,7 @@
 include!(concat!(env!("OUT_DIR"), "/topics.rs"));
 
+use crate::prompt::{AGENT_CONTEXT, agent_context};
+
 fn disabled_notice(disabled: &[&str]) -> String {
     let mut names = disabled.to_vec();
     names.sort_unstable();
@@ -13,36 +15,27 @@ fn topic_list(disabled: &[&str]) -> String {
     }
     out.push_str("Available docs topics:\n");
     for (name, summary, _) in TOPICS {
-        if *name == "functions" && !disabled.is_empty() {
-            let mut items: Vec<&str> = [
-                "session", "read", "write", "append", "delete", "edit", "grep", "sh", "show",
-                "pick", "ask", "llm", "reload", "docs",
-            ]
-            .into_iter()
-            .filter(|n| !disabled.contains(n))
-            .collect();
-            if ["task_get", "task_stop", "task_list"]
-                .iter()
-                .any(|n| !disabled.contains(n))
-            {
-                items.push("task_*");
-            }
-            if items.is_empty() {
-                out.push_str("- functions — Built-in Lua functions\n");
-            } else {
-                out.push_str(&format!(
-                    "- functions — Built-in Lua functions ({})\n",
-                    items.join(", ")
-                ));
-            }
-        } else {
-            out.push_str(&format!("- {name} — {summary}\n"));
-        }
+        out.push_str(&format!("- {name} — {summary}\n"));
     }
     if !disabled.contains(&"docs") {
         out.push_str("\nCall docs(\"<topic>\") to read a section.");
     }
     out
+}
+
+fn render(name: &str, body: &str, disabled: &[&str]) -> String {
+    let text = match (name, body.find(AGENT_CONTEXT)) {
+        ("lua", Some(i)) if !disabled.is_empty() => {
+            format!("{}{}", &body[..i], agent_context(disabled))
+        }
+        _ => body.to_string(),
+    };
+    let text = text.trim_end();
+    if disabled.is_empty() {
+        text.to_string()
+    } else {
+        format!("{}{text}", disabled_notice(disabled))
+    }
 }
 
 pub fn docs(topic: Option<&str>) -> String {
@@ -55,29 +48,10 @@ pub fn docs_for(topic: Option<&str>, disabled: &[&str]) -> String {
     };
     let key = raw.to_ascii_lowercase();
     let key = key.strip_suffix(".md").unwrap_or(&key);
-    if let Some((name, _, body)) = TOPICS
-        .iter()
-        .find(|(name, _, _)| name.trim_end_matches(".md").eq_ignore_ascii_case(key))
-    {
-        let text = body.trim_end();
-        if disabled.is_empty() {
-            return text.to_string();
-        }
-        return match *name {
-            "functions" => render_functions(disabled),
-            "tool" => render_tool(disabled),
-            _ => format!("{}{text}", disabled_notice(disabled)),
-        };
+    match TOPICS.iter().find(|(name, _, _)| *name == key) {
+        Some((name, _, body)) => render(name, body, disabled),
+        None => format!("Unknown docs topic \"{raw}\".\n\n{}", topic_list(disabled)),
     }
-    format!("Unknown docs topic \"{raw}\".\n\n{}", topic_list(disabled))
-}
-
-fn render_functions(disabled: &[&str]) -> String {
-    crate::prompt::functions_doc(disabled)
-}
-
-fn render_tool(disabled: &[&str]) -> String {
-    crate::prompt::tool_doc(disabled)
 }
 
 #[cfg(test)]
@@ -85,48 +59,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn lua_page_ends_with_the_agent_context() {
+        let page = docs(Some("lua"));
+        let i = page
+            .find(AGENT_CONTEXT)
+            .expect("lua.md misses the agent context");
+        let expected = agent_context(&[]);
+        assert!(
+            page[i..] == *expected.trim_end(),
+            "docs/lua.md must end with:\n\n{expected}"
+        );
+    }
+
+    #[test]
     fn docs_lists_finds_and_filters_disabled_builtins() {
         let index = docs(None);
-        for (name, _, _) in TOPICS {
-            assert!(index.contains(&format!("- {name} —")), "missing {name}");
+        for (name, summary, _) in TOPICS {
+            assert!(!summary.is_empty(), "{name} has no summary");
+            assert!(index.contains(&format!("- {name} — ")), "missing {name}");
         }
+        assert_eq!(TOPICS.len(), 7);
         assert_eq!(index, docs(Some("  ")));
-        for topic in ["plugins", "plugin-authoring", "subs"] {
-            assert!(!index.contains(&format!("- {topic} —")));
-            assert!(docs(Some(topic)).starts_with("Unknown docs topic"));
+        for topic in ["functions", "tool", "commands", "hooks", "nope"] {
+            assert!(docs(Some(topic)).starts_with(&format!("Unknown docs topic \"{topic}\".")));
         }
-        let hooks = docs(Some("hooks"));
-        assert!(hooks.starts_with("# Hooks"));
-        assert_eq!(hooks, docs(Some(" HOOKS ")));
-        assert_eq!(hooks, docs(Some("Hooks.MD")));
-        let readme = docs(Some(" Readme.md "));
-        assert!(readme.starts_with("# Tuse"));
-        assert_eq!(readme, docs(Some("readme")));
-        let err = docs(Some("nope"));
-        assert!(err.starts_with("Unknown docs topic \"nope\"."));
-        assert!(err.contains("- config —"));
+        assert_eq!(docs(Some(" Config.MD ")), docs(Some("config")));
+        assert_eq!(docs(Some("README.md")), docs(Some("readme")));
+        assert!(docs(Some("json")).starts_with("# "));
 
-        let f = docs_for(Some("functions"), &["sh", "delete", "docs"]);
-        assert!(!f.contains("`sh(") && !f.contains("`sh`"), "{f}");
-        assert!(!f.contains("`delete(") && !f.contains("`delete`"), "{f}");
+        let lua = docs_for(Some("lua"), &["sh", "delete", "docs"]);
+        assert!(lua.starts_with("Disabled in this session: delete, docs, sh."));
+        let tail = &lua[lua.find(AGENT_CONTEXT).unwrap()..];
+        assert!(!tail.contains("`sh(") && !tail.contains("sh(cmd"), "{tail}");
         assert!(
-            !f.contains("docs(\"config\")") && !f.contains("`docs("),
-            "{f}"
+            !tail.contains("`delete(") && !tail.contains("`docs("),
+            "{tail}"
         );
-        assert!(f.contains("`read(") && f.contains("`write("));
-
-        let idx_no_docs = docs_for(None, &["docs"]);
-        assert!(!idx_no_docs.contains("Call docs("), "{idx_no_docs}");
-
-        let t = docs_for(Some("tool"), &["sh", "delete"]);
-        assert!(!t.contains("`sh(") && !t.contains("`sh`"), "{t}");
-        assert!(!t.contains("`delete(") && !t.contains("`delete`"), "{t}");
-        assert!(t.contains("`read("));
-
-        let c = docs_for(Some("config"), &["sh", "delete"]);
-        assert!(
-            c.starts_with("Disabled in this session: delete, sh."),
-            "{c}"
-        );
+        assert!(tail.contains("`read("));
+        assert!(!docs_for(None, &["docs"]).contains("Call docs("));
     }
 }

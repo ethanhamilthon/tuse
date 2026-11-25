@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn docs_and_config_list_every_built_in_command() {
-        let docs = tuse_core::docs(Some("commands"));
+        let docs = tuse_core::docs(Some("usage"));
         for (name, _) in crate::ui::picker::COMMANDS {
             assert!(docs.contains(&format!("`/{name}`")), "docs misses /{name}");
             assert!(tuse_config::BUILTIN_COMMANDS.contains(&name), "/{name}");

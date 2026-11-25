@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.7
+
+- **Boxed input padding.** The draft and status row now leave one blank column inside each side border, without widening the box.
+
 ## 0.11.6
 
 - **Commands take arguments.** A `commands` entry is a function or `{ args?, desc?, run }`, like a prompt plus `desc`. `desc` shows in the `/` picker. Without `args`, `/mv a.txt "b c"` passes the typed words (quotes keep spaces) to `run(from, to)`; with `args`, one word from the list is accepted and the TUI opens a picker for it. JSON-RPC `commands.run` takes `argv`, and `commands.list` returns `{name, desc, args, params}` objects (**breaking** for clients that read names).

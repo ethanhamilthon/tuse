@@ -16,6 +16,7 @@ pub struct InputArea {
     pub height: usize,
     pub top: usize,
     pub cols: usize,
+    pub boxed: bool,
 }
 
 #[derive(Default)]

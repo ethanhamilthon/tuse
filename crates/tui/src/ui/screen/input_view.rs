@@ -3,6 +3,9 @@ use crate::kit::text::{Line, clip_line, line_width, span};
 use crate::ui::app::App;
 use tuse_config::InputStyle;
 
+const BOXED_PAD: &str = " ";
+pub(super) const BOXED_INSET: usize = 1 + BOXED_PAD.len();
+
 fn label(line: Line, room: usize) -> Line {
     if room == 0 {
         vec![]
@@ -120,14 +123,15 @@ impl App {
     ) -> Vec<Line> {
         let border = Style::fg(self.palette.border);
         let surround = |line: Line| {
-            let mut out = vec![span("│", border)];
-            let fill = w.saturating_sub(line_width(&line));
+            let mut out = vec![span("│", border), span(BOXED_PAD, Style::default())];
+            let fill = w.saturating_sub(line_width(&line)) + BOXED_PAD.len();
             out.extend(line);
             out.push(span(" ".repeat(fill), Style::default()));
             out.push(span("│", border));
             out
         };
-        let mut out = vec![vec![span(format!("╭{}╮", RULE_CHAR.repeat(w)), border)]];
+        let rule = RULE_CHAR.repeat(w + 2 * BOXED_PAD.len());
+        let mut out = vec![vec![span(format!("╭{rule}╮"), border)]];
         out.extend(
             self.input_rows(view, rows, top, InputStyle::Boxed)
                 .into_iter()
@@ -135,7 +139,7 @@ impl App {
         );
         out.push(surround(vec![]));
         out.push(surround(self.status_row(w)));
-        out.push(vec![span(format!("╰{}╯", RULE_CHAR.repeat(w)), border)]);
+        out.push(vec![span(format!("╰{rule}╯"), border)]);
         out
     }
 
@@ -195,7 +199,11 @@ impl App {
             if !prefix.is_empty() {
                 line.push(span(prefix, Style::fg(pfx_color)));
             }
-            line.push(span(text, style));
+            if mode == InputStyle::Boxed && text.contains('\t') {
+                line.push(span(text.replace('\t', "    "), style));
+            } else {
+                line.push(span(text, style));
+            }
             out.push(line);
         }
         if !dim {
@@ -251,7 +259,7 @@ mod tests {
         );
         app.palette.ui.input_style = InputStyle::Boxed;
         let boxed = app.boxed_input(&view, 120, &["x".into()], 0);
-        assert_eq!(boxed[3][1].text, cwd);
+        assert_eq!(boxed[3][2].text, cwd);
         app.flash("Copied.");
         let flashed = app.input_block(&view, 120, &["x".into()], 0);
         assert!(!flashed[0].iter().any(|s| s.text == cwd));

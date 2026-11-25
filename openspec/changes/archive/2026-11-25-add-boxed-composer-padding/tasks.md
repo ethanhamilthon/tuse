@@ -1,0 +1,4 @@
+- [x] 1. Reserve the two inner padding columns in boxed layout and account for them in the `lines` fallback check.
+- [x] 2. Render the padded editor and status rows within the existing frame width; wrap the draft and clip status labels to the content width.
+- [x] 3. Align the cursor, editor selection, and mouse hit testing with the padded content area.
+- [x] 4. Cover wrapped text, clipped status labels, cursor and mouse alignment, and narrow-width fallback and recovery in TUI tests.

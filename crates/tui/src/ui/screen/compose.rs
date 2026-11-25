@@ -1,6 +1,7 @@
 use crate::kit::style::Style;
 use crate::kit::text::Line;
 use crate::ui::app::App;
+use crate::ui::screen::input_view::BOXED_INSET;
 use tuse_config::InputStyle;
 pub(crate) struct Frame {
     pub screen: Vec<Line>,
@@ -24,15 +25,20 @@ impl App {
         let ui = &p.ui;
         let pad = ui.pad_x as usize;
         let inner = w.saturating_sub(pad * 2).max(1);
-        let style = match ui.input_style {
-            InputStyle::Lines => InputStyle::Lines,
-            framed if h >= 5 && inner >= 4 => framed,
-            _ => InputStyle::Lines,
+        let inset = if ui.input_style == InputStyle::Boxed {
+            BOXED_INSET
+        } else {
+            0
         };
-        let boxed = style == InputStyle::Boxed;
+        let min_width = if inset == 0 { 4 } else { 2 * inset + 2 };
+        let (style, inset) = if h >= 5 && inner >= min_width {
+            (ui.input_style, inset)
+        } else {
+            (InputStyle::Lines, 0)
+        };
         let left = self.input_left(style);
-        let editor_w = inner - if boxed { 2 } else { 0 };
-        let input_col = pad + left + usize::from(boxed);
+        let editor_w = inner - 2 * inset;
+        let input_col = pad + inset + left;
         let text_w = editor_w.saturating_sub(left).max(1);
         self.input_cols = text_w;
         let mut view = self.editor.view(text_w);
@@ -155,6 +161,7 @@ impl App {
             height: input_h,
             top: input_top,
             cols: text_w,
+            boxed: style == InputStyle::Boxed,
         });
         let cursor = (!self.input_disabled()).then(|| {
             let cy = (first + crow - input_top).min(h.saturating_sub(1));
@@ -183,13 +190,14 @@ mod tests {
         app.display_flash("Waiting");
         let frame = app.compose(80, 10);
         let area = app.input_area.unwrap();
-        assert_eq!((area.row, area.col, area.height, area.top), (3, 1, 4, 0));
-        assert_eq!(frame.cursor, Some((5, 6)));
+        assert_eq!((area.row, area.col, area.height, area.top), (3, 2, 4, 0));
+        assert_eq!(frame.cursor, Some((6, 6)));
         assert!(frame.screen[2..].iter().all(|row| line_width(row) == 80));
         assert!(frame.screen[2][0].text.starts_with('╭'));
-        assert_eq!(frame.screen[3][1].text, "one");
+        assert!(text(&frame.screen[3]).starts_with("│ one"));
         assert!(frame.screen[7][1].text.trim().is_empty());
-        assert_eq!(frame.screen[8][1].text, "Waiting");
+        assert!(text(&frame.screen[8]).starts_with("│ Waiting"));
+        assert!(text(&frame.screen[8]).ends_with(" │"));
         assert!(frame.screen[9][0].text.starts_with('╰'));
         assert!(
             !app.compose(80, 4)
@@ -200,6 +208,38 @@ mod tests {
         );
         assert!(app.compose(80, 10).screen[2][0].text.starts_with('╭'));
         assert_eq!(app.editor.text(), "one\ntwo\nthree\nfour");
+        cleanup(app);
+    }
+
+    #[test]
+    fn boxed_status_clips_both_labels_inside_the_padding() {
+        let mut app = test_app("boxed-status");
+        app.palette.ui.input_style = InputStyle::Boxed;
+        app.session.set_model("model-abcdefghijklmnop", "default");
+        app.display_flash("waiting for a reply");
+        let frame = app.compose(20, 6);
+        assert_eq!(text(&frame.screen[4]), "│ wait…   model-a… │");
+        cleanup(app);
+    }
+
+    #[test]
+    fn boxed_requires_two_content_columns_after_margins_and_padding() {
+        let mut app = test_app("boxed-width");
+        app.palette.ui.input_style = InputStyle::Boxed;
+        app.palette.ui.pad_x = 1;
+        app.editor.insert("界z");
+        let frame = app.compose(8, 8);
+        let area = app.input_area.unwrap();
+        assert_eq!((area.col, area.cols), (3, 2));
+        assert_eq!(text(&frame.screen[area.row]), "│ 界 │");
+        let narrow = app.compose(7, 8);
+        assert!(!narrow.screen.iter().any(|row| text(row).starts_with('╭')));
+        assert_eq!(app.palette.ui.input_style, InputStyle::Boxed);
+        let restored = app.compose(8, 8);
+        assert_eq!(restored.screen, frame.screen);
+        assert_eq!(restored.cursor, frame.cursor);
+        assert_eq!(app.editor.text(), "界z");
+        assert_eq!(app.editor.cursor(), 2);
         cleanup(app);
     }
 

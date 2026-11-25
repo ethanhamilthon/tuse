@@ -119,7 +119,7 @@ impl App {
             return;
         }
         let Some(a) = self.input_area else { return };
-        if y < a.row || y >= a.row + a.height || x < a.col {
+        if y < a.row || y >= a.row + a.height || x < a.col || (a.boxed && x >= a.col + a.cols) {
             return;
         }
         self.editor.apply(
@@ -354,6 +354,29 @@ mod tests {
     }
 
     #[test]
+    fn boxed_mouse_selection_aligns_with_wrapped_text_not_padding() {
+        let mut app = crate::ui::app::test_app("boxed-mouse");
+        app.palette.ui.input_style = tuse_config::InputStyle::Boxed;
+        app.palette.ui.pad_x = 1;
+        app.editor.insert("abcd界efghi");
+        let frame = app.compose(12, 8);
+        let area = app.input_area.unwrap();
+        assert_eq!((area.height, area.col, area.cols), (2, 3, 6));
+        let y = (area.row + 1) as u16;
+        assert_eq!(frame.cursor, Some((8, y)));
+        app.mouse(event(MouseEventKind::Down(MouseButton::Left), 5, y));
+        assert_eq!(app.editor.cursor(), 7);
+        app.mouse(event(MouseEventKind::Up(MouseButton::Left), 7, y));
+        assert_eq!(app.editor.selected_text().as_deref(), Some("gh"));
+        for gutter in [2, 9] {
+            app.mouse(event(MouseEventKind::Down(MouseButton::Left), gutter, y));
+            app.mouse(event(MouseEventKind::Up(MouseButton::Left), gutter, y));
+            assert_eq!(app.editor.cursor(), 9);
+        }
+        crate::ui::app::cleanup(app);
+    }
+
+    #[test]
     fn the_wheel_scrolls_the_chat_and_a_click_moves_the_cursor() {
         let mut app = crate::ui::app::test_app("mouse");
         let step = app.palette.ui.scroll_step as usize;
@@ -368,6 +391,7 @@ mod tests {
             height: 1,
             top: 0,
             cols: 40,
+            boxed: false,
         });
         app.mouse(event(MouseEventKind::Down(MouseButton::Left), 4, 20));
         assert_eq!(app.editor.cursor(), 2);

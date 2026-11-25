@@ -110,28 +110,38 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
     );
 
     let t = &cfg.theme;
-    let theme_pairs = [
-        ("bg", &t.bg),
-        ("surface", &t.surface),
-        ("fg", &t.fg),
-        ("dim", &t.dim),
-        ("muted", &t.muted),
-        ("border", &t.border),
-        ("accent", &t.accent),
-        ("ok", &t.ok),
-        ("err", &t.err),
-        ("info", &t.info),
+    let mut theme_pairs = vec![
+        ("bg".to_string(), t.bg.as_str()),
+        ("surface".to_string(), t.surface.as_str()),
+        ("fg".to_string(), t.fg.as_str()),
+        ("user".to_string(), t.user.as_str()),
+        ("dim".to_string(), t.dim.as_str()),
+        ("muted".to_string(), t.muted.as_str()),
+        ("border".to_string(), t.border.as_str()),
+        ("accent".to_string(), t.accent.as_str()),
+        ("ok".to_string(), t.ok.as_str()),
+        ("err".to_string(), t.err.as_str()),
+        ("info".to_string(), t.info.as_str()),
     ];
+    let lua_values = t.lua.values();
+    for (name, value) in tuse_config::LuaTheme::TOKENS.iter().zip(lua_values) {
+        theme_pairs.push((format!("lua.{name}"), value));
+    }
     sec(
         "Theme",
         theme_pairs
             .into_iter()
             .map(|(n, v)| {
-                let sw = color(if v.trim() == "accent" { &t.accent } else { v });
+                let linked = t.named(v).unwrap_or(v);
+                let sw = color(if linked.trim() == "accent" {
+                    &t.accent
+                } else {
+                    linked
+                });
                 vec![
                     span(format!("  {n:<18}"), key),
                     span("■ ", Style::fg(sw)),
-                    span(v.clone(), fg),
+                    span(v, fg),
                 ]
             })
             .collect(),

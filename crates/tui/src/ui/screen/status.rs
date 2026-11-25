@@ -58,6 +58,16 @@ impl App {
         )]
     }
 
+    pub(crate) fn cwd_label(&self) -> Line {
+        let home = std::env::home_dir().unwrap_or_default();
+        let text = match self.cwd.strip_prefix(&home) {
+            Ok(rest) if !home.as_os_str().is_empty() && rest.as_os_str().is_empty() => "~".into(),
+            Ok(rest) if !home.as_os_str().is_empty() => format!("~/{}", rest.display()),
+            _ => self.cwd.display().to_string(),
+        };
+        vec![span(text, Style::fg(self.palette.muted))]
+    }
+
     pub(crate) fn model_label(&self) -> Line {
         let (model, effort) = self.session.model();
         let def = self.session.model_def(&model);

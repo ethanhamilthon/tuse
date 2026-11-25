@@ -123,6 +123,8 @@ pub struct Palette {
     pub ok: Option<Color>,
     pub err: Option<Color>,
     pub info: Option<Color>,
+    pub user: Option<Color>,
+    pub lua: Vec<Option<Color>>,
 }
 
 impl Palette {
@@ -147,6 +149,13 @@ impl Palette {
             ok: c(&t.ok),
             err: c(&t.err),
             info: c(&t.info),
+            user: c(t.named(&t.user).unwrap_or(&t.user)),
+            lua: t
+                .lua
+                .values()
+                .into_iter()
+                .map(|v| c(t.named(v).unwrap_or(v)))
+                .collect(),
         }
     }
 

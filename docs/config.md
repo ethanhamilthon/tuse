@@ -69,7 +69,7 @@ All keys are optional. Unknown keys, wrong types, and out-of-range values fail w
 
 ### Theme and UI
 
-`theme` has 10 colors. Set only the ones you want to change:
+`theme` has 10 colors, a `user` color, and a `lua` table of Lua syntax colors. Set only the ones you want to change:
 
 | Token | Default | Used for |
 | --- | --- | --- |
@@ -83,8 +83,33 @@ All keys are optional. Unknown keys, wrong types, and out-of-range values fail w
 | `ok` | `#94B979` | Added lines, inline code, Lua strings. |
 | `err` | `#E27373` | Errors, removed lines, Lua keywords. |
 | `info` | `#97BEDC` | Headings, Lua functions. |
+| `user` | `"fg"` | Text of your messages and of the input. `fg` stays for the agent's text. |
 
 A color is `#rgb`, `#rrggbb`, an ANSI index `"0"`–`"255"`, or a name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `grey`, `dark_grey`, and `bright_*`. It can also be `"accent"` (the accent color) or `"none"` (the terminal default).
+
+`user` and every `lua` token can also name another theme color: `bg`, `surface`, `fg`, `dim`, `muted`, `border`, `accent`, `ok`, `err`, or `info`. The link follows that color when you change it.
+
+#### Lua syntax colors
+
+`theme.lua` colors Lua code in tool calls, `/` panels, and `lua` code blocks. The parser knows which names are definitions, parameters, calls, methods, table keys, and standard functions:
+
+| Token | Default | Colors |
+| --- | --- | --- |
+| `keyword` | `"err"` | `if`, `then`, `else`, `for`, `while`, `do`, `repeat`, `until`, `in`, `return`, `break`, `goto`, `end`. |
+| `storage` | `"err"` | `local`, `function`. |
+| `constant` | `"accent"` | `nil`, `true`, `false`. |
+| `operator` | `"dim"` | `=`, `==`, `+`, `..`, `#`, `and`, `or`, `not`, and the other operators. |
+| `punctuation` | `"muted"` | `( ) { } [ ] , ; . :`. |
+| `number` | `"accent"` | Numbers, including hex and exponents. |
+| `string` | `"ok"` | Strings and long strings. |
+| `escape` | `"info"` | Escapes inside strings: `\n`, `\x41`, `\u{20}`. |
+| `comment` | `"muted"` | Comments. |
+| `function` | `"info"` | Function names at definitions and calls. |
+| `builtin` | `"info"` | Standard and Tuse functions and libraries: `print`, `read`, `string.format`. |
+| `method` | `"info"` | Names after `:`. |
+| `field` | `"none"` | Names after `.` and table keys. |
+| `parameter` | `"dim"` | Function parameters and their uses in the body. |
+| `variable` | `"none"` | Every other name. |
 
 `settings.ui` controls the TUI. `-1` means unlimited and `0` hides the item:
 
@@ -100,7 +125,7 @@ A color is `#rgb`, `#rrggbb`, an ANSI index `"0"`–`"255"`, or a name: `black`,
 | `message_gap` | `1` | Blank lines between entries. |
 | `list_max_height` | `16` | Max rows for pickers and panels (`>= 1`). |
 | `input_max_height` | `-1` | Max visible input rows (`-1` or `>= 1`). |
-| `input_style` | `classic` | `classic` uses the original input layout. `boxed` draws a border around the growing input with an inside status bar; it falls back to classic if the terminal is too small. |
+| `input_style` | `boxed` | `boxed` draws a border around the growing input with an inside status bar. `lines` puts a rule above and below the input. `fill` draws the input on a `border`-colored background with the status line below it. `classic` still works as an alias of `lines`. `boxed` and `fill` fall back to `lines` if the terminal is too small. |
 | `hide_history` | `{}` | History roles left out of `/history`, such as `{ "usage", "hook" }` ([Session](session.md#history-and-session-data)). Unknown roles fail. |
 | `scope_models` | `{}` | `provider/model` or `provider/*` patterns. When set, `/models` lists only matching models plus the current one. JSON-RPC ignores it. |
 

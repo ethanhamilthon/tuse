@@ -35,7 +35,6 @@ pub struct Session {
     pub(crate) subs: Mutex<Subs>,
     pub(crate) vm: tuse_lua::Vm,
     pub(crate) hooks_on: AtomicBool,
-    pub(crate) lifecycle_job: Mutex<Option<std::thread::JoinHandle<()>>>,
     pub(crate) hook_runs: crate::session::hooks::lanes::Runs,
     pub(crate) ui: Mutex<crate::session::ui::UiState>,
     pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,

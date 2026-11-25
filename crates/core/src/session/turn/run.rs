@@ -17,7 +17,6 @@ enum Step {
 
 impl Session {
     pub(crate) fn turn(self: Arc<Self>, generation: u64, cancel: Arc<AtomicBool>) {
-        self.wait_lifecycle();
         {
             let Some(mut st) = self.lock_live(generation) else {
                 return;
@@ -86,7 +85,6 @@ impl Session {
         st.partial.clear();
         st.reasoning.clear();
         let inputs = std::mem::take(&mut st.queue);
-        let mut hooks = vec![];
         for (id, input) in inputs {
             if input.notification {
                 let event = Event::Notification(input.text.clone());
@@ -108,16 +106,9 @@ impl Session {
                 images: input.images,
             };
             if self.record(&mut st, &[r], [event]) {
-                hooks.push(self.simple_hook("user_message"));
+                self.simple_hook("user_message");
             }
         }
-        drop(st);
-        for hook in hooks {
-            let _ = hook.recv();
-        }
-        let Some(mut st) = self.lock_live(generation) else {
-            return Step::Stale;
-        };
         let config = self.config();
         let cache = self.cached(&mut st);
         let model = cache.meta.model.clone();
@@ -211,13 +202,11 @@ impl Session {
         st.reasoning.clear();
         st.tool_step = !calls.is_empty();
         drop(st);
-        let _ = self
-            .agent_message_hook(if calls.is_empty() {
-                "finished"
-            } else {
-                "working"
-            })
-            .recv();
+        self.agent_message_hook(if calls.is_empty() {
+            "finished"
+        } else {
+            "working"
+        });
         if calls.is_empty() {
             return Step::Done;
         }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.5
+
+- **Hooks never block a turn.** Hooks run fully in the background: a message, a reply, and a launch no longer wait for them, so the activity indicator no longer appears seconds after you press Enter. On quit, Tuse still waits for running hooks.
+- **Three input styles.** `settings.ui.input_style` is now `boxed` (the new default), `lines` (the old `classic`, which still works as an alias), and `fill`, an input on a `border`-colored background with the status line below it. The boxed input has no left padding, so its text lines up with the status.
+- **Project directory in the status.** When no indicator or notice is shown, the input shows the current directory in `muted`.
+- **Lua syntax colors.** `theme.lua` has 15 tokens (`keyword`, `operator`, `function`, `parameter`, `field`, `escape`, and more). The highlighter now parses definitions, parameters, calls, methods, table keys, and standard functions, so `=` no longer looks like a function name.
+- **User text color.** `theme.user` colors your messages and the input; `fg` stays for the agent's text.
+
 ## 0.11.4
 
 - Boxed input drops the prompt arrow, grows with the draft like the classic input, and keeps one blank row above its status bar. Its status labels keep a three-column gap and are no longer clipped while they fit.

@@ -120,7 +120,7 @@ Every `e` has `event`, the event name, plus the fields below.
 | `lua_start` | A tool call, command, task, or `open` handler started. | `id` (`lua-N`), `kind` (`tool`, `command`, `task`, `open`), `code`, `name` |
 | `lua_end` | One of those ended. | `id`, `kind`, `status` (`success`, `error`, `cancelled`), `duration_ms`, `result`, `error` |
 
-Launch runs `config_load`, `process_start`, and then `session_created` or `session_resumed`. Switching runs `session_close` in the old VM, then `config_load` and the new session event in the new VM. Call `t.session()` inside a hook to get session data. Each hook handles its events one at a time, in order, while different hooks run concurrently. Hooks have no deadline, and Esc cancels the running ones. An error shows up as the notice `hook <name>: <error>` and does not stop anything else. Every run is recorded in `/history`. When a session closes, Tuse waits for all hooks to finish. Hook runs never fire `lua_start`/`lua_end`.
+Launch runs `config_load`, `process_start`, and then `session_created` or `session_resumed`. Switching runs `session_close` in the old VM, then `config_load` and the new session event in the new VM. Call `t.session()` inside a hook to get session data. Hooks run in the background and nothing waits for them. Each hook handles its events one at a time, in order, while different hooks run concurrently. Hooks have no deadline, and Esc cancels the running ones. An error shows up as the notice `hook <name>: <error>` and does not stop anything else. Every run is recorded in `/history`. When a session closes, Tuse waits for all hooks to finish. Hook runs never fire `lua_start`/`lua_end`.
 
 ## What the agent sees
 

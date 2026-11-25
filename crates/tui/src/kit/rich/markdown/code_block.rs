@@ -6,7 +6,7 @@ use pulldown_cmark::CodeBlockKind;
 impl Renderer<'_> {
     pub(crate) fn start_code_block(&mut self, kind: CodeBlockKind) {
         self.code = true;
-        self.open.clear();
+        self.lua = Default::default();
         self.lang = match &kind {
             CodeBlockKind::Fenced(l) => l.split_whitespace().next().unwrap_or("").to_lowercase(),
             CodeBlockKind::Indented => String::new(),
@@ -30,7 +30,7 @@ impl Renderer<'_> {
             first.push(span(pad.clone(), st));
             let rest = first.clone();
             let content = if lua {
-                crate::kit::rich::syntax::tokens(line, &mut self.open)
+                crate::kit::rich::syntax::tokens(line, &mut self.lua)
                     .into_iter()
                     .map(|(k, s)| span(s, crate::kit::rich::syntax::style(k, st, self.p)))
                     .collect()

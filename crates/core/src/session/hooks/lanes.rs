@@ -13,7 +13,7 @@ pub use tuse_config::HOOK_EVENTS as EVENTS;
 #[derive(Default)]
 pub(crate) struct Lane {
     busy: bool,
-    queue: Vec<(Value, std::sync::mpsc::Sender<()>)>,
+    queue: Vec<Value>,
     cancel: Arc<AtomicBool>,
 }
 
@@ -24,14 +24,9 @@ fn listens(hook: &tuse_config::Hook, event: &str) -> bool {
 }
 
 impl Session {
-    pub(crate) fn hook(
-        self: &Arc<Self>,
-        event: &str,
-        payload: Value,
-    ) -> std::sync::mpsc::Receiver<()> {
-        let (done, completion) = std::sync::mpsc::channel();
+    pub(crate) fn hook(self: &Arc<Self>, event: &str, payload: Value) {
         if !self.hooks_on.load(Ordering::Acquire) {
-            return completion;
+            return;
         }
         let names: Vec<String> = self
             .config()
@@ -44,18 +39,17 @@ impl Session {
         for name in names {
             let mut runs = self.hook_runs.lock().unwrap();
             let lane = runs.entry(name.clone()).or_default();
-            lane.queue.push((payload.clone(), done.clone()));
+            lane.queue.push(payload.clone());
             if !lane.busy {
                 lane.busy = true;
                 drop(runs);
                 self.next_hook(name);
             }
         }
-        completion
     }
 
     fn next_hook(self: &Arc<Self>, name: String) {
-        let ((vars, completion), cancel) = {
+        let (vars, cancel) = {
             let mut runs = self.hook_runs.lock().unwrap();
             let Some(lane) = runs.get_mut(&name) else {
                 return;
@@ -73,10 +67,8 @@ impl Session {
         let started = Instant::now();
         self.vm.post(move |lua| {
             let s2 = weak.clone();
-            let finished = completion.clone();
             let (n2, v2) = (name.clone(), vars.clone());
             let done = move |_: &Lua, d: Done| {
-                let _finished = finished;
                 if let Some(s) = s2.upgrade() {
                     s.hook_done(&n2, &v2, d, started);
                 }
@@ -139,15 +131,8 @@ impl Session {
         }
     }
 
-    pub(crate) fn wait_lifecycle(&self) {
-        if let Some(job) = self.lifecycle_job.lock().unwrap().take() {
-            let _ = job.join();
-        }
-    }
-
     pub(crate) fn finish_hooks(self: &Arc<Self>, event: Option<&'static str>) {
         self.ui_cancel_hooks(true);
-        self.wait_lifecycle();
         if let Some(event) = event {
             self.simple_hook(event);
         }

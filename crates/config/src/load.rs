@@ -90,15 +90,45 @@ mod tests {
         let cfg = |v| from_value(v, "test");
         assert_eq!(
             cfg(json!({})).unwrap().settings.ui.input_style,
-            crate::InputStyle::Classic
+            crate::InputStyle::Boxed
         );
-        let boxed = cfg(json!({"settings":{"ui":{"input_style":"boxed"}}})).unwrap();
-        assert_eq!(
-            serde_json::to_value(boxed).unwrap()["settings"]["ui"]["input_style"],
-            "boxed"
-        );
+        for (given, shown) in [("fill", "fill"), ("lines", "lines"), ("classic", "lines")] {
+            let c = cfg(json!({"settings":{"ui":{"input_style":given}}})).unwrap();
+            assert_eq!(
+                serde_json::to_value(c).unwrap()["settings"]["ui"]["input_style"],
+                shown
+            );
+        }
         let err = cfg(json!({"settings":{"ui":{"input_style":"other"}}})).unwrap_err();
         assert!(err.contains("settings.ui.input_style"), "{err}");
+    }
+
+    #[test]
+    fn theme_user_and_lua_tokens_default_validate_and_serialize() {
+        let cfg = |v| from_value(v, "test");
+        let c = cfg(json!({})).unwrap();
+        assert_eq!(c.theme.user, "fg");
+        assert_eq!(c.theme.lua.values().len(), crate::LuaTheme::TOKENS.len());
+        assert_eq!(
+            c.theme.named(&c.theme.lua.keyword),
+            Some(c.theme.err.as_str())
+        );
+        let c = cfg(
+            json!({"theme": {"user": "#fff", "lua": {"operator": "info", "string": "#00ff00"}}}),
+        )
+        .unwrap();
+        let shown = serde_json::to_value(c).unwrap();
+        assert_eq!(shown["theme"]["user"], "#fff");
+        assert_eq!(shown["theme"]["lua"]["operator"], "info");
+        assert_eq!(shown["theme"]["lua"]["keyword"], "err");
+        for bad in [
+            json!({"theme": {"lua": {"nope": "red"}}}),
+            json!({"theme": {"lua": {"keyword": "user"}}}),
+            json!({"theme": {"user": "user"}}),
+            json!({"theme": {"fg": "info"}}),
+        ] {
+            assert!(cfg(bad).is_err());
+        }
     }
 
     #[test]

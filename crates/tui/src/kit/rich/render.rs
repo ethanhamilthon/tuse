@@ -35,7 +35,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
     let pad = " ".repeat(crate::kit::text::width(NOTICE_PREFIX));
     match e {
         Entry::User { text, images } => {
-            let st = Style::fg(p.fg).on(p.surface);
+            let st = Style::fg(p.user).on(p.surface);
             let mut text = text.clone();
             if *images > 0 && !text.contains("[Image") {
                 text.push_str(&format!("\n[{images} image(s)]"));
@@ -218,5 +218,33 @@ mod tests {
             assert_eq!(line_width(l), 20);
             assert!(l.iter().all(|s| s.style.bg == p.surface));
         }
+    }
+
+    #[test]
+    fn user_and_lua_colors_follow_the_theme() {
+        let t = tuse_config::Theme {
+            user: "#112233".into(),
+            lua: tuse_config::LuaTheme {
+                keyword: "info".into(),
+                field: "#445566".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let p = Palette::new(&t, &Default::default());
+        let e = Entry::User {
+            text: "hi".into(),
+            images: 0,
+        };
+        assert_eq!(render(&e, 20, &p)[0][0].style.fg, p.user);
+        assert_ne!(p.user, p.fg);
+        let base = Style::fg(p.fg);
+        let kw = crate::kit::rich::syntax::style(crate::kit::rich::syntax::Kind::Keyword, base, &p);
+        assert_eq!(kw.fg, p.info);
+        let plain =
+            crate::kit::rich::syntax::style(crate::kit::rich::syntax::Kind::Variable, base, &p);
+        assert_eq!(plain.fg, p.fg);
+        let linked = Palette::new(&Default::default(), &Default::default());
+        assert_eq!(linked.user, linked.fg);
     }
 }

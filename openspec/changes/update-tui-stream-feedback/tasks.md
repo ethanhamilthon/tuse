@@ -4,3 +4,4 @@
 - [x] 4. Add the five-row boxed composer and compact fallback; share geometry between drawing, cursor, mouse, and the editor viewport.
 - [x] 5. Keep empty Lua previews off-screen and reveal the inline star and code in one frame; test metadata-only and whitespace-only deltas, first code at `ToolStart`, and reset before any code.
 - [x] 6. Test an isolated first SSE delta before the response ends, burst pacing, phase transitions, and boxed geometry at normal and small sizes. Recheck cancellation, session switch, scrollback, config reload, and JSON-RPC compatibility.
+- [x] 7. Rename `classic` to `lines` with an alias, make `boxed` the default, drop the boxed left padding, add the `fill` style, and show the muted project directory when idle.

@@ -1,6 +1,7 @@
 use crate::kit::style::Style;
 use crate::kit::text::Line;
 use crate::ui::app::App;
+use tuse_config::InputStyle;
 pub(crate) struct Frame {
     pub screen: Vec<Line>,
     pub pad: usize,
@@ -23,12 +24,14 @@ impl App {
         let ui = &p.ui;
         let pad = ui.pad_x as usize;
         let inner = w.saturating_sub(pad * 2).max(1);
-        let boxed = ui.input_style == tuse_config::InputStyle::Boxed && h >= 5 && inner >= 4;
-        let left = if boxed {
-            1
-        } else {
-            crate::kit::text::width(crate::kit::style::INPUT_PREFIX)
+        let style = match ui.input_style {
+            InputStyle::Lines => InputStyle::Lines,
+            framed if h >= 5 && inner >= 4 => framed,
+            _ => InputStyle::Lines,
         };
+        let framed = style != InputStyle::Lines;
+        let boxed = style == InputStyle::Boxed;
+        let left = self.input_left(style);
         let editor_w = inner - if boxed { 2 } else { 0 };
         let input_col = pad + left + usize::from(boxed);
         let text_w = editor_w.saturating_sub(left).max(1);
@@ -37,7 +40,7 @@ impl App {
         let (crow, ccol) = view.cursor;
         let head = usize::from(h > 1);
         let foot = usize::from(h > 2);
-        let editor_room = if boxed {
+        let editor_room = if framed {
             h - 4
         } else {
             h.saturating_sub(head + foot).max(1)
@@ -48,7 +51,7 @@ impl App {
         let input_top = crow
             .saturating_sub(input_h.saturating_sub(1))
             .min(view.rows.len().saturating_sub(input_h));
-        let fixed = if boxed {
+        let fixed = if framed {
             input_h + 4
         } else {
             input_h + head + foot
@@ -97,15 +100,19 @@ impl App {
         view.rows
             .resize_with(view.rows.len().max(input_h), String::new);
         let shown = &view.rows[input_top..input_top + input_h];
-        if boxed {
-            screen.extend(self.boxed_input(&view, editor_w, shown, input_top));
-        } else {
-            screen.extend(
+        match style {
+            InputStyle::Boxed => {
+                screen.extend(self.boxed_input(&view, editor_w, shown, input_top));
+            }
+            InputStyle::Fill => {
+                screen.extend(self.fill_input(&view, editor_w, shown, input_top));
+            }
+            InputStyle::Lines => screen.extend(
                 self.input_block(&view, editor_w, shown, input_top)
                     .into_iter()
                     .skip(1 - head)
                     .take(head + input_h + foot),
-            );
+            ),
         }
         screen.truncate(h);
         self.links = crate::kit::links::scan(&screen, pad);
@@ -127,7 +134,7 @@ impl App {
         self.selection
             .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
 
-        let first = if boxed {
+        let first = if framed {
             h - input_h - 3
         } else {
             h.saturating_sub(input_h + foot)
@@ -166,11 +173,11 @@ mod tests {
         app.display_flash("Waiting");
         let frame = app.compose(80, 10);
         let area = app.input_area.unwrap();
-        assert_eq!((area.row, area.col, area.height, area.top), (3, 2, 4, 0));
-        assert_eq!(frame.cursor, Some((6, 6)));
+        assert_eq!((area.row, area.col, area.height, area.top), (3, 1, 4, 0));
+        assert_eq!(frame.cursor, Some((5, 6)));
         assert!(frame.screen[2..].iter().all(|row| line_width(row) == 80));
         assert!(frame.screen[2][0].text.starts_with('╭'));
-        assert_eq!(frame.screen[3][1].text, " ");
+        assert_eq!(frame.screen[3][1].text, "one");
         assert!(frame.screen[7][1].text.trim().is_empty());
         assert_eq!(frame.screen[8][1].text, "Waiting");
         assert!(frame.screen[9][0].text.starts_with('╰'));
@@ -183,6 +190,37 @@ mod tests {
         );
         assert!(app.compose(80, 10).screen[2][0].text.starts_with('╭'));
         assert_eq!(app.editor.text(), "one\ntwo\nthree\nfour");
+        cleanup(app);
+    }
+
+    #[test]
+    fn fill_layout_pads_the_input_and_puts_the_status_below_a_gap() {
+        let mut app = test_app("fill-layout");
+        app.palette.ui.input_style = InputStyle::Fill;
+        app.editor.insert("one\ntwo");
+        app.display_flash("Waiting");
+        let frame = app.compose(40, 10);
+        let area = app.input_area.unwrap();
+        assert_eq!((area.row, area.col, area.height), (5, 2, 2));
+        assert_eq!(frame.cursor, Some((5, 6)));
+        let bg = app.palette.border;
+        for row in &frame.screen[4..=7] {
+            assert_eq!(line_width(row), 40);
+            assert!(row.iter().all(|s| s.style.bg == bg));
+        }
+        assert!(frame.screen[4].iter().all(|s| s.text.trim().is_empty()));
+        assert_eq!(frame.screen[5][0].text, "› ");
+        assert!(frame.screen[7].iter().all(|s| s.text.trim().is_empty()));
+        assert!(frame.screen[8].iter().all(|s| s.text.is_empty()));
+        assert_eq!(frame.screen[9][0].text, "Waiting");
+        assert_eq!(frame.screen.len(), 10);
+        assert!(
+            !app.compose(40, 4)
+                .screen
+                .iter()
+                .flatten()
+                .any(|s| s.style.bg == bg && bg.is_some())
+        );
         cleanup(app);
     }
 }

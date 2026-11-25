@@ -136,7 +136,6 @@ impl Prepared {
                 subs: Mutex::default(),
                 vm,
                 hooks_on: AtomicBool::new(true),
-                lifecycle_job: Mutex::default(),
                 hook_runs: Default::default(),
                 ui: Mutex::default(),
                 cmd_runs: Mutex::default(),

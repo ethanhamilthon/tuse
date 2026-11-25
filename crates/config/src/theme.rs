@@ -24,6 +24,51 @@ pub struct Theme {
     pub err: String,
     #[serde(deserialize_with = "color")]
     pub info: String,
+    #[serde(deserialize_with = "linked_color")]
+    pub user: String,
+    pub lua: LuaTheme,
+}
+
+macro_rules! lua_theme {
+    ($($name:ident: $default:literal,)*) => {
+        #[derive(Debug, Clone, Deserialize, serde::Serialize)]
+        #[serde(default, deny_unknown_fields)]
+        pub struct LuaTheme {
+            $(#[serde(deserialize_with = "linked_color")] pub $name: String,)*
+        }
+
+        impl Default for LuaTheme {
+            fn default() -> Self {
+                Self { $($name: $default.to_string(),)* }
+            }
+        }
+
+        impl LuaTheme {
+            pub const TOKENS: &'static [&'static str] = &[$(stringify!($name)),*];
+
+            pub fn values(&self) -> Vec<&str> {
+                vec![$(self.$name.as_str()),*]
+            }
+        }
+    };
+}
+
+lua_theme! {
+    keyword: "err",
+    storage: "err",
+    constant: "accent",
+    operator: "dim",
+    punctuation: "muted",
+    number: "accent",
+    string: "ok",
+    escape: "info",
+    comment: "muted",
+    function: "info",
+    builtin: "info",
+    method: "info",
+    field: "none",
+    parameter: "dim",
+    variable: "none",
 }
 
 impl Default for Theme {
@@ -40,7 +85,27 @@ impl Default for Theme {
             ok: s("#94B979"),
             err: s("#E27373"),
             info: s("#97BEDC"),
+            user: s("fg"),
+            lua: LuaTheme::default(),
         }
+    }
+}
+
+impl Theme {
+    pub fn named(&self, name: &str) -> Option<&str> {
+        Some(match name.trim() {
+            "bg" => &self.bg,
+            "surface" => &self.surface,
+            "fg" => &self.fg,
+            "dim" => &self.dim,
+            "muted" => &self.muted,
+            "border" => &self.border,
+            "accent" => &self.accent,
+            "ok" => &self.ok,
+            "err" => &self.err,
+            "info" => &self.info,
+            _ => return None,
+        })
     }
 }
 
@@ -85,15 +150,18 @@ pub fn valid_color(s: &str) -> bool {
 #[serde(rename_all = "snake_case")]
 pub enum InputStyle {
     #[default]
-    Classic,
     Boxed,
+    #[serde(alias = "classic")]
+    Lines,
+    Fill,
 }
 
 impl InputStyle {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Classic => "classic",
             Self::Boxed => "boxed",
+            Self::Lines => "lines",
+            Self::Fill => "fill",
         }
     }
 }
@@ -153,6 +221,18 @@ impl Default for UiSettings {
 
 pub fn limit(setting: i32, len: usize) -> usize {
     usize::try_from(setting).map_or(len, |n| n.min(len))
+}
+
+pub fn linked_color<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    let s = String::deserialize(d)?;
+    let named = matches!(
+        s.trim(),
+        "bg" | "surface" | "fg" | "dim" | "muted" | "border" | "ok" | "err" | "info"
+    );
+    if !named && !valid_color(&s) {
+        return Err(D::Error::custom(format!("invalid color `{s}`")));
+    }
+    Ok(s)
 }
 
 pub fn color<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {

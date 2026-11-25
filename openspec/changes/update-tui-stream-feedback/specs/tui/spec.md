@@ -42,7 +42,7 @@ The TUI MUST NOT reserve a chat row or show an inline Lua star for a tool announ
 - **THEN** the pending preview is discarded without ever appearing in chat
 
 ### Requirement: Boxed input composer
-When `settings.ui.input_style` is `boxed` and the viewport fits, the composer SHALL consist of a top border, the editor rows, one blank row, a status row, and a bottom border. Editor rows SHALL have no prompt arrow. The editor SHALL grow with the draft like the classic composer, limited by `input_max_height` and the viewport, and scroll beyond that with the cursor visible. Exactly one blank row SHALL separate the last editor row from the status row. Side borders SHALL enclose all interior rows. The status row SHALL place activity and notices on the left and the model/context label on the right; labels MUST be clipped rather than overlap. The classic composer SHALL be used when the box cannot fit, without changing the configured style or losing the draft. Both styles SHALL retain editing, completion, mouse and selection behavior.
+When `settings.ui.input_style` is `boxed` and the viewport fits, the composer SHALL consist of a top border, the editor rows, one blank row, a status row, and a bottom border. Editor rows SHALL have no prompt arrow and no left padding, so the first column inside the border is shared by the editor text and the status row. The editor SHALL grow with the draft, limited by `input_max_height` and the viewport, and scroll beyond that with the cursor visible. Exactly one blank row SHALL separate the last editor row from the status row. Side borders SHALL enclose all interior rows. The status row SHALL place activity and notices on the left and the model/context label on the right; labels MUST be clipped rather than overlap. The lines composer SHALL be used when the box cannot fit, without changing the configured style or losing the draft. All styles SHALL retain editing, completion, mouse and selection behavior.
 
 #### Scenario: Boxed composer with a multiline draft
 - **WHEN** boxed input is configured in a terminal with sufficient space and the draft wraps to more than one row
@@ -51,3 +51,26 @@ When `settings.ui.input_style` is `boxed` and the viewport fits, the composer SH
 #### Scenario: Resize or reload
 - **WHEN** the terminal becomes too small for the box, grows again, or `/reload` changes the input style
 - **THEN** the layout and input hit testing update together, and the draft and logical cursor position are preserved
+
+### Requirement: Lines input composer
+When `settings.ui.input_style` is `lines`, or a framed style does not fit, the composer SHALL be a rule with the activity on its right, the editor rows with the prompt arrow on the first row, and a rule with the model/context label on its right.
+
+#### Scenario: Small terminal
+- **WHEN** the style is `boxed` or `fill` and the terminal is too small for the frame
+- **THEN** the lines composer is drawn and the configured style is unchanged
+
+### Requirement: Fill input composer
+When `settings.ui.input_style` is `fill` and the viewport fits, the composer SHALL draw one blank row, the editor rows, and one blank row, all with the `border` color as background across the full width. The first editor row SHALL start with the prompt arrow. One row without background SHALL follow, then the status row with the activity on the left and the model/context label on the right.
+
+#### Scenario: Fill composer with a multiline draft
+- **WHEN** fill input is configured in a terminal with sufficient space and the draft wraps to more than one row
+- **THEN** the filled block grows by one row per draft row, one unfilled row separates it from the status row, and the cursor and mouse hit testing match the editor rows
+
+### Requirement: Idle status shows the project directory
+When no activity indicator or notice is shown and no turn is running, the composer SHALL show the session working directory in the `muted` color without an icon, with the home directory written as `~`, in the place of the indicator in every input style.
+
+#### Scenario: Idle and working
+- **WHEN** no turn is running and no notice is shown
+- **THEN** the status shows the directory
+- **WHEN** a turn starts or a notice appears
+- **THEN** the indicator or notice replaces the directory

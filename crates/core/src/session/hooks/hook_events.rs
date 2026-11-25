@@ -5,36 +5,23 @@ use std::time::Duration;
 use tuse_lua::Done;
 
 impl Session {
-    pub(crate) fn simple_hook(
-        self: &Arc<Self>,
-        event: &'static str,
-    ) -> std::sync::mpsc::Receiver<()> {
-        self.hook(event, json!({"event": event}))
+    pub(crate) fn simple_hook(self: &Arc<Self>, event: &'static str) {
+        self.hook(event, json!({"event": event}));
     }
 
     pub(crate) fn lifecycle(self: &Arc<Self>, launch: bool, restored: bool) {
-        let first = self.simple_hook("config_load");
-        let s = self.clone();
-        let job = std::thread::spawn(move || {
-            let _ = first.recv();
-            if launch {
-                let _ = s.simple_hook("process_start").recv();
-            }
-            let _ = s
-                .simple_hook(if restored {
-                    "session_resumed"
-                } else {
-                    "session_created"
-                })
-                .recv();
+        self.simple_hook("config_load");
+        if launch {
+            self.simple_hook("process_start");
+        }
+        self.simple_hook(if restored {
+            "session_resumed"
+        } else {
+            "session_created"
         });
-        *self.lifecycle_job.lock().unwrap() = Some(job);
     }
 
-    pub(crate) fn agent_message_hook(
-        self: &Arc<Self>,
-        status: &'static str,
-    ) -> std::sync::mpsc::Receiver<()> {
+    pub(crate) fn agent_message_hook(self: &Arc<Self>, status: &'static str) {
         self.hook(
             "agent_message",
             json!({"event": "agent_message", "status": status}),

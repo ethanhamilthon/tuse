@@ -1,18 +1,14 @@
-# System Prompt
+# Prompt template
 
-The exact words Tuse sends the model, and the text of the `lua` tool and of `docs("tool")` and `docs("functions")`. Tuse's code holds only the mechanism that fills this page in. Changing the wording of the prompt means editing this page.
-
-Placeholders inside a block:
-
-- `{{names:text}}` keeps `text` only when a built-in function is enabled. `names` is one name, `a|b` (any of them enabled) or `a&b` (all enabled).
-- `{{prefer}}` and `{{prefer()}}` expand to the sentence built from the `prefer` blocks: the clauses of `prefer-clauses` whose functions are enabled, joined as "a, b, and c" (`prefer()` writes the names as calls).
-- `{{each:a,b,c}}` expands to the enabled names, in backticks, separated by commas. A line whose `each` is empty is dropped.
-- `{{lines:a,b,c}}` expands to the one-line descriptions of the enabled names from [Functions](#functions). When none is enabled, the whole block is empty.
-- A line that holds a placeholder and ends up empty is dropped.
-
-Functions turned off with `functions = { name = false }` drop out of everything below. After the prompt come each string of `config.systems`, in order, and, once earlier records were dropped, the `compacted` note.
+Blocks are fenced `text` sections under `### name`. Placeholders: `{{names:text}}` (names `a`, `a|b`, `a&b`), `{{prefer}}`, `{{prefer()}}`. A line holding a placeholder that ends up empty is dropped. One line per built-in function under `## Functions`.
 
 ## Prompt blocks
+
+### context-intro
+
+```text
+This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order, and the compaction note is added once earlier records were dropped. Inside a session this section is rendered for that session's config.
+```
 
 ### prefix
 
@@ -69,53 +65,7 @@ Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Re
 The Lua code to run.
 ```
 
-### functions-doc-header
-
-```text
-# Functions
-
-Built-in host functions are globals in the agent's `lua` tool and are also exposed on `require("tuse")`. Errors are plain Lua errors (catchable with `pcall`). File paths accept absolute paths, `~/...`, or paths relative to the session working directory.
-```
-
-### functions-doc-preference
-
-```text
-{{prefer}}{{sh: Use `sh` for running programs and processing their output.}}
-```
-
-### tool-doc
-
-```text
-# The `lua` tool
-
-The agent has a single tool, `lua`, taking one required string argument `code` (Lua 5.4 source).
-
-## Tool call contract
-- **Arguments:** JSON object `{"code": "..."}`. Unknown tools, invalid JSON, or missing/non-string `code` fail with `code = 1` without starting a Lua job.
-- **Compilation and output:** Tuse first tries `return <code>` so a lone expression returns its value; otherwise compiles `<code>` as statements. Captured `print(...)` and `io.write(...)` come first, followed by formatted non-nil return values. Output is uncapped.
-- **Exit status:** `0` on success, `1` on error or timeout, `nil` on cancel.
-
-## VM lifetime, timeouts, and scheduling
-- **Persistent VM:** One Lua 5.4 VM runs per session. Globals persist between `lua` calls (use `local` for scratch variables).
-- **120-second deadline:** Each `lua` call has a 120-second deadline.{{spawn: Start long jobs with `spawn(fn, name)` (no deadline).}}
-- **Standard library:** `string`, `table`, `math`, `utf8`, `io`, `os` (without `os.exit`), `coroutine`, `package`, `load`, `loadfile`, `dofile`, and `require`. The `debug` library is unavailable.
-{{json|inspect:- **Added globals:** }}{{json:`json.encode`/`json.decode`}}{{json&inspect:, }}{{inspect:`inspect(value)`}}{{json|inspect:.}}
-- **Cooperative yielding:** {{each:sh,pick,ask,reload,llm}} yield cooperatively so other coroutines keep running.
-- **Paused deadlines:** {{each:pick,ask,reload}} pause the calling coroutine's remaining deadline while waiting.
-```
-
-### tool-doc-functions
-
-```text
-## Available file, search, and shell functions
-{{lines:read,write,append,delete,edit,grep,sh}}
-```
-
 ## Functions
-
-One line per built-in function, grouped as `docs("functions")` shows them. The first backticked name of a line is the function it describes. A line marked `<!-- docs-only -->` is listed by `docs("functions")` but is not part of the system prompt. Full behavior of each function is in [functions.md](functions.md).
-
-### File Functions
 
 - `read(path)` / `read(path, {lines=true, offset=1, limit=2000})`: returns raw text by default, or an image (png, jpg, gif, webp) that you then see. Pass `{lines=true}` for numbered, paginated lines (ending with the next `offset`).
 - `write(path, content)`: create a file or replace it completely; missing folders are created.
@@ -123,27 +73,15 @@ One line per built-in function, grouped as `docs("functions")` shows them. The f
 - `delete(path)`: delete a single file and show its removal as a diff (does not delete directories).
 - `edit(path, old, new, {all=false})`: replace exact text in a file. `old` must be unique unless `all` is set; read the file first. A wrong `old` raises an error.
 - `grep(pattern, {path=".", glob=nil, ignore_case=false, literal=false, context=0, limit=100})`: search file contents with a regex (or plain text with `literal=true`); `path` can be a string or list of paths. Returns `path:line: text` per match and respects `.gitignore`.
-
-### Shell, Timing, and Background Tasks
-
 - `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E "foo\\bar" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. A command is killed at its explicit timeout or the foreground Lua deadline, whichever comes first. Steering or cancelling the turn can move the whole Lua call to a background task, where the foreground deadline no longer applies.
 - `spawn(fn, name)`: runs `fn` in the background as a task in this same VM (it sees your globals); returns its ID. A task has no deadline; its `print` goes to its log, and you get a message when it ends.
 - `task_get(id, lines=50)`: return `{ id, name, status, started, ended, output }` with the log tail in `.output`.
 - `task_stop(id)`: stop a running background task and return its task info.
 - `task_list()`: list all tasks in the session with `.id`, `.name`, and `.status` (`running`, `done`, `failed`, `stopped`).
-
-### Interactive UI
-
 - `show(name, text, pin)`: render or update a UI-only Markdown block by name (`pin=true` keeps it at the end of the chat after new messages; `show(name, "", false)` removes it).
 - `pick(options)`: show a list of strings to the user and return the selected string, or `nil` on Esc (pauses your timeout while waiting).
 - `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
-
-### Control, Model, Docs, and Utilities
-
 - `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text; `model` and `effort` default to the session's.
 - `reload()`: reload the config like `/reload`; raises if it is invalid.
-- `set_title(text)`: update the session title (up to 80 characters). <!-- docs-only -->
 - `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `trace`).
 - `docs(topic)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.
-- `json.encode(value)` / `json.decode(text)`: encode a Lua value to compact JSON or decode JSON to Lua. <!-- docs-only -->
-- `inspect(value)`: format any Lua value into a readable string. <!-- docs-only -->

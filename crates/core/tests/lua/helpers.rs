@@ -4,7 +4,7 @@ use common::Reply;
 use std::time::Duration;
 use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
 
-const PROBE: &str = "local d = docs('functions'); return table.concat({type(drop), keep and keep() or '-', tostring(mine), rebound(), gone(), tostring(d:find('`drop(', 1, true) ~= nil)}, ' ')";
+const PROBE: &str = "local d = docs('lua'); return table.concat({type(drop), keep and keep() or '-', tostring(mine), rebound(), gone(), tostring(d:find('`drop(', 1, true) ~= nil)}, ' ')";
 
 fn config(keep: &str, drop: bool) -> String {
     let mut f = format!("keep = function() return '{keep}' end,");

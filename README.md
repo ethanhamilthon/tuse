@@ -1,45 +1,75 @@
 # Tuse
 
-A minimal AI coding agent for the terminal written in Rust + Crossterm, centered on a single `lua` tool in a persistent Lua 5.4 VM, with both a full-screen TUI and a JSON-RPC 2.0 stdio mode.
+The simplest, most powerful AI coding agent for the terminal.
 
-[Website](https://ethanhamilthon.github.io/tuse/) · [Documentation](https://ethanhamilthon.github.io/tuse/docs/) ([local index](docs/index.md)) · [Releases](https://github.com/ethanhamilthon/tuse/releases) ([changelog](release/CHANGELOG.md))
+Tuse is a minimal layer that is all a modern model needs to do real work: files and a shell. Everything else you shape yourself with a small Lua config.
 
-## Why Tuse
+Tuse itself stays tiny and fast. It is written in Rust, so you can run hundreds of instances without thinking about it.
 
-- **One tool: `lua`** — runs in one persistent Lua 5.4 VM per session with `read`, `write`, `edit`, `append`, `delete`, `grep`, `sh`, `sleep`, and `spawn` background coroutines, live colored diffs, and no output cap.
-- **TUI and `tuse json`** — full-screen terminal UI (Markdown, `/` commands, `#` prompts, `@` files, image paste) plus a JSON-RPC 2.0 stdio server (`tuse json`) sharing SQLite sessions (`~/.tuse/tuse.db`).
-- **Plain Lua config** — configure hooks, custom slash commands, helpers, file openers, and a 10-token theme with live `/reload`.
-- **Lean context** — small built-in system prompt, 50/25/25 context compaction, and automatic retries.
-- **Single binary** — built-in defaults require no config file to start, and `tuse update` replaces the binary without touching your config.
+- **Code mode by default.** The agent writes Lua that does many steps at once, instead of calling tools one by one.
+- **No skills, no MCP, no plugins.** Need something? Ask the agent to change its own config, and it just works.
+- **TUI and JSON modes.** A fast full-screen terminal UI, and a JSON-RPC mode if you want to put your own GUI on top.
+- **Under 20k lines of code.** Any agent or person can read, understand, and change Tuse.
+- **Per-project configs.** Drop a `tuse.lua` into a repo and the harness is tuned for that project.
+- **Any model, any provider, any multiplexer.** OpenAI, Anthropic, Gemini, or anything OpenAI-compatible.
 
-## Install
+## Quickstart
+
+Install the binary (macOS and Linux):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 ```
 
-The installer installs only the binary and leaves configuration files untouched.
+Connect a provider. The key stays in your environment, and Tuse only stores the `$VAR` reference:
 
-Update in place with `tuse update`, or build from source with `cargo install --locked --git https://github.com/ethanhamilthon/tuse tuse` or `make install`. See [docs/install.md](docs/install.md) and [docs/env.md](docs/env.md) for version pinning (`TUSE_VERSION`) and custom install directories (`TUSE_BIN_DIR`).
+```sh
+tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai
+tuse connect --base https://api.anthropic.com/v1 --key '$ANTHROPIC_API_KEY' --name anthropic --api anthropic-messages
+```
 
-## Quick Start
+Run `tuse` in your project, pick a model with `/models`, and start talking. To customize it for a project, run `tuse init` and edit `./tuse.lua`.
 
-1. Connect an OpenAI-compatible provider (quote `'$ENV'` to store an environment variable reference instead of the raw key):
+## Subscriptions
 
-   ```sh
-   tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai
-   ```
+Tuse does not log in to subscriptions itself, because plans and models change too fast to keep up with.
 
-2. Start `tuse`, pick a model and reasoning effort with `/models`, and begin chatting.
+We leave that to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI). Install it, sign in, and connect it like any other provider:
 
-Resume a saved session with `tuse --resume ID` (the session ID prints to stderr on exit), or run `tuse json` for editor and tool integration.
+```sh
+tuse connect --base http://localhost:8317/v1 --key '$CLIPROXY_KEY' --name subs
+```
 
-## Documentation
+EasyCLIProxyAPI is also a handy desktop client for all your subscriptions.
 
-Browse the published guides and references at [ethanhamilthon.github.io/tuse/docs/](https://ethanhamilthon.github.io/tuse/docs/) or locally starting from [docs/index.md](docs/index.md) — covering CLI flags, TUI keybindings, JSON-RPC, Lua host functions, hooks, configuration, and themes.
+## cmux, Orca, Herdr, tmux, Rex…
 
-## Development & License
+Ask Tuse to write a small config for your terminal or multiplexer and `require` it from `~/.config/tuse/init.lua`. Hooks, commands, and `sh` cover notifications, panes, titles, and the rest.
 
-Built with Rust (toolchain pinned in `rust-toolchain.toml`); prebuilt releases target macOS 11+ and Linux (glibc 2.35+). See [AGENTS.md](AGENTS.md) for architecture rules and run `make check` before committing.
+## Skills, MCP, plugins
 
-Licensed under the [MIT License](LICENSE).
+Tuse ships none of these, on purpose.
+
+**Skills** are an over-engineered name for reusable prompts. Add one to your config:
+
+```lua
+return {
+  prompts = {
+    showme = "Explain what changed in the last commit and why, with file paths.",
+  },
+}
+```
+
+Then type `#showme` in the TUI.
+
+**MCP** is one of dozens of agent protocols, and we see no reason to build it into Tuse. If you have MCP servers you want to use, ask Tuse to wrap them in `functions`, and the agent will call them like any other Lua function.
+
+**Plugins** made everything more complicated, so we removed them. Write the few lines you need yourself, or ask Tuse to write them, and load them from `init.lua`.
+
+## Docs, license, contributing
+
+Docs are at https://ethanhamilthon.github.io/tuse/. The agent reads the same pages with `docs()`. Tuse is MIT licensed, see [LICENSE](LICENSE).
+
+Discussions and pull requests are welcome. The project is still in beta and I work on it actively. Honestly, I don't know where it is heading, but I'm glad I built a harness that makes it hard to go back to any other.
+
+Give Tuse a try, and if you like it too, tell me. Let's build it together!

@@ -1,0 +1,12 @@
+[book]
+title = "Tuse"
+language = "en"
+src = "target/book-src"
+
+[build]
+build-dir = "target/book"
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/ethanhamilthon/tuse"
+site-url = "/tuse/"

@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn help_and_docs_list_every_command() {
-        let docs = tuse_core::docs(Some("commands"));
+        let docs = tuse_core::docs(Some("usage"));
         for sub in ALL {
             let cmd = super::spec(sub).unwrap();
             let name = cmd.usage.split(" [").next().unwrap();

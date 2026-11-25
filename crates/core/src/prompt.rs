@@ -4,12 +4,11 @@ use std::sync::OnceLock;
 use tuse_api::ToolDef;
 use tuse_config::Config;
 
-const PAGE: &str = include_str!("../../../docs/system-prompt.md");
-const DOCS_ONLY: &str = " <!-- docs-only -->";
+const PAGE: &str = include_str!("prompt.md");
 
 struct Page {
     blocks: BTreeMap<&'static str, &'static str>,
-    functions: Vec<(&'static str, &'static str, &'static str, bool)>,
+    functions: Vec<(&'static str, &'static str)>,
 }
 
 fn page() -> &'static Page {
@@ -21,7 +20,6 @@ fn parse(text: &'static str) -> Page {
     let mut blocks = BTreeMap::new();
     let mut functions = vec![];
     let mut in_functions = false;
-    let mut group = "";
     let mut lines = text.lines().peekable();
     while let Some(line) = lines.next() {
         if line == "## Functions" {
@@ -33,18 +31,13 @@ fn parse(text: &'static str) -> Page {
         }
         let Some(name) = line.strip_prefix("### ") else {
             if in_functions && line.starts_with("- `") {
-                let (body, docs_only) = match line.strip_suffix(DOCS_ONLY) {
-                    Some(b) => (b, true),
-                    None => (line, false),
-                };
-                let id = body[3..].split('`').next().unwrap_or("");
+                let id = line[3..].split('`').next().unwrap_or("");
                 let id = id.split(['(', '.']).next().unwrap_or(id);
-                functions.push((group, id, body, docs_only));
+                functions.push((id, line));
             }
             continue;
         };
         if in_functions {
-            group = name;
             continue;
         }
         if lines.peek() == Some(&"") {
@@ -83,14 +76,6 @@ impl Enabled<'_> {
         } else {
             spec.split('|').any(|n| self.has(n))
         }
-    }
-
-    fn line(&self, name: &str) -> Option<&'static str> {
-        page()
-            .functions
-            .iter()
-            .find(|(_, id, _, _)| *id == name)
-            .map(|(_, _, line, _)| *line)
     }
 }
 
@@ -168,89 +153,34 @@ fn placeholder(inner: &str, on: &Enabled, disabled: &[&str]) -> String {
     if inner == "prefer()" {
         return prefer_sentence(disabled, true);
     }
-    if let Some(list) = inner.strip_prefix("each:") {
-        let names: Vec<String> = list
-            .split(',')
-            .filter(|n| on.has(n))
-            .map(|n| format!("`{n}`"))
-            .collect();
-        return names.join(", ");
-    }
-    if let Some(list) = inner.strip_prefix("lines:") {
-        let lines: Vec<&str> = list
-            .split(',')
-            .filter(|n| on.has(n))
-            .filter_map(|n| on.line(n))
-            .collect();
-        return lines.join("\n");
-    }
     match inner.split_once(':') {
         Some((spec, text)) if on.cond(spec) => text.to_string(),
         Some(_) | None => String::new(),
     }
 }
 
-pub(crate) fn function_sections(disabled: &[&str]) -> Vec<(&'static str, Vec<&'static str>)> {
+fn base_prompt(disabled: &[&str]) -> String {
     let on = Enabled(disabled);
-    let mut out: Vec<(&'static str, Vec<&'static str>)> = vec![];
-    for (group, id, line, _) in &page().functions {
-        if !on.has(id) {
-            continue;
-        }
-        match out.last_mut() {
-            Some((g, lines)) if g == group => lines.push(line),
-            _ => out.push((group, vec![line])),
-        }
-    }
-    out
-}
-
-pub(crate) fn functions_doc(disabled: &[&str]) -> String {
-    let mut out = block("functions-doc-header").to_string();
-    let pref = expand(block("functions-doc-preference"), disabled);
-    if !pref.is_empty() {
-        out.push_str("\n\n");
-        out.push_str(pref.trim_start());
-    }
-    for (group, lines) in function_sections(disabled) {
-        out.push_str(&format!("\n\n## {group}\n"));
-        for line in lines {
-            out.push('\n');
-            out.push_str(line);
-        }
-    }
-    out
-}
-
-pub(crate) fn tool_doc(disabled: &[&str]) -> String {
-    let mut out = expand(block("tool-doc"), disabled);
-    let tail = expand(block("tool-doc-functions"), disabled);
-    if !tail.is_empty() && !tail.ends_with("{{lines}}") && tail.lines().count() > 1 {
-        out.push_str("\n\n");
-        out.push_str(&tail);
-    }
-    out
-}
-
-pub fn system_prompt(config: &Config, compacted: bool) -> String {
-    let disabled = config.disabled_builtins();
-    let on = Enabled(&disabled);
-    let mut base = expand(block("prefix"), &disabled);
+    let mut base = expand(block("prefix"), disabled);
     let bullets: Vec<&str> = page()
         .functions
         .iter()
-        .filter(|(_, id, _, docs_only)| !docs_only && on.has(id))
-        .map(|(_, _, line, _)| *line)
+        .filter(|(id, _)| on.has(id))
+        .map(|(_, line)| *line)
         .collect();
     if !bullets.is_empty() {
         base.push_str("\n\n");
-        base.push_str(&expand(block("functions-header"), &disabled));
+        base.push_str(&expand(block("functions-header"), disabled));
         for b in bullets {
             base.push('\n');
             base.push_str(b);
         }
     }
-    let mut parts = vec![base];
+    base
+}
+
+pub fn system_prompt(config: &Config, compacted: bool) -> String {
+    let mut parts = vec![base_prompt(&config.disabled_builtins())];
     parts.extend(config.systems.iter().map(|s| s.trim_end().to_string()));
     let mut out = parts.join("\n\n");
     if compacted {
@@ -258,6 +188,19 @@ pub fn system_prompt(config: &Config, compacted: bool) -> String {
         out.push_str(block("compacted"));
     }
     out
+}
+
+pub(crate) const AGENT_CONTEXT: &str = "## What the agent sees";
+
+pub(crate) fn agent_context(disabled: &[&str]) -> String {
+    format!(
+        "{AGENT_CONTEXT}\n\n{}\n\n### System prompt\n\n```text\n{}\n```\n\n### Tool description\n\nThe one tool is `lua`. Its single required string argument `code` is described as \"{}\".\n\n```text\n{}\n```\n\n### Compaction note\n\n```text\n{}\n```\n",
+        block("context-intro"),
+        base_prompt(disabled),
+        block("tool-code-parameter"),
+        expand(block("tool-description"), disabled),
+        block("compacted"),
+    )
 }
 
 fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> ToolDef {
@@ -269,8 +212,7 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
 }
 
 pub fn tools(config: &Config) -> Vec<ToolDef> {
-    let disabled = config.disabled_builtins();
-    let desc = expand(block("tool-description"), &disabled);
+    let desc = expand(block("tool-description"), &config.disabled_builtins());
     vec![tool(
         "lua",
         &desc,

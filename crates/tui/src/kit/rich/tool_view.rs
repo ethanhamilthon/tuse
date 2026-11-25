@@ -12,8 +12,18 @@ pub fn tool(
 ) -> Vec<Line> {
     let failed = output.is_some() && code != Some(0);
     let head = Style::fg(if failed { p.err } else { p.info });
+    let lines = source(input.trim(), true, width, head, failed, p);
+    finish(lines, output, diffs, width, p)
+}
+
+pub fn finish(
+    mut lines: Vec<Line>,
+    output: Option<&str>,
+    diffs: &[FileDiff],
+    width: usize,
+    p: &Palette,
+) -> Vec<Line> {
     let pad = " ".repeat(crate::kit::text::width(TOOL_PREFIX));
-    let mut lines = source(input, width, head, failed, p);
     let keep = tuse_config::limit(p.ui.tool_line, lines.len());
     if keep < lines.len() {
         lines.truncate(keep);
@@ -40,8 +50,15 @@ pub fn tool(
     lines
 }
 
-fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<Line> {
-    let cleaned = crate::kit::text::clean(input.trim());
+pub fn source(
+    input: &str,
+    first: bool,
+    w: usize,
+    head: Style,
+    failed: bool,
+    p: &Palette,
+) -> Vec<Line> {
+    let cleaned = crate::kit::text::clean(input);
     let code = if p.ui.fold_strings {
         crate::kit::rich::fold::fold_multiline_strings(&cleaned)
     } else {
@@ -53,12 +70,13 @@ fn source(input: &str, w: usize, head: Style, failed: bool, p: &Palette) -> Vec<
     } else {
         crate::kit::rich::syntax::highlight(&code, head, p)
     };
-    let (first, rest) = (vec![span(TOOL_PREFIX, head)], vec![span(pad, head)]);
+    let (lead, rest) = (vec![span(TOOL_PREFIX, head)], vec![span(pad, head)]);
     colored
         .into_iter()
         .enumerate()
         .flat_map(|(i, l)| {
-            crate::kit::text::wrap(&l, w, if i == 0 { &first } else { &rest }, &rest)
+            let lead = if i == 0 && first { &lead } else { &rest };
+            crate::kit::text::wrap(&l, w, lead, &rest)
         })
         .collect()
 }

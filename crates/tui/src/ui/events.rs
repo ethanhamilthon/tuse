@@ -116,6 +116,7 @@ impl App {
                 self.streaming = None;
                 self.thinking = None;
                 self.streamed_text = false;
+                self.chat.settle();
             }
             Event::ToolDelta {
                 index, id, code, ..
@@ -213,6 +214,7 @@ impl App {
                 self.streaming = None;
                 self.thinking = None;
                 self.drop_pending();
+                self.chat.settle();
                 if cancelled {
                     self.chat.finish_interrupted_tools();
                     self.turn_error = None;

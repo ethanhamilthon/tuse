@@ -31,7 +31,7 @@ g.systems = g.systems or {}
 g.systems[#g.systems + 1] = "Run `make check` before you finish."
 g.prompts = g.prompts or {}
 g.prompts.review = require("prompts/review")
-g.open = { md = function(path) t.sh('open -a Typora "$P"', { env = { P = path } }) end }
+g.settings = { open = { md = function(path) t.sh('open -a Typora "$P"', { env = { P = path } }) end } }
 return g
 ```
 
@@ -161,7 +161,7 @@ return {
 
 ### `commands` and `settings.open`
 
-- `commands = { name = function() ... end }` adds `/name` to the TUI and JSON-RPC `commands.run`. Commands run as Lua jobs with no deadline. `print` is not shown, so use `show()`. Esc cancels them. Built-in names (`config`, `new`, `resume`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`) are reserved.
+- `commands = { name = function() ... end }` adds `/name` to the TUI and JSON-RPC `commands.run`. Commands run as Lua jobs with no deadline. `print` is not shown, and host functions are not globals here, so use `t.show()`. Esc cancels them. Built-in names (`config`, `new`, `resume`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`) are reserved.
 - `settings = { open = { md = function(path) ... end } }` handles clicks on local files with that extension (case-insensitive) in the TUI. Without a handler, the OS opener is used. URLs always go to the OS opener. A top-level `open` key fails with `open: moved to settings.open`.
 
 ## Reload

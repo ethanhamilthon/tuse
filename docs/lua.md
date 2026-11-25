@@ -102,6 +102,8 @@ return {
 }
 ```
 
+Every `e` has `event`, the event name, plus the fields below.
+
 | Event | When | Fields of `e` |
 | --- | --- | --- |
 | `config_load` | After a successful config load and system prompt rebuild. | None |

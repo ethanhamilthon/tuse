@@ -22,6 +22,7 @@ pub fn render_with_links(text: &str, width: usize, p: &Palette, links: bool) -> 
         open: String::new(),
         item_first: None,
         table: None,
+        image: None,
     };
     let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS;
     for ev in Parser::new_ext(text, opts) {
@@ -48,6 +49,7 @@ pub(crate) struct Renderer<'a> {
     pub(crate) open: String,
     item_first: Option<String>,
     table: Option<crate::kit::rich::table::Table>,
+    image: Option<(String, usize)>,
 }
 
 impl Renderer<'_> {
@@ -58,6 +60,17 @@ impl Renderer<'_> {
     fn push_style(&mut self, f: impl FnOnce(Style) -> Style) {
         let s = f(self.style());
         self.styles.push(s);
+    }
+
+    fn push_link(&mut self, dest: &str) {
+        let (links, p) = (self.links, self.p);
+        self.push_style(|s| {
+            if links {
+                crate::kit::links::styled(dest, s, p)
+            } else {
+                s
+            }
+        });
     }
 
     fn indent(&self) -> String {
@@ -151,16 +164,11 @@ impl Renderer<'_> {
             Tag::Emphasis => self.push_style(|s| s.italic()),
             Tag::Strong => self.push_style(|s| s.bold()),
             Tag::Strikethrough => self.push_style(|s| Style { dim: true, ..s }),
-            Tag::Link { dest_url, .. } => {
-                let (links, p) = (self.links, self.p);
-                self.push_style(|s| {
-                    if links {
-                        crate::kit::links::styled(&dest_url, s, p)
-                    } else {
-                        s
-                    }
-                });
+            Tag::Image { dest_url, .. } => {
+                self.push_link(&dest_url);
+                self.image = Some((dest_url.to_string(), self.cur.len()));
             }
+            Tag::Link { dest_url, .. } => self.push_link(&dest_url),
             Tag::BlockQuote(_) => {
                 self.flush();
                 self.quote += 1;
@@ -202,6 +210,14 @@ impl Renderer<'_> {
             TagEnd::Heading(_) => {
                 self.styles.pop();
                 self.blank();
+            }
+            TagEnd::Image => {
+                if let Some((dest, len)) = self.image.take()
+                    && self.cur.len() == len
+                {
+                    self.text(&dest);
+                }
+                self.styles.pop();
             }
             TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Link => {
                 self.styles.pop();

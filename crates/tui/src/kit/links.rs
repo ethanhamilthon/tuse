@@ -3,6 +3,7 @@ use crate::kit::text::{Line, Span, span, width};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LinkTarget {
@@ -339,13 +340,32 @@ fn existing_path(token: &str, cwd: &Path) -> Option<PathBuf> {
         if candidate.is_empty() || !looks_like_path(candidate) {
             continue;
         }
-        if let Some(p) = resolve_path(candidate, cwd)
-            && p.exists()
-        {
-            return Some(p.canonicalize().unwrap_or(p));
+        if let Some(p) = resolve_path(candidate, cwd).and_then(probe) {
+            return Some(p);
         }
     }
     None
+}
+
+fn probe(path: PathBuf) -> Option<PathBuf> {
+    const TTL: Duration = Duration::from_secs(1);
+    type Probes = HashMap<PathBuf, (Instant, Option<PathBuf>)>;
+    static CACHE: OnceLock<Mutex<Probes>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some((at, hit)) = cache.lock().unwrap().get(&path)
+        && at.elapsed() < TTL
+    {
+        return hit.clone();
+    }
+    let hit = path
+        .exists()
+        .then(|| path.canonicalize().unwrap_or_else(|_| path.clone()));
+    let mut map = cache.lock().unwrap();
+    if map.len() >= 4096 {
+        map.retain(|_, (at, _)| at.elapsed() < TTL);
+    }
+    map.insert(path, (Instant::now(), hit.clone()));
+    hit
 }
 
 fn looks_like_path(s: &str) -> bool {
@@ -561,6 +581,16 @@ mod tests {
                 .iter()
                 .all(|s| s.style.fg == p.accent && s.style.underline)
         );
+        let img = crate::kit::rich::markdown::render(
+            "![pic](https://dup.example) ![](https://dup.example)",
+            80,
+            &p,
+        );
+        let img_texts: Vec<_> = link_spans(&img, dup_id)
+            .into_iter()
+            .map(|s| s.text.as_str())
+            .collect();
+        assert_eq!(img_texts, ["pic", "https://dup.example"]);
         let sec = dup.iter().flatten().find(|s| s.text == "sec").unwrap();
         assert!(sec.style.link.is_none() && sec.style.underline && sec.style.fg == p.info);
         highlight(&mut dup, Some(dup_id), p.fg);

@@ -6,14 +6,15 @@ use std::time::Duration;
 use tuse_core::{Record, Session};
 
 type Cache = Option<(usize, Vec<Line>)>;
+type Stream = Option<crate::kit::rich::stream::Prefix>;
+const STREAMS: usize = 8;
 
 #[derive(Default)]
 pub struct Chat {
     pub(crate) entries: Vec<(Entry, Cache)>,
     pub(crate) pinned: Vec<(String, String, Cache)>,
-    hot: Option<usize>,
     pub(crate) tick: usize,
-    stream: Option<crate::kit::rich::md_stream::Prefix>,
+    streams: Vec<(usize, Stream)>,
 }
 
 impl Chat {
@@ -110,8 +111,15 @@ impl Chat {
     pub fn get_mut(&mut self, i: usize) -> Option<&mut Entry> {
         let slot = self.entries.get_mut(i)?;
         slot.1 = None;
-        if matches!(slot.0, Entry::Assistant(_)) {
-            self.hot = Some(i);
+        let live = matches!(
+            slot.0,
+            Entry::Assistant(_) | Entry::Reasoning(_) | Entry::Tool { output: None, .. }
+        );
+        if live && !self.streams.iter().any(|(n, _)| *n == i) {
+            if self.streams.len() >= STREAMS {
+                self.streams.remove(0);
+            }
+            self.streams.push((i, None));
         }
         Some(&mut slot.0)
     }
@@ -119,8 +127,7 @@ impl Chat {
     pub fn remove(&mut self, i: usize) {
         if i < self.entries.len() {
             self.entries.remove(i);
-            self.hot = None;
-            self.stream = None;
+            self.streams.clear();
         }
     }
 
@@ -146,8 +153,18 @@ impl Chat {
         }
     }
 
+    pub(crate) fn settle(&mut self) {
+        for (i, _) in std::mem::take(&mut self.streams) {
+            if let Some(slot) = self.entries.get_mut(i) {
+                slot.1 = None;
+            }
+        }
+    }
+
     pub fn invalidate(&mut self) {
-        self.stream = None;
+        for (_, s) in &mut self.streams {
+            *s = None;
+        }
         for (_, cache) in self.entries.iter_mut() {
             *cache = None;
         }
@@ -159,11 +176,24 @@ impl Chat {
     pub(crate) fn lines(&mut self, i: usize, width: usize, p: &Palette) -> &[Line] {
         let (e, cache) = &mut self.entries[i];
         if cache.as_ref().is_none_or(|(w, _)| *w != width) {
-            let lines = match e {
-                Entry::Assistant(t) if self.hot == Some(i) => {
-                    crate::kit::rich::md_stream::render(&mut self.stream, i, t, width, p)
+            use crate::kit::rich::stream;
+            let live = self.streams.iter_mut().find(|(n, _)| *n == i);
+            let lines = match (&*e, live) {
+                (Entry::Assistant(t), Some((_, s))) => stream::markdown(s, t, width, p),
+                (Entry::Reasoning(t), Some((_, s)))
+                    if p.ui.reasoning_line < 0 && !t.trim().is_empty() =>
+                {
+                    stream::reasoning(s, t, width, p)
                 }
-                _ => render(e, width, p),
+                (
+                    Entry::Tool {
+                        input,
+                        output: None,
+                        ..
+                    },
+                    Some((_, s)),
+                ) => stream::tool(s, input, width, p),
+                (e, _) => render(e, width, p),
             };
             *cache = Some((width, lines));
         }

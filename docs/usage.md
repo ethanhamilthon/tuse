@@ -49,7 +49,7 @@ Every command accepts `-h`/`--help`, which prints its usage and exits without re
 
 From top to bottom:
 
-- **Chat.** Your messages sit on a `surface` block. Agent replies render as Markdown. Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
+- **Chat.** Your messages sit on a `surface` block. Agent replies render as Markdown, and a Markdown image `![alt](path)` shows as a clickable `alt` (or the path when `alt` is empty). Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
 - **Overlay.** At most one picker, panel, or `ask()` question, shown above the input.
 - **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`.
 - **Input.** Grows with the text up to `settings.ui.input_max_height`.
@@ -101,7 +101,7 @@ Text files send their first 1,024 bytes (`truncated="true" size="…"` when long
 | `Ctrl+U` / `Ctrl+K` | Delete to start / end of line. |
 | `Esc` | Close, or stop everything (see above). |
 
-Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text (copy with `Ctrl+C`). Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `open.<ext>` handler from config or the OS opener.
+Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text (copy with `Ctrl+C`). Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `settings.open.<ext>` handler from config or the OS opener.
 
 ## Slash commands
 

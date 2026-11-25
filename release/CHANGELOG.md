@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.2
+
+- **Faster streaming.** Long replies no longer slow down while they stream: lists, code blocks, reasoning, and `lua` tool code re-render only their unfinished end, and file path checks for clickable links are cached. Up to 150x less work per frame on long replies.
+- **Markdown images** (`![alt](path)`) render as a clickable link instead of the bare alt text.
+- **Docs.** Fixed the `settings.open` example in Config, and documented `e.event` in hooks.
+
 ## 0.11.1
 
 - **Fix: task notices wake the agent.** A background task that ends while the session is idle now starts a turn instead of waiting for your next message.

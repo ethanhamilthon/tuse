@@ -81,10 +81,11 @@ pub fn wrap(content: &Line, width: usize, first: &Line, rest: &Line) -> Vec<Line
     let mut cur: Vec<(char, Style)> = vec![];
     let mut cur_w = 0;
     let mut prefix = first;
-    let room = |p: &Line| width.saturating_sub(line_width(p)).max(1);
+    let rooms = [first, rest].map(|p| width.saturating_sub(line_width(p)).max(1));
+    let mut room = rooms[0];
     for cell in cells {
         let w = char_width(cell.0);
-        if cur_w + w > room(prefix) && !cur.is_empty() {
+        if cur_w + w > room && !cur.is_empty() {
             let carry = match cur.iter().rposition(|(c, _)| *c == ' ') {
                 Some(i) if i > 0 && cell.0 != ' ' => cur.split_off(i + 1),
                 _ => vec![],
@@ -94,6 +95,7 @@ pub fn wrap(content: &Line, width: usize, first: &Line, rest: &Line) -> Vec<Line
             }
             out.push(join(prefix, &cur));
             prefix = rest;
+            room = rooms[1];
             cur = carry;
             cur_w = cur.iter().map(|(c, _)| char_width(*c)).sum();
             if cell.0 == ' ' && cur.is_empty() {

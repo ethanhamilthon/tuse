@@ -1,4 +1,6 @@
 use serde_json::Value;
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
 use std::io::Write;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
@@ -37,12 +39,42 @@ impl std::io::Read for Pipe {
     }
 }
 
+thread_local! {
+    static PENDING: RefCell<HashMap<usize, VecDeque<Value>>> = RefCell::default();
+}
+
+fn recv(rx: &mpsc::Receiver<Value>) -> Value {
+    rx.recv_timeout(Duration::from_secs(30)).expect("timed out")
+}
+
 pub fn until(rx: &mpsc::Receiver<Value>, f: impl Fn(&Value) -> bool) -> Value {
+    let key = rx as *const _ as usize;
     loop {
-        let v = rx.recv_timeout(Duration::from_secs(30)).expect("timed out");
+        let v = PENDING
+            .with_borrow_mut(|p| p.get_mut(&key).and_then(VecDeque::pop_front))
+            .unwrap_or_else(|| recv(rx));
         if f(&v) {
             return v;
         }
+    }
+}
+
+fn reply(rx: &mpsc::Receiver<Value>, id: u64) -> Value {
+    let key = rx as *const _ as usize;
+    let early = PENDING.with_borrow_mut(|p| {
+        let q = p.entry(key).or_default();
+        let i = q.iter().position(|v| v["id"] == id)?;
+        q.remove(i)
+    });
+    if let Some(v) = early {
+        return v;
+    }
+    loop {
+        let v = recv(rx);
+        if v["id"] == id {
+            return v;
+        }
+        PENDING.with_borrow_mut(|p| p.entry(key).or_default().push_back(v));
     }
 }
 
@@ -80,5 +112,5 @@ pub fn call(
 ) -> Value {
     let msg = serde_json::json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
     tx.send(format!("{msg}\n")).unwrap();
-    until(out, |v| v["id"] == id)
+    reply(out, id)
 }

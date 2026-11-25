@@ -160,15 +160,16 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     let treq = next_req(&rx);
     std::thread::sleep(Duration::from_millis(120));
     s.ui_reply(treq.id, Some("yes".into())).unwrap();
+    let answered = || {
+        s.records().iter().any(
+            |r| matches!(r, tuse_core::Record::Tool { output, .. } if output.contains("yes:1")),
+        )
+    };
     let deadline = Instant::now() + Duration::from_secs(5);
-    while s.busy() && Instant::now() < deadline {
+    while !(answered() && !s.busy()) && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(
-        s.records().iter().any(
-            |r| matches!(r, tuse_core::Record::Tool { output, .. } if output.contains("yes:1"))
-        )
-    );
+    assert!(answered());
     s.run_command("updated_cmd").unwrap();
     let pending = next_req(&rx);
     assert_eq!(

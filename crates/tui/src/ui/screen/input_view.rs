@@ -29,7 +29,6 @@ impl App {
         top: usize,
     ) -> Vec<Line> {
         let p = &self.palette;
-        let half = w / 2;
         let mark = if self.scroll > 0 {
             vec![span(
                 format!("{SCROLL_MARK}{} ", self.scroll),
@@ -38,13 +37,13 @@ impl App {
         } else {
             vec![]
         };
-        let mark = label(mark, half);
+        let mark = label(mark, w);
         let working = match &self.flash {
             Some((text, _)) => vec![span(text, Style::fg(p.accent))],
             None => self.working(),
         };
-        let working = label(working, half.saturating_sub(line_width(&mark)));
-        let model = label(self.model_label(), half);
+        let working = label(working, w.saturating_sub(line_width(&mark)));
+        let model = label(self.model_label(), w);
         let dim = self.steering.is_some() && self.saved_editor.is_none();
         let style = Style::fg(if dim { p.dim } else { p.fg });
         let left = crate::kit::text::width(INPUT_PREFIX);

@@ -78,7 +78,7 @@ end, "tests")
 
 - A task shares the VM and its globals. `print` writes to `~/.tuse/<session>/tasks/<id>.log`, and the return value or error is appended at the end.
 - Status is `running`, `done`, `failed`, or `stopped`. `started` and `ended` are UTC timestamps, with `ended` empty while the task runs.
-- When a task ends on its own, the agent gets a message. A running turn takes it at its next step. An idle session does not start a turn: the message waits and goes with your next message:
+- When a task ends on its own, the agent gets a message. A running turn takes it at its next step. An idle session starts a turn for it:
   ``<task>Task t1 (tests) finished. Last line: tests passed. Output: `task_get("t1").output`.</task>``
   The last line comes from the return value or the error, not from the log. Stopped tasks send no message.
 - **Handoff.** If you steer while a `lua` tool call runs, the whole call keeps running as a task named after its run, such as `lua-3`. Locals, a running `sh`, and the rest of the script all continue. The tool result becomes `[continued in background: tN]`. A call is handed off at most once.

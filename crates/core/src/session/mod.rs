@@ -43,7 +43,6 @@ pub struct Session {
     pub(crate) next_lua: AtomicU64,
     pub(crate) task_lua: Mutex<HashMap<String, (String, Instant)>>,
     pub(crate) jobs: Mutex<HashMap<String, (&'static str, String, String)>>,
-    pub(crate) pending: Mutex<Vec<String>>,
     pub(crate) reload_lock: Mutex<()>,
     pub(crate) reload_after_hook: AtomicBool,
 }

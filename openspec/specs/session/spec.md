@@ -18,12 +18,12 @@ Steering SHALL still hand a running `lua` call off to a background task. Esc (wi
 - **WHEN** a background task runs and the user presses Esc
 - **THEN** its status becomes `stopped`
 
-### Requirement: Task notices wait for the user
-A task that ends on its own SHALL NOT start a turn. Its `<task>` notice SHALL be queued and sent with the next user message, as `notification` records placed before that `user` record. A turn that is already running still takes the notice at its next step.
+### Requirement: Task notices wake the agent
+A task that ends on its own SHALL queue its `<task>` notice as a `notification` record. A turn that is already running takes the notice at its next step. An idle session SHALL start a turn for it.
 
 #### Scenario: Idle session
 - **WHEN** a task finishes while the session is idle
-- **THEN** no turn starts, and the next user message carries the notice
+- **THEN** a turn starts and the agent receives the notice
 
 ### Requirement: Complete history
 The history SHALL show everything that happens in the session, one role each: `system`, `user`, `agent`, `lua`, `tool`, `notification`, `notice`, `flash`, `error`, `hook`, `task`, `command`, `open`, `usage`, `model`, `turn`, `title`, `show`, `pick`, `ask`. Everything shown in the UI SHALL be a history record, including retry flashes, command, `open`, and reload errors, and stopped replies. `task`, `command`, and `open` entries SHALL hold name, status, duration, error, and code. Adding a record kind without a history entry, or emitting a visible event without a record, MUST NOT compile.

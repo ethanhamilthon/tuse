@@ -213,23 +213,17 @@ end)()
             assert!(Instant::now() < until);
             std::thread::sleep(Duration::from_millis(10));
         }
-        std::thread::sleep(Duration::from_millis(100));
-        let notes = |s: &Session| {
-            s.with_records(|r| {
-                r.iter()
-                    .filter(|r| matches!(r, Record::Notification { .. }))
-                    .count()
-            })
-        };
-        assert_eq!(notes(&s), 0);
-        assert!(!s.busy());
-        s.submit(UserInput::text("next"));
         loop {
             if let Event::Notification(text) = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
                 assert!(
                     text.starts_with("<task>Task t1 (lua-1) finished. Last line: ready:42."),
                     "{text}"
                 );
+                break;
+            }
+        }
+        loop {
+            if let Event::TurnEnd { .. } = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
                 break;
             }
         }

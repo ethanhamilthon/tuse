@@ -12,21 +12,10 @@ impl Session {
         let mut st = self.state.lock().unwrap();
         st.next_input += 1;
         let id = InputId(st.next_input);
-        if input.notification && !st.busy {
-            self.pending.lock().unwrap().push(input.text);
-            return (id, false);
-        }
         if !input.notification
             && let Some(request) = &st.tool_handoff
         {
             request.store(true, Ordering::Release);
-        }
-        if !input.notification {
-            for text in self.pending.lock().unwrap().drain(..) {
-                st.next_input += 1;
-                let nid = InputId(st.next_input);
-                st.queue.push((nid, UserInput::notification(text)));
-            }
         }
         st.queue.push((id, input));
         if st.busy || self.dir.lock().unwrap().is_none() {

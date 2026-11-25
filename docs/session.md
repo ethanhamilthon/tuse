@@ -12,7 +12,7 @@ Tuse saves a new session immediately, even if you never send a message. The firs
 
 ## A turn
 
-A turn starts when you send a message while the session is idle. Task notifications that arrive while idle wait for the next message. Each step:
+A turn starts when you send a message while the session is idle. A task notification that arrives while idle also starts a turn. Each step:
 
 1. Record pending user input and task notifications. Run `user_message` hooks for the user messages.
 2. Read the stored system prompt and conversation and send them with the `lua` tool definition. Tuse does not prune or summarize history on its own.

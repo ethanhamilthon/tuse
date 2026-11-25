@@ -1,0 +1,3 @@
+- [x] 1. Start a turn for task notices while idle and drop the pending queue
+- [x] 2. Remove the 50% width limit from input rule labels
+- [x] 3. Update the session spec and docs

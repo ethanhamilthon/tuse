@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.1
+
+- **Fix: task notices wake the agent.** A background task that ends while the session is idle now starts a turn instead of waiting for your next message.
+- **Input rule labels** (scroll mark, status, model) are no longer limited to half of the width.
+
 ## 0.11.0
 
 - **Breaking: persistent session history.** SQLite is now the source of truth. New sessions are saved immediately; only started sessions appear in resume lists. Old database data is not migrated. Back up `~/.tuse/tuse.db` before upgrading and re-add your providers with `tuse connect`.

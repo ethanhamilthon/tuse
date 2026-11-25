@@ -172,6 +172,8 @@ impl Prepared {
                 http: tuse_api::default_agent(),
                 next_lua: AtomicU64::new(0),
                 task_lua: Mutex::default(),
+                jobs: Mutex::default(),
+                pending: Mutex::default(),
                 reload_lock: Mutex::default(),
                 reload_after_hook: AtomicBool::new(false),
             }

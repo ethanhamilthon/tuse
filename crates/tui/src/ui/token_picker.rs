@@ -23,8 +23,21 @@ impl App {
             return;
         }
         self.dismissed = None;
+        let arg_of = self.editor.prompt_before_token().filter(|n| {
+            self.session
+                .config()
+                .prompts
+                .get(n)
+                .is_some_and(|p| !p.args.is_empty())
+        });
         let mut chars = token.chars();
-        let (kind, query) = match chars.next() {
+        let first = if arg_of.is_some() {
+            Some(' ')
+        } else {
+            chars.next()
+        };
+        let (kind, query) = match first {
+            Some(' ') => (Kind::PromptArg(arg_of.unwrap_or_default()), token.as_str()),
             Some('/') => (Kind::Command, chars.as_str()),
             Some('#') if !self.session.config().prompts.is_empty() => {
                 (Kind::Prompt, chars.as_str())
@@ -69,9 +82,23 @@ impl App {
                 config
                     .prompts
                     .iter()
-                    .map(|(k, v)| item(format!("#{k}"), v.lines().next().unwrap_or(""), k.clone()))
+                    .map(|(k, v)| {
+                        let detail = if v.args.is_empty() {
+                            v.body.lines().next().unwrap_or("").to_string()
+                        } else {
+                            v.args.join(" | ")
+                        };
+                        item(format!("#{k}"), detail, k.clone())
+                    })
                     .collect()
             }
+            Kind::PromptArg(name) => self
+                .session
+                .config()
+                .prompts
+                .get(name)
+                .map(|p| p.args.iter().map(|a| item(a, "", a)).collect())
+                .unwrap_or_default(),
             _ => {
                 let max = crate::kit::style::FILE_PICKER_MAX;
                 crate::kit::files::list(&self.cwd, &self.file_dir, max)

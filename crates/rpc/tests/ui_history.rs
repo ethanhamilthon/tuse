@@ -223,7 +223,7 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
     assert!(tags.contains(&"ui_markdown") && tags.contains(&"ui_result"));
 
     let trace = call(&tx, &out, 4, "session.trace", json!({}))["result"].to_string();
-    assert!(!trace.contains("SECRET_UI_BLOCK") && !trace.contains("SECRET_ANSWER"));
+    assert!(trace.contains("SECRET_UI_BLOCK") && trace.contains("SECRET_ANSWER"));
 
     assert_eq!(
         call(&tx, &out, 5, "ui.reply", json!({"id": 3, "value": "stale"}))["error"]["code"],

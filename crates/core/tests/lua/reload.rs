@@ -18,8 +18,12 @@ fn config(tag: &str) -> String {
 
 fn wait_tag(s: &Session, tag: &str) {
     let end = Instant::now() + Duration::from_secs(5);
-    while s.config().prompts["tag"] != tag {
-        assert!(Instant::now() < end, "still {}", s.config().prompts["tag"]);
+    while s.config().prompts["tag"].body != tag {
+        assert!(
+            Instant::now() < end,
+            "still {}",
+            s.config().prompts["tag"].body
+        );
         std::thread::sleep(Duration::from_millis(10));
     }
 }
@@ -76,7 +80,7 @@ fn reload_from_the_agent_commands_and_hooks() {
             _ => {}
         }
     }
-    assert_eq!(s.config().prompts["tag"], "v4");
+    assert_eq!(s.config().prompts["tag"].body, "v4");
     s.close();
     common::cleanup(&dir);
 }

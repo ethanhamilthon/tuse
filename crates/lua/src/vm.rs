@@ -68,7 +68,7 @@ impl Vm {
         done: impl FnOnce(Done) -> R + Send + 'static,
     ) -> Option<R> {
         let (tx, rx) = mpsc::channel();
-        let (code, name) = (code.to_string(), format!("={name}"));
+        let (code, name) = (Arc::<str>::from(code), format!("={name}"));
         self.post(move |lua| {
             let f = match env(lua).and_then(|env| compile(lua, &code, &name, &env)) {
                 Ok(f) => f,
@@ -85,7 +85,8 @@ impl Vm {
                 Out::Buf(String::new()),
                 |_, _| {},
             ) {
-                Ok(mut job) => {
+                Ok(job) => {
+                    let mut job = job.with_code(Some(code));
                     job.on_done(move |_, d| {
                         let _ = tx.send(done(d));
                     });

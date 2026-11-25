@@ -1,5 +1,7 @@
 # Tuse
 
+![Tuse](docs/screenshot.png)
+
 The simplest, most powerful AI coding agent for the terminal.
 
 Tuse is a minimal layer that is all a modern model needs to do real work: files and a shell. Everything else you shape yourself with a small Lua config.
@@ -42,15 +44,15 @@ tuse connect --base http://localhost:8317/v1 --key '$CLIPROXY_KEY' --name subs
 
 EasyCLIProxyAPI is also a handy desktop client for all your subscriptions.
 
-## cmux, Orca, Herdr, tmux, Rex…
+## [cmux](https://github.com/ethanhamilthon/tuse/blob/main/examples/cmux.lua), [Orca](https://github.com/ethanhamilthon/tuse/blob/main/examples/orca.lua), [Herdr](https://github.com/ethanhamilthon/tuse/blob/main/examples/herdr.lua), [tmux](https://github.com/ethanhamilthon/tuse/blob/main/examples/tmux.lua), [Rex](https://github.com/ethanhamilthon/tuse/blob/main/examples/rex.lua)…
 
-Ask Tuse to write a small config for your terminal or multiplexer and `require` it from `~/.config/tuse/init.lua`. Hooks, commands, and `sh` cover notifications, panes, titles, and the rest.
+Ask Tuse to write a small config for your terminal or multiplexer and `require` it from `~/.config/tuse/init.lua`. Hooks, commands, and `sh` cover [notifications](https://github.com/ethanhamilthon/tuse/blob/main/examples/notify.lua), panes, [titles](https://github.com/ethanhamilthon/tuse/blob/main/examples/rename.lua), and the rest.
 
 ## Skills, MCP, plugins
 
 Tuse ships none of these, on purpose.
 
-**Skills** are an over-engineered name for reusable prompts. Add one to your config:
+**[Skills](https://github.com/ethanhamilthon/tuse/blob/main/examples/skills.lua)** are an over-engineered name for reusable prompts. Add one to your config:
 
 ```lua
 return {
@@ -62,9 +64,9 @@ return {
 
 Then type `#showme` in the TUI.
 
-**MCP** is one of dozens of agent protocols, and we see no reason to build it into Tuse. If you have MCP servers you want to use, ask Tuse to wrap them in `functions`, and the agent will call them like any other Lua function.
+**[MCP](https://github.com/ethanhamilthon/tuse/blob/main/examples/mcp.lua)** is one of dozens of agent protocols, and we see no reason to build it into Tuse. If you have MCP servers you want to use, ask Tuse to wrap them in `functions`, and the agent will call them like any other Lua function.
 
-**Plugins** made everything more complicated, so we removed them. Write the few lines you need yourself, or ask Tuse to write them, and load them from `init.lua`.
+**Plugins** made everything more complicated, so we removed them. Write the few lines you need yourself, or ask Tuse to write them, and load them from `init.lua`. See [`examples/`](https://github.com/ethanhamilthon/tuse/tree/main/examples) for ready ones.
 
 ## Docs, license, contributing
 

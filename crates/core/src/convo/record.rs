@@ -90,6 +90,19 @@ pub enum Record {
         prompt: String,
         value: String,
     },
+    Job {
+        kind: String,
+        name: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        code: String,
+        status: String,
+        ms: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    Title {
+        new: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

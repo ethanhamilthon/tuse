@@ -78,7 +78,7 @@ mod tests {
             assert!(!summary.is_empty(), "{name} has no summary");
             assert!(index.contains(&format!("- {name} — ")), "missing {name}");
         }
-        assert_eq!(TOPICS.len(), 7);
+        assert_eq!(TOPICS.len(), 8);
         assert_eq!(index, docs(Some("  ")));
         for topic in ["functions", "tool", "commands", "hooks", "nope"] {
             assert!(docs(Some(topic)).starts_with(&format!("Unknown docs topic \"{topic}\".")));

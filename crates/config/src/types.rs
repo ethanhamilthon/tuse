@@ -14,14 +14,13 @@ pub struct Config {
     pub models: Vec<ModelDef>,
     #[serde(deserialize_with = "crate::de::list")]
     pub systems: Vec<String>,
-    pub prompts: BTreeMap<String, String>,
+    #[serde(deserialize_with = "crate::names::prompts")]
+    pub prompts: BTreeMap<String, Prompt>,
     #[serde(deserialize_with = "crate::names::functions")]
     pub functions: BTreeMap<String, FunctionKind>,
     pub hooks: BTreeMap<String, Hook>,
     #[serde(deserialize_with = "crate::names::commands")]
     pub commands: Vec<String>,
-    #[serde(deserialize_with = "crate::names::open")]
-    pub open: Vec<String>,
     #[serde(skip_deserializing)]
     pub path: String,
 }
@@ -65,6 +64,26 @@ pub struct Settings {
     )]
     pub compact_at: Option<u64>,
     pub ui: UiSettings,
+    #[serde(deserialize_with = "crate::names::open")]
+    pub open: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Prompt {
+    pub kind: PromptKind,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptKind {
+    #[default]
+    Text,
+    Function,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]

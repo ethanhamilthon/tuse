@@ -40,6 +40,7 @@ impl Session {
         }
         st.meta.title = text.clone();
         self.save_meta(&mut st);
+        self.push(&mut st, Record::Title { new: text.clone() });
         drop(st);
         self.name_change_hook((!prev.is_empty()).then_some(prev), text);
         Ok(())

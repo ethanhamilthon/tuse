@@ -1,7 +1,9 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-const TOPICS: &[&str] = &["usage", "connect", "config", "lua", "session", "json"];
+const TOPICS: &[&str] = &[
+    "usage", "connect", "config", "lua", "session", "json", "examples",
+];
 
 fn summary(path: &Path) -> String {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));

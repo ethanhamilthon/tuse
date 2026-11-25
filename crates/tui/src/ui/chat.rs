@@ -179,6 +179,31 @@ impl Chat {
         lines
     }
 
+    pub fn total(&mut self, width: usize, p: &Palette) -> usize {
+        let gap = p.ui.message_gap as usize;
+        let mut n = 0;
+        let mut parts: usize = 0;
+        for i in 0..self.pinned.len() {
+            let (_, text, cache) = &mut self.pinned[i];
+            if cache.as_ref().is_none_or(|(w, _)| *w != width) {
+                *cache = Some((width, crate::kit::rich::render::ui_markdown(text, width, p)));
+            }
+            let len = cache.as_ref().unwrap().1.len();
+            if len > 0 {
+                n += len;
+                parts += 1;
+            }
+        }
+        for i in 0..self.entries.len() {
+            let len = self.lines(i, width, p).len();
+            if len > 0 {
+                n += len;
+                parts += 1;
+            }
+        }
+        n + gap * parts.saturating_sub(1)
+    }
+
     pub fn window(
         &mut self,
         width: usize,

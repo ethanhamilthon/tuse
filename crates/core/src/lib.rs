@@ -15,6 +15,7 @@ pub use convo::record::{FileDiff, Record, UserInput};
 pub use convo::usage::Stats;
 pub use docs::docs;
 pub use event::{Event, InputId, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
+pub use id::elapsed_since;
 pub use mode::{Mode, Options, Start};
 pub use session::Session;
 pub use session::hooks::lanes::EVENTS;

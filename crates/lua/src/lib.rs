@@ -26,7 +26,7 @@ pub struct TaskStart {
 pub trait Host: Send + Sync + 'static {
     fn cwd(&self) -> PathBuf;
     fn action(&self, _what: &str) {}
-    fn task_start(&self, name: &str, from_lua_hook: bool) -> Result<TaskStart, String>;
+    fn task_start(&self, name: &str, code: &str, from_lua_hook: bool) -> Result<TaskStart, String>;
     fn task_track(&self, _id: &str, _name: &str) {}
     fn task_end(&self, id: &str, done: Done);
 }

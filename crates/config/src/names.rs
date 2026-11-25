@@ -83,9 +83,90 @@ pub const HOOK_EVENTS: [&str; 8] = [
     "lua_end",
 ];
 
-pub const BUILTIN_COMMANDS: [&str; 9] = [
-    "config", "new", "resume", "models", "tasks", "session", "trace", "reload", "quit",
+pub const BUILTIN_COMMANDS: [&str; 10] = [
+    "config", "new", "resume", "models", "tasks", "session", "trace", "reload", "stop", "quit",
 ];
+
+pub const TRACE_ROLES: [&str; 21] = [
+    "system",
+    "user",
+    "thinking",
+    "agent",
+    "lua",
+    "output",
+    "notification",
+    "notice",
+    "error",
+    "hook",
+    "task",
+    "command",
+    "open",
+    "compaction",
+    "usage",
+    "model",
+    "turn",
+    "title",
+    "show",
+    "pick",
+    "ask",
+];
+
+pub fn trace_roles<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    let list: Vec<String> = list(d)?;
+    if let Some(r) = list.iter().find(|r| !TRACE_ROLES.contains(&r.as_str())) {
+        return Err(D::Error::custom(format!("unknown trace role `{r}`")));
+    }
+    Ok(list)
+}
+
+pub fn model_scope<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    let list: Vec<String> = list(d)?;
+    for s in &list {
+        let (provider, id) = split_model(s);
+        if provider.is_empty() || id.is_empty() || s.chars().any(char::is_whitespace) {
+            return Err(D::Error::custom(format!(
+                "expected `provider/model` or `provider/*`, got `{s}`"
+            )));
+        }
+    }
+    Ok(list)
+}
+
+pub fn scope_matches(scope: &[String], model: &str) -> bool {
+    scope.is_empty()
+        || scope.iter().any(|s| match s.strip_suffix("/*") {
+            Some(p) => split_model(model).0 == p,
+            None => s == model,
+        })
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum PromptValue {
+    Text(String),
+    Full(crate::types::Prompt),
+}
+
+pub fn prompts<'de, D: Deserializer<'de>>(
+    d: D,
+) -> Result<BTreeMap<String, crate::types::Prompt>, D::Error> {
+    let map = BTreeMap::<String, PromptValue>::deserialize(d)?;
+    let mut out = BTreeMap::new();
+    for (name, v) in map {
+        if name.is_empty() || name.chars().any(char::is_whitespace) {
+            return Err(D::Error::custom(format!("`{name}`: invalid prompt name")));
+        }
+        let p = match v {
+            PromptValue::Text(body) => crate::types::Prompt {
+                body,
+                ..Default::default()
+            },
+            PromptValue::Full(p) => p,
+        };
+        out.insert(name, p);
+    }
+    Ok(out)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]

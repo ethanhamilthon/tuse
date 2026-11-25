@@ -58,10 +58,10 @@ mod tests {
     #[test]
     fn builds_from_a_table_and_checks_it() {
         let c = from_value(
-            json!({"settings": {"ui": {"tool_line": 7}},
+            json!({"settings": {"ui": {"tool_line": 7, "hide_trace": ["hook"], "scope_models": ["a/*"]}, "open": ["md"]},
                 "theme": {"accent": "blue", "info": "green"},
-                "prompts": {}, "systems": {}, "hooks": {"h": {"events": ["user_message"]}},
-                "open": ["md"]}),
+                "prompts": {"a": "x", "b": {"kind": "function", "args": ["p"]}},
+                "systems": {}, "hooks": {"h": {"events": ["user_message"]}}}),
             "t",
         )
         .unwrap();
@@ -69,7 +69,12 @@ mod tests {
         assert_eq!((t.accent.as_str(), t.info.as_str()), ("blue", "green"));
         assert_eq!(c.settings.ui.tool_line, 7);
         assert_eq!(c.hooks["h"].events, ["user_message"]);
-        assert_eq!(c.open, ["md"]);
+        assert_eq!(c.settings.open, ["md"]);
+        assert_eq!(c.prompts["a"].body, "x");
+        assert_eq!(c.prompts["b"].args, ["p"]);
+        assert!(crate::scope_matches(&c.settings.ui.scope_models, "a/m"));
+        assert!(!crate::scope_matches(&c.settings.ui.scope_models, "b/m"));
+        assert!(from_value(json!({"settings": {"ui": {"hide_trace": ["hooks"]}}}), "t").is_err());
         assert!(from_value(json!("x"), "t").is_err());
         assert!(from_value(json!({"unknown_key": 1}), "t").is_err());
     }

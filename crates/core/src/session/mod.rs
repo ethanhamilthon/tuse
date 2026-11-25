@@ -42,6 +42,8 @@ pub struct Session {
     pub(crate) http: tuse_api::HttpAgent,
     pub(crate) next_lua: AtomicU64,
     pub(crate) task_lua: Mutex<HashMap<String, (String, Instant)>>,
+    pub(crate) jobs: Mutex<HashMap<String, (&'static str, String, String)>>,
+    pub(crate) pending: Mutex<Vec<String>>,
     pub(crate) reload_lock: Mutex<()>,
     pub(crate) reload_after_hook: AtomicBool,
 }
@@ -148,15 +150,30 @@ impl Session {
         &self,
         names: &[String],
         strict: bool,
-    ) -> Result<Vec<(String, String)>, String> {
+    ) -> Result<Vec<(String, Option<String>, String)>, String> {
         let config = self.config();
         let mut out = vec![];
-        for n in names {
-            match config.prompts.get(n) {
-                Some(body) => out.push((n.clone(), body.clone())),
-                None if strict => return Err(format!("unknown prompt `{n}`")),
-                None => {}
+        for raw in names {
+            let (n, arg) = match raw.trim().split_once(char::is_whitespace) {
+                Some((n, a)) => (n, Some(a.trim().to_string())),
+                None => (raw.trim(), None),
+            };
+            let Some(p) = config.prompts.get(n) else {
+                if strict {
+                    return Err(format!("unknown prompt `{n}`"));
+                }
+                continue;
+            };
+            if let Some(a) = &arg
+                && !p.args.contains(a)
+            {
+                return Err(format!("prompt `{n}`: unknown arg `{a}`"));
             }
+            let body = match p.kind {
+                tuse_config::PromptKind::Text => p.body.clone(),
+                tuse_config::PromptKind::Function => self.prompt_body(n, arg.as_deref())?,
+            };
+            out.push((n.to_string(), arg, body));
         }
         Ok(out)
     }

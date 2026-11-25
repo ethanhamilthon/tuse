@@ -2,6 +2,7 @@
 pub enum Kind {
     Command,
     Prompt,
+    PromptArg(String),
     File,
     Resume,
     Model,
@@ -13,7 +14,10 @@ pub enum Kind {
 
 impl Kind {
     pub fn is_token(&self) -> bool {
-        matches!(self, Kind::Command | Kind::Prompt | Kind::File)
+        matches!(
+            self,
+            Kind::Command | Kind::Prompt | Kind::PromptArg(_) | Kind::File
+        )
     }
 
     pub fn is_searchable(&self) -> bool {
@@ -102,7 +106,7 @@ impl Picker {
     }
 }
 
-pub const COMMANDS: [(&str, &str); 9] = [
+pub const COMMANDS: [(&str, &str); 10] = [
     ("config", "show the resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
@@ -111,6 +115,7 @@ pub const COMMANDS: [(&str, &str); 9] = [
     ("session", "session info, usage and model"),
     ("trace", "everything in this session"),
     ("reload", "run the config file again"),
+    ("stop", "stop the turn, tasks, hooks and commands"),
     ("quit", "exit"),
 ];
 

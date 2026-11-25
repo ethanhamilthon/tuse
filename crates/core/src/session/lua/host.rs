@@ -33,9 +33,9 @@ impl Host for SessionHost {
         }
     }
 
-    fn task_start(&self, name: &str, from_lua_hook: bool) -> Result<TaskStart, String> {
+    fn task_start(&self, name: &str, code: &str, from_lua_hook: bool) -> Result<TaskStart, String> {
         let s = self.get().ok_or("session closed")?;
-        let t = s.tasks.create(name)?;
+        let t = s.tasks.create(name, code)?;
         if !from_lua_hook {
             self.task_track(&t.id, name);
         }
@@ -51,7 +51,8 @@ impl Host for SessionHost {
             .lock()
             .unwrap()
             .insert(id.to_string(), (exec_id.clone(), Instant::now()));
-        s.lua_start_hook(exec_id, "task", None, Some(display.to_string()));
+        let code = s.tasks.get(id).map(|t| t.code).filter(|c| !c.is_empty());
+        s.lua_start_hook(exec_id, "task", code, Some(display.to_string()));
     }
 
     fn task_end(&self, id: &str, d: Done) {
@@ -275,6 +276,7 @@ fn task(lua: &Lua, t: &TaskInfo, output: Option<String>) -> mlua::Result<Table> 
     r.set("status", t.status.as_str())?;
     r.set("started", t.started.as_str())?;
     r.set("ended", t.ended.as_str())?;
+    r.set("code", t.code.as_str())?;
     r.set("output", output)?;
     Ok(r)
 }

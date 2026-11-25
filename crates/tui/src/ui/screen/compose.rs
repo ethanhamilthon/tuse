@@ -61,6 +61,18 @@ impl App {
         let history_h = chat_h - overlay.len();
         self.overlay_rows = history_h..chat_h;
         if history_h > 0 {
+            if self.scroll > 0 {
+                let total = self.chat.total(inner, p);
+                if let Some((w, prev)) = self.chat_anchor
+                    && w == inner
+                    && total > prev
+                {
+                    self.scroll += total - prev;
+                }
+                self.chat_anchor = Some((inner, total));
+            } else {
+                self.chat_anchor = None;
+            }
             let (view, clamped) = self.chat.window(inner, p, self.scroll, history_h);
             self.scroll = clamped;
             screen.resize_with(history_h - view.len(), Vec::new);

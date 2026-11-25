@@ -15,7 +15,7 @@ A new session is written to disk only when its first message arrives. If you qui
 
 ## A turn
 
-A turn starts when you send a message (or a background task finishes) while the session is idle. It runs in steps:
+A turn starts when you send a message while the session is idle. A task that finishes while the session is idle does not start one: its message is sent with your next message. It runs in steps:
 
 1. Take all queued input: your messages (which fire `user_message` hooks) and task notifications.
 2. Build the request: the system prompt ([Lua](lua.md#what-the-agent-sees)), then your `systems`, the history, and the single `lua` tool.
@@ -27,7 +27,7 @@ The first line of your first message becomes the session title (up to 80 charact
 
 **Steering.** A message sent during a turn is queued and read at the next step. If a `lua` call is running at that moment, it is handed off to a background task so the agent can answer right away ([Lua](lua.md#background-tasks)). A queued message can be withdrawn until it is read.
 
-**Cancel** (`Esc`, or `turn.cancel`) stops the turn, its queued input, hooks, and commands right away. A running `lua` call is handed off, and other unfinished calls get `[interrupted: no output]`. The turn ends with `cancelled`, and `agent_message` fires with what was streamed so far. Background tasks keep running.
+**Cancel** (`Esc`, `/stop`, or `turn.cancel`) stops everything right away: the turn and its queued input, the running `lua` call (its result is `[cancelled]`), background tasks, hooks, commands, `open` handlers, and open `pick`/`ask` prompts. Other unfinished calls get `[interrupted: no output]`. The turn ends with `cancelled`, and `agent_message` fires with what was streamed so far.
 
 ## Compaction
 
@@ -69,11 +69,13 @@ The session log is a list of JSON records tagged by `t`:
 | `turn_end` | `elapsed_ms`, `calls`, `model`, `effort`, `cancelled` |
 | `ui_markdown` | `name`, `text`, `pin`, `removed` |
 | `ui_result` | `id`, `kind` (`picker`, `question`), `prompt`, `value` |
+| `job` | `kind` (`task`, `command`, `open`), `name`, `code?`, `status`, `ms`, `error?` |
+| `title` | `new` |
 
 `replay` holds provider reasoning data (`{provider, api, model, items}`). It is sent back only to the same provider, API, and model.
 
 ## Trace and session data
 
-`/trace`, `session().trace`, and JSON-RPC `session.trace` list `{role, summary, text}` entries. Entry 0 is `system`, the current full system prompt. After it come `user`, `thinking`, `agent`, `lua`, `output`, `notification`, `notice`, `error`, and `hook` entries. `show()` and `pick`/`ask` entries are not part of the trace.
+`/trace`, `session().trace`, and JSON-RPC `session.trace` list `{role, summary, text}` entries. Entry 0 is `system`, the current full system prompt. After it, every record has an entry with one of these roles: `user`, `thinking`, `agent`, `lua`, `output`, `notification`, `notice`, `error`, `hook`, `task`, `command`, `open` (with status, duration, error, and code), `compaction`, `usage`, `model`, `turn`, `title`, `show`, `pick`, and `ask`. `settings.ui.hide_trace` only hides roles in `/trace`.
 
 `/session` and `session()` show the live state: model and effort, `ctx` (the last request's `input + output`) and `ctx_size`, the `steps` and `turns` counts, and cumulative `usage` and cost, including resumed history.

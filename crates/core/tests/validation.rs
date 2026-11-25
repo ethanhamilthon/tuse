@@ -119,12 +119,16 @@ fn validates_config_and_preserves_state_on_failed_reload() {
             "commands.bad: expected function",
         ),
         (
-            "return { open = { ['.md'] = function() end } }",
-            "open: `.md`: extension must not start with `.`",
+            "return { settings = { open = { ['.md'] = function() end } } }",
+            "settings.open: `.md`: extension must not start with `.`",
         ),
         (
-            "return { open = { md = 'nope' } }",
-            "open.md: expected function",
+            "return { settings = { open = { md = 'nope' } } }",
+            "settings.open.md: expected function",
+        ),
+        (
+            "return { open = { md = function() end } }",
+            "open: moved to settings.open",
         ),
     ];
     for (src, want) in bad_cases {
@@ -148,7 +152,7 @@ fn validates_config_and_preserves_state_on_failed_reload() {
     fs::write(&cfg, r#"return { plugins = { "tuse/default" } }"#).unwrap();
     let err = s.reload().unwrap_err();
     assert!(err.contains("plugins: unknown key"), "{err}");
-    assert_eq!(s.config().prompts["keep"], "alive");
+    assert_eq!(s.config().prompts["keep"].body, "alive");
     s.run_command("ok").unwrap();
     let dl = std::time::Instant::now() + std::time::Duration::from_secs(3);
     while std::time::Instant::now() < dl {

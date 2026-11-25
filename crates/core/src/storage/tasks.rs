@@ -14,6 +14,7 @@ pub struct TaskInfo {
     pub started: String,
     pub ended: String,
     pub log: String,
+    pub code: String,
 }
 
 impl TaskInfo {
@@ -51,7 +52,7 @@ impl Tasks {
         }
     }
 
-    pub(crate) fn create(&self, name: &str) -> Result<tuse_lua::TaskStart, String> {
+    pub(crate) fn create(&self, name: &str, code: &str) -> Result<tuse_lua::TaskStart, String> {
         std::fs::create_dir_all(&self.dir).map_err(|e| format!("{}: {e}", self.dir.display()))?;
         let mut list = self.list.lock().unwrap();
         let id = format!("t{}", list.len() + 1);
@@ -68,6 +69,7 @@ impl Tasks {
             started: crate::id::now(),
             ended: String::new(),
             log: log.display().to_string(),
+            code: code.to_string(),
         });
         let cancel = Arc::new(AtomicBool::new(false));
         self.cancels

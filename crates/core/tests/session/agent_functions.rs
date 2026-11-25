@@ -169,12 +169,12 @@ return {
       t.show("cmd", out, false)
     end,
   },
-  open = {
+  settings = { open = {
     md = function(path)
       assert(my_secret_fn == nil)
       t.show("opened", t.sh("printf open-ok").out .. ":" .. path, false)
     end,
-  },
+  } },
   hooks = {
     check_hook = {
       events = { "start" },

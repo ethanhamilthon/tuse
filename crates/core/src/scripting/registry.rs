@@ -29,5 +29,20 @@ pub(crate) fn command_of(lua: &Lua, name: &str) -> Option<Function> {
 
 pub(crate) fn open_of(lua: &Lua, ext: &str) -> Option<Function> {
     let t: Table = lua.named_registry_value("tuse.config").ok()?;
-    t.get::<Table>("open").ok()?.get(ext).ok()
+    t.get::<Table>("settings")
+        .ok()?
+        .get::<Table>("open")
+        .ok()?
+        .get(ext)
+        .ok()
+}
+
+pub(crate) fn prompt_of(lua: &Lua, name: &str) -> Option<Function> {
+    let t: Table = lua.named_registry_value("tuse.config").ok()?;
+    t.get::<Table>("prompts")
+        .ok()?
+        .get::<Table>(name)
+        .ok()?
+        .get("run")
+        .ok()
 }

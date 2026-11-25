@@ -41,7 +41,7 @@ Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~
 
 - `sh(cmd, {timeout=nil, cwd=nil, env={}})`: Runs `bash -c cmd` with stdin closed, merging stdout and stderr. Returns `{out, code, ok, timed_out}` plus `:lines()`. `tostring(r)` adds `[exit code N]` or `[timed out]`. `code` is `nil` when the process was killed. `env` is added to the inherited environment. The command is killed (with its whole process group) on timeout, at the caller's deadline, or on cancel. Use long strings `sh([=[ … ]=])` for commands with quotes or backslashes.
 - `spawn(fn, name)`: Runs `fn` as a background task with no deadline and returns its id (`t1`, `t2`, …).
-- `task_get(id, lines=50)`: `{id, name, status, started, ended, output}`, where `output` is the end of the log.
+- `task_get(id, lines=50)`: `{id, name, status, started, ended, code, output}`, where `code` is the source of the task's function and `output` is the end of the log.
 - `task_stop(id)`: Stops a task.
 - `task_list()`: Lists all tasks of the session.
 
@@ -78,11 +78,11 @@ end, "tests")
 
 - A task shares the VM and its globals. `print` writes to `~/.tuse/<session>/tasks/<id>.log`, and the return value or error is appended at the end.
 - Status is `running`, `done`, `failed`, or `stopped`. `started` and `ended` are UTC timestamps, with `ended` empty while the task runs.
-- When a task ends on its own, the agent gets a message, which starts a turn if the session is idle:
+- When a task ends on its own, the agent gets a message. A running turn takes it at its next step. An idle session does not start a turn: the message waits and goes with your next message:
   ``<task>Task t1 (tests) finished. Last line: tests passed. Output: `task_get("t1").output`.</task>``
   The last line comes from the return value or the error, not from the log. Stopped tasks send no message.
-- **Handoff.** If you steer or press Esc while a `lua` tool call runs, the whole call keeps running as a task named after its run, such as `lua-3`. Locals, a running `sh`, and the rest of the script all continue. The tool result becomes `[continued in background: tN]`. A call is handed off at most once.
-- Stop tasks with `task_stop`, with `Ctrl+X` in `/tasks`, or with JSON-RPC `tasks.stop`. Esc and reload do not stop tasks, but closing or switching the session does.
+- **Handoff.** If you steer while a `lua` tool call runs, the whole call keeps running as a task named after its run, such as `lua-3`. Locals, a running `sh`, and the rest of the script all continue. The tool result becomes `[continued in background: tN]`. A call is handed off at most once.
+- Stop tasks with `task_stop`, with `Ctrl+X` in `/tasks`, or with JSON-RPC `tasks.stop`. Esc, `/stop`, `turn.cancel`, and closing or switching the session stop all of them. Reload does not.
 
 ## Hooks
 

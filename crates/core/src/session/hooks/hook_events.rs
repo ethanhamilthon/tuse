@@ -79,6 +79,13 @@ impl Session {
         code: Option<String>,
         name: Option<String>,
     ) {
+        if kind != "tool" {
+            let job_code = code.clone().unwrap_or_default();
+            self.jobs.lock().unwrap().insert(
+                id.clone(),
+                (kind, name.clone().unwrap_or_default(), job_code),
+            );
+        }
         self.hook(
             "lua_start",
             json!({"event": "lua_start", "id": id, "kind": kind, "code": code, "name": name}),
@@ -94,6 +101,18 @@ impl Session {
         result: Option<String>,
         error: Option<String>,
     ) {
+        if let Some((kind, name, code)) = self.jobs.lock().unwrap().remove(&id) {
+            let r = crate::convo::record::Record::Job {
+                kind: kind.into(),
+                name,
+                code,
+                status: status.into(),
+                ms: elapsed.as_millis() as u64,
+                error: error.clone(),
+            };
+            let mut st = self.state.lock().unwrap();
+            self.push(&mut st, r);
+        }
         self.hook(
             "lua_end",
             json!({

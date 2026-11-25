@@ -1,10 +1,9 @@
-use crate::convo::compaction;
-use crate::convo::history::{estimate_tokens, messages};
 use crate::convo::record::Record;
+use crate::convo::wire;
 use crate::event::Event;
-use crate::id;
 use crate::prompt;
 use crate::session::Session;
+use crate::session::bus::Signal;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tuse_api::{ApiType, Client, Request};
@@ -18,11 +17,12 @@ enum Step {
 
 impl Session {
     pub(crate) fn turn(self: Arc<Self>, generation: u64, cancel: Arc<AtomicBool>) {
+        self.wait_lifecycle();
         {
             let Some(mut st) = self.lock_live(generation) else {
                 return;
             };
-            let auto_title = if st.meta.title.is_empty() {
+            let auto_title = if self.cached(&mut st).meta.title.is_empty() {
                 st.queue
                     .iter()
                     .find(|(_, i)| !i.notification)
@@ -30,13 +30,12 @@ impl Session {
             } else {
                 None
             };
-            st.turn_error = None;
             drop(st);
             if let Some(title) = auto_title {
                 let _ = self.set_name(&title);
             }
         }
-        self.emit(Event::TurnStart);
+        self.emit(Signal::TurnStart);
         loop {
             match self.step(generation, &cancel) {
                 Step::Continue => continue,
@@ -55,10 +54,10 @@ impl Session {
         if !st.queue.is_empty() {
             return false;
         }
-        st.turn_error = None;
         st.busy = false;
         let (elapsed, calls) = (st.turn_start.elapsed(), st.calls);
-        let (model, effort) = (st.model.clone(), st.effort.clone());
+        let cache = self.cached(&mut st);
+        let (model, effort) = (cache.meta.model.clone(), cache.meta.effort.clone());
         let r = Record::TurnEnd {
             elapsed_ms: elapsed.as_millis() as u64,
             calls,
@@ -66,62 +65,69 @@ impl Session {
             effort: effort.clone(),
             cancelled: false,
         };
-        self.push(&mut st, r);
-        self.save_meta(&mut st);
-        drop(st);
-        self.emit(Event::TurnEnd {
-            elapsed,
-            calls,
-            model,
-            effort,
-            cancelled: false,
-        });
+        self.record(
+            &mut st,
+            &[r],
+            [Event::TurnEnd {
+                elapsed,
+                calls,
+                model,
+                effort,
+                cancelled: false,
+            }],
+        );
         true
     }
 
     fn step(self: &Arc<Self>, generation: u64, cancel: &Arc<AtomicBool>) -> Step {
-        let config = self.config();
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
         };
         st.partial.clear();
-        let mut typed = vec![];
-        for (id, input) in std::mem::take(&mut st.queue) {
+        st.reasoning.clear();
+        let inputs = std::mem::take(&mut st.queue);
+        let mut hooks = vec![];
+        for (id, input) in inputs {
             if input.notification {
-                self.emit(Event::Notification(input.text.clone()));
-                self.push(&mut st, Record::Notification { text: input.text });
+                let event = Event::Notification(input.text.clone());
+                self.record(
+                    &mut st,
+                    &[Record::Notification { text: input.text }],
+                    [event],
+                );
                 continue;
             }
-            self.emit(Event::User {
+            let event = Event::User {
                 id,
                 text: input.text.clone(),
                 images: input.images.len(),
-            });
-            let is_first = !st.records.iter().any(|r| matches!(r, Record::User { .. }));
-            typed.push((input.text.clone(), is_first));
+            };
             let r = Record::User {
                 text: input.text,
                 context: input.context,
                 images: input.images,
-                at: id::now(),
             };
-            self.push(&mut st, r);
+            if self.record(&mut st, &[r], [event]) {
+                hooks.push(self.simple_hook("user_message"));
+            }
         }
-        let system = prompt::system_prompt(&config, st.bounds.drop > 0);
-        let (model, effort) = (st.model.clone(), st.effort.clone());
         drop(st);
-        for (text, is_first) in typed {
-            self.user_message_hook(text, is_first);
+        for hook in hooks {
+            let _ = hook.recv();
         }
-        let Some(st) = self.lock_live(generation) else {
+        let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
         };
+        let config = self.config();
+        let cache = self.cached(&mut st);
+        let model = cache.meta.model.clone();
+        let effort = cache.meta.effort.clone();
         let (provider, raw_model) = split_model(&model);
         let req = Request {
             provider: provider.to_string(),
             model: raw_model.to_string(),
-            system,
-            messages: messages(&st.records, st.bounds),
+            system: wire::system(&cache.records),
+            messages: wire::messages(&cache.records),
             tools: prompt::tools(&config),
             effort: (effort != "default").then_some(effort),
         };
@@ -138,17 +144,28 @@ impl Session {
             &conn.api_key,
             ApiType::from_stored(conn.api_type()),
         );
+        let Some(mut st) = self.lock_live(generation) else {
+            return Step::Stale;
+        };
+        st.streaming = true;
+        drop(st);
         let result = client.complete(
             &req,
             tuse_api::RETRY_DELAYS.len(),
             cancel,
-            &mut |d| self.on_delta(d),
+            &mut |d| self.on_delta(generation, d),
             &mut |r| {
-                self.emit(Event::StreamReset);
-                self.emit(Event::Flash(format!(
-                    "Retry {}/{} in {}s: {}",
-                    r.attempt, r.max, r.delay, r.error
-                )));
+                if let Some(mut st) = self.lock_live(generation) {
+                    st.partial.clear();
+                    st.reasoning.clear();
+                    let text =
+                        format!("Retry {}/{} in {}s: {}", r.attempt, r.max, r.delay, r.error);
+                    self.record(
+                        &mut st,
+                        &[Record::Flash { text: text.clone() }],
+                        [Event::StreamReset, Event::Flash(text)],
+                    );
+                }
             },
         );
         let reply = match result {
@@ -159,38 +176,41 @@ impl Session {
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
         };
-        if let Some(u) = reply.usage {
-            st.context = u.input + u.output;
-            self.push(
-                &mut st,
-                Record::Usage {
-                    model: model.clone(),
-                    usage: u,
-                    llm: false,
-                },
-            );
+        st.streaming = false;
+        let mut records = Vec::with_capacity(2);
+        if let Some(usage) = reply.usage {
+            records.push(Record::Usage {
+                model,
+                usage,
+                llm: false,
+            });
         }
-        let calls = reply.tool_calls.clone();
-        let r = Record::Assistant {
+        let calls = reply.tool_calls;
+        records.push(Record::Assistant {
             text: reply.text.clone(),
             reasoning: reply.reasoning,
             tool_calls: calls.clone(),
             replay: reply.replay,
-            at: id::now(),
-        };
-        self.push(&mut st, r);
+            cancelled: false,
+        });
+        if !self.record(
+            &mut st,
+            &records,
+            [Event::Assistant { text: reply.text }, Event::Usage],
+        ) {
+            return Step::Done;
+        }
         st.partial.clear();
+        st.reasoning.clear();
+        st.tool_step = !calls.is_empty();
         drop(st);
-        if !reply.text.trim().is_empty() || !calls.is_empty() {
-            let status = if calls.is_empty() {
+        let _ = self
+            .agent_message_hook(if calls.is_empty() {
                 "finished"
             } else {
                 "working"
-            };
-            self.agent_message_hook(reply.text.clone(), status, &calls);
-        }
-        self.emit(Event::Assistant { text: reply.text });
-        self.emit(Event::Usage);
+            })
+            .recv();
         if calls.is_empty() {
             return Step::Done;
         }
@@ -201,49 +221,29 @@ impl Session {
                 Some(false) => {}
             }
         }
-        self.compact(generation, &config);
-        Step::Continue
-    }
-
-    fn compact(&self, generation: u64, config: &tuse_config::Config) {
-        let Some(mut st) = self.lock_live(generation) else {
-            return;
-        };
-        let threshold = config.compact_at(config.model_def(&st.model));
-        if threshold == 0 || st.context < threshold {
-            return;
+        if let Some(mut st) = self.lock_live(generation) {
+            self.end_tool_step(&mut st);
         }
-        let Some(b) = compaction::bounds(&st.records, threshold, st.bounds) else {
-            return;
-        };
-        st.bounds = b;
-        self.push(
-            &mut st,
-            Record::Compaction {
-                prune: b.prune,
-                drop: b.drop,
-            },
-        );
-        let system = prompt::system_prompt(config, true);
-        st.context = estimate_tokens(&system, &messages(&st.records, b));
-        let text = format!(
-            "Context compacted at {} tokens; now about {}.",
-            crate::text::tokens(threshold),
-            crate::text::tokens(st.context)
-        );
-        self.push(&mut st, Record::Notice { text: text.clone() });
-        drop(st);
-        self.emit(Event::Notice(text));
+        Step::Continue
     }
 
     fn fail(self: &Arc<Self>, generation: u64, text: String) -> Step {
         let Some(mut st) = self.lock_live(generation) else {
             return Step::Stale;
         };
-        st.turn_error = Some(text.clone());
-        self.push(&mut st, Record::Error { text: text.clone() });
+        st.streaming = false;
+        let saved = self.record(
+            &mut st,
+            &[Record::Error { text: text.clone() }],
+            [Event::Error(text.clone())],
+        );
         drop(st);
-        self.emit(Event::Error(text));
+        if saved {
+            self.hook(
+                "turn_error",
+                serde_json::json!({"event": "turn_error", "error": text}),
+            );
+        }
         Step::Done
     }
 }

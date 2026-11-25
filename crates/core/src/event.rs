@@ -85,6 +85,7 @@ pub enum Event {
     Usage,
     Models,
     Reloaded,
+    HistoryReplaced,
     UiMarkdown {
         name: String,
         text: String,

@@ -177,7 +177,7 @@ return {
   } },
   hooks = {
     check_hook = {
-      events = { "start" },
+      events = { "session_created" },
       run = function()
         assert(my_secret_fn == nil)
         local id = t.spawn(function()

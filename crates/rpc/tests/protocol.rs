@@ -56,28 +56,24 @@ fn handshake_setters_and_model_refresh() {
     let r = call(&tx, &out, 3, "initialize", json!({}));
     assert_eq!(r["result"]["protocolVersion"], 1, "{r}");
 
-    let r = call(
-        &tx,
-        &out,
-        4,
+    for (i, method) in [
         "config.set",
-        json!({"key": "effort", "value": "huge"}),
-    );
-    assert_eq!(r["error"]["code"], -32602, "{r}");
-    let r = call(
-        &tx,
-        &out,
-        5,
-        "config.set",
-        json!({"key": "model", "value": "nope/x"}),
-    );
-    assert_eq!(r["error"]["code"], -32000, "{r}");
+        "session.set",
+        "session.records",
+        "session.trace",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let r = call(&tx, &out, 20 + i as u64, method, json!({}));
+        assert_eq!(r["error"]["code"], -32601, "{r}");
+    }
     let r = call(
         &tx,
         &out,
         6,
-        "config.set",
-        json!({"key": "effort", "value": "high"}),
+        "model.set",
+        json!({"model": "p/m", "effort": "high"}),
     );
     assert_eq!(r["result"], json!(null), "{r}");
     let r = call(&tx, &out, 7, "model.get", json!({}));

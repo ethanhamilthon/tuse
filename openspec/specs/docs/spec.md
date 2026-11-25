@@ -5,6 +5,8 @@ Documentation topics shared by the agent (`docs()`) and the site, and the agent 
 
 ## Requirements
 
+1
+
 ### Requirement: Documentation topics
 Tuse SHALL ship exactly eight documentation topics, in this order: `readme`, `usage`, `connect`, `config`, `lua`, `session`, `json`, `examples`. `readme` SHALL be the content of `README.md` and every other topic the content of `docs/<topic>.md`, embedded at build time. The build MUST fail when a listed page is missing or when `docs/` holds any other `.md` file.
 
@@ -40,7 +42,7 @@ The topics SHALL document every public surface: `usage` every CLI subcommand and
 - **THEN** it fails if a CLI subcommand or slash command is missing from `docs("usage")`, a host function from `docs("lua")`, or a JSON-RPC method from `docs("json")`
 
 ### Requirement: Lua docs end with the agent's context
-`docs/lua.md` SHALL end with a `## What the agent sees` section that holds, verbatim in `text` code blocks, the system prompt and the `lua` tool description that Tuse produces for the default config. The section MUST also say that disabled functions drop out and that `systems` strings and the compaction note are appended.
+`docs/lua.md` SHALL end with a `## What the agent sees` section that holds, verbatim in `text` code blocks, the system prompt and the `lua` tool description that Tuse produces for the default config. The section MUST also say that disabled functions drop out, that `systems` strings are appended, and that the prompt is the first `system` history record, rebuilt on new, resume, and config load.
 
 #### Scenario: Docs match the code
 - **WHEN** the prompt template in the code or the tail of `docs/lua.md` changes so that they no longer match
@@ -50,9 +52,13 @@ The topics SHALL document every public surface: `usage` every CLI subcommand and
 - **WHEN** a session disables `sh` and the agent calls `docs("lua")`
 - **THEN** the text starts with `Disabled in this session: sh.` and its `What the agent sees` section contains no `sh(` reference
 
-### Requirement: System prompt template lives in code
-The system prompt template SHALL be loaded from a file inside `crates/core/src`, not from `docs/`. The prompt text and the placeholder rules SHALL stay unchanged.
+#### Scenario: No compaction note
+- **WHEN** the agent calls `docs("lua")`
+- **THEN** the section does not mention compaction
 
-#### Scenario: Prompt unchanged
+### Requirement: System prompt template lives in code
+The system prompt template SHALL be loaded from a file inside `crates/core/src`, not from `docs/`. The template and its placeholder rules SHALL be the source of the rendered prompt.
+
+#### Scenario: Prompt rendered
 - **WHEN** a session starts with the default config
-- **THEN** its system prompt is identical to the one built from the old `docs/system-prompt.md`
+- **THEN** its first system history record contains the rendered prompt

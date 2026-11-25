@@ -20,7 +20,7 @@ fn wait_turn(rx: &std::sync::mpsc::Receiver<Event>) {
 }
 
 #[test]
-fn session_snapshot_trace_and_open_handlers() {
+fn session_snapshot_history_and_open_handlers() {
     let long_arg = "x".repeat(400);
     let check_code = r#"
 local t = require("tuse")
@@ -35,7 +35,7 @@ assert(s2.usage.input >= 10 and s2.usage.output >= 3 and s2.usage.cost > 0)
 assert(s2.steps >= 1 and s2.turns >= 0)
 local dump = t.json.encode(s2)
 assert(not dump:find("sk-super-secret", 1, true), "must never expose credentials")
-return #s2.trace
+return #s2.history
 "#;
     let addr = common::provider(vec![
         Reply::Text("first reply"),
@@ -58,7 +58,7 @@ return #s2.trace
         &cfg,
         format!(
             r#"return {{
-  models = {{{{ name = "p/m", display = "M", window = 100000, compact_at = 60000,
+  models = {{{{ name = "p/m", display = "M", window = 100000,
     prices = {{ input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 }} }}}},
   settings = {{ open = {{
     md = function(path)
@@ -109,22 +109,25 @@ return #s2.trace
     let snap = s2.snapshot(true);
     assert_eq!(snap.turns, Some(2));
     assert_eq!(snap.steps, Some(3));
-    let trace = snap.trace.as_ref().unwrap();
-    assert!(trace.iter().any(|t| t.role == "user" && t.text == long_arg));
+    let history = snap.history.as_ref().unwrap();
     assert!(
-        trace
+        history
             .iter()
-            .any(|t| t.role == "hook" && t.text.contains(&long_arg))
+            .any(|t| t.role == "user" && t.detail == long_arg)
     );
     assert!(
-        trace
-            .iter()
-            .any(|t| t.role == "agent" && t.text == "first reply")
+        history.iter().any(|t| t.role == "hook"
+            && t.fields["vars"] == serde_json::json!({"event": "user_message"}))
     );
     assert!(
-        trace
+        history
             .iter()
-            .any(|t| t.role == "agent" && t.text == "second reply")
+            .any(|t| t.role == "agent" && t.detail == "first reply")
+    );
+    assert!(
+        history
+            .iter()
+            .any(|t| t.role == "agent" && t.detail == "second reply")
     );
 
     s2.open_path(std::path::Path::new("notes/README.MD"));
@@ -171,7 +174,7 @@ return #s2.trace
     );
     std::fs::write(&cfg, doubled).unwrap();
     s2.reload().unwrap();
-    assert!((s2.stats().cost - old_cost * 2.0).abs() < 1e-9);
+    assert!((s2.stats().cost - old_cost).abs() < 1e-9);
     s2.close();
     common::cleanup(&dir);
 }

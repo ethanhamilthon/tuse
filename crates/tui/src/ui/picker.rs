@@ -8,7 +8,7 @@ pub enum Kind {
     Model,
     Effort(String),
     Task,
-    Trace,
+    History,
     LuaPicker(u64),
 }
 
@@ -113,7 +113,7 @@ pub const COMMANDS: [(&str, &str); 10] = [
     ("models", "switch model and effort"),
     ("tasks", "background tasks"),
     ("session", "session info, usage and model"),
-    ("trace", "everything in this session"),
+    ("history", "everything in this session"),
     ("reload", "run the config file again"),
     ("stop", "stop the turn, tasks, hooks and commands"),
     ("quit", "exit"),

@@ -1,5 +1,4 @@
 use crate::convo::record::Record;
-use crate::event::Event;
 use crate::session::Session;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,7 +11,9 @@ use tuse_lua::{Done, Job, Out, Stop};
 impl Session {
     pub fn run_command(self: &Arc<Self>, name: &str) -> Result<(), String> {
         if !self.config().commands.iter().any(|c| c == name) {
-            return Err(format!("unknown command /{name}"));
+            let error = format!("unknown command /{name}");
+            self.error(error.clone());
+            return Err(error);
         }
         let cancel = Arc::new(AtomicBool::new(false));
         {
@@ -25,18 +26,19 @@ impl Session {
         let cmd = name.to_string();
         let exec_id = self.next_lua_id();
         let started = Instant::now();
-        self.lua_start_hook(exec_id.clone(), "command", None, Some(cmd.clone()));
         self.vm.post(move |lua| {
+            if let Some(s) = weak.upgrade() {
+                let code = crate::scripting::registry::command_of(lua, &cmd)
+                    .map(|f| tuse_lua::source_of(&f, None));
+                s.lua_start_hook(exec_id.clone(), "command", code, Some(cmd.clone()));
+            }
             let (s2, c2, flag, id2) = (weak.clone(), cmd.clone(), cancel.clone(), exec_id.clone());
             let done = move |_: &Lua, d: Done| {
                 flag.store(true, Ordering::Relaxed);
                 if let Some(s) = s2.upgrade() {
                     s.lua_end_done(&id2, "command", started.elapsed(), &d);
                     if !d.ok && d.stop != Some("cancelled") {
-                        s.emit(Event::Error(format!(
-                            "/{c2}: {}",
-                            crate::text::error_line(&d.text)
-                        )));
+                        s.error(format!("/{c2}: {}", crate::text::error_line(&d.text)));
                     }
                 }
             };
@@ -66,7 +68,7 @@ impl Session {
                         None,
                         Some(msg.clone()),
                     );
-                    s.emit(Event::Error(format!("/{cmd}: {msg}")));
+                    s.error(format!("/{cmd}: {msg}"));
                 }
             }
         });
@@ -151,16 +153,15 @@ impl Session {
             .map_err(|e| format!("llm: {e}"))?;
         if let Some(u) = reply.usage {
             let mut st = self.state.lock().unwrap();
-            self.push(
+            self.record(
                 &mut st,
-                Record::Usage {
+                &[Record::Usage {
                     model: model.to_string(),
                     usage: u,
                     llm: true,
-                },
+                }],
+                [crate::Event::Usage],
             );
-            drop(st);
-            self.emit(crate::Event::Usage);
         }
         Ok(reply.text)
     }

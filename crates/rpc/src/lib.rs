@@ -67,6 +67,7 @@ pub fn serve(
             }
         }
     });
+    let mut shutdown = false;
     loop {
         if stop.load(Ordering::Relaxed) {
             break;
@@ -99,6 +100,7 @@ pub fn serve(
                 continue;
             }
             "shutdown" => {
+                shutdown = true;
                 if let Some(id) = req.id {
                     out.send(&answer(id, Ok(Value::Null)));
                 }
@@ -147,7 +149,11 @@ pub fn serve(
             out.send(&answer(id, reply));
         }
     }
-    session.close();
+    if shutdown {
+        session.close();
+    } else {
+        session.disconnect();
+    }
     std::thread::sleep(Duration::from_millis(100));
     done.store(true, Ordering::Relaxed);
     let _ = pump.join();

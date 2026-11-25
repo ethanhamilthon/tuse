@@ -1,10 +1,10 @@
 use crate::mode::Mode;
 use crate::session::Session;
-use crate::session::view::trace::TraceItem;
+use crate::session::view::history::HistoryItem;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tuse_config::{ModelDef, Prices, split_model};
-use tuse_lua::mlua::{self, Lua, Value};
+use tuse_lua::mlua::{self, Lua, LuaSerdeExt, Value};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionSnapshot {
@@ -15,6 +15,10 @@ pub struct SessionSnapshot {
     pub home: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -36,7 +40,7 @@ pub struct SessionSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub turns: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub trace: Option<Vec<TraceItem>>,
+    pub history: Option<Vec<HistoryItem>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,8 +62,6 @@ pub struct ModelInfoSnapshot {
     pub display: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub compact_at: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prices: Option<PricesSnapshot>,
 }
@@ -89,7 +91,6 @@ impl From<&ModelDef> for ModelInfoSnapshot {
             name: m.name.clone(),
             display: (!m.display.is_empty()).then(|| m.display.clone()),
             window: (m.window > 0).then_some(m.window),
-            compact_at: m.compact_at,
             prices: m.prices.as_ref().map(Into::into),
         }
     }
@@ -103,6 +104,8 @@ impl SessionSnapshot {
             cwd: cwd.display().to_string(),
             home: home.display().to_string(),
             id: None,
+            started: None,
+            created: None,
             name: None,
             model: None,
             provider: None,
@@ -113,13 +116,16 @@ impl SessionSnapshot {
             model_info: None,
             steps: None,
             turns: None,
-            trace: None,
+            history: None,
         }
     }
 
     pub fn to_lua(&self, lua: &Lua) -> mlua::Result<Value> {
         let v = serde_json::to_value(self).map_err(mlua::Error::runtime)?;
-        tuse_lua::to_lua(lua, &v)
+        lua.to_value_with(
+            &v,
+            mlua::serde::SerializeOptions::new().serialize_none_to_null(false),
+        )
     }
 }
 
@@ -131,24 +137,29 @@ pub(crate) struct LoadCtx {
 }
 
 impl Session {
-    pub fn snapshot(&self, include_trace: bool) -> SessionSnapshot {
+    pub fn snapshot(&self, include_history: bool) -> SessionSnapshot {
         let config = self.config();
-        let (model_full, effort) = self.model();
-        let name = self.title();
-        let stats = self.stats();
+        let cache = self.cached(&mut self.state.lock().unwrap());
+        let meta = &cache.meta;
+        let (model_full, effort) = (meta.model.clone(), meta.effort.clone());
+        let name = meta.title.clone();
+        let stats = &cache.stats;
         let def = config.model_def(&model_full);
         let provider = {
             let p = split_model(&model_full).0;
             (!p.is_empty()).then(|| p.to_string())
         };
         let ctx_size = def.filter(|d| d.window > 0).map(|d| d.window);
-        let trace = include_trace.then(|| self.trace());
+        let history =
+            include_history.then(|| cache.records.iter().map(HistoryItem::from).collect());
         SessionSnapshot {
             mode: self.mode.name(),
             configpath: (!config.path.is_empty()).then(|| config.path.clone()),
             cwd: self.cwd.display().to_string(),
             home: tuse_config::tuse_home().display().to_string(),
-            id: Some(self.id.clone()),
+            id: Some(meta.id.clone()),
+            started: Some(meta.started),
+            created: Some(meta.created.clone()),
             name: (!name.is_empty()).then_some(name),
             model: (!model_full.is_empty()).then_some(model_full),
             provider,
@@ -166,7 +177,7 @@ impl Session {
             model_info: def.map(Into::into),
             steps: Some(stats.steps),
             turns: Some(stats.turns),
-            trace,
+            history,
         }
     }
 }

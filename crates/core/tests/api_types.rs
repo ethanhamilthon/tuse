@@ -58,18 +58,12 @@ fn wait_turn(rx: &std::sync::mpsc::Receiver<Event>) -> Vec<Event> {
 }
 
 #[test]
-fn replay_resume_provider_isolation_truncation_and_migration() {
+fn replay_resume_provider_isolation_and_truncation() {
     let dir = std::env::temp_dir().join(format!("tuse-api-types-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let home = dir.join("home");
     std::fs::create_dir_all(home.join(".tuse")).unwrap();
     unsafe { std::env::set_var("HOME", &home) };
-
-    rusqlite::Connection::open(home.join(".tuse/tuse.db")).unwrap().execute_batch(
-        "CREATE TABLE providers (name TEXT PRIMARY KEY, base_url TEXT NOT NULL, api_key TEXT NOT NULL);
-         INSERT INTO providers VALUES ('legacy', 'http://127.0.0.1:1', 'k');",
-    ).unwrap();
-    assert_eq!(tuse_core::Providers::list().unwrap()[0].api, "openai-chat");
 
     let (au, ab) = mock(vec![
         j(
@@ -135,6 +129,31 @@ fn replay_resume_provider_isolation_truncation_and_migration() {
     wait_turn(&rx);
     assert!(ab.lock().unwrap()[2].to_string().contains("SIG1"));
 
+    std::fs::write(
+        dir.join("tuse.lua"),
+        r#"return { commands = { rewrite = function()
+      local t = require('tuse')
+      local h = t.session().history
+      t.set_session{ history = h }
+      for _, r in ipairs(h) do
+        if r.role == 'agent' and r.replay then r.text = 'edited'; break end
+      end
+      t.set_session{ history = h }
+    end } }"#,
+    )
+    .unwrap();
+    s.reload().unwrap();
+    s.run_command("rewrite").unwrap();
+    loop {
+        match rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap() {
+            Event::HistoryReplaced => break,
+            Event::Error(e) => panic!("{e}"),
+            _ => {}
+        }
+    }
+    assert!(s.history().iter().any(|r| r.role == "agent"
+        && r.fields["text"] == "edited"
+        && !r.fields.contains_key("replay")));
     s.select_model("anth2/claude-sonnet-4", "high", false)
         .unwrap();
     s.submit(UserInput::text("s3"));

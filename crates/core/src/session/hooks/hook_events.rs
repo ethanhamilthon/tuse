@@ -2,74 +2,43 @@ use crate::session::Session;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
-use tuse_api::ToolCall;
-use tuse_config::split_model;
 use tuse_lua::Done;
 
-fn non_empty(s: &str) -> Option<&str> {
-    (!s.is_empty()).then_some(s)
-}
-
 impl Session {
-    pub(crate) fn start_hook(self: &Arc<Self>, reason: &'static str, is_new: bool, restored: bool) {
-        self.hook(
-            "start",
-            json!({
-                "event": "start",
-                "reason": reason,
-                "is_new": is_new,
-                "restored": restored,
-            }),
-        );
+    pub(crate) fn simple_hook(
+        self: &Arc<Self>,
+        event: &'static str,
+    ) -> std::sync::mpsc::Receiver<()> {
+        self.hook(event, json!({"event": event}))
     }
 
-    pub(crate) fn user_message_hook(self: &Arc<Self>, text: String, is_first: bool) {
-        self.hook(
-            "user_message",
-            json!({"event": "user_message", "text": text, "is_first": is_first}),
-        );
+    pub(crate) fn lifecycle(self: &Arc<Self>, launch: bool, restored: bool) {
+        let first = self.simple_hook("config_load");
+        let s = self.clone();
+        let job = std::thread::spawn(move || {
+            let _ = first.recv();
+            if launch {
+                let _ = s.simple_hook("process_start").recv();
+            }
+            let _ = s
+                .simple_hook(if restored {
+                    "session_resumed"
+                } else {
+                    "session_created"
+                })
+                .recv();
+        });
+        *self.lifecycle_job.lock().unwrap() = Some(job);
     }
 
     pub(crate) fn agent_message_hook(
         self: &Arc<Self>,
-        text: String,
         status: &'static str,
-        calls: &[ToolCall],
-    ) {
-        let tc = (!calls.is_empty()).then(|| {
-            calls
-                .iter()
-                .map(|c| json!({"id": c.id, "name": c.name, "arguments": c.arguments}))
-                .collect::<Vec<_>>()
-        });
+    ) -> std::sync::mpsc::Receiver<()> {
         self.hook(
             "agent_message",
-            json!({"event": "agent_message", "text": text, "status": status, "tool_calls": tc}),
-        );
-    }
-
-    pub(crate) fn model_change_hook(self: &Arc<Self>, pm: &str, pe: &str, nm: &str, ne: &str) {
-        let side = |m: &str, e: &str| {
-            let (p, _) = split_model(m);
-            crate::text::compact(
-                json!({"model": non_empty(m), "provider": non_empty(p), "effort": e}),
-            )
-        };
-        self.hook(
-            "model_change",
-            json!({
-                "event": "model_change",
-                "previous": side(pm, pe),
-                "new": side(nm, ne),
-            }),
-        );
-    }
-
-    pub(crate) fn name_change_hook(self: &Arc<Self>, previous: Option<String>, new: String) {
-        self.hook(
-            "name_change",
-            json!({"event": "name_change", "previous": previous, "new": new}),
-        );
+            json!({"event": "agent_message", "status": status}),
+        )
     }
 
     pub(crate) fn lua_start_hook(
@@ -106,7 +75,12 @@ impl Session {
                 kind: kind.into(),
                 name,
                 code,
-                status: status.into(),
+                status: if kind == "task" && status == "error" {
+                    "failed"
+                } else {
+                    status
+                }
+                .into(),
                 ms: elapsed.as_millis() as u64,
                 error: error.clone(),
             };

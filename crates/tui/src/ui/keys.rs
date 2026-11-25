@@ -1,6 +1,6 @@
 use crate::kit::editor::Edit;
 use crate::ui::app::App;
-use crate::ui::panel::trace_panel;
+use crate::ui::panel::history_panel;
 use crate::ui::picker::Kind;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
@@ -193,9 +193,9 @@ impl App {
                         self.restore_draft();
                         let _ = self.session.ui_reply(id, None);
                     }
-                    Kind::Trace => {
-                        self.trace_items.clear();
-                        self.trace_back = None;
+                    Kind::History => {
+                        self.history_items.clear();
+                        self.history_back = None;
                         self.restore_draft();
                     }
                     _ => self.restore_draft(),
@@ -253,7 +253,7 @@ impl App {
             KeyCode::Esc => {
                 self.panel = None;
                 self.clear_link_hover();
-                if let Some((mut picker, search)) = self.trace_back.take() {
+                if let Some((mut picker, search)) = self.history_back.take() {
                     picker.follow(self.picker_rows());
                     self.picker = Some(picker);
                     self.editor = search;
@@ -268,23 +268,23 @@ impl App {
                 self.clear_link_hover();
             }
             KeyCode::Left
-                if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
+                if self.editor.is_empty() && mods.is_empty() && self.history_back.is_some() =>
             {
-                self.step_trace(-1);
+                self.step_history(-1);
             }
             KeyCode::Right
-                if self.editor.is_empty() && mods.is_empty() && self.trace_back.is_some() =>
+                if self.editor.is_empty() && mods.is_empty() && self.history_back.is_some() =>
             {
-                self.step_trace(1);
+                self.step_history(1);
             }
             _ => return false,
         }
         true
     }
 
-    fn step_trace(&mut self, delta: isize) {
+    fn step_history(&mut self, delta: isize) {
         let rows = self.picker_rows();
-        let Some((picker, _)) = &mut self.trace_back else {
+        let Some((picker, _)) = &mut self.history_back else {
             return;
         };
         let Some(next) = picker.selected.checked_add_signed(delta) else {
@@ -293,19 +293,19 @@ impl App {
         let Some(&item_idx) = picker.shown.get(next) else {
             return;
         };
-        let Some(trace_idx) = picker
+        let Some(history_idx) = picker
             .items
             .get(item_idx)
             .and_then(|it| it.value.parse::<usize>().ok())
         else {
             return;
         };
-        let Some(it) = self.trace_items.get(trace_idx) else {
+        let Some(it) = self.history_items.get(history_idx) else {
             return;
         };
         picker.selected = next;
         picker.follow(rows);
-        self.panel = Some(trace_panel(it));
+        self.panel = Some(history_panel(it));
         self.selection = Default::default();
         self.clear_link_hover();
     }
@@ -597,6 +597,7 @@ mod tests {
         std::fs::write(&cfg, "return { typo_key = 1 }").unwrap();
         app.run_command("new");
         assert!(std::sync::Arc::ptr_eq(&app.session, &session) && session.is_open());
+        app.pump(&mut std::time::Instant::now());
         assert!(
             matches!(app.chat.get_mut(app.chat.len() - 1), Some(crate::kit::entry::Entry::Error(e)) if e.contains("typo_key"))
         );

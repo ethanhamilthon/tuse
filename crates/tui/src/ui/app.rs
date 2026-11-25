@@ -1,4 +1,5 @@
 use crate::kit::editor::Editor;
+#[cfg(test)]
 use crate::kit::entry::Entry;
 use crate::kit::style::Palette;
 use crate::ui::chat::Chat;
@@ -36,6 +37,7 @@ pub struct App {
     pub palette: Palette,
     pub palette_gen: u64,
     pub chat: Chat,
+    pub refresh_history: bool,
     pub editor: Editor,
     pub selection: crate::kit::selection::Selection,
     pub links: Vec<crate::kit::links::LinkBox>,
@@ -45,8 +47,8 @@ pub struct App {
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
     pub question: Option<QuestionPrompt>,
-    pub trace_items: Vec<tuse_core::TraceItem>,
-    pub trace_back: Option<(Picker, Editor)>,
+    pub history_items: Vec<tuse_core::HistoryItem>,
+    pub history_back: Option<(Picker, Editor)>,
     pub list_rows: usize,
     pub input_area: Option<InputArea>,
     pub overlay_rows: std::ops::Range<usize>,
@@ -81,6 +83,7 @@ impl App {
             palette,
             palette_gen: 0,
             chat,
+            refresh_history: false,
             editor: Editor::default(),
             selection: Default::default(),
             links: vec![],
@@ -90,8 +93,8 @@ impl App {
             picker: None,
             panel: None,
             question: None,
-            trace_items: vec![],
-            trace_back: None,
+            history_items: vec![],
+            history_back: None,
             list_rows: 8,
             input_area: None,
             overlay_rows: 0..0,
@@ -143,18 +146,26 @@ impl App {
     }
 
     pub fn flash(&mut self, text: impl AsRef<str>) {
+        if self.session.flash(text.as_ref().to_string()) {
+            self.display_flash(text);
+        }
+    }
+
+    pub fn display_flash(&mut self, text: impl AsRef<str>) {
         self.flash = Some((
             text.as_ref().lines().collect::<Vec<_>>().join(" "),
             std::time::Instant::now(),
         ));
     }
 
+    #[cfg(test)]
     pub fn notice(&mut self, text: impl Into<String>) {
         self.chat.push(Entry::Notice(text.into()));
     }
 
     pub fn error(&mut self, text: impl Into<String>) {
-        self.chat.push(Entry::Error(text.into()));
+        let text = text.into();
+        self.session.error(text);
     }
 
     pub fn switch(&mut self, resume: Option<String>) {

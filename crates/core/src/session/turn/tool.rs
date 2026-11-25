@@ -1,7 +1,7 @@
 use crate::convo::record::{FileDiff, Record};
 use crate::event::Event;
-use crate::id;
 use crate::session::Session;
+use crate::session::bus::Signal;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
@@ -40,7 +40,7 @@ impl Session {
         let code = parsed.as_ref().ok().and_then(|args| args["code"].as_str());
         let input = code.unwrap_or(&call.arguments).to_string();
         let mut st = self.lock_live(generation)?;
-        self.emit(Event::ToolStart {
+        self.emit(Signal::ToolStart {
             timeout: TIMEOUT_SECS,
             id: call.id.clone(),
             tool: call.name.clone(),
@@ -59,7 +59,12 @@ impl Session {
             )
             .transferable(exec_id.clone(), request);
             let started = Instant::now();
-            self.lua_start_hook(exec_id.clone(), "tool", Some(code.to_string()), None);
+            self.lua_start_hook(
+                exec_id.clone(),
+                "tool",
+                Some(code.to_string()),
+                Some(call.name.clone()),
+            );
             let s = self.clone();
             let (owned_call, owned_input) = (call.clone(), input.clone());
             return self
@@ -126,9 +131,9 @@ impl Session {
         let mut st = self.lock_live(generation)?;
         st.tool_handoff = None;
         st.calls += 1;
-        self.push(
+        self.record(
             &mut st,
-            Record::Tool {
+            &[Record::Tool {
                 id: call.id.clone(),
                 tool: call.name.clone(),
                 input,
@@ -136,21 +141,21 @@ impl Session {
                 code: out.code,
                 images: out.images,
                 diffs: out.diffs.clone(),
-                at: id::now(),
-            },
+            }],
+            [Event::ToolEnd {
+                id: call.id.clone(),
+                output: out.text,
+                code: out.code,
+                diffs: out.diffs,
+            }],
         );
-        self.emit(Event::ToolEnd {
-            id: call.id.clone(),
-            output: out.text,
-            code: out.code,
-            diffs: out.diffs,
-        });
         if st.cancel_pending {
             self.finish_cancel(st);
             return None;
         }
         if handed_off {
-            for r in crate::convo::history::missing_results(&st.records) {
+            let cache = self.cached(&mut st);
+            for r in crate::convo::wire::missing_results(&cache.records) {
                 self.push(&mut st, r);
             }
         }

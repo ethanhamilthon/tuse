@@ -79,7 +79,7 @@ fn validates_config_and_preserves_state_on_failed_reload() {
             "hooks.h.events: must contain at least one event",
         ),
         (
-            "return { hooks = { h = { events = {'start'} } } }",
+            "return { hooks = { h = { events = {'process_start'} } } }",
             "hooks.h.run: is required",
         ),
         (

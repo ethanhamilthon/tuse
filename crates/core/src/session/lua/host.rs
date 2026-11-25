@@ -1,12 +1,13 @@
 use crate::event::UiPrompt;
 use crate::session::Session;
+use crate::session::bus::Signal;
 use crate::storage::tasks::{TaskInfo, Tasks};
 use crate::tools;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
-use tuse_lua::mlua::{self, Lua, Table, Value};
+use tuse_lua::mlua::{self, Lua, LuaSerdeExt, Table, Value};
 use tuse_lua::{Done, ExtWait, Host, TaskStart, with_run};
 
 pub(crate) type Slot = Arc<Mutex<Weak<Session>>>;
@@ -36,10 +37,15 @@ impl Host for SessionHost {
     fn task_start(&self, name: &str, code: &str, from_lua_hook: bool) -> Result<TaskStart, String> {
         let s = self.get().ok_or("session closed")?;
         let t = s.tasks.create(name, code)?;
-        if !from_lua_hook {
+        if from_lua_hook {
+            s.task_lua
+                .lock()
+                .unwrap()
+                .insert(t.id.clone(), (String::new(), Instant::now()));
+        } else {
             self.task_track(&t.id, name);
         }
-        s.emit(crate::Event::Tasks);
+        s.emit(Signal::Tasks);
         Ok(t)
     }
 
@@ -57,11 +63,33 @@ impl Host for SessionHost {
 
     fn task_end(&self, id: &str, d: Done) {
         let Some(s) = self.get() else { return };
-        if let Some((exec_id, started)) = s.task_lua.lock().unwrap().remove(id) {
-            s.lua_end_done(&exec_id, "task", started.elapsed(), &d);
+        let tracked = s.task_lua.lock().unwrap().remove(id);
+        if let Some((exec_id, started)) = tracked {
+            if exec_id.is_empty() {
+                if let Some(t) = s.tasks.get(id) {
+                    let status = if d.ok {
+                        "success"
+                    } else if d.stop == Some("cancelled") {
+                        "cancelled"
+                    } else {
+                        "failed"
+                    };
+                    let record = crate::Record::Job {
+                        kind: "task".into(),
+                        name: t.name,
+                        code: t.code,
+                        status: status.into(),
+                        ms: started.elapsed().as_millis() as u64,
+                        error: (!d.ok).then(|| crate::text::error_line(&d.text)),
+                    };
+                    s.push(&mut s.state.lock().unwrap(), record);
+                }
+            } else {
+                s.lua_end_done(&exec_id, "task", started.elapsed(), &d);
+            }
         }
         let ended = s.tasks.end(id, d.ok);
-        s.emit(crate::Event::Tasks);
+        s.emit(Signal::Tasks);
         if let Some(t) = ended {
             let last = if d.ok {
                 crate::text::last_line(&d.text)
@@ -122,10 +150,7 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
             Ok(crate::docs::docs_for(topic.as_deref(), &disabled))
         })?,
     )?;
-    g.set(
-        "set_title",
-        lua.create_function(|lua, text: String| session(lua)?.set_name(&text).map_err(err))?,
-    )?;
+    g.set("set_session", lua.create_function(set_session)?)?;
     g.set("session", lua.create_function(|lua, ()| lua_session(lua))?)?;
     install_tasks(lua)?;
     install_ui(lua)?;
@@ -138,7 +163,7 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
         "edit",
         "grep",
         "docs",
-        "set_title",
+        "set_session",
         "session",
         "task_get",
         "task_stop",
@@ -469,4 +494,100 @@ pub(crate) fn lua_session(lua: &Lua) -> mlua::Result<Value> {
         })
         .ok_or_else(|| mlua::Error::runtime("session closed"))?;
     snap.to_lua(lua)
+}
+fn set_session(lua: &Lua, table: Table) -> mlua::Result<()> {
+    let mut update = crate::session::view::history::Update::default();
+    for pair in table.pairs::<Value, Value>() {
+        let (key, value) = pair?;
+        let Value::String(key) = key else {
+            return Err(mlua::Error::runtime("set_session keys must be strings"));
+        };
+        let key = key.to_str()?;
+        match &*key {
+            "history" => {
+                let Value::Table(history) = value else {
+                    return Err(mlua::Error::runtime("history must be a list"));
+                };
+                let list = dense(&history, "history")?
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, value)| {
+                        let Value::Table(r) = value else {
+                            return Err(mlua::Error::runtime(format!(
+                                "history[{}] must be a record",
+                                i + 1
+                            )));
+                        };
+                        let mut fields = serde_json::Map::new();
+                        for pair in r.pairs::<Value, Value>() {
+                            let (key, value) = pair?;
+                            let Value::String(key) = key else {
+                                return Err(mlua::Error::runtime(format!(
+                                    "history[{}] field names must be strings",
+                                    i + 1
+                                )));
+                            };
+                            let key = key.to_str()?.to_string();
+                            let value = match key.as_str() {
+                                "summary" => continue,
+                                "images" | "tool_calls" | "diffs" => {
+                                    let Value::Table(t) = value else {
+                                        return Err(mlua::Error::runtime(format!(
+                                            "`{key}` must be a list"
+                                        )));
+                                    };
+                                    serde_json::Value::Array(
+                                        dense(&t, &key)?
+                                            .into_iter()
+                                            .map(|v| lua.from_value(v))
+                                            .collect::<mlua::Result<_>>()?,
+                                    )
+                                }
+                                _ => lua.from_value(value)?,
+                            };
+                            fields.insert(key, value);
+                        }
+                        Ok(fields)
+                    })
+                    .collect::<mlua::Result<_>>()?;
+                update.history = Some(list);
+            }
+            "title" | "model" | "effort" => {
+                let Value::String(value) = value else {
+                    return Err(mlua::Error::runtime(format!(
+                        "set_session `{key}` must be a string"
+                    )));
+                };
+                let value = Some(value.to_str()?.to_string());
+                match &*key {
+                    "title" => update.title = value,
+                    "model" => update.model = value,
+                    _ => update.effort = value,
+                }
+            }
+            _ => {
+                return Err(mlua::Error::runtime(format!(
+                    "unknown set_session key `{key}`"
+                )));
+            }
+        }
+    }
+    session(lua)?.set_session(update).map_err(err)
+}
+
+fn dense(t: &Table, name: &str) -> mlua::Result<Vec<Value>> {
+    let len = t.raw_len();
+    let fail = || mlua::Error::runtime(format!("`{name}` must be a dense list"));
+    for pair in t.pairs::<Value, Value>() {
+        let (key, _) = pair?;
+        if !matches!(key, Value::Integer(i) if i > 0 && i as usize <= len) {
+            return Err(fail());
+        }
+    }
+    (1..=len)
+        .map(|i| {
+            let v = t.raw_get::<Value>(i)?;
+            if v.is_nil() { Err(fail()) } else { Ok(v) }
+        })
+        .collect()
 }

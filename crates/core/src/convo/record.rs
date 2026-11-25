@@ -2,16 +2,20 @@ use serde::{Deserialize, Serialize};
 use tuse_api::{Replay, ToolCall, Usage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "t", rename_all = "snake_case")]
+#[serde(tag = "t", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Record {
+    System {
+        text: String,
+    },
+    Flash {
+        text: String,
+    },
     User {
         text: String,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         context: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<String>,
-        #[serde(default)]
-        at: String,
     },
     Assistant {
         text: String,
@@ -22,7 +26,7 @@ pub enum Record {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         replay: Option<Replay>,
         #[serde(default)]
-        at: String,
+        cancelled: bool,
     },
     Tool {
         id: String,
@@ -35,8 +39,6 @@ pub enum Record {
         images: Vec<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         diffs: Vec<FileDiff>,
-        #[serde(default)]
-        at: String,
     },
     Notification {
         text: String,
@@ -46,10 +48,6 @@ pub enum Record {
     },
     Error {
         text: String,
-    },
-    Compaction {
-        prune: usize,
-        drop: usize,
     },
     Usage {
         model: String,
@@ -64,7 +62,7 @@ pub enum Record {
     Hook {
         name: String,
         event: String,
-        vars: String,
+        vars: serde_json::Value,
         error: Option<String>,
         ms: u64,
     },

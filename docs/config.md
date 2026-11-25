@@ -41,7 +41,7 @@ return g
 
 | Call | Loads |
 | --- | --- |
-| `require("tuse")` | The host functions: `session`, `sh`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_title`, `task_get`, `task_list`, `task_stop`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`. |
+| `require("tuse")` | The host functions: `session`, `sh`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_session`, `task_get`, `task_list`, `task_stop`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`. |
 | `require("global")` | `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. |
 | `require("name")`, `require("a.b")` | `name.lua` or `name/init.lua` (`a/b.lua`, …) next to the calling file. |
 | `require("./x")`, `require("../x")` | The same, relative to the calling file. |
@@ -58,7 +58,7 @@ All keys are optional. Unknown keys, wrong types, and out-of-range values fail w
 
 | Key | Type | Meaning |
 | --- | --- | --- |
-| `settings` | table | `compact_at`, `ui`, and `open` (below). |
+| `settings` | table | `ui` and `open` (below). |
 | `theme` | table | Colors (below). |
 | `models` | list | Model metadata ([Connect](connect.md#model-metadata)). |
 | `systems` | list of strings | Text appended to the system prompt, in order ([Lua](lua.md#what-the-agent-sees)). |
@@ -66,10 +66,6 @@ All keys are optional. Unknown keys, wrong types, and out-of-range values fail w
 | `functions` | `name -> function \| false` | Extra agent functions, overrides, and disabled built-ins (below). |
 | `hooks` | `name -> { events, run }` | Lifecycle hooks ([Lua](lua.md#hooks)). |
 | `commands` | `name -> function` | Custom slash commands (below). |
-
-### `settings.compact_at`
-
-The number of context tokens at which old tool output gets compacted ([Session](session.md#compaction)). `0` turns it off. If unset, it is 60% of the model's `window`, or off when the window is unknown. A model's own `compact_at` wins over this setting.
 
 ### Theme and UI
 
@@ -104,13 +100,13 @@ A color is `#rgb`, `#rrggbb`, an ANSI index `"0"`–`"255"`, or a name: `black`,
 | `message_gap` | `1` | Blank lines between entries. |
 | `list_max_height` | `16` | Max rows for pickers and panels (`>= 1`). |
 | `input_max_height` | `-1` | Max input rows (`-1` or `>= 1`). |
-| `hide_trace` | `{}` | Trace roles left out of `/trace`, such as `{ "usage", "hook" }` ([Session](session.md#trace-and-session-data)). Unknown roles fail. |
+| `hide_history` | `{}` | History roles left out of `/history`, such as `{ "usage", "hook" }` ([Session](session.md#history-and-session-data)). Unknown roles fail. |
 | `scope_models` | `{}` | `provider/model` or `provider/*` patterns. When set, `/models` lists only matching models plus the current one. JSON-RPC ignores it. |
 
 ```lua
 return {
   theme = { accent = "#FFB86C", info = "bright_blue" },
-  settings = { compact_at = 150000, ui = { output_line = 3, pad_x = 1 } },
+  settings = { ui = { output_line = 3, pad_x = 1 } },
 }
 ```
 
@@ -165,7 +161,7 @@ return {
 
 ### `commands` and `settings.open`
 
-- `commands = { name = function() ... end }` adds `/name` to the TUI and JSON-RPC `commands.run`. Commands run as Lua jobs with no deadline. `print` is not shown, so use `show()`. Esc cancels them. Built-in names (`config`, `new`, `resume`, `models`, `tasks`, `session`, `trace`, `reload`, `stop`, `quit`) are reserved.
+- `commands = { name = function() ... end }` adds `/name` to the TUI and JSON-RPC `commands.run`. Commands run as Lua jobs with no deadline. `print` is not shown, so use `show()`. Esc cancels them. Built-in names (`config`, `new`, `resume`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`) are reserved.
 - `settings = { open = { md = function(path) ... end } }` handles clicks on local files with that extension (case-insensitive) in the TUI. Without a handler, the OS opener is used. URLs always go to the OS opener. A top-level `open` key fails with `open: moved to settings.open`.
 
 ## Reload
@@ -174,6 +170,6 @@ return {
 
 1. Evaluate and validate the new config, and re-read providers from SQLite.
 2. If that fails, the error is shown (`Reload failed: …`) and the old config, hooks, and functions stay. Side effects of top-level code can't be undone, so keep top-level code pure.
-3. If it works, `close` hooks run with `reason = "reload"`, then the new config takes over. Functions, overrides, and disables update in place, even through saved references. Then `start` hooks run with `reason = "reload"`.
+3. If it works, the new config takes over. Functions, overrides, and disables update in place, even through saved references. Tuse rebuilds the first `system` history record and runs `config_load` hooks.
 
 A reload keeps the session's model, its running tasks, `show()` blocks, and the agent's own globals. `/config` (or `config.get`) shows what is active.

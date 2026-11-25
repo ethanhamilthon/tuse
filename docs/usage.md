@@ -101,7 +101,7 @@ Text files send their first 1,024 bytes (`truncated="true" size="…"` when long
 | `Ctrl+U` / `Ctrl+K` | Delete to start / end of line. |
 | `Esc` | Close, or stop everything (see above). |
 
-Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text (copy with `Ctrl+C`). Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/trace` opens it, using a matching `open.<ext>` handler from config or the OS opener.
+Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text (copy with `Ctrl+C`). Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `open.<ext>` handler from config or the OS opener.
 
 ## Slash commands
 
@@ -112,7 +112,7 @@ Type `/` to get a picker. Pickers filter by label, ignoring case.
 - `/models` picks a model (limited by `settings.ui.scope_models`), then an effort (`default`, `low`, `medium`, `high`, `xhigh`, `max`). The choice applies to this session and becomes the default for new ones.
 - `/tasks` lists background tasks. `Enter` shows the task: id, name, status, start and end, how long it has run, the source of its function, and the last 200 log lines. `Ctrl+X` stops one.
 - `/session` shows the session: ID, name, folder, config, model, context, turns, usage, cost.
-- `/trace` lists everything in the session, starting with the system prompt. `Enter` opens an entry, `Left`/`Right` step through entries, `Esc` goes back. Roles in `settings.ui.hide_trace` are left out.
+- `/history` lists everything in the session, starting with the system prompt. `Enter` opens an entry, `Left`/`Right` step through entries, `Esc` goes back. Roles in `settings.ui.hide_history` are left out.
 - `/config` shows the resolved config, without secrets or Lua bodies.
 - `/reload` runs the config again. If it fails, the old config stays.
 - `/stop` stops the turn, background tasks, hooks, and commands, also when the session is idle.

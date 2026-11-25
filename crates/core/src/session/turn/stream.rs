@@ -1,8 +1,11 @@
-use crate::Event;
 use crate::Session;
+use crate::session::bus::Signal;
 use tuse_api::Delta;
 impl Session {
-    pub(crate) fn on_delta(&self, d: Delta) {
+    pub(crate) fn on_delta(&self, generation: u64, d: Delta) {
+        let Some(mut st) = self.lock_live(generation) else {
+            return;
+        };
         match d {
             Delta::Tool {
                 index,
@@ -11,7 +14,7 @@ impl Session {
                 code,
             } => {
                 if name == crate::session::turn::tool::TOOL {
-                    self.emit(Event::ToolDelta {
+                    self.emit(Signal::ToolDelta {
                         index,
                         id: id.into(),
                         name: name.into(),
@@ -20,10 +23,13 @@ impl Session {
                 }
             }
             Delta::Text(t) => {
-                self.state.lock().unwrap().partial.push_str(t);
-                self.emit(Event::Text(t.to_string()));
+                st.partial.push_str(t);
+                self.emit(Signal::Text(t.to_string()));
             }
-            Delta::Reasoning(t) => self.emit(Event::Reasoning(t.to_string())),
+            Delta::Reasoning(t) => {
+                st.reasoning.push_str(t);
+                self.emit(Signal::Reasoning(t.to_string()));
+            }
         }
     }
 }

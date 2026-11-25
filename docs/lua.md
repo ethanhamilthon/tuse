@@ -55,10 +55,10 @@ Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~
 
 ### Session and utilities
 
-- `session()`: Returns a fresh snapshot (changing it does nothing) with `mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage` (`input`, `output`, `cache_read`, `cache_write`, `cost`, `llm_cost`), `model_info`, `steps`, `turns`, and `trace` (`{role, summary, text}` list). It never contains keys. During config evaluation only the first four fields are set.
+- `session()`: Returns a fresh snapshot (changing it does nothing) with `mode`, `configpath`, `cwd`, `home`, `id`, `started`, `created`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage` (`input`, `output`, `cache_read`, `cache_write`, `cost`, `llm_cost`), `model_info`, `steps`, `turns`, and `history` (structured records; see [History](session.md#history-and-session-data)). It never contains keys. During config evaluation only the first four fields are set.
 - `llm(prompt, model, effort)`: Sends one prompt to a model, with no tools, history, or system prompt, and returns the text. `model` and `effort` default to the session's. It uses the same retries as turns, and its usage is counted as `llm_cost`.
 - `reload()`: Reloads the config like `/reload` and raises an error if the config is invalid. Inside a hook, it runs after the hook returns.
-- `set_title(text)`: Sets the session title (one line, up to 80 characters).
+- `set_session{title, model, effort, history}`: Pass any subset of these keys. The title is one line, up to 80 characters. Model and effort must match a configured provider and its supported efforts. History replaces the whole list; use `session().history` as a starting point. Each tool call must have exactly one result before the next user or agent record. Images must be data URLs, and a `system` record, if present, must come first. Invalid input raises without changing anything. A replacement requested during tool calls waits until the step's final result is recorded, before queued input. Usage totals and `ctx` are unaffected.
 - `docs(topic)`: `docs()` lists the topics and `docs("lua")` reads one. These are the pages of this documentation.
 - `json.encode(value)` / `json.decode(text)`: JSON, where `null` becomes `nil`.
 - `inspect(value)`: Formats any value readably, the same formatting used for tool results.
@@ -104,20 +104,25 @@ return {
 
 | Event | When | Fields of `e` |
 | --- | --- | --- |
-| `start` | A session opened, or a reload committed. | `reason` (`launch`, `new`, `resume`, `reload`), `is_new`, `restored` |
-| `close` | A session is closing, or a reload is about to replace the config. | `reason` (`exit`, `new`, `resume`, `reload`) |
-| `user_message` | A turn takes a user message. | `text`, `is_first` |
-| `agent_message` | A model step ended, or a turn was cancelled. | `text`, `status` (`working`, `finished`, `cancelled`), `tool_calls` |
-| `model_change` | The model or effort changed. | `previous`, `new` (`{model, provider, effort}`) |
-| `name_change` | The session title changed. | `previous`, `new` |
+| `config_load` | After a successful config load and system prompt rebuild. | None |
+| `process_start` | Once on launch, including JSON mode. | None |
+| `process_end` | Once on quit or RPC `shutdown`. | None |
+| `session_created` | A new session is opened. | None |
+| `session_resumed` | A saved session is opened. | None |
+| `session_close` | Before switching sessions, not on quit. | None |
+| `session_updated` | After a successful `set_session` call. | `changed` (list of keys) |
+| `user_message` | A user message was recorded. | None |
+| `agent_message` | An agent reply was recorded. | `status` (`working`, `finished`, or `cancelled`) |
+| `turn_error` | A turn failed. | `error` |
+| `turn_stopped` | A turn was stopped. | None |
 | `lua_start` | A tool call, command, task, or `open` handler started. | `id` (`lua-N`), `kind` (`tool`, `command`, `task`, `open`), `code`, `name` |
 | `lua_end` | One of those ended. | `id`, `kind`, `status` (`success`, `error`, `cancelled`), `duration_ms`, `result`, `error` |
 
-Call `t.session()` inside a hook to get session data. Each hook handles its events one at a time, in order, while different hooks run concurrently. Hooks have no deadline, and Esc cancels the running ones. An error shows up as the notice `hook <name>: <error>` and does not stop anything else. Every run is recorded in `/trace`. When a session closes, Tuse waits for all hooks to finish. Hook runs never fire `lua_start`/`lua_end`.
+Launch runs `config_load`, `process_start`, and then `session_created` or `session_resumed`. Switching runs `session_close` in the old VM, then `config_load` and the new session event in the new VM. Call `t.session()` inside a hook to get session data. Each hook handles its events one at a time, in order, while different hooks run concurrently. Hooks have no deadline, and Esc cancels the running ones. An error shows up as the notice `hook <name>: <error>` and does not stop anything else. Every run is recorded in `/history`. When a session closes, Tuse waits for all hooks to finish. Hook runs never fire `lua_start`/`lua_end`.
 
 ## What the agent sees
 
-This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order, and the compaction note is added once earlier records were dropped. Inside a session this section is rendered for that session's config.
+This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order,. The prompt is stored as the first `system` history record and rebuilt on session creation, resume, and config load. Inside a session this section is rendered for that session's config.
 
 ### System prompt
 
@@ -152,7 +157,8 @@ They are Lua globals, not tools: call them inside `lua` code. Errors are Lua err
 - `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
 - `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text; `model` and `effort` default to the session's.
 - `reload()`: reload the config like `/reload`; raises if it is invalid.
-- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `trace`).
+- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `started`, `created`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `history`).
+- `set_session({title, model, effort, history})`: update any of these fields; `history` replaces the stored list with structured records from `session().history`.
 - `docs(topic)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.
 ```
 
@@ -162,10 +168,4 @@ The one tool is `lua`. Its single required string argument `code` is described a
 
 ```text
 Run Lua 5.4 code in the session's persistent VM (globals stay between calls). Returns what the code prints plus the values it returns (a lone expression returns itself), or an error with a traceback. Prefer read() for file contents, grep() for search, and write()/edit()/append()/delete() for file changes so the user sees diffs. Use sh(cmd) for running programs and processing their output, not as the default for file operations; use sh([=[…]=]) when a shell command has quotes, backslashes, or regexes.
-```
-
-### Compaction note
-
-```text
-Earlier parts of this conversation were compacted to save context: old tool calls and their outputs were removed and some later outputs were cut to their first line.
 ```

@@ -5,12 +5,10 @@ use tuse_core::{Session, SessionSnapshot, tokens};
 
 pub fn panel(session: &Session, p: &Palette) -> Panel {
     let snap = session.snapshot(false);
-    let def = snap.model.as_deref().and_then(|m| session.model_def(m));
-    let compact = session.config().compact_at(def.as_ref());
-    panel_from_snapshot(&snap, compact, p)
+    panel_from_snapshot(&snap, p)
 }
 
-pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, compact: u64, p: &Palette) -> Panel {
+pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, p: &Palette) -> Panel {
     let key = Style::fg(p.border);
     let fg = Style::fg(p.fg);
     let dim = Style::fg(p.dim);
@@ -47,9 +45,6 @@ pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, compact: u64, p: &Palette
     } else {
         ctx_spans.push(span(" / ?", dim));
     }
-    if compact > 0 {
-        ctx_spans.push(span(format!(", compacts at {}", tokens(compact)), dim));
-    }
 
     let model_info_spans = match &s.model_info {
         Some(mi) => {
@@ -59,13 +54,6 @@ pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, compact: u64, p: &Palette
             }
             if let Some(w) = mi.window {
                 parts.push(format!("{} window", tokens(w)));
-            }
-            if let Some(c) = mi.compact_at {
-                parts.push(if c == 0 {
-                    "compact off".into()
-                } else {
-                    format!("compact {}", tokens(c))
-                });
             }
             if let Some(pr) = &mi.prices {
                 parts.push(format!(
@@ -143,7 +131,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn session_panel_shows_every_snapshot_field_except_trace() {
+    fn session_panel_shows_every_snapshot_field_except_history() {
         let app = crate::ui::app::test_app("session-view");
         let p = &app.palette;
         let mut pnl = panel(&app.session, p);

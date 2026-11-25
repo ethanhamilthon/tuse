@@ -13,6 +13,15 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     let extra = r#"
   prompts = { review = "Check edge cases." },
   commands = {
+    rewrite = function()
+      local t = require("tuse")
+      local s = t.session()
+      assert(not pcall(t.set_session, {title = "invalid", history = {{role = "agent", text = "x", tool_calls = {{id = "1", name = "lua", arguments = "{}"}}}}}))
+      assert(t.session().name == s.name)
+      t.set_session{history = s.history}
+      s.history[1].text = "custom system"
+      t.set_session{history = s.history}
+    end,
     ui_demo = function()
       local t = require("tuse")
       t.show("m1", "Hello", true)
@@ -42,7 +51,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     );
     assert_eq!(
         call(&tx, &out, 2, "commands.list", json!({}))["result"],
-        json!(["ui_demo"])
+        json!(["rewrite", "ui_demo"])
     );
 
     assert!(call(&tx, &out, 3, "commands.run", json!({"name": "ui_demo"}))["error"].is_null());
@@ -147,17 +156,33 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
             .is_null()
     );
     event(&out, "turn_end");
-    let trace = call(&tx, &out, 13, "session.trace", json!({}))["result"].clone();
-    assert!(trace.as_array().unwrap().iter().any(|t| {
+    let history = call(&tx, &out, 13, "session.history", json!({}))["result"].clone();
+    assert!(history.as_array().unwrap().iter().any(|t| {
         t["role"] == "user"
-            && t["text"]
+            && t["context"]
                 .as_str()
                 .unwrap()
                 .contains("<prompt name=\"review\">Check edge cases.</prompt>")
     }));
 
+    let usage = call(&tx, &out, 130, "session.snapshot", json!({}))["result"]["usage"].clone();
+    assert!(call(&tx, &out, 131, "commands.run", json!({"name": "rewrite"}))["error"].is_null());
+    event(&out, "history_replaced");
+    let snap = call(&tx, &out, 132, "session.snapshot", json!({}))["result"].clone();
+    assert_eq!(snap["history"][0]["text"], "custom system");
+    assert_eq!(snap["usage"], usage);
+
     let s2 = call(&tx, &out, 14, "session.new", json!({}))["result"].clone();
     assert_ne!(s2["session"]["id"], s1_id);
+    let list = call(&tx, &out, 140, "session.list", json!({}))["result"].clone();
+    assert_eq!(
+        list.as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [s1_id.as_str()]
+    );
     assert_eq!(
         (s2["model"].clone(), s2["effort"].clone()),
         (json!("p/alt"), json!("high"))

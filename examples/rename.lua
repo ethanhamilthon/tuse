@@ -14,16 +14,21 @@ function M.apply(g, model)
   g.commands = g.commands or {}
   g.hooks.rename = {
     events = { "user_message" },
-    run = function(e)
-      if e.is_first then
-        t.set_title(title(e.text, model))
+    run = function()
+      local first
+      for _, record in ipairs(t.session().history) do
+        if record.role == "user" then
+          if first then return end
+          first = record.text
+        end
       end
+      if first then t.set_session{ title = title(first, model) } end
     end,
   }
   g.commands.rename = function()
     local name = t.ask("New session title:")
     if name and name ~= "" then
-      t.set_title(name)
+      t.set_session{ title = name }
     end
   end
   return g

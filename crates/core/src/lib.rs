@@ -21,11 +21,11 @@ pub use session::Session;
 pub use session::hooks::lanes::EVENTS;
 pub use session::lua::config_lua::{config_arg, configured_models};
 pub use session::lua::open::openable_url;
+pub use session::view::history::HistoryItem;
 pub use session::view::models::model_available;
 pub use session::view::snapshot::{
     ModelInfoSnapshot, PricesSnapshot, SessionSnapshot, UsageSnapshot,
 };
-pub use session::view::trace::TraceItem;
 pub use storage::store::Meta;
 pub use storage::tasks::{TaskInfo, Tasks};
 pub use storage::{Prefs, Providers};

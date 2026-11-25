@@ -1,12 +1,15 @@
-use crate::event::Event;
 use crate::session::Session;
+use crate::session::bus::Signal;
 use std::sync::Arc;
 use tuse_api::{ApiType, Client};
 use tuse_config::ModelDef;
 
 pub fn model_available(config: &tuse_config::Config, full: &str) -> bool {
-    let (provider, _) = tuse_config::split_model(full);
-    !provider.is_empty() && config.connect(provider).is_some()
+    let (provider, name) = tuse_config::split_model(full);
+    !provider.is_empty()
+        && !name.is_empty()
+        && !full.chars().any(char::is_whitespace)
+        && config.connect(provider).is_some()
 }
 
 impl Session {
@@ -52,18 +55,14 @@ impl Session {
         names
     }
 
-    pub(crate) fn swap_config(&self, c: Arc<tuse_config::Config>) {
+    pub(crate) fn swap_config(&self, c: Arc<tuse_config::Config>) -> Result<(), String> {
+        let mut st = self.state.lock().unwrap();
+        self.rebuild_system(&mut st, &c)?;
         let mut cfg = self.config.write().unwrap();
         cfg.0 += 1;
-        let mut st = self.state.lock().unwrap();
-        st.remote.clear();
-        if st.stats.1 != c.models {
-            st.stats = (
-                crate::convo::usage::Stats::of(&st.records, &c.models),
-                c.models.clone(),
-            );
-        }
         cfg.1 = c;
+        st.remote.clear();
+        Ok(())
     }
 
     pub fn fetch_models(self: &Arc<Self>) {
@@ -78,21 +77,22 @@ impl Session {
                     .models()
                 {
                     Ok(ids) => {
+                        let mut st = s.state.lock().unwrap();
                         let cfg = s.config.read().unwrap();
                         if cfg.0 != config_gen {
                             return;
                         }
                         let prefix = format!("{}/", c.name);
-                        let mut st = s.state.lock().unwrap();
                         st.remote.retain(|m| !m.starts_with(&prefix));
                         st.remote
                             .extend(ids.into_iter().map(|id| format!("{prefix}{id}")));
                         drop((st, cfg));
-                        s.emit(Event::Models);
+                        s.emit(Signal::Models);
                     }
                     Err(e) => {
-                        if s.config.read().unwrap().0 == config_gen {
-                            s.emit(Event::Error(format!("{}: can't fetch models: {e}", c.name)));
+                        let current = s.config.read().unwrap().0 == config_gen;
+                        if current {
+                            s.error(format!("{}: can't fetch models: {e}", c.name));
                         }
                     }
                 }
@@ -115,7 +115,14 @@ impl Session {
         if !model.is_empty() && !self.model_available(model) {
             return Err(format!("Model `{model}` is unavailable"));
         }
-        self.set_model(model, effort);
+        self.update(
+            crate::session::view::history::Update {
+                model: Some(model.into()),
+                effort: Some(effort.into()),
+                ..Default::default()
+            },
+            false,
+        )?;
         if persist {
             self.save_choice("model", model)?;
             self.save_choice("effort", effort)?;

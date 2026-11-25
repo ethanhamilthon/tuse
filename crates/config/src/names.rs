@@ -13,7 +13,7 @@ pub const HOST_FUNCTIONS: &[&str] = &[
     "edit",
     "grep",
     "docs",
-    "set_title",
+    "set_session",
     "session",
     "task_get",
     "task_list",
@@ -72,28 +72,32 @@ pub fn check_open_ext(ext: &str) -> Option<&'static str> {
     }
 }
 
-pub const HOOK_EVENTS: [&str; 8] = [
-    "start",
-    "close",
+pub const HOOK_EVENTS: [&str; 13] = [
+    "config_load",
+    "process_start",
+    "process_end",
+    "session_created",
+    "session_resumed",
+    "session_close",
+    "session_updated",
     "user_message",
     "agent_message",
-    "model_change",
-    "name_change",
+    "turn_error",
+    "turn_stopped",
     "lua_start",
     "lua_end",
 ];
 
 pub const BUILTIN_COMMANDS: [&str; 10] = [
-    "config", "new", "resume", "models", "tasks", "session", "trace", "reload", "stop", "quit",
+    "config", "new", "resume", "models", "tasks", "session", "history", "reload", "stop", "quit",
 ];
 
-pub const TRACE_ROLES: [&str; 21] = [
+pub const HISTORY_ROLES: [&str; 20] = [
     "system",
     "user",
-    "thinking",
     "agent",
     "lua",
-    "output",
+    "tool",
     "notification",
     "notice",
     "error",
@@ -101,7 +105,7 @@ pub const TRACE_ROLES: [&str; 21] = [
     "task",
     "command",
     "open",
-    "compaction",
+    "flash",
     "usage",
     "model",
     "turn",
@@ -111,10 +115,17 @@ pub const TRACE_ROLES: [&str; 21] = [
     "ask",
 ];
 
-pub fn trace_roles<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+pub fn history_roles<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
     let list: Vec<String> = list(d)?;
-    if let Some(r) = list.iter().find(|r| !TRACE_ROLES.contains(&r.as_str())) {
-        return Err(D::Error::custom(format!("unknown trace role `{r}`")));
+    if let Some((i, r)) = list
+        .iter()
+        .enumerate()
+        .find(|(_, r)| !HISTORY_ROLES.contains(&r.as_str()))
+    {
+        return Err(D::Error::custom(format!(
+            "settings.ui.hide_history[{}]: unknown history role `{r}`",
+            i + 1
+        )));
     }
     Ok(list)
 }

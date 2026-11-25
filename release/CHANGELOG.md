@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+
+- **Breaking: persistent session history.** SQLite is now the source of truth. New sessions are saved immediately; only started sessions appear in resume lists. Old database data is not migrated. Back up `~/.tuse/tuse.db` before upgrading and re-add your providers with `tuse connect`.
+- **Breaking: history APIs.** `/history`, `settings.ui.hide_history`, `session().history`, and JSON-RPC `session.history` replace trace and raw records. Lua can edit history and session metadata with `set_session`; `set_title` and `config.set` were removed.
+- **Breaking: hooks.** The new process and session lifecycle hooks run in the TUI and JSON mode, with smaller event payloads. See the Lua docs for the new names and fields.
+- **Compaction is now opt-in Lua.** Built-in compaction and `compact_at` were removed. See `examples/compaction.lua` for a replacement.
+
 ## 0.10.5
 
 - **Examples.** New `examples/` folder (skills, MCP, themes, rename, notifications, tmux, Zellij, cmux, Herdr, Orca, Rex, web search, sandbox, commands, open handlers, OpenSpec, project config) and a new `examples` docs topic that links them.

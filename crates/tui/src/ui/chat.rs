@@ -173,9 +173,8 @@ impl Chat {
         {
             const STARS: [&str; 4] = ["✦ ", "✧ ", "✦ ", "✶ "];
             let frame = STARS[self.tick % STARS.len()];
-            if prefix.text != frame {
-                prefix.text = frame.into();
-            }
+            let rest: String = prefix.text.chars().skip(2).collect();
+            prefix.text = format!("{frame}{rest}");
         }
         lines
     }
@@ -380,9 +379,11 @@ mod tests {
             index: 0,
             id: "id".into(),
             name: "lua".into(),
-            code: "1".into(),
+            code: "print(1)".into(),
         });
-        assert_eq!(app.chat.lines(n, 40, &app.palette)[0][0].text, "✦ ");
+        let text =
+            |l: &crate::kit::text::Line| l.iter().map(|s| s.text.as_str()).collect::<String>();
+        assert_eq!(text(&app.chat.lines(n, 40, &app.palette)[0]), "✦ print(1)");
         app.handle_event(Event::ToolStart {
             timeout: 120,
             id: "id".into(),

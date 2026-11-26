@@ -38,8 +38,8 @@ impl App {
         let mark = label(mark, w);
         let working = match &self.flash {
             Some((text, _)) => vec![span(text, Style::fg(p.accent))],
-            None if self.session.busy() => self.working(),
-            None => self.cwd_label(),
+            None if self.session.busy() => self.busy_label(),
+            None => self.tasks_idle().unwrap_or_else(|| self.cwd_label()),
         };
         (mark, working, self.model_label())
     }

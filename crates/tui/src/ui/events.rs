@@ -56,7 +56,14 @@ impl App {
             self.flash = None;
             pump.dirty = true;
         }
-        if self.session.busy() && last_tick.elapsed() >= std::time::Duration::from_millis(100) {
+        let tasks = self.session.running_tasks();
+        if std::mem::replace(&mut self.tasks_shown, tasks) != tasks {
+            pump.dirty = true;
+            pump.immediate = true;
+        }
+        if (self.session.busy() || tasks > 0)
+            && last_tick.elapsed() >= std::time::Duration::from_millis(100)
+        {
             self.tick += 1;
             self.chat.tick = self.tick;
             *last_tick = std::time::Instant::now();

@@ -97,6 +97,10 @@ impl Session {
         self.tasks.list()
     }
 
+    pub fn running_tasks(&self) -> usize {
+        self.tasks.running()
+    }
+
     pub fn task(&self, id: &str) -> Option<crate::storage::tasks::TaskInfo> {
         self.tasks.get(id)
     }

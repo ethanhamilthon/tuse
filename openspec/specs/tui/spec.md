@@ -132,7 +132,7 @@ The TUI SHALL wake when session events arrive, without waiting for terminal inpu
 - **THEN** the TUI handles input during the burst and renders the accumulated content in order, including the last delta, without waiting for another event
 
 ### Requirement: Show the foreground activity in the composer
-Both input styles SHALL distinguish provider wait with the existing spinner, foreground Lua execution with the Lua block's animated star, and model streaming with a fixed-width dot that pulses through progressively larger and smaller glyphs. The elapsed timer SHALL remain available with the activity. Streaming SHALL begin at the first displayable text, reasoning, or Lua code update; empty announcements alone MUST NOT activate the pulse or the Lua execution star. A pause between chunks MUST NOT switch the indicator back to waiting. Activity changes MUST NOT insert rows into the chat. The TUI SHALL preserve steering and retry notices and MUST NOT keep showing an old retry notice over a new attempt. Ending, stopping, or switching sessions MUST clear stale activity.
+Both input styles SHALL distinguish provider wait with the existing spinner, foreground Lua execution with the Lua block's animated star, and model streaming with a fixed-width dot that pulses through progressively larger and smaller glyphs. The elapsed timer SHALL remain available with the activity. While background tasks are running, the activity indicator SHALL be followed by ` · n tasks` in the accent color, using `task` for one, and the task count SHALL NOT add a second spinner. Only tasks whose status is `running` count. Streaming SHALL begin at the first displayable text, reasoning, or Lua code update; empty announcements alone MUST NOT activate the pulse or the Lua execution star. A pause between chunks MUST NOT switch the indicator back to waiting. Activity changes MUST NOT insert rows into the chat. The TUI SHALL preserve steering and retry notices and MUST NOT keep showing an old retry notice over a new attempt. Ending, stopping, or switching sessions MUST clear stale activity.
 
 #### Scenario: Wait, stream, run Lua
 - **WHEN** the model request is sent, the provider announces a tool without code, then sends displayable code, and the foreground Lua function starts after the reply
@@ -145,6 +145,22 @@ Both input styles SHALL distinguish provider wait with the existing spinner, for
 #### Scenario: Retry and stop
 - **WHEN** a partial response is retried and the new attempt is then stopped
 - **THEN** the retry notice replaces stale activity during the wait for retry, the provider spinner returns for the new attempt, and stopping clears its indicator
+
+#### Scenario: Working with tasks
+- **WHEN** a turn has run for 12 seconds and one background task is running
+- **THEN** the status shows the activity indicator, `12s`, and `· 1 task` in the accent color, with only the one spinner of the activity
+
+#### Scenario: Notice over tasks
+- **WHEN** a notice or flash is shown while tasks are running
+- **THEN** the notice replaces the task indicator until it expires
+
+#### Scenario: Finished tasks
+- **WHEN** a task has finished, failed, or been stopped
+- **THEN** it is not counted and no task indicator is shown for it
+
+#### Scenario: Switching sessions
+- **WHEN** the user switches to a session that has no running tasks
+- **THEN** no task indicator is shown
 
 ### Requirement: Show the Lua preview only with code
 The TUI MUST NOT reserve a chat row or show an inline Lua star for a tool announcement or whitespace-only code. The inline star and the first displayable Lua code MUST appear together in the same frame, whether the code first arrives in a delta or at tool start. A hidden preview discarded on reset, cancellation, or session switch MUST NOT flash on screen.
@@ -198,13 +214,19 @@ When `settings.ui.input_style` is `fill` and the viewport fits, the composer SHA
 - **THEN** the list is drawn between the filled block and the status row, and one border rule row closes it
 
 ### Requirement: Idle status shows the project directory
-When no activity indicator or notice is shown and no turn is running, the composer SHALL show the session working directory in the `muted` color without an icon, with the home directory written as `~`, in the place of the indicator in every input style.
+When no activity indicator or notice is shown, no turn is running, and no background task is running, the composer SHALL show the session working directory in the `muted` color without an icon, with the home directory written as `~`, in the place of the indicator in every input style. When background tasks are running, that place SHALL show the task indicator instead of the directory.
 
 #### Scenario: Idle and working
-- **WHEN** no turn is running and no notice is shown
+- **WHEN** no turn is running, no background task is running, and no notice is shown
 - **THEN** the status shows the directory
 - **WHEN** a turn starts or a notice appears
 - **THEN** the indicator or notice replaces the directory
+
+#### Scenario: Idle with tasks
+- **WHEN** no turn is running and two background tasks are running
+- **THEN** the status shows an animated spinner and `2 tasks` in the accent color instead of the directory
+- **WHEN** the last task ends
+- **THEN** the directory returns
 
 ### Requirement: Lists open below the input
 A picker, question, or panel SHALL open below the input, never between the chat and the input. With `lines` and `boxed` its rows SHALL follow the last row of the composer. With `fill` and `bar` its rows SHALL sit between the editor block and the status row, followed by one row drawn as a rule in the `border` color. Its height SHALL stay limited by `list_max_height` and the viewport, and the chat SHALL keep the rows that remain. The wheel over the list and paging SHALL use the rows where the list is drawn.

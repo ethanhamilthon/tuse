@@ -211,7 +211,7 @@ fn redraw_wait(
         wait = wait
             .min(Duration::from_millis(kit::style::FRAME_MS).saturating_sub(last_draw.elapsed()));
     }
-    if app.session.busy() {
+    if app.session.busy() || app.tasks_shown > 0 {
         wait = wait.min(Duration::from_millis(100).saturating_sub(last_tick.elapsed()));
     }
     if !app.retry_notice_active()

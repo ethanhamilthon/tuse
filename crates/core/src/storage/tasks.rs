@@ -123,6 +123,15 @@ impl Tasks {
         self.list.lock().unwrap().clone()
     }
 
+    pub fn running(&self) -> usize {
+        self.list
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|t| t.alive())
+            .count()
+    }
+
     pub fn stop_all(&self) {
         for t in self.list() {
             if t.alive() {

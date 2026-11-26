@@ -51,7 +51,7 @@ From top to bottom:
 
 - **Chat.** Your messages sit on a `surface` block. Both your messages and agent replies leave two columns on each side and line up with the rest of the chat text. Agent replies render as Markdown, and a Markdown image `![alt](path)` shows as a clickable `alt` (or the path when `alt` is empty). Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
 - **Gap.** One empty row above the input in every style.
-- **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`.
+- **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`. While background tasks run, the count follows the timer (`12s · 2 tasks`), and when idle it replaces the project path as `⠋ 2 tasks` in the accent color.
 - **Input.** Grows with the text up to `settings.ui.input_max_height`.
 - **Bottom rule.** `<model> · <effort> · <used>/<window> · $<cost>`. The context and cost parts are hidden while unknown.
 - **Overlay.** At most one picker, panel, or `ask()` question, shown below the input. With `fill` and `bar` it sits between the input and the status line and ends with a rule ([Config](config.md#theme-and-ui)).

@@ -58,6 +58,31 @@ impl App {
         )]
     }
 
+    fn tasks_text(&self) -> Option<String> {
+        let n = self.session.running_tasks();
+        (n > 0).then(|| format!("{n} task{}", if n == 1 { "" } else { "s" }))
+    }
+
+    pub(crate) fn tasks_idle(&self) -> Option<Line> {
+        let text = self.tasks_text()?;
+        let spin = SPINNER[self.tick % SPINNER.len()];
+        Some(vec![span(
+            format!("{spin} {text}"),
+            Style::fg(self.palette.accent),
+        )])
+    }
+
+    pub(crate) fn busy_label(&self) -> Line {
+        let mut line = self.working();
+        if line.is_empty() || self.steering.is_some() {
+            return line;
+        }
+        if let Some(text) = self.tasks_text() {
+            line.push(span(format!(" · {text}"), Style::fg(self.palette.accent)));
+        }
+        line
+    }
+
     pub(crate) fn cwd_label(&self) -> Line {
         let home = std::env::home_dir().unwrap_or_default();
         let text = match self.cwd.strip_prefix(&home) {
@@ -88,6 +113,38 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wait_for_tasks(app: &App, n: usize) {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while app.session.running_tasks() != n && std::time::Instant::now() < end {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert_eq!(app.session.running_tasks(), n);
+    }
+
+    #[test]
+    fn running_tasks_replace_the_directory_when_idle() {
+        let mut app = crate::ui::app::test_app("task-indicator");
+        std::fs::write(
+            app.cwd.join("tuse.lua"),
+            "local t = require('tuse')\nreturn { commands = { bg = function() t.spawn(function() t.sh('sleep 30') end, 'nap') end } }",
+        )
+        .unwrap();
+        app.run_command("reload");
+        assert!(app.tasks_idle().is_none());
+        app.run_command("bg");
+        wait_for_tasks(&app, 1);
+        let line = app.tasks_idle().unwrap();
+        assert!(line[0].text.ends_with(" 1 task") && line[0].text.starts_with(SPINNER[0]));
+        assert_eq!(line[0].style, Style::fg(app.palette.accent));
+        app.run_command("bg");
+        wait_for_tasks(&app, 2);
+        assert!(app.tasks_idle().unwrap()[0].text.ends_with(" 2 tasks"));
+        app.run_command("stop");
+        wait_for_tasks(&app, 0);
+        assert!(app.tasks_idle().is_none());
+        crate::ui::app::cleanup(app);
+    }
 
     #[test]
     fn working_indicator_omits_transient_actions_and_keeps_steering_and_flash() {

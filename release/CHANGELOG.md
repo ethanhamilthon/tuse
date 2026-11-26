@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.13
+
+- **Background task indicator.** While background tasks run, the status shows `⠋ 2 tasks` in the accent color in place of the project path, and `12s · 2 tasks` after the timer during a turn.
+
 ## 0.11.12
 
 - **`/fork`.** Branch the session at any user or agent message. The new session opens in the same folder, titled `[fork] ` plus the old title. Forking at an agent message keeps it; forking at a user message leaves it out and puts its text in the input. JSON-RPC gets `session.fork {index}`, which returns `draft` along with the usual switch result. `fork` is now a reserved command name.

@@ -63,6 +63,12 @@ impl Args {
             .and_then(|(_, v)| v.clone())
     }
 
+    pub fn values<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a str> {
+        self.flags
+            .iter()
+            .filter_map(move |(n, v)| (n == name).then_some(v.as_deref()).flatten())
+    }
+
     pub fn has(&self, names: &[&str]) -> bool {
         self.flags.iter().any(|(n, _)| names.contains(&n.as_str()))
     }

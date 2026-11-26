@@ -149,7 +149,8 @@ impl Session {
             &conn.base_url,
             &conn.api_key,
             ApiType::from_stored(conn.api_type()),
-        );
+        )
+        .with_headers(conn.headers.clone());
         let reply = client
             .complete(
                 &req,

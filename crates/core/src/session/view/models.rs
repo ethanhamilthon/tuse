@@ -74,6 +74,7 @@ impl Session {
             let s = self.clone();
             std::thread::spawn(move || {
                 match Client::new(&c.base_url, &c.api_key, ApiType::from_stored(c.api_type()))
+                    .with_headers(c.headers)
                     .models()
                 {
                     Ok(ids) => {

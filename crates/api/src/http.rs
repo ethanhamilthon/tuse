@@ -106,6 +106,7 @@ pub(crate) enum Auth {
 pub(crate) struct Conn {
     base_url: String,
     api_key: String,
+    extra_headers: std::collections::BTreeMap<String, String>,
     agent: ureq::Agent,
 }
 
@@ -114,8 +115,31 @@ impl Conn {
         Self {
             base_url: base_url.trim_end_matches('/').into(),
             api_key: api_key.into(),
+            extra_headers: Default::default(),
             agent,
         }
+    }
+
+    pub(crate) fn set_headers(&mut self, headers: std::collections::BTreeMap<String, String>) {
+        self.extra_headers = headers;
+    }
+
+    pub(crate) fn redact(&self, mut error: Error) -> Error {
+        let message = match &mut error {
+            Error::Status(_, msg) | Error::Transport(msg) | Error::Parse(msg) => msg,
+            _ => return error,
+        };
+        let mut secrets: Vec<_> = self
+            .extra_headers
+            .values()
+            .chain(std::iter::once(&self.api_key))
+            .filter(|s| !s.is_empty())
+            .collect();
+        secrets.sort_unstable_by_key(|s| std::cmp::Reverse(s.len()));
+        for secret in secrets {
+            *message = message.replace(secret, "[redacted]");
+        }
+        error
     }
 
     fn headers(&self, auth: &Auth, extra: &[(&str, &str)]) -> Vec<(String, String)> {
@@ -125,6 +149,11 @@ impl Conn {
         };
         std::iter::once((k.to_string(), v))
             .chain(extra.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+            .chain(
+                self.extra_headers
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone())),
+            )
             .collect()
     }
 

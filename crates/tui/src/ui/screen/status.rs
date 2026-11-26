@@ -108,6 +108,7 @@ mod tests {
             base_url: format!("http://{addr}"),
             api_key: "test".into(),
             api: "openai-chat".into(),
+            ..Default::default()
         })
         .unwrap();
         std::fs::write(&cfg, "return {}").unwrap();

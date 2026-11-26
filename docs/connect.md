@@ -4,7 +4,7 @@ How to connect API providers, pick models and reasoning effort, describe model m
 
 ## Providers
 
-A provider is a named API endpoint plus a key. Providers are stored in `~/.tuse/tuse.db`, not in Lua config:
+A provider is a named API endpoint plus a key. `tuse connect` saves a provider in `~/.tuse/tuse.db`:
 
 ```sh
 tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai
@@ -18,11 +18,33 @@ tuse disconnect openai
 - `--base` must start with `http://` or `https://`. You always pass it, because there are no built-in hosts.
 - `--name` can't contain `/` or whitespace and must be new. Use `--replace` to update an existing one. The old entry is only replaced if the new one checks out.
 - `--key '$VAR'` (or `'${VAR}'`) stores the reference, not the secret. It is read from the environment every time a session starts or reloads. Keep the single quotes so your shell does not expand it. `--key-stdin` reads a literal key from stdin so it never shows up in argv. If you pass a literal `--key`, it is stored as given.
+- `--header 'Name: value'` adds a header to model discovery and generation. Repeat it for multiple headers. Quote `--header 'X-Gateway-Token: $TOKEN'` to store an environment reference instead of a literal value. Header names are case-insensitive; duplicates and overrides of built-in auth, protocol, or HTTP framing headers are rejected.
 - `--api` picks the wire protocol: `openai-chat` (the default, any OpenAI-compatible Chat Completions API), `openai-responses`, `anthropic-messages`, or `google-gemini`. To use two protocols on one host, connect it twice under different names.
 
 Before saving, `tuse connect` lists models from `GET <base>/models`. If that fails, nothing is saved and it prints `can't fetch models from <base>: <error>`. If it works, it prints ``Received <N> models. Saved `<NAME>`.`` This only checks that model listing works, not generation.
 
-A running session uses the providers it loaded at start. After `tuse connect` or `tuse disconnect` in another terminal, run `/reload` to pick up the change. Keys never appear in `/config`, `/session`, `session()`, `tuse providers`, or JSON-RPC.
+A running session uses the providers it loaded at start. After `tuse connect` or `tuse disconnect` in another terminal, run `/reload` to pick up the change. Keys and header values are not shown in `/config`, `/session`, `session()`, `tuse providers`, or JSON-RPC.
+
+### Providers in Lua config
+
+Use `providers` for a project or personal connection that should not be saved in the database:
+
+```lua
+return {
+  providers = {
+    gateway = {
+      base = "https://gateway.example/v1",
+      key = "$GATEWAY_API_KEY",
+      api = "openai-chat",
+      headers = { ["X-Tenant"] = "my-team", ["X-Gateway-Token"] = "$GATEWAY_TOKEN" },
+    },
+  },
+}
+```
+
+The table key is the provider name. `base` and `key` are required; `api` defaults to `openai-chat`, and `headers` is optional. Whole-value environment references in keys and headers are resolved on startup and reload. Missing or empty required values fail validation. A name already saved by `tuse connect` cannot also be used in Lua. `tuse providers` and `tuse disconnect` only operate on saved profiles.
+
+Config loading does not wait for a network probe. Model discovery can still query `/models`; if the gateway does not implement it, declare a `gateway/<model-id>` entry in `models`.
 
 ## Models
 

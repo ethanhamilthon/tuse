@@ -26,3 +26,10 @@ The Pages workflow SHALL install a pinned mdBook, run `make site`, and deploy `t
 #### Scenario: Pull request
 - **WHEN** a pull request changes `docs/`
 - **THEN** the workflow builds the site and fails on build errors, but does not deploy
+
+### Requirement: Shared Tuse screenshot
+The docs site SHALL use the same screenshot asset as the repository README.
+
+#### Scenario: Building the screenshot into the site
+- **WHEN** `make site` builds the README page
+- **THEN** the screenshot it references is copied to the corresponding path inside `target/book`

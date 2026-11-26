@@ -99,6 +99,10 @@ fn require_session_validation_and_reload_rollback() {
         assert(load("return sh")() == nil)
         local g = require('global')
         assert(require('util').origin == 'project' and require('pkg') == 'pkg init')
+        g.providers = { project = {
+            base = 'http://127.0.0.1:1', key = 'local-secret',
+            headers = { ['X-Tenant'] = '$CUSTOM_USER_VAR' },
+        } }
         g.systems[#g.systems + 1] = 'last'
         g.settings.ui.scroll_step = 5
         g.prompts.local_wins = 'from project'
@@ -121,6 +125,16 @@ fn require_session_validation_and_reload_rollback() {
         let s = open(mode, None).unwrap();
         let cfg = s.config();
         assert_eq!(cfg.systems, ["first", name, "last"]);
+        let profile = cfg.connect("project").unwrap();
+        assert_eq!(profile.api, "openai-chat");
+        assert_eq!(profile.headers["x-tenant"], "kept_val");
+        assert!(s.model_available("project/m"));
+        assert!(!tuse_core::Providers::json().unwrap().contains("project"));
+        assert!(
+            !serde_json::to_string(&*cfg)
+                .unwrap()
+                .contains("local-secret")
+        );
         assert_eq!((cfg.settings.ui.pad_x, cfg.settings.ui.scroll_step), (3, 5));
         assert_eq!(cfg.prompts["local_wins"].body, "from project");
         assert_eq!(cfg.prompts["rex"].body, "rex-v1");
@@ -156,6 +170,17 @@ fn require_session_validation_and_reload_rollback() {
                 std::thread::sleep(std::time::Duration::from_millis(20));
             }
             assert!(s.ui_snapshot().markdowns.iter().any(|m| m.text == "rex-v2"));
+            fs::write(
+                &root,
+                "return { providers = { p = { base = 'http://127.0.0.1:1', key = 'k' } } }",
+            )
+            .unwrap();
+            assert!(s.reload().unwrap_err().contains("name is already saved"));
+            assert!(s.model_available("project/m"));
+            fs::write(&root, "return { providers = {} }").unwrap();
+            s.reload().unwrap();
+            assert!(!s.model_available("project/m"));
+            assert!(s.model_available("p/m"));
             fs::write(&root, saved_root).unwrap();
             fs::write(shared.join("rex.lua"), "return { tag = 'rex-v1' }").unwrap();
         }

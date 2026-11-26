@@ -153,7 +153,8 @@ fn adapters_request_stream_tools_usage_replay_and_models() {
         ]),
         j(r#"{"data":[{"id":"gpt-5"}]}"#),
     ]);
-    let c = Client::new(&u, "sk-c", ApiType::OpenAiChat);
+    let c = Client::new(&u, "sk-c", ApiType::OpenAiChat)
+        .with_headers([("x-tenant".into(), "demo".into())].into());
     let (mut t, mut r, mut code) = (String::new(), String::new(), String::new());
     let rep = c
         .complete(
@@ -179,6 +180,8 @@ fn adapters_request_stream_tools_usage_replay_and_models() {
         })
     );
     let l = log.lock().unwrap();
+    assert_eq!(l[0].1["x-tenant"], "demo");
+    assert_eq!(l[1].1["x-tenant"], "demo");
     assert!(
         l[0].0 == "/chat/completions"
             && l[0].1["authorization"] == "Bearer sk-c"

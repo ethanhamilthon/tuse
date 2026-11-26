@@ -60,6 +60,7 @@ All keys are optional. Unknown keys, wrong types, and out-of-range values fail w
 | --- | --- | --- |
 | `settings` | table | `ui` and `open` (below). |
 | `theme` | table | Colors (below). |
+| `providers` | `name -> { base, key, api?, headers? }` | Session-only API connections ([Connect](connect.md#providers-in-lua-config)). |
 | `models` | list | Model metadata ([Connect](connect.md#model-metadata)). |
 | `systems` | list of strings | Text appended to the system prompt, in order ([Lua](lua.md#what-the-agent-sees)). |
 | `prompts` | `name -> string \| { args?, run }` | Prompts for the `#` picker and JSON-RPC `turn.submit` (below). |

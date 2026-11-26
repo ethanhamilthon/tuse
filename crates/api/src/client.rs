@@ -67,6 +67,11 @@ impl Client {
         }
     }
 
+    pub fn with_headers(mut self, headers: std::collections::BTreeMap<String, String>) -> Self {
+        self.conn.set_headers(headers);
+        self
+    }
+
     pub fn complete(
         &self,
         req: &Request,
@@ -112,7 +117,10 @@ impl Client {
                 return Err(Error::Cancelled);
             }
             on_attempt();
-            match self.once(req, cancel, on_delta) {
+            match self
+                .once(req, cancel, on_delta)
+                .map_err(|e| self.conn.redact(e))
+            {
                 Err(e) if e.retryable() && attempt < max => {
                     let delay = delays[attempt];
                     attempt += 1;
@@ -168,6 +176,7 @@ impl Client {
             ApiType::AnthropicMessages => crate::anthropic::models(&self.conn),
             ApiType::GoogleGemini => crate::gemini::models(&self.conn),
         }
+        .map_err(|e| self.conn.redact(e))
     }
 }
 

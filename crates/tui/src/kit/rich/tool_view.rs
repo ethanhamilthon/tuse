@@ -355,6 +355,7 @@ mod tests {
             base_url: format!("http://{addr}"),
             api_key: "test".into(),
             api: "openai-chat".into(),
+            ..Default::default()
         })
         .unwrap();
         let write_cfg = |n: i32| {

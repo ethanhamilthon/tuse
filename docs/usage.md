@@ -34,7 +34,7 @@ Every command accepts `-h`/`--help`, which prints its usage and exits without re
 
 - `tuse [-c|--config PATH] [-r|--resume ID]` opens the TUI in the current folder. `-r ID` opens a saved session instead, using its saved folder if that still exists. On exit it prints `tuse: session <ID>` to stderr.
 - `tuse json [-c|--config PATH] [-r|--resume ID]` serves one session over JSON-RPC on stdin/stdout ([JSON mode](json.md)).
-- `tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--replace]` checks a provider and saves it ([Connect](connect.md)).
+- `tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--header HEADER]... [--replace]` checks a provider and saves it ([Connect](connect.md)).
 - `tuse disconnect NAME` removes a provider.
 - `tuse providers [--json]` lists providers as `NAME<TAB>BASE_URL`, or as JSON with `api`. Keys are never printed.
 - `tuse models [-c|--config PATH]` prints the saved default model and effort and the `models` metadata from the effective config.

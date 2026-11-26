@@ -1,8 +1,7 @@
 use crate::args::Args;
 use std::io::Read;
 
-const USAGE: &str =
-    "tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--replace]";
+const USAGE: &str = "tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--header HEADER]... [--replace]";
 
 pub fn run(args: &Args) -> Result<(), String> {
     let required = |flag| {
@@ -38,31 +37,38 @@ pub fn run(args: &Args) -> Result<(), String> {
         Some(raw) => tuse_api::ApiType::parse(&raw)?,
         None => tuse_api::ApiType::OpenAiChat,
     };
-    if !base_url.starts_with("http://") && !base_url.starts_with("https://") {
-        return Err("the base URL must start with http:// or https://".into());
-    }
-    if name.contains('/') || name.chars().any(char::is_whitespace) {
-        return Err("the name can't contain `/` or whitespace".into());
-    }
     let replace = args.has(&["--replace"]);
     if !replace && tuse_core::Providers::list()?.iter().any(|p| p.name == name) {
         return Err(format!(
             "`{name}` already exists; `tuse disconnect {name}` removes it"
         ));
     }
-    let key = tuse_config::env_value(&api_key);
-    if key.trim().is_empty() {
-        return Err("the API key environment variable is unset or empty".into());
+    let mut headers = std::collections::BTreeMap::new();
+    for header in args.values("--header") {
+        let (name, value) = header
+            .split_once(':')
+            .ok_or("--header expects 'Name: value'")?;
+        let name = name.trim_matches([' ', '\t']).to_ascii_lowercase();
+        if headers
+            .insert(name.clone(), value.trim_matches([' ', '\t']).to_owned())
+            .is_some()
+        {
+            return Err(format!("duplicate header `{name}`"));
+        }
     }
-    let models = tuse_api::Client::new(&base_url, &key, api)
-        .models()
-        .map_err(|e| format!("can't fetch models from {base_url}: {e}"))?;
-    tuse_core::Providers::add(&tuse_config::Connect {
+    let profile = tuse_config::Connect {
         name: name.clone(),
         base_url,
         api_key,
         api: api.as_str().to_string(),
-    })?;
+        headers,
+    };
+    let resolved = profile.resolve()?;
+    let models = tuse_api::Client::new(&resolved.base_url, &resolved.api_key, api)
+        .with_headers(resolved.headers)
+        .models()
+        .map_err(|e| format!("can't fetch models from {}: {e}", resolved.base_url))?;
+    tuse_core::Providers::add(&profile)?;
     println!("Received {} models. Saved `{name}`.", models.len());
     Ok(())
 }

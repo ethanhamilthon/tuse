@@ -92,6 +92,7 @@ fn replay_resume_provider_isolation_and_truncation() {
             base_url: u.clone(),
             api_key: "k".into(),
             api: a.into(),
+            ..Default::default()
         })
         .unwrap();
     }

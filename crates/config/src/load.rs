@@ -38,9 +38,12 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
         let path = if path.is_empty() { ".".into() } else { path };
         let msg = e.inner().to_string();
         let msg = msg.split(" at line ").next().unwrap_or(&msg);
-        let msg = match msg.starts_with("unknown field `") {
-            true => "unknown key",
-            false => msg,
+        let msg = if msg.starts_with("unknown field `") {
+            "unknown key"
+        } else if path == "providers" || path.starts_with("providers.") {
+            "invalid provider settings"
+        } else {
+            msg
         };
         if path == "." {
             format!("{name}: {msg}")

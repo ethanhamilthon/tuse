@@ -101,8 +101,36 @@ fn connect_apis_providers_format_key_stdin_replace_and_probe() {
         if !a.is_empty() {
             args.extend(["--api", a]);
         }
+        args.extend([
+            "--header",
+            "X-Gateway-Key: $TEST_API_KEY",
+            "--header=X-Tenant: demo",
+        ]);
         assert!(tuse(&dir, &args, None).status.success(), "{n}");
     }
+    for log in [&oai_s, &anth_s, &gem_s] {
+        for request in log.lock().unwrap().iter() {
+            assert!(request.contains("x-gateway-key: secret-val"));
+            assert!(request.contains("x-tenant: demo"));
+        }
+    }
+    for headers in [
+        vec!["--header", "Authorization: override"],
+        vec![
+            "--header",
+            "X-Tenant: first",
+            "--header",
+            "x-tenant: second",
+        ],
+        vec!["--header", "X-Tenant: invalid\r\nX-Other: data"],
+    ] {
+        let mut args = vec![
+            "connect", "--base", &oai_u, "--key", "k", "--name", "invalid",
+        ];
+        args.extend(headers);
+        assert!(!tuse(&dir, &args, None).status.success());
+    }
+    assert_eq!(oai_s.lock().unwrap().len(), 2);
     assert!(anth_s.lock().unwrap()[0].contains("anthropic-version: 2023-06-01"));
     assert!(gem_s.lock().unwrap()[0].contains("x-goog-api-key: secret-val"));
 
@@ -113,7 +141,9 @@ fn connect_apis_providers_format_key_stdin_replace_and_probe() {
             && !plain.contains("secret-val")
     );
     let js = String::from_utf8(tuse(&dir, &["providers", "--json"], None).stdout).unwrap();
-    assert!(!js.contains("secret-val") && !js.contains("api_key"));
+    for secret in ["secret-val", "api_key", "headers", "TEST_API_KEY"] {
+        assert!(!js.contains(secret));
+    }
     for a in [
         "openai-chat",
         "openai-responses",

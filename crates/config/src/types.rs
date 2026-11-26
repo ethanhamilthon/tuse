@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 pub struct Config {
     #[serde(skip)]
     pub connect: Vec<Connect>,
+    #[serde(skip_serializing)]
+    pub providers: BTreeMap<String, crate::ProviderConfig>,
     pub settings: Settings,
     pub theme: Theme,
     #[serde(deserialize_with = "crate::de::list")]
@@ -30,8 +32,11 @@ pub struct Config {
 pub struct Connect {
     pub name: String,
     pub base_url: String,
+    #[serde(skip_serializing)]
     pub api_key: String,
     pub api: String,
+    #[serde(skip_serializing)]
+    pub headers: BTreeMap<String, String>,
 }
 
 impl Default for Connect {
@@ -41,6 +46,7 @@ impl Default for Connect {
             base_url: String::new(),
             api_key: String::new(),
             api: DEFAULT_API.to_string(),
+            headers: BTreeMap::new(),
         }
     }
 }

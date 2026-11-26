@@ -1,0 +1,4 @@
+- [x] 1. Implement shared provider profiles, headers, CLI and storage migration.
+- [x] 2. Load config-only providers and use profiles across all request paths.
+- [x] 3. Document providers and update the shared screenshot.
+- [x] 4. Add focused tests and verify build, tests and mdBook.

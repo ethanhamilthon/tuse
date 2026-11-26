@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.10
+
+- Add extra provider headers with `tuse connect --header` and configure session-only providers in Lua with `providers`.
+- Use the same updated Tuse screenshot in the README and the documentation site.
+
 ## 0.11.9
 
 - **Aligned chat.** User messages and agent replies have two columns of padding on both sides, lining up with Lua output, `show()` blocks, and other chat entries.

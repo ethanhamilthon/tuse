@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS providers (
     name TEXT PRIMARY KEY,
     base_url TEXT NOT NULL,
     api_key TEXT NOT NULL,
-    api TEXT NOT NULL DEFAULT 'openai-chat'
+    api TEXT NOT NULL DEFAULT 'openai-chat',
+    headers TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS state (
     key TEXT PRIMARY KEY,
@@ -67,7 +68,11 @@ fn initialize_schema(c: &mut Connection) -> rusqlite::Result<()> {
             DROP TABLE IF EXISTS providers; DROP TABLE IF EXISTS state;",
         )?;
         tx.execute_batch(SCHEMA)?;
-        tx.pragma_update(None, "user_version", 1)?;
+    } else if version == 1 {
+        tx.execute_batch("ALTER TABLE providers ADD COLUMN headers TEXT NOT NULL DEFAULT '{}';")?;
+    }
+    if version < 2 {
+        tx.pragma_update(None, "user_version", 2)?;
     }
 
     tx.commit()
@@ -125,14 +130,22 @@ pub struct Providers;
 impl Providers {
     pub fn list() -> Result<Vec<tuse_config::Connect>, String> {
         with(|c| {
-            let mut q =
-                c.prepare("SELECT name, base_url, api_key, api FROM providers ORDER BY rowid")?;
+            let mut q = c.prepare(
+                "SELECT name, base_url, api_key, api, headers FROM providers ORDER BY rowid",
+            )?;
             let rows = q.query_map([], |r| {
                 let mut conn = tuse_config::Connect {
                     name: r.get(0)?,
                     base_url: r.get(1)?,
                     api_key: r.get(2)?,
                     api: r.get(3)?,
+                    headers: serde_json::from_str(&r.get::<_, String>(4)?).map_err(|_| {
+                        rusqlite::Error::InvalidColumnType(
+                            4,
+                            "headers".into(),
+                            rusqlite::types::Type::Text,
+                        )
+                    })?,
                 };
                 conn.api = conn.api_type().to_string();
                 Ok(conn)
@@ -143,11 +156,12 @@ impl Providers {
 
     pub fn add(p: &tuse_config::Connect) -> Result<(), String> {
         let api = p.api_type();
+        let headers = serde_json::to_string(&p.headers).map_err(|e| e.to_string())?;
         with(|c| {
             c.execute(
-                "INSERT INTO providers(name, base_url, api_key, api) VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3, api = ?4",
-                params![p.name, p.base_url, p.api_key, api],
+                "INSERT INTO providers(name, base_url, api_key, api, headers) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3, api = ?4, headers = ?5",
+                params![p.name, p.base_url, p.api_key, api, headers],
             )
             .map(|_| ())
         })
@@ -176,10 +190,22 @@ impl Providers {
     }
 
     pub(crate) fn apply(config: &mut tuse_config::Config) -> Result<(), String> {
-        config.connect = Self::list()?;
-        for c in &mut config.connect {
-            c.api_key = tuse_config::env_value(&c.api_key);
+        let mut profiles = Self::list()?;
+        for (name, profile) in std::mem::take(&mut config.providers) {
+            if profiles.iter().any(|p| p.name == name) {
+                return Err(format!(
+                    "providers.{name}: name is already saved by tuse connect"
+                ));
+            }
+            profiles.push(profile.into_connect(name));
         }
+        config.connect = profiles
+            .into_iter()
+            .map(|p| {
+                p.resolve()
+                    .map_err(|e| format!("providers.{}: {e}", p.name))
+            })
+            .collect::<Result<_, _>>()?;
         Ok(())
     }
 }
@@ -187,6 +213,28 @@ impl Providers {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn schema_v2_preserves_saved_providers() {
+        let mut c = Connection::open_in_memory().unwrap();
+        c.execute_batch(
+            "CREATE TABLE providers (name TEXT PRIMARY KEY, base_url TEXT, api_key TEXT, api TEXT);
+            INSERT INTO providers VALUES ('p', 'https://example.com', '$KEY', 'openai-chat');
+            PRAGMA user_version = 1;",
+        )
+        .unwrap();
+        for _ in 0..2 {
+            initialize_schema(&mut c).unwrap();
+        }
+        let (key, headers): (String, String) = c
+            .query_row(
+                "SELECT api_key, headers FROM providers WHERE name = 'p'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((key.as_str(), headers.as_str()), ("$KEY", "{}"));
+    }
 
     #[test]
     fn schema_reset_discards_legacy_data() {

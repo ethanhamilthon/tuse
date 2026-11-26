@@ -143,6 +143,10 @@ fn validates_config_and_preserves_state_on_failed_reload() {
             "settings.open.md: expected function",
         ),
         (
+            "return { settings = { open = { ['@file'] = function() end } } }",
+            "settings.open: `@file`: unknown special key",
+        ),
+        (
             "return { open = { md = function() end } }",
             "open: moved to settings.open",
         ),

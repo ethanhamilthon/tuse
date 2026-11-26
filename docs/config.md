@@ -210,7 +210,13 @@ return {
 - `args` are unique strings without spaces, `desc` is a string, and `run` is required in the table form.
 - Commands run as Lua jobs with no deadline. `print` is not shown, and host functions are not globals here, so use `t.show()`. Esc cancels them. The return value is ignored.
 - A command name is not empty, does not start with `/`, has no whitespace or control characters, and is not a built-in name (`config`, `new`, `resume`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`).
-- `settings = { open = { md = function(path) ... end } }` handles clicks on local files with that extension (case-insensitive) in the TUI. An extension is not empty, does not start with `.`, and has no `/`, `\`, whitespace, or control characters. Without a handler, the OS opener is used. URLs always go to the OS opener. A top-level `open` key fails with `open: moved to settings.open`.
+- `settings = { open = { md = function(path) ... end } }` handles clicks on local files and links in the TUI. A key is one of:
+  - an extension without a dot (`md`), case-insensitive;
+  - a mask with `*` or `?` matched against the file name (`*.test.lua`, `.env*`), case-insensitive;
+  - `*`, for anything without a more specific handler;
+  - `@dir`, for folders;
+  - `@url`, for `http://`, `https://`, and `mailto:` links, which get the URL.
+- A file uses its extension handler, then the mask with the most literal characters (ties go in alphabetical order), then `*`. A folder uses `@dir`, then `*`. Without a handler, the OS opener is used. Other keys fail loading, and keys have no `/`, `\`, whitespace, or control characters. A top-level `open` key fails with `open: moved to settings.open`.
 
 ## Reload
 

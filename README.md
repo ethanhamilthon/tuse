@@ -67,6 +67,18 @@ Then type `#showme` in the TUI.
 
 **Plugins** made everything more complicated, so we removed them. Write the few lines you need yourself, or ask Tuse to write them, and load them from `init.lua`. See [`examples/`](https://github.com/ethanhamilthon/tuse/tree/main/examples) for ready ones.
 
+## Benchmark
+
+This is a small benchmark. What matters here is not quality but the efficiency of the agents. Like Pi, Tuse uses 2-3x fewer input tokens than the others, thanks to its minimalism. But unlike Pi, Tuse has much more functionality out of the box, and that does not make it slower.
+
+| Agent | Full passes | Time* | Input* | Output* |
+| :-- | --: | --: | --: | --: |
+| **Tuse 0.11.5** | **49/50** | 57.3 s | 54.7k | 11.4k |
+| **OpenCode** | **49/50** | 66.2 s | 126.5k | 10.9k |
+| Claude Code | 47/50 | 69.0 s | 153.8k | 13.7k |
+| Pi | 46/50 | 55.3 s | **52.6k** | 11.2k |
+| Codex | 46/50 | **54.4 s** | 154.0k | **9.7k** |
+
 ## Docs, license, contributing
 
 Docs are at https://ethanhamilthon.github.io/tuse/. The agent reads the same pages with `docs()`. Tuse is MIT licensed, see [LICENSE](LICENSE).

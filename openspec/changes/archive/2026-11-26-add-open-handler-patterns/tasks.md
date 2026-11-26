@@ -1,0 +1,6 @@
+- [x] 1. Validate and match `settings.open` keys (extension, mask, `*`, `@dir`, `@url`) in the config crate
+- [x] 2. Use the matcher for files and folders in `open_path`, and call `@url` in `open_url`
+- [x] 3. Show the new keys in `/config`
+- [x] 4. Add tests
+- [x] 5. Update the config spec and docs
+- [x] 6. Run `cargo build` and `cargo test`

@@ -21,7 +21,17 @@ impl Session {
             self.error(format!("cannot open URL `{url}`"));
             return;
         }
-        self.spawn_os_open(url.to_string());
+        let key = self
+            .config()
+            .settings
+            .open
+            .iter()
+            .find(|k| k.as_str() == tuse_config::OPEN_URL)
+            .cloned();
+        match key {
+            Some(key) => self.run_open_callback(key, url.to_string()),
+            None => self.spawn_os_open(url.to_string()),
+        }
     }
 
     pub fn open_path(self: &Arc<Self>, path: &Path) {
@@ -33,26 +43,16 @@ impl Session {
             ));
             return;
         }
-        let ext = resolved
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.to_ascii_lowercase());
-        if let Some(ext) = ext
-            && let Some(key) = self
-                .config()
-                .settings
-                .open
-                .iter()
-                .find(|k| k.eq_ignore_ascii_case(&ext))
-                .cloned()
-        {
-            self.run_open_callback(key, resolved);
-            return;
+        let key =
+            tuse_config::pick_open_key(&self.config().settings.open, &resolved, resolved.is_dir())
+                .cloned();
+        match key {
+            Some(key) => self.run_open_callback(key, resolved.display().to_string()),
+            None => self.spawn_os_open(resolved.display().to_string()),
         }
-        self.spawn_os_open(resolved.display().to_string());
     }
 
-    fn run_open_callback(self: &Arc<Self>, ext: String, path: PathBuf) {
+    fn run_open_callback(self: &Arc<Self>, ext: String, path_str: String) {
         let cancel = Arc::new(AtomicBool::new(false));
         {
             let mut list = self.cmd_runs.lock().unwrap();
@@ -63,7 +63,6 @@ impl Session {
         let weak = Arc::downgrade(self);
         let exec_id = self.next_lua_id();
         let started = Instant::now();
-        let path_str = path.display().to_string();
         self.vm.post(move |lua| {
             if let Some(s) = weak.upgrade() {
                 let code = crate::scripting::registry::open_of(lua, &ext)

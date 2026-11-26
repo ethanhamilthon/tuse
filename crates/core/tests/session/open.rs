@@ -57,15 +57,22 @@ return #s2.history
     std::fs::write(
         &cfg,
         format!(
-            r#"return {{
+            r#"local function rec(tag)
+  return function(path)
+    local f = assert(io.open("{}", "a"))
+    f:write(tag, " ", path, "\n")
+    f:close()
+  end
+end
+return {{
   models = {{{{ name = "p/m", display = "M", window = 100000,
     prices = {{ input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 }} }}}},
   settings = {{ open = {{
-    md = function(path)
-      local f = assert(io.open("{}", "a"))
-      f:write(path, "\n")
-      f:close()
-    end,
+    md = rec("md"),
+    ["*.note"] = rec("mask"),
+    ["*"] = rec("any"),
+    ["@dir"] = rec("dir"),
+    ["@url"] = rec("url"),
     bad = function() error("opener crashed") end,
   }} }},
   hooks = {{
@@ -137,8 +144,37 @@ return #s2.history
     }
     assert_eq!(
         std::fs::read_to_string(&opened_log).unwrap().trim(),
-        sample.canonicalize().unwrap().display().to_string()
+        format!("md {}", sample.canonicalize().unwrap().display())
     );
+
+    let note = dir.join("a.NOTE");
+    let other = dir.join("b.txt");
+    std::fs::write(&note, "x").unwrap();
+    std::fs::write(&other, "x").unwrap();
+    s2.open_path(&note);
+    s2.open_path(&other);
+    s2.open_path(&dir.join("notes"));
+    s2.open_url("https://example.com/x");
+    let dl = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < dl
+        && std::fs::read_to_string(&opened_log)
+            .unwrap()
+            .lines()
+            .count()
+            < 5
+    {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let log = std::fs::read_to_string(&opened_log).unwrap();
+    let canon = |p: &std::path::Path| p.canonicalize().unwrap().display().to_string();
+    for want in [
+        format!("mask {}", canon(&note)),
+        format!("any {}", canon(&other)),
+        format!("dir {}", canon(&dir.join("notes"))),
+        "url https://example.com/x".to_string(),
+    ] {
+        assert!(log.lines().any(|l| l == want), "{want}\n{log}");
+    }
 
     s2.open_path(std::path::Path::new("notes/missing.md"));
     let bad_file = dir.join("x.bad");

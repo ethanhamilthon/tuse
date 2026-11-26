@@ -76,7 +76,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                     &cfg.settings
                         .open
                         .iter()
-                        .map(|e| format!(".{e}"))
+                        .map(|e| tuse_config::open_label(e))
                         .collect::<Vec<_>>(),
                 ),
                 info,

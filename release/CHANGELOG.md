@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.8
+
+- **More open handlers.** `settings.open` keys can now be masks matched against the file name (`*.test.lua`, `.env*`), `*` for any file or folder without a better handler, `@dir` for folders, and `@url` for `http://`, `https://`, and `mailto:` links. A file uses its extension, then the most specific mask, then `*`; a folder uses `@dir`, then `*`. Other keys fail loading, and `/config` lists the new keys as written.
+
 ## 0.11.7
 
 - **Boxed input padding.** The draft and status row now leave one blank column inside each side border, without widening the box.

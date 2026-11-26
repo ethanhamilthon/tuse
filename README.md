@@ -1,5 +1,5 @@
 # Tuse
-![Tuse](docs/screenshot.png)
+![Tuse](docs/demo.gif)
 
 The simplest, most powerful AI coding agent for the terminal.
 

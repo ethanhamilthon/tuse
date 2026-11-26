@@ -154,6 +154,9 @@ impl App {
     }
 
     pub fn picker_rows(&self) -> usize {
+        if self.picker.as_ref().is_some_and(|p| p.title.is_some()) {
+            return self.list_rows.max(1);
+        }
         self.list_rows
             .min(self.palette.ui.list_max_height.saturating_sub(1).max(1))
             .max(1)

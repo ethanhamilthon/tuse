@@ -154,7 +154,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             prompt,
             value,
         } => marked(&marker(UI_RESULT_PREFIX), width, p, |room| {
-            let mut out = if *is_picker {
+            let mut out = if *is_picker && prompt == "Picker" {
                 plain(prompt, room, Style::fg(p.dim), "", "")
             } else {
                 crate::kit::rich::markdown::render_with_links(prompt, room, p, false)
@@ -238,15 +238,25 @@ mod tests {
     #[test]
     fn ui_entries_use_accent_markers_and_keep_wrapped_content_aligned() {
         let p = Palette::new(&Default::default(), &Default::default());
-        for (is_picker, prompt) in [(true, "Picker"), (false, "**Question**")] {
+        for (is_picker, prompt) in [
+            (true, "Picker"),
+            (true, "**Question**"),
+            (false, "**Question**"),
+        ] {
             let entry = Entry::UiResult {
                 is_picker,
                 prompt: prompt.into(),
-                value: "answer".into(),
+                value: "**answer**".into(),
             };
             let lines = render(&entry, 20, &p);
             assert_eq!(lines[0][0], span("? ", Style::fg(p.accent)));
             assert_eq!(lines[1][0], span("› ", Style::fg(p.accent)));
+            assert_eq!(lines[0].iter().any(|s| s.style.bold), prompt != "Picker");
+            assert!(
+                lines[1]
+                    .iter()
+                    .any(|s| s.text == "**answer**" && !s.style.bold)
+            );
         }
         let lines = ui_markdown("**one two three**", 9, &p);
         assert_eq!(lines[0][0], span("◆ ", Style::fg(p.accent)));

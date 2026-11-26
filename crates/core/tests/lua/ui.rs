@@ -31,9 +31,10 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
       t.show("pin1", "Pinned A", true)
       t.show("gone", "Temp", false)
       t.show("gone", "", false)
-      local pick = t.pick({"alpha", "beta"})
+      assert(t.pick({}, "No choices") == nil)
+      local pick = t.pick({"alpha", "beta"}, "**Choose one**")
       local ans = t.ask("**Name?**")
-      local skip = t.pick({"x", "y"})
+      local skip = t.pick({"x", "y"}, "Cancel this?")
       t.show("summary", tostring(pick) .. "|" .. tostring(ans) .. "|" .. tostring(skip), true)
     end,
     second = function()
@@ -72,7 +73,8 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     assert_eq!(
         r1.prompt,
         UiPrompt::Picker {
-            options: vec!["alpha".into(), "beta".into()]
+            options: vec!["alpha".into(), "beta".into()],
+            title: Some("**Choose one**".into()),
         }
     );
     s.run_command("second", &[]).unwrap();
@@ -131,7 +133,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
             snap.entries[0].prompt.as_str(),
             snap.entries[0].value.as_str()
         ),
-        ("picker", "Picker", "beta")
+        ("picker", "**Choose one**", "beta")
     );
     assert_eq!(
         (

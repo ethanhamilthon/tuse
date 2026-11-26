@@ -40,7 +40,7 @@ impl App {
         self.picker.insert(p)
     }
 
-    pub(crate) fn open_lua_picker(&mut self, id: u64, options: Vec<String>) {
+    pub(crate) fn open_lua_picker(&mut self, id: u64, options: Vec<String>, title: Option<String>) {
         self.question = None;
         self.panel = None;
         self.history_back = None;
@@ -49,7 +49,9 @@ impl App {
             .into_iter()
             .map(|s| item(s.clone(), "", s))
             .collect();
-        self.open_modal(Picker::new(Kind::LuaPicker(id), items));
+        let mut picker = Picker::new(Kind::LuaPicker(id), items);
+        picker.title = title;
+        self.open_modal(picker);
     }
 
     pub(crate) fn open_question(&mut self, id: u64, text: String) {
@@ -205,7 +207,7 @@ mod tests {
                 && !rendered.iter().any(|l| l.contains("UNPIN1"))
         );
 
-        app.open_lua_picker(1, vec!["one".into(), "two".into()]);
+        app.open_lua_picker(1, vec!["one".into(), "two".into()], None);
         assert!(app.input_disabled() && app.editor.is_empty());
         type_text(&mut app, "two");
         app.paste("ignored");

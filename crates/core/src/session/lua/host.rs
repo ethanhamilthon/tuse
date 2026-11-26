@@ -360,7 +360,7 @@ fn install_ui(lua: &Lua) -> mlua::Result<()> {
     tuse_lua::wrap(lua, &g, &["show"])
 }
 
-fn start_picker(lua: &Lua, options: Table) -> mlua::Result<Value> {
+fn start_picker(lua: &Lua, (options, title): (Table, Option<String>)) -> mlua::Result<Value> {
     let mut list = vec![];
     for v in options.sequence_values::<Value>() {
         match v? {
@@ -371,7 +371,13 @@ fn start_picker(lua: &Lua, options: Table) -> mlua::Result<Value> {
     if list.is_empty() {
         return Ok(Value::Nil);
     }
-    enqueue(lua, UiPrompt::Picker { options: list })
+    enqueue(
+        lua,
+        UiPrompt::Picker {
+            options: list,
+            title: title.filter(|s| !s.trim().is_empty()),
+        },
+    )
 }
 
 fn start_question(lua: &Lua, text: String) -> mlua::Result<Value> {

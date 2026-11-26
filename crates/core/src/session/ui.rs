@@ -164,7 +164,7 @@ impl Session {
             if front.req.id != id {
                 return Err(format!("UI request {id} is not active"));
             }
-            if let (Some(v), UiPrompt::Picker { options }) = (&value, &front.req.prompt)
+            if let (Some(v), UiPrompt::Picker { options, .. }) = (&value, &front.req.prompt)
                 && !options.contains(v)
             {
                 return Err(format!("invalid picker option `{v}`"));
@@ -172,7 +172,9 @@ impl Session {
             let pending = ui.queue.pop_front().unwrap();
             if let Some(v) = &value {
                 let (kind, prompt) = match pending.req.prompt {
-                    UiPrompt::Picker { .. } => ("picker", "Picker".into()),
+                    UiPrompt::Picker { title, .. } => {
+                        ("picker", title.unwrap_or_else(|| "Picker".into()))
+                    }
                     UiPrompt::Question { text } => ("question", text),
                 };
                 let e = UiEntry {

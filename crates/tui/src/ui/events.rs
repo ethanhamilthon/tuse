@@ -350,7 +350,7 @@ impl App {
                 }
             }
             Event::UiRequest(req) => match req.prompt {
-                UiPrompt::Picker { options } => self.open_lua_picker(req.id, options),
+                UiPrompt::Picker { options, title } => self.open_lua_picker(req.id, options, title),
                 UiPrompt::Question { text } => self.open_question(req.id, text),
             },
             Event::UiClear { id } => {

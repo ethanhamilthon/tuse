@@ -4,8 +4,14 @@ use std::time::Duration;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum UiPrompt {
-    Picker { options: Vec<String> },
-    Question { text: String },
+    Picker {
+        options: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+    },
+    Question {
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

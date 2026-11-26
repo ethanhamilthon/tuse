@@ -37,7 +37,10 @@ impl App {
             _ => 0,
         };
         if page_delta != 0 {
-            if shift && let Some(panel) = self.visible_panel_mut() {
+            if !shift && let Some(picker) = self.picker.as_mut().filter(|p| p.title.is_some()) {
+                let rows = self.list_rows.max(1);
+                picker.moved(page_delta.signum() * rows as isize, rows);
+            } else if shift && let Some(panel) = self.visible_panel_mut() {
                 panel.scroll_by(page_delta);
                 self.clear_link_hover();
             } else {

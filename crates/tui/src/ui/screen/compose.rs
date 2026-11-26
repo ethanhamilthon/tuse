@@ -62,8 +62,12 @@ impl App {
 
         let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.list_max_height);
         let mut overlay = if let Some(pk) = &mut self.picker {
-            let rows = cap.max(1);
-            let lines = crate::ui::screen::list::options(pk, rows, inner, p);
+            let mut lines = pk.title.as_deref().map_or_else(Vec::new, |title| {
+                crate::kit::rich::markdown::render_with_links(title, inner, p, false)
+            });
+            lines.truncate(cap.saturating_sub(1));
+            let rows = (cap - lines.len()).max(1);
+            lines.extend(crate::ui::screen::list::options(pk, rows, inner, p));
             self.list_rows = rows;
             crate::kit::rich::render::framed(lines, inner, p)
         } else if let Some(panel) = self
@@ -280,6 +284,42 @@ mod tests {
         );
         cleanup(app);
     }
+    #[test]
+    fn titled_picker_reserves_choices_and_pages_by_their_height() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let mut app = test_app("titled-picker-layout");
+        app.open_lua_picker(
+            1,
+            (0..8).map(|i| format!("choice {i}")).collect(),
+            Some("**Choose one**".into()),
+        );
+        app.palette.ui.list_max_height = 3;
+        let frame = app.compose(40, 20);
+        assert!(frame.cursor.is_none());
+        let overlay = &frame.screen[app.overlay_rows.clone()];
+        assert_eq!(overlay.len(), 3);
+        assert!(
+            overlay[0]
+                .iter()
+                .any(|s| s.text == "Choose one" && s.style.bold)
+        );
+        assert!(text(&overlay[1]).contains("choice 0"));
+        app.key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE), 20);
+        assert_eq!(app.picker.as_ref().unwrap().selected, 2);
+        let frame = app.compose(40, 20);
+        let overlay = &frame.screen[app.overlay_rows.clone()];
+        assert!(text(&overlay[0]).contains("Choose one"));
+        assert!(text(&overlay[2]).contains("choice 2"));
+
+        app.palette.ui.list_max_height = 1;
+        let frame = app.compose(40, 20);
+        let overlay = &frame.screen[app.overlay_rows.clone()];
+        assert_eq!(overlay.len(), 1);
+        assert!(text(&overlay[0]).contains("choice 2"));
+        cleanup(app);
+    }
+
     fn open_list(app: &mut crate::ui::app::App) {
         use crate::ui::picker::{Kind, Picker, item};
         let items = ["one", "two", "three"].map(|s| item(s, "", s)).to_vec();

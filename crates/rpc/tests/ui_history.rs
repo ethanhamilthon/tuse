@@ -65,7 +65,7 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
       t.show("a", "v1", false)
       t.show("tmp", "drop-me", false)
       t.show("p", "pin-v1", true)
-      local c = t.pick({"opt1", "opt2"})
+      local c = t.pick({"opt1", "opt2"}, "**Choose an option**")
       local a = t.ask("SECRET_QUESTION_PROMPT")
       local _ = t.ask("CANCELLED_PROMPT")
       t.show("tmp", "", false)
@@ -187,6 +187,7 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
     assert!(st["active"].is_null(), "{st}");
     let entries = st["entries"].as_array().unwrap();
     assert_eq!(entries.len(), 2, "{st}");
+    assert_eq!(entries[0]["prompt"], "**Choose an option**");
     assert_eq!(
         (entries[0]["id"].as_u64(), entries[0]["value"].as_str()),
         (Some(1), Some("opt2"))
@@ -220,6 +221,9 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
         .filter(|t| matches!(*t, "user" | "show" | "ask"))
         .collect();
     assert_eq!(tags[0], "user");
+    assert!(recs.iter().any(|r| r["role"] == "pick"
+        && r["prompt"] == "**Choose an option**"
+        && r["value"] == "opt2"));
     assert!(tags.contains(&"show") && tags.contains(&"ask"));
 
     let history = call(&tx, &out, 4, "session.history", json!({}))["result"].to_string();

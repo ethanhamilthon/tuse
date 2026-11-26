@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.11
+
+- Lua `pick(options, title)` accepts an optional Markdown question and keeps it with the selected answer in history. JSON-RPC clients receive the title with the active request.
+
 ## 0.11.10
 
 - Add extra provider headers with `tuse connect --header` and configure session-only providers in Lua with `providers`.

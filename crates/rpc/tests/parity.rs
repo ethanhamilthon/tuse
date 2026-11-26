@@ -28,9 +28,9 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
       t.show("m1", "Hello", true)
       t.show("drop", "Temp", false)
       t.show("drop", "", false)
-      local p = t.pick({"a", "b"})
+      local p = t.pick({"a", "b"}, "  **Pick one**  ")
       local q = t.ask("Why?")
-      local c = t.pick({"x"})
+      local c = t.pick({"x"}, "  ")
       t.show("done", tostring(p) .. ":" .. tostring(q) .. ":" .. tostring(c), false)
     end,
   },
@@ -82,6 +82,21 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     assert!(call(&tx, &out, 3, "commands.run", json!({"name": "ui_demo"}))["error"].is_null());
     let r1 = event(&out, "ui_request");
     assert_eq!(r1["kind"], "picker");
+    assert_eq!(r1["title"], "  **Pick one**  ");
+    assert_eq!(r1["options"], json!(["a", "b"]));
+    let active = &call(&tx, &out, 301, "ui.state", json!({}))["result"]["active"];
+    assert_eq!(active["title"], r1["title"]);
+    assert_eq!(active["options"], r1["options"]);
+    assert_eq!(
+        call(
+            &tx,
+            &out,
+            302,
+            "ui.reply",
+            json!({"id": r1["id"], "value": "c"})
+        )["error"]["code"],
+        -32000
+    );
     assert!(
         call(
             &tx,
@@ -92,7 +107,9 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
         )["error"]
             .is_null()
     );
-    assert_eq!(event(&out, "ui_result")["value"], "b");
+    let result = event(&out, "ui_result");
+    assert_eq!(result["value"], "b");
+    assert_eq!(result["prompt"], r1["title"]);
     let r2 = event(&out, "ui_request");
     assert_eq!(r2["kind"], "question");
     assert!(
@@ -107,6 +124,10 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     );
     assert_eq!(event(&out, "ui_result")["value"], "because");
     let r3 = event(&out, "ui_request");
+    assert!(r3.get("title").is_none());
+    let active = &call(&tx, &out, 303, "ui.state", json!({}))["result"]["active"];
+    assert_eq!(active["id"], r3["id"]);
+    assert!(active.get("title").is_none());
     assert!(call(&tx, &out, 6, "ui.cancel", json!({"id": r3["id"]}))["error"].is_null());
     let done = until(&out, |v| {
         assert_ne!(

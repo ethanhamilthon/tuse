@@ -48,10 +48,10 @@ Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~
 ### UI
 
 - `show(name, text, pin)`: Shows or updates a Markdown block by name. `pin=true` keeps it at the bottom of the chat, and `show(name, "")` removes it. Blocks survive reload and resume and are never sent to the model.
-- `pick(options)`: Shows a list of strings and returns the chosen one, or `nil` on Esc or an empty list.
+- `pick(options, title)`: Shows a list of strings under an optional Markdown question and returns the chosen string, or `nil` on Esc or an empty list. For example, `pick({"Retry", "Skip"}, "**Build failed.** What next?")`. A blank title is omitted.
 - `ask(text)`: Shows a Markdown question and returns the typed answer, or `nil` on Esc. The answer is not sent to the model.
 
-`pick` and `ask` share one queue. Answered prompts are saved in the chat history.
+`pick` and `ask` share one queue. Answered prompts are saved in the chat history with the question and answer. An untitled picker is recorded as `Picker`; cancelled prompts are not recorded.
 
 ### Session and utilities
 
@@ -158,7 +158,7 @@ They are Lua globals, not tools: call them inside `lua` code. Errors are Lua err
 - `task_stop(id)`: stop a running background task and return its task info.
 - `task_list()`: list all tasks in the session with `.id`, `.name`, and `.status` (`running`, `done`, `failed`, `stopped`).
 - `show(name, text, pin)`: render or update a UI-only Markdown block by name (`pin=true` keeps it at the end of the chat after new messages; `show(name, "", false)` removes it).
-- `pick(options)`: show a list of strings to the user and return the selected string, or `nil` on Esc (pauses your timeout while waiting).
+- `pick(options, title)`: show a list of strings under an optional Markdown question and return the selected string, or `nil` on Esc or an empty list (pauses your timeout while waiting).
 - `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
 - `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text; `model` and `effort` default to the session's.
 - `reload()`: reload the config like `/reload`; raises if it is invalid.

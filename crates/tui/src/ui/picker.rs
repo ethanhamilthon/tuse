@@ -60,6 +60,7 @@ pub fn item(label: impl Into<String>, detail: impl Into<String>, value: impl Int
 
 pub struct Picker {
     pub kind: Kind,
+    pub title: Option<String>,
     pub items: Vec<Item>,
     pub shown: Vec<usize>,
     pub selected: usize,
@@ -82,6 +83,7 @@ impl Picker {
         Picker {
             kind,
             widths,
+            title: None,
             items,
             shown,
             selected: 0,

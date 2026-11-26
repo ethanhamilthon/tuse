@@ -97,6 +97,7 @@ For `session.new` and `session.resume`, events left over from the old session ar
 `show`, `pick`, and `ask` become events, and the client answers them:
 
 - `ui.state` → `{markdowns: [{name, text, pin}], active: UiRequest | null, entries: [{id, kind, prompt, value}]}`. Call it to resync at any time.
+- An active picker has `id`, `kind: "picker"`, and `options`. A titled picker also has `title`, the original Markdown question; untitled pickers omit it in both `ui.state.active` and `ui_request`.
 - `ui.reply` `{id, value}` → `null`. Answers the active request. For a picker, `value` must be one of the options.
 - `ui.cancel` `{id}` → `null`. The Lua side gets `nil`. No `ui_clear` follows, so clear the prompt yourself.
 
@@ -127,6 +128,6 @@ Events come as `{"jsonrpc":"2.0","method":"event","params":{"type": …}}`:
 | `reloaded` | | The config was reloaded. |
 | `history_replaced` | | Lua replaced the stored history; call `session.history` to refresh. |
 | `ui_markdown` | `name`, `text`, `pin`, `removed` | A `show()` block changed. |
-| `ui_request` | `id`, `kind`, plus `options` (`picker`) or `text` (`question`) | A prompt became active. |
+| `ui_request` | `id`, `kind`, plus `options` and optional `title` (`picker`) or `text` (`question`) | A prompt became active. |
 | `ui_clear` | `id` | Tuse withdrew the active prompt. |
 | `ui_result` | `id`, `kind`, `prompt`, `value` | A prompt was answered. |

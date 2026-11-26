@@ -111,6 +111,7 @@ Type `/` to get a picker. Pickers filter by their text, ignoring case, and show 
 
 - `/new` starts a fresh session in the current folder.
 - `/resume` picks another titled session from this folder, newest first.
+- `/fork` picks one of the user and agent messages of this session and opens a new session in the same folder with the history up to it, titled `[fork] ` plus the old title. Forking at an agent message keeps it; forking at a user message leaves it out and puts its text in the input. The original session stays in `/resume`.
 - `/models` picks a model (limited by `settings.ui.scope_models`), then an effort (`default`, `low`, `medium`, `high`, `xhigh`, `max`). The choice applies to this session and becomes the default for new ones.
 - `/tasks` lists background tasks. `Enter` shows the task: id, name, status, start and end, how long it has run, the source of its function, and the last 200 log lines. `Ctrl+X` stops one.
 - `/session` shows the session: ID, name, folder, config, model, context, turns, usage, cost.

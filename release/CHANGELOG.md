@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.12
+
+- **`/fork`.** Branch the session at any user or agent message. The new session opens in the same folder, titled `[fork] ` plus the old title. Forking at an agent message keeps it; forking at a user message leaves it out and puts its text in the input. JSON-RPC gets `session.fork {index}`, which returns `draft` along with the usual switch result. `fork` is now a reserved command name.
+- **Selectable panels.** Mouse selection and Ctrl+C now work in `/config`, `/session`, `/history` entries, task details, and the Lua `pick` and `ask` panels. A drag stays inside the panel it started in.
+- OpenAI Responses replies finish as soon as the terminal event arrives, without waiting for the HTTP body to close.
+
 ## 0.11.11
 
 - Lua `pick(options, title)` accepts an optional Markdown question and keeps it with the selected answer in history. JSON-RPC clients receive the title with the active request.

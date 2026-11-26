@@ -6,6 +6,7 @@ pub enum Kind {
     CommandArg(String),
     File,
     Resume,
+    Fork,
     Model,
     Effort(String),
     Task,
@@ -139,10 +140,11 @@ impl Picker {
     }
 }
 
-pub const COMMANDS: [(&str, &str); 10] = [
+pub const COMMANDS: [(&str, &str); 11] = [
     ("config", "show the resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
+    ("fork", "branch the session at a message"),
     ("models", "switch model and effort"),
     ("tasks", "background tasks"),
     ("session", "session info, usage and model"),

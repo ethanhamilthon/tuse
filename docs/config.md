@@ -210,7 +210,7 @@ return {
 - With `args`, only one word is accepted, it must be one of `args`, and `run` gets it as its first parameter. In the TUI, picking the command opens a picker of its `args`, and a space after `/name` opens it again. Choosing an arg runs the command. Esc leaves `/name ` in the input, and Enter then runs it with no arg. An unknown arg fails with `Unknown arg x for /deploy`.
 - `args` are unique strings without spaces, `desc` is a string, and `run` is required in the table form.
 - Commands run as Lua jobs with no deadline. `print` is not shown, and host functions are not globals here, so use `t.show()`. Esc cancels them. The return value is ignored.
-- A command name is not empty, does not start with `/`, has no whitespace or control characters, and is not a built-in name (`config`, `new`, `resume`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`).
+- A command name is not empty, does not start with `/`, has no whitespace or control characters, and is not a built-in name (`config`, `new`, `resume`, `fork`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`).
 - `settings = { open = { md = function(path) ... end } }` handles clicks on local files and links in the TUI. A key is one of:
   - an extension without a dot (`md`), case-insensitive;
   - a mask with `*` or `?` matched against the file name (`*.test.lua`, `.env*`), case-insensitive;

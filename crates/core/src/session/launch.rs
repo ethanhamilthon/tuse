@@ -43,6 +43,48 @@ pub fn switch(session: &Arc<Session>, resume: Option<String>) -> Result<Arc<Sess
     next.start()
 }
 
+pub fn fork(session: &Arc<Session>, index: usize) -> Result<(Arc<Session>, String), String> {
+    let (records, draft) = session.with_records(|records| fork_records(records, index))?;
+    let source = Meta::read(&session.id)?.ok_or_else(|| format!("no session {}", session.id))?;
+    let id = crate::id::new_session_id();
+    let meta = Meta {
+        id: id.clone(),
+        title: format!("[fork] {}", source.title).trim_end().to_string(),
+        created: crate::id::now(),
+        ..source
+    };
+    SessionDir::create_fork(&meta, &records)?;
+    Ok((switch(session, Some(id))?, draft))
+}
+
+fn fork_records(records: &[Record], index: usize) -> Result<(Vec<Record>, String), String> {
+    let (end, draft) = match records.get(index) {
+        Some(Record::User { text, .. }) => (index, text.clone()),
+        Some(Record::Assistant { tool_calls, .. }) => {
+            let mut end = index + 1;
+            for (at, record) in records.iter().enumerate().skip(index + 1) {
+                match record {
+                    Record::User { .. } | Record::Assistant { .. } => break,
+                    Record::Tool { id, .. } if tool_calls.iter().any(|c| c.id == *id) => {
+                        end = at + 1;
+                    }
+                    _ => {}
+                }
+            }
+            (end, String::new())
+        }
+        Some(_) => return Err(format!("record {index} is not a user or agent message")),
+        None => return Err(format!("no record {index}")),
+    };
+    let mut copy: Vec<Record> = records[..end]
+        .iter()
+        .filter(|r| !matches!(r, Record::Usage { .. }))
+        .cloned()
+        .collect();
+    copy.extend(wire::missing_results(&copy));
+    Ok((copy, draft))
+}
+
 fn prepare(mut opts: Options) -> Result<Prepared, String> {
     let restored = opts.resume.is_some();
     let id = opts
@@ -149,5 +191,61 @@ impl Prepared {
         });
         s.lifecycle(opts.start == Start::Launch, restored);
         Ok(s)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tuse_api::{ToolCall, Usage};
+
+    fn history() -> Vec<Record> {
+        let user = |t: &str| Record::User {
+            text: t.into(),
+            context: String::new(),
+            images: vec![],
+        };
+        vec![
+            Record::System { text: "s".into() },
+            user("one"),
+            Record::Assistant {
+                text: String::new(),
+                reasoning: String::new(),
+                tool_calls: vec![ToolCall {
+                    id: "c".into(),
+                    name: "lua".into(),
+                    arguments: "{}".into(),
+                }],
+                replay: None,
+                cancelled: false,
+            },
+            Record::Usage {
+                model: "m".into(),
+                usage: Usage::default(),
+                llm: false,
+            },
+            Record::Tool {
+                id: "c".into(),
+                tool: "lua".into(),
+                input: String::new(),
+                output: "ok".into(),
+                code: Some(0),
+                images: vec![],
+                diffs: vec![],
+            },
+            user("two"),
+        ]
+    }
+
+    #[test]
+    fn fork_cuts_before_a_user_message_and_after_an_agent_message_with_its_results() {
+        let records = history();
+        let (copy, draft) = fork_records(&records, 5).unwrap();
+        assert_eq!((copy.len(), draft.as_str()), (4, "two"));
+        let (copy, draft) = fork_records(&records, 2).unwrap();
+        assert_eq!((copy.len(), draft.as_str()), (4, ""));
+        assert!(matches!(copy.last(), Some(Record::Tool { .. })));
+        assert!(copy.iter().all(|r| !matches!(r, Record::Usage { .. })));
+        assert!(fork_records(&records, 0).is_err());
+        assert!(fork_records(&records, 9).is_err());
     }
 }

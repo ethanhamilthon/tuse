@@ -419,7 +419,9 @@ mod tests {
     fn chat_bounds(app: &App) -> ((usize, usize), (usize, usize)) {
         let points = || {
             app.chat_hits.iter().enumerate().filter_map(|(y, hit)| {
-                let hit = hit.as_ref().filter(|hit| hit.is_text())?;
+                let hit = hit
+                    .as_ref()
+                    .filter(|hit| hit.is_text() && !crate::kit::selection::is_overlay(hit.id))?;
                 Some((
                     (y, app.chat_pad + hit.start()),
                     (y, app.chat_pad + hit.end()),
@@ -471,7 +473,7 @@ mod tests {
         let overlay = app.overlay_rows.start;
         assert!(!app.overlay_rows.is_empty());
         drag(&mut app, (overlay, agent.1), user);
-        assert!(app.selection.message.is_none());
+        assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), "ov");
         drag(&mut app, agent_end, user);
         assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), "agent text");
         drag(&mut app, agent, (area.row, area.col + 2));
@@ -495,6 +497,48 @@ mod tests {
         let area = app.input_area.unwrap();
         drag(&mut app, (area.row, area.col + 5), user);
         assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), "hello");
+        crate::ui::app::cleanup(app);
+    }
+
+    #[test]
+    fn panels_and_lua_questions_select_only_their_own_text() {
+        use crate::ui::panel::Panel;
+        let mut app = crate::ui::app::test_app("overlay-selection");
+        app.chat.push(crate::kit::entry::Entry::User {
+            text: "#openspec propose fix".into(),
+            images: 0,
+        });
+        app.panel = Some(Panel::new("alpha beta\ngamma"));
+        app.compose(40, 20);
+        let rows = app.overlay_rows.clone();
+        let col = app.chat_pad;
+        drag(&mut app, (rows.start, col + 6), (rows.start + 1, col + 3));
+        assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), "beta\ngam");
+        let (first, last) = chat_bounds(&app);
+        drag(&mut app, (rows.start, col + 5), first);
+        assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), "alpha");
+        drag(&mut app, first, last);
+        assert_eq!(
+            clipboard(&mut app, KeyModifiers::CONTROL),
+            "#openspec propose fix"
+        );
+        app.panel = None;
+        app.open_lua_picker(
+            7,
+            vec!["one".into(), "two".into()],
+            Some("**Pick** it".into()),
+        );
+        app.compose(40, 20);
+        let top = app.overlay_rows.start;
+        drag(&mut app, (top, col), (top + 2, col + 10));
+        assert_eq!(
+            clipboard(&mut app, KeyModifiers::CONTROL),
+            "Pick it\none\ntwo"
+        );
+        app.panel = Some(Panel::new("x"));
+        app.picker = None;
+        app.compose(40, 20);
+        assert!(app.selection.message.is_none());
         crate::ui::app::cleanup(app);
     }
 

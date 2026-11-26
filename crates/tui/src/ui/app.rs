@@ -208,6 +208,16 @@ impl App {
         self.session.error(text);
     }
 
+    pub fn fork(&mut self, index: usize) {
+        match self.session.fork(index) {
+            Ok((s, draft)) => {
+                *self = App::with_wake(s, self.config_arg.clone(), self.wake.clone());
+                self.editor.insert(&draft);
+            }
+            Err(e) => self.error(e),
+        }
+    }
+
     pub fn switch(&mut self, resume: Option<String>) {
         match self.session.switch(resume) {
             Ok(s) => *self = App::with_wake(s, self.config_arg.clone(), self.wake.clone()),

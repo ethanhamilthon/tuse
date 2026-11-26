@@ -428,3 +428,45 @@ fn redirects_truncation_validation_and_cancel() {
         .unwrap_err();
     assert!(matches!(e, Error::Cancelled));
 }
+#[test]
+fn responses_returns_at_terminal_event_without_eof() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    for status in ["completed", "incomplete"] {
+        let frame = serde_json::json!({
+            "type": format!("response.{status}"),
+            "response": {"status": status, "usage": {"input_tokens": 6, "output_tokens": 3}}
+        });
+        let (url, _) = serve(vec![format!(
+            "STALL:{}",
+            sse(&[
+                r#"{"type":"response.output_text.delta","delta":"hello"}"#,
+                &frame.to_string(),
+            ])
+        )]);
+        let (tx, rx) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let stop = cancel.clone();
+        let client = std::thread::spawn(move || {
+            let reply = Client::new(&url, "key", ApiType::OpenAiResponses).complete(
+                &ureq("resp", "gpt-5", None),
+                0,
+                &stop,
+                &mut |_| {},
+                &mut |_| {},
+            );
+            let _ = tx.send(reply);
+        });
+        let result = rx.recv_timeout(Duration::from_secs(2));
+        cancel.store(true, Ordering::Relaxed);
+        client.join().unwrap();
+        let reply = result
+            .expect("adapter waited for the HTTP body to close")
+            .unwrap();
+        assert_eq!(reply.text, "hello");
+        assert_eq!(reply.finish, status);
+        let usage = reply.usage.unwrap();
+        assert_eq!((usage.input, usage.output), (6, 3));
+    }
+}

@@ -1,8 +1,21 @@
+use crate::kit::selection::{HitRow, PICKER_BASE, is_overlay};
 use crate::kit::style::Style;
-use crate::kit::text::Line;
+use crate::kit::text::{CopyRow, CopySpan, Line, width};
 use crate::ui::app::App;
+use crate::ui::picker::Kind;
 use crate::ui::screen::input_view::BOXED_INSET;
 use tuse_config::InputStyle;
+fn option_copy(line: &Line) -> Option<CopyRow> {
+    let mark = line.first().map_or(0, |s| width(&s.text));
+    let text: String = line.iter().skip(1).map(|s| s.text.as_str()).collect();
+    let text = text.trim_end().to_string();
+    (!text.is_empty()).then_some(CopyRow::Text(CopySpan {
+        col: mark,
+        text,
+        soft: None,
+    }))
+}
+
 pub(crate) struct Frame {
     pub screen: Vec<Line>,
     pub pad: usize,
@@ -61,26 +74,51 @@ impl App {
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
         let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.list_max_height);
-        let mut overlay = if let Some(pk) = &mut self.picker {
-            let mut lines = pk.title.as_deref().map_or_else(Vec::new, |title| {
-                crate::kit::rich::markdown::render_with_links(title, inner, p, false)
+        let (mut overlay, mut overlay_hits) = if let Some(pk) = &mut self.picker {
+            let mut rows = pk.title.as_deref().map_or_else(Vec::new, |title| {
+                crate::kit::rich::markdown::rows(title, inner, p, false)
             });
-            lines.truncate(cap.saturating_sub(1));
-            let rows = (cap - lines.len()).max(1);
-            lines.extend(crate::ui::screen::list::options(pk, rows, inner, p));
-            self.list_rows = rows;
-            crate::kit::rich::render::framed(lines, inner, p)
+            rows.truncate(cap.saturating_sub(1));
+            let titled = rows.len();
+            let count = (cap - titled).max(1);
+            let options = crate::ui::screen::list::options(pk, count, inner, p);
+            self.list_rows = count;
+            let id = match pk.kind {
+                Kind::LuaPicker(n) => Some(PICKER_BASE + n),
+                _ => None,
+            };
+            let first = titled + pk.scroll;
+            let mut hits: Vec<Option<HitRow>> = rows
+                .iter()
+                .enumerate()
+                .map(|(index, r)| {
+                    let copy = r.copy.clone();
+                    id.zip(copy).map(|(id, copy)| HitRow { id, index, copy })
+                })
+                .collect();
+            hits.extend(options.iter().enumerate().map(|(i, line)| {
+                let copy = option_copy(line);
+                id.zip(copy).map(|(id, copy)| HitRow {
+                    id,
+                    index: first + i,
+                    copy,
+                })
+            }));
+            let mut lines: Vec<Line> = rows.into_iter().map(|r| r.line).collect();
+            lines.extend(options);
+            (crate::kit::rich::render::framed(lines, inner, p), hits)
         } else if let Some(panel) = self
             .question
             .as_mut()
             .map(|q| &mut q.panel)
             .or(self.panel.as_mut())
         {
-            panel.lines(inner, cap, p)
+            panel.rows(inner, cap, p)
         } else {
-            vec![]
+            (vec![], vec![])
         };
         overlay.truncate(cap);
+        overlay_hits.truncate(cap);
         let history_h = chat_h - overlay.len();
         let below = matches!(style, InputStyle::Lines | InputStyle::Boxed);
         let start = history_h
@@ -145,6 +183,8 @@ impl App {
         }
         screen.extend(overlay);
         screen.truncate(h);
+        self.chat_hits.resize_with(self.overlay_rows.start, || None);
+        self.chat_hits.extend(overlay_hits);
         self.links = crate::kit::links::scan(&screen, pad);
         if let Some(id) = self.hover
             && self.pointer.is_none_or(|pt| self.link_at(pt) != Some(id))
@@ -161,6 +201,12 @@ impl App {
             self.pressed_link.map(|(_, id)| id).or(self.hover),
             p.fg,
         );
+        if let Some(m) = self.selection.message
+            && is_overlay(m.id)
+            && !self.chat_hits.iter().flatten().any(|h| h.id == m.id)
+        {
+            self.selection.message = None;
+        }
         if let Some(selection) = self.selection.message {
             selection.render(&self.chat_hits, &mut screen, Style::fg(p.bg).on(p.accent));
         }

@@ -1,6 +1,9 @@
-use crate::kit::rich::render::plain;
+use crate::kit::selection::{HitRow, PANEL_BASE};
 use crate::kit::style::{Palette, Style};
-use crate::kit::text::{Line, wrap};
+use crate::kit::text::{Line, MessageRow, clean, span, wrap_message};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT: AtomicU64 = AtomicU64::new(PANEL_BASE);
 
 enum Body {
     Text(String),
@@ -17,15 +20,24 @@ pub enum PanelKind {
 }
 
 pub struct Panel {
+    id: u64,
     body: Body,
     pub kind: PanelKind,
     scroll: usize,
-    cache: Option<(usize, Vec<Line>)>,
+    cache: Option<(usize, Vec<MessageRow>)>,
+}
+
+fn wrapped_rows(rows: impl IntoIterator<Item = Line>, width: usize) -> Vec<MessageRow> {
+    let empty = vec![];
+    rows.into_iter()
+        .flat_map(|r| wrap_message(&r, width, &empty, &empty, 0))
+        .collect()
 }
 
 impl Panel {
     fn with_body(body: Body) -> Self {
         Self {
+            id: NEXT.fetch_add(1, Ordering::Relaxed),
             body,
             kind: PanelKind::Plain,
             scroll: 0,
@@ -55,43 +67,61 @@ impl Panel {
         self.cache = None;
     }
 
-    fn wrapped(&mut self, width: usize, p: &Palette) -> &[Line] {
+    fn wrapped(&mut self, width: usize, p: &Palette) -> &[MessageRow] {
         if self.cache.as_ref().is_none_or(|(w, _)| *w != width) {
-            let empty = vec![];
-            let lines = match &self.body {
-                Body::Text(text) => plain(text, width, Style::fg(p.fg), "", ""),
-                Body::Markdown(text, true) => crate::kit::rich::markdown::render(text, width, p),
-                Body::Markdown(text, false) => {
-                    crate::kit::rich::markdown::render_with_links(text, width, p, false)
+            let rows = match &self.body {
+                Body::Text(text) => {
+                    let style = Style::fg(p.fg);
+                    wrapped_rows(clean(text).split('\n').map(|l| vec![span(l, style)]), width)
                 }
-                Body::Lua(code) => {
-                    let clean = crate::kit::text::clean(code);
-                    crate::kit::rich::syntax::highlight(&clean, Style::fg(p.fg), p)
-                        .into_iter()
-                        .flat_map(|r| wrap(&r, width, &empty, &empty))
-                        .collect()
+                Body::Markdown(text, links) => {
+                    crate::kit::rich::markdown::rows(text, width, p, *links)
                 }
-                Body::Styled(rows) => rows
-                    .iter()
-                    .flat_map(|r| {
-                        let r = crate::kit::links::linkify_line(r.clone(), p);
-                        wrap(&r, width, &empty, &empty)
-                    })
-                    .collect(),
+                Body::Lua(code) => wrapped_rows(
+                    crate::kit::rich::syntax::highlight(&clean(code), Style::fg(p.fg), p),
+                    width,
+                ),
+                Body::Styled(rows) => wrapped_rows(
+                    rows.iter()
+                        .map(|r| crate::kit::links::linkify_line(r.clone(), p)),
+                    width,
+                ),
             };
-            self.cache = Some((width, lines));
+            self.cache = Some((width, rows));
         }
         &self.cache.as_ref().unwrap().1
     }
 
-    pub fn lines(&mut self, width: usize, max_rows: usize, p: &Palette) -> Vec<Line> {
+    pub fn rows(
+        &mut self,
+        width: usize,
+        max_rows: usize,
+        p: &Palette,
+    ) -> (Vec<Line>, Vec<Option<HitRow>>) {
         let inner = width.max(1);
-        let body = max_rows.min(p.ui.list_max_height).max(1);
-        let all = self.wrapped(inner, p).to_vec();
-        let body = body.min(all.len());
-        self.scroll = self.scroll.min(all.len().saturating_sub(body));
-        let rows = all.into_iter().skip(self.scroll).take(body).collect();
-        crate::kit::rich::render::framed(rows, width, p)
+        let len = self.wrapped(inner, p).len();
+        let body = max_rows.min(p.ui.list_max_height).max(1).min(len);
+        self.scroll = self.scroll.min(len.saturating_sub(body));
+        let (id, scroll) = (self.id, self.scroll);
+        let window = &self.wrapped(inner, p)[scroll..scroll + body];
+        let hits = window
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                r.copy.clone().map(|copy| HitRow {
+                    id,
+                    index: scroll + i,
+                    copy,
+                })
+            })
+            .collect();
+        let lines = window.iter().map(|r| r.line.clone()).collect();
+        (crate::kit::rich::render::framed(lines, width, p), hits)
+    }
+
+    #[cfg(test)]
+    pub fn lines(&mut self, width: usize, max_rows: usize, p: &Palette) -> Vec<Line> {
+        self.rows(width, max_rows, p).0
     }
 
     #[cfg(test)]
@@ -101,6 +131,7 @@ impl Panel {
 
     pub fn rebuilt(mut self, old: &Panel) -> Panel {
         self.scroll = old.scroll;
+        self.id = old.id;
         self
     }
 

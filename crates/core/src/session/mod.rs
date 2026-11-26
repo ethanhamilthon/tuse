@@ -85,6 +85,10 @@ impl Session {
         crate::session::launch::switch(self, resume)
     }
 
+    pub fn fork(self: &Arc<Self>, index: usize) -> Result<(Arc<Session>, String), String> {
+        crate::session::launch::fork(self, index)
+    }
+
     pub fn cwd(&self) -> &std::path::Path {
         &self.cwd
     }

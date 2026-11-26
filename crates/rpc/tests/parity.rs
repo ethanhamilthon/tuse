@@ -250,6 +250,23 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
         ),
         (json!(s1_id), json!("p/alt"), json!("high"))
     );
+    let hist = call(&tx, &out, 170, "session.history", json!({}))["result"].clone();
+    let at = hist
+        .as_array()
+        .unwrap()
+        .iter()
+        .rposition(|t| t["role"] == "user")
+        .unwrap();
+    assert_eq!(
+        call(&tx, &out, 171, "session.fork", json!({"index": 0}))["error"]["code"],
+        -32000
+    );
+    let forked = call(&tx, &out, 172, "session.fork", json!({"index": at}))["result"].clone();
+    assert_eq!(forked["draft"], hist[at]["text"]);
+    assert_ne!(forked["session"]["id"], json!(s1_id));
+    let cut = call(&tx, &out, 173, "session.history", json!({}))["result"].clone();
+    assert!(cut.as_array().unwrap().len() <= at);
+    call(&tx, &out, 174, "session.resume", json!({"id": s1_id}));
     let rui = call(&tx, &out, 18, "ui.state", json!({}))["result"].clone();
     assert!(rui["active"].is_null(), "{rui}");
     assert_eq!(rui["entries"].as_array().unwrap().len(), 2);

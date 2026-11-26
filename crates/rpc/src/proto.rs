@@ -68,6 +68,13 @@ pub fn str_param(p: &Value, name: &str) -> Result<String, Fail> {
         .ok_or_else(|| Fail::params(format!("`{name}` must be a string")))
 }
 
+pub fn index_param(p: &Value, name: &str) -> Result<usize, Fail> {
+    p[name]
+        .as_u64()
+        .map(|n| n as usize)
+        .ok_or_else(|| Fail::params(format!("`{name}` must be a non-negative integer")))
+}
+
 pub fn str_list(p: &Value, name: &str) -> Result<Vec<String>, Fail> {
     match &p[name] {
         Value::Null => Ok(vec![]),

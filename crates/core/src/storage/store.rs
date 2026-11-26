@@ -184,6 +184,17 @@ impl SessionDir {
         })
     }
 
+    pub(crate) fn create_fork(meta: &Meta, records: &[Record]) -> Result<(), String> {
+        let started = records.iter().any(|r| matches!(r, Record::User { .. }));
+        db::transaction(|tx| {
+            tx.execute(
+                "INSERT INTO sessions(id,cwd,title,model,effort,started,created,updated) VALUES (?1,?2,?3,?4,?5,?6,?7,?7)",
+                params![meta.id, meta.cwd, meta.title, meta.model, meta.effort, started, meta.created],
+            )?;
+            insert(tx, &meta.id, records)
+        })
+    }
+
     pub(crate) fn system(&self, record: &Record) -> Result<(), String> {
         db::transaction(|tx| {
             let body = encode(record)?;

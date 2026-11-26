@@ -41,6 +41,13 @@ impl HitRow {
     }
 }
 
+pub const PICKER_BASE: u64 = 1 << 62;
+pub const PANEL_BASE: u64 = 1 << 63;
+
+pub fn is_overlay(id: u64) -> bool {
+    id >= PICKER_BASE
+}
+
 type Point = (usize, usize);
 
 #[derive(Clone, Copy)]

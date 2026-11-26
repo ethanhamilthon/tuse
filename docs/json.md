@@ -66,8 +66,9 @@ Send `initialize` first. Only `shutdown` is accepted before it. `protocolVersion
 - `session.list` `{cwd?}` → started sessions in that folder, newest first: `[{id, cwd, title, model, effort, started, created, updated}]`.
 - `session.new` → `{session, model, effort}`.
 - `session.resume` `{id}` → `{session, model, effort}`.
+- `session.fork` `{index}` → `{session, model, effort, draft}`. `index` counts from 0 in the `session.history` list and must point at a `user` or `agent` record. The new session holds the history through an agent record, or up to a user record without it. `draft` is the text of that user record, and empty for an agent record.
 
-For `session.new` and `session.resume`, events left over from the old session are sent before the reply, and events of the new session after it. If the switch fails, the current session stays.
+For `session.new`, `session.resume`, and `session.fork`, events left over from the old session are sent before the reply, and events of the new session after it. If the switch fails, the current session stays.
 
 ### Models
 

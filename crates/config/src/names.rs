@@ -143,8 +143,9 @@ pub const HOOK_EVENTS: [&str; 13] = [
     "lua_end",
 ];
 
-pub const BUILTIN_COMMANDS: [&str; 10] = [
-    "config", "new", "resume", "models", "tasks", "session", "history", "reload", "stop", "quit",
+pub const BUILTIN_COMMANDS: [&str; 11] = [
+    "config", "new", "resume", "fork", "models", "tasks", "session", "history", "reload", "stop",
+    "quit",
 ];
 
 pub const HISTORY_ROLES: [&str; 20] = [

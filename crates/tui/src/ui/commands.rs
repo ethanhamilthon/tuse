@@ -45,6 +45,7 @@ impl App {
             "new" => self.switch(None),
             "quit" => self.quit = true,
             "resume" => self.open_resume(),
+            "fork" => self.open_fork(),
             "models" => {
                 self.open_models();
                 self.session.fetch_models();
@@ -92,6 +93,23 @@ impl App {
             return;
         }
         self.open_modal(Picker::new(Kind::Resume, items));
+    }
+
+    fn open_fork(&mut self) {
+        let items: Vec<_> = self
+            .session
+            .history()
+            .into_iter()
+            .enumerate()
+            .filter(|(_, it)| matches!(it.role, "user" | "agent"))
+            .rev()
+            .map(|(i, it)| item(it.role, it.summary, i.to_string()))
+            .collect();
+        if items.is_empty() {
+            self.flash("Nothing to fork yet.");
+            return;
+        }
+        self.open_modal(Picker::new(Kind::Fork, items));
     }
 
     fn open_history(&mut self) {
@@ -182,6 +200,7 @@ impl App {
             (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}")),
             (Kind::File, Some(v)) => self.insert_file(&v),
             (Kind::Resume, Some(v)) => self.switch(Some(v)),
+            (Kind::Fork, Some(v)) => self.fork(v.parse().unwrap_or(usize::MAX)),
             (Kind::Model, Some(v)) if !v.is_empty() && !self.session.model_available(&v) => {
                 self.restore_draft();
                 self.error(format!("Model `{v}` is unavailable"));

@@ -109,35 +109,40 @@ pub fn serve(
             _ if !ready.load(Ordering::Acquire) => {
                 Err(Fail(NOT_READY, "call `initialize` first".into()))
             }
-            "session.new" | "session.resume" => {
-                let resume = if req.method == "session.resume" {
-                    match proto::str_param(&req.params, "id") {
-                        Ok(id) => Some(id),
-                        Err(f) => {
-                            if let Some(id) = req.id {
-                                out.send(&answer(id, Err(f)));
-                            }
-                            continue;
-                        }
-                    }
-                } else {
-                    None
+            "session.new" | "session.resume" | "session.fork" => {
+                let switched = match req.method.as_str() {
+                    "session.fork" => proto::index_param(&req.params, "index").and_then(|index| {
+                        let (next, draft) = session.fork(index).map_err(Fail::session)?;
+                        Ok((next, Some(draft)))
+                    }),
+                    "session.resume" => proto::str_param(&req.params, "id").and_then(|id| {
+                        let next = session.switch(Some(id)).map_err(Fail::session)?;
+                        Ok((next, None))
+                    }),
+                    _ => session
+                        .switch(None)
+                        .map(|next| (next, None))
+                        .map_err(Fail::session),
                 };
-                match session.switch(resume) {
-                    Ok(next) => {
+                match switched {
+                    Ok((next, draft)) => {
                         ready.store(false, Ordering::Release);
                         let (ack_tx, ack_rx) = std::sync::mpsc::channel();
                         let _ = swap_tx.send((next.subscribe(), ack_tx));
                         let _ = ack_rx.recv();
                         session = next;
                         if let Some(id) = req.id {
-                            out.send(&answer(id, Ok(methods::switched(&session))));
+                            let mut result = methods::switched(&session);
+                            if let Some(draft) = draft {
+                                result["draft"] = draft.into();
+                            }
+                            out.send(&answer(id, Ok(result)));
                         }
                         ready.store(true, Ordering::Release);
                     }
-                    Err(e) => {
+                    Err(f) => {
                         if let Some(id) = req.id {
-                            out.send(&answer(id, Err(Fail::session(e))));
+                            out.send(&answer(id, Err(f)));
                         }
                     }
                 }

@@ -84,11 +84,11 @@ pub(crate) fn complete(
             None => acc.fallback(&v, on_delta)?,
             Some(ev) => acc.event(ev, &v, on_delta)?,
         }
-        Ok(true)
+        Ok(!acc.completed)
     })?;
     if streamed && !acc.completed {
         return Err(Error::Transport(
-            "stream ended before response.completed".into(),
+            "stream ended before response.completed or response.incomplete".into(),
         ));
     }
     acc.reply.tool_calls = acc.slots.into_iter().map(|s| s.call).collect();

@@ -17,6 +17,7 @@ pub const METHODS: &[&str] = &[
     "session.list",
     "session.new",
     "session.resume",
+    "session.fork",
     "model.get",
     "model.set",
     "model.list",

@@ -81,7 +81,7 @@ return {
     space = { padding = 1, steps = 0 },
     theme = { accent = "#FFB86C", code = { keyword = "accent" } },
   },
-  history = { hide = { "usage", "hook" } },
+  history = { hide = { "usage", "flash" } },
 }
 ```
 
@@ -171,7 +171,7 @@ Colors Lua code in tool calls, `/` panels, and `lua` code blocks, and the lines 
 
 #### `history`
 
-`history.hide` is a list of history roles left out of `/history`, such as `{ "usage", "hook" }` ([Session](session.md#history-and-session-data)). Unknown roles fail.
+`history.hide` is a list of history roles left out of `/history`, such as `{ "usage", "turn_end" }` ([Session](session.md#history-and-session-data)). It also takes the message levels `flash`, `notice`, and `error`, which hide only `message` entries of that level. Unknown names fail.
 
 When `models` is set, `/models` lists only those models. JSON-RPC `model.list` ignores that.
 

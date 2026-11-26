@@ -68,7 +68,7 @@ mod tests {
     fn builds_from_a_table_and_checks_it() {
         let c = from_value(
             json!({"ui": {"lines": {"tool": 7}, "theme": {"accent": "blue", "markdown": {"heading": "green"}}},
-                "history": {"hide": ["hook"]}, "open": ["md"],
+                "history": {"hide": ["usage"]}, "open": ["md"],
                 "prompts": {"a": "x", "b": {"kind": "function", "args": ["p"]}},
                 "systems": {}, "hooks": {"h": {"events": ["user_message"]}}}),
             "t",
@@ -80,7 +80,7 @@ mod tests {
             ("blue", "green")
         );
         assert_eq!(c.ui.lines.tool, 7);
-        assert_eq!(c.history.hide, ["hook"]);
+        assert_eq!(c.history.hide, ["usage"]);
         assert_eq!(c.hooks["h"].events, ["user_message"]);
         assert_eq!(c.open, ["md"]);
         assert_eq!(c.prompts["a"].body, "x");

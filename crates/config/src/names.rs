@@ -150,36 +150,31 @@ pub const BUILTIN_COMMANDS: [&str; 11] = [
     "quit",
 ];
 
-pub const HISTORY_ROLES: [&str; 20] = [
+pub const HISTORY_ROLES: [&str; 15] = [
     "system",
     "user",
     "agent",
     "lua",
-    "tool",
     "notification",
-    "notice",
-    "error",
-    "hook",
-    "task",
-    "command",
-    "open",
-    "flash",
+    "message",
     "usage",
-    "model",
-    "turn",
-    "title",
+    "meta",
+    "turn_end",
     "show",
     "pick",
     "ask",
+    "task",
+    "command",
+    "open",
 ];
+
+pub const MESSAGE_LEVELS: [&str; 3] = ["flash", "notice", "error"];
 
 pub fn history_roles<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
     let list: Vec<String> = list(d)?;
-    if let Some((i, r)) = list
-        .iter()
-        .enumerate()
-        .find(|(_, r)| !HISTORY_ROLES.contains(&r.as_str()))
-    {
+    if let Some((i, r)) = list.iter().enumerate().find(|(_, r)| {
+        !HISTORY_ROLES.contains(&r.as_str()) && !MESSAGE_LEVELS.contains(&r.as_str())
+    }) {
         return Err(D::Error::custom(format!(
             "history.hide[{}]: unknown history role `{r}`",
             i + 1

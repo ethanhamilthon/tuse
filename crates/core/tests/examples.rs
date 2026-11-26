@@ -93,7 +93,7 @@ fn examples_load_and_are_linked_from_the_docs() {
         start: Start::Launch,
     })
     .unwrap();
-    assert_eq!(s.config().history.hide, ["usage", "hook"]);
+    assert_eq!(s.config().history.hide, ["usage", "flash"]);
     s.close();
     common::cleanup(&dir);
 }

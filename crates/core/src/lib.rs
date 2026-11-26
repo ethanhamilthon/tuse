@@ -11,7 +11,7 @@ mod text;
 mod tools;
 
 pub use convo::input::{FILE_LIMIT, Refs, build as build_input};
-pub use convo::record::{FileDiff, Record, UserInput};
+pub use convo::record::{FileDiff, Level, Record, UserInput};
 pub use convo::usage::Stats;
 pub use docs::docs;
 pub use event::{Event, InputId, Switch, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};

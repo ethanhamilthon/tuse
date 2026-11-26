@@ -48,6 +48,7 @@ impl Session {
         let mut meta = cache.meta.clone();
         let mut changed = vec![];
         let mut records = vec![];
+        let mut new_title = None;
         let check_effort = update.effort.is_some() || update.model.is_some();
         if let Some(title) = update.title {
             let title: String = title
@@ -62,7 +63,7 @@ impl Session {
             if title != meta.title {
                 meta.title = title.clone();
                 changed.push("title");
-                records.push(Record::Title { new: title });
+                new_title = Some(title);
             }
         }
         if let Some(model) = update.model {
@@ -97,10 +98,12 @@ impl Session {
                 ));
             }
         }
-        if changed.contains(&"model") || changed.contains(&"effort") {
-            records.push(Record::Settings {
-                model: meta.model.clone(),
-                effort: meta.effort.clone(),
+        let settings = changed.contains(&"model") || changed.contains(&"effort");
+        if new_title.is_some() || settings {
+            records.push(Record::Meta {
+                title: new_title,
+                model: settings.then(|| meta.model.clone()),
+                effort: settings.then(|| meta.effort.clone()),
             });
         }
         if let Some(rs) = &mut history {

@@ -101,7 +101,7 @@ impl App {
             .history()
             .into_iter()
             .enumerate()
-            .filter(|(_, it)| matches!(it.role, "user" | "agent"))
+            .filter(|(_, it)| matches!(it.role, "user" | "agent") && !it.is_empty_agent())
             .rev()
             .map(|(i, it)| item(it.role, it.summary, i.to_string()))
             .collect();
@@ -115,9 +115,7 @@ impl App {
     fn open_history(&mut self) {
         let hide = self.session.config().history.hide.clone();
         let mut items = self.session.history();
-        if !hide.is_empty() {
-            items.retain(|it| !hide.iter().any(|h| h == it.role));
-        }
+        items.retain(|it| !it.is_empty_agent() && !it.hidden_by(&hide));
         let rows: Vec<_> = items
             .iter()
             .enumerate()

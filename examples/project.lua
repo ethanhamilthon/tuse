@@ -11,7 +11,7 @@ g.models = g.models or {}
 
 g.systems[#g.systems + 1] = "This is a Rust workspace. Run `cargo test` before you finish."
 g.prompts.release = "Bump the patch version, update the changelog, commit, tag, and push."
-g.history = { hide = { "usage", "hook" } }
+g.history = { hide = { "usage", "flash" } }
 g.models[#g.models + 1] = { name = "anthropic/claude-sonnet-4-5" }
 g.models[#g.models + 1] = { name = "openai/gpt-5" }
 

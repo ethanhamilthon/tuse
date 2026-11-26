@@ -67,12 +67,12 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
     let tools: Vec<_> = all
         .iter()
         .filter_map(|r| match r {
-            Record::Tool {
+            Record::Lua {
                 output,
                 diffs,
-                code,
+                exit,
                 ..
-            } => Some((output, diffs, code)),
+            } => Some((output, diffs, exit)),
             _ => None,
         })
         .collect();
@@ -196,7 +196,7 @@ end)()
             let out = s.with_records(|r| {
                 r.iter()
                     .find_map(|r| match r {
-                        Record::Tool { output, .. } => Some(output.clone()),
+                        Record::Lua { output, .. } => Some(output.clone()),
                         _ => None,
                     })
                     .unwrap()

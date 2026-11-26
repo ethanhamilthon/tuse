@@ -1,6 +1,6 @@
 use crate::convo::{record::Record, wire::join_context};
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize)]
@@ -13,78 +13,84 @@ pub struct HistoryItem {
     pub detail: String,
 }
 
-impl From<&Record> for HistoryItem {
-    fn from(r: &Record) -> Self {
-        let (role, detail) = match r {
-            Record::System { text } => ("system", text.clone()),
-            Record::Flash { text } => ("flash", text.clone()),
+impl Record {
+    pub fn role(&self) -> &'static str {
+        match self {
+            Record::System { .. } => "system",
+            Record::User { .. } => "user",
+            Record::Agent { .. } => "agent",
+            Record::Lua { .. } => "lua",
+            Record::Notification { .. } => "notification",
+            Record::Message { .. } => "message",
+            Record::Usage { .. } => "usage",
+            Record::Meta { .. } => "meta",
+            Record::TurnEnd { .. } => "turn_end",
+            Record::Show { .. } => "show",
+            Record::Pick { .. } => "pick",
+            Record::Ask { .. } => "ask",
+            Record::Task { .. } => "task",
+            Record::Command { .. } => "command",
+            Record::Open { .. } => "open",
+        }
+    }
+
+    fn detail(&self) -> String {
+        match self {
+            Record::System { text } | Record::Notification { text } => text.clone(),
+            Record::Message { text, .. } => text.clone(),
             Record::User {
                 text,
                 context,
                 images,
-            } => (
-                "user",
-                with_images(join_context(text, context), images.len()),
-            ),
-            Record::Assistant {
+            } => with_images(join_context(text, context), images.len()),
+            Record::Agent {
                 text,
                 reasoning,
-                tool_calls,
                 cancelled,
                 ..
-            } => {
-                let mut parts = vec![text.clone(), reasoning.clone()];
-                parts.extend(
-                    tool_calls
-                        .iter()
-                        .map(|c| format!("{}: {}", c.name, c.arguments)),
-                );
-                if *cancelled {
-                    parts.push("[cancelled]".into());
-                }
-                (
-                    "agent",
-                    parts
-                        .into_iter()
-                        .filter(|s| !s.is_empty())
-                        .collect::<Vec<_>>()
-                        .join("\n\n"),
-                )
-            }
-            Record::Tool {
-                tool,
-                input,
-                output,
+            } => [
+                text.as_str(),
+                reasoning.as_str(),
+                if *cancelled { "[cancelled]" } else { "" },
+            ]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n"),
+            Record::Lua {
                 code,
+                output,
+                exit,
                 images,
                 diffs,
                 ..
             } => {
-                let role = if tool == "lua" { "lua" } else { "tool" };
-                let code = code.map_or_else(|| "none".into(), |c| c.to_string());
+                let exit = exit.map_or_else(|| "none".into(), |c| c.to_string());
                 let mut detail = format!(
-                    "{input}\n\nexit {code}\n\n{}",
+                    "{code}\n\nexit {exit}\n\n{}",
                     with_images(output.clone(), images.len())
                 );
                 for d in diffs {
                     detail.push_str(&format!("\n\n{}\n{}", d.path, d.diff));
                 }
-                (role, detail)
+                detail
             }
-            Record::Notification { text } => ("notification", text.clone()),
-            Record::Notice { text } => ("notice", text.clone()),
-            Record::Error { text } => ("error", text.clone()),
             Record::Usage { model, usage, llm } => {
                 let source = if *llm { " (llm)" } else { "" };
-                (
-                    "usage",
-                    format!(
-                        "{model}{source}: input {} output {} cached {} cache_write {}",
-                        usage.input, usage.output, usage.cached, usage.cache_write
-                    ),
+                format!(
+                    "{model}{source}: input {} output {} cached {} cache_write {}",
+                    usage.input, usage.output, usage.cached, usage.cache_write
                 )
             }
-            Record::Settings { model, effort } => ("model", format!("{model} {effort}")),
+            Record::Meta {
+                title,
+                model,
+                effort,
+            } => [title.clone(), model.clone(), effort.clone()]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" "),
             Record::TurnEnd {
                 elapsed_ms,
                 calls,
@@ -93,96 +99,66 @@ impl From<&Record> for HistoryItem {
                 cancelled,
             } => {
                 let how = if *cancelled { "cancelled" } else { "done" };
-                (
-                    "turn",
-                    format!("{how} in {elapsed_ms} ms, {calls} calls, {model} {effort}"),
-                )
+                format!("{how} in {elapsed_ms} ms, {calls} calls, {model} {effort}")
             }
-            Record::Title { new } => ("title", new.clone()),
-            Record::UiMarkdown {
-                name,
-                text,
-                pin,
-                removed,
-            } => {
-                let marker = if *removed {
+            Record::Show { name, text, pin } => {
+                let marker = if text.is_empty() {
                     " removed"
                 } else if *pin {
                     " (pinned)"
                 } else {
                     ""
                 };
-                ("show", format!("{name}{marker}\n\n{text}"))
+                format!("{name}{marker}\n\n{text}")
             }
-            Record::UiResult {
-                kind,
-                prompt,
-                value,
-                ..
-            } => {
-                let role = if kind == "picker" { "pick" } else { "ask" };
-                (
-                    role,
-                    format!("{} → {value}\n\n{prompt}", first_line(prompt)),
-                )
+            Record::Pick { prompt, value, .. } | Record::Ask { prompt, value, .. } => {
+                format!("{} → {value}\n\n{prompt}", first_line(prompt))
             }
-            Record::Job {
-                kind,
+            Record::Task {
                 name,
                 code,
                 status,
                 ms,
                 error,
-            } => {
-                let role = match kind.as_str() {
-                    "task" => "task",
-                    "command" => "command",
-                    _ => "open",
-                };
-                (
-                    role,
-                    format!(
-                        "{name} {status} ({ms} ms)\n\n{}\n\n{code}",
-                        error.as_deref().unwrap_or("")
-                    ),
-                )
             }
-            Record::Hook {
+            | Record::Command {
                 name,
-                event,
-                vars,
-                error,
+                code,
+                status,
                 ms,
-            } => {
-                let result = error.as_deref().unwrap_or("ok");
-                (
-                    "hook",
-                    format!("{name} {event} {result} ({ms} ms)\n\n{vars}"),
-                )
+                error,
             }
-        };
+            | Record::Open {
+                name,
+                code,
+                status,
+                ms,
+                error,
+            } => format!(
+                "{name} {status} ({ms} ms)\n\n{}\n\n{code}",
+                error.as_deref().unwrap_or("")
+            ),
+        }
+    }
+}
+
+impl From<&Record> for HistoryItem {
+    fn from(r: &Record) -> Self {
+        let detail = r.detail();
         let mut fields = serde_json::to_value(r)
             .unwrap()
             .as_object_mut()
             .map(std::mem::take)
             .unwrap();
-        fields.remove("t");
-        match r {
-            Record::Tool { .. } => rename(&mut fields, "tool", "name"),
-            Record::Title { .. } => rename(&mut fields, "new", "text"),
-            Record::Usage { .. } => {
-                if let Some(Value::Object(usage)) = fields.remove("usage") {
-                    fields.extend(usage);
-                }
-            }
-            Record::Job { .. } | Record::UiResult { .. } => {
-                fields.remove("kind");
-            }
-            _ => {}
+        fields.remove("role");
+        if let Record::Usage { .. } = r
+            && let Some(Value::Object(usage)) = fields.remove("usage")
+        {
+            fields.extend(usage);
         }
         fields.retain(|_, v| !v.is_null());
         Self {
-            role,
+            role: r.role(),
             summary: first_line(&detail),
             fields,
             detail,
@@ -190,9 +166,15 @@ impl From<&Record> for HistoryItem {
     }
 }
 
-fn rename(fields: &mut Map<String, Value>, from: &str, to: &str) {
-    if let Some(v) = fields.remove(from) {
-        fields.insert(to.into(), v);
+impl HistoryItem {
+    pub fn is_empty_agent(&self) -> bool {
+        self.role == "agent" && self.detail.is_empty()
+    }
+
+    pub fn hidden_by(&self, hide: &[String]) -> bool {
+        let level = self.fields.get("level").and_then(Value::as_str);
+        hide.iter()
+            .any(|h| h == self.role || (self.role == "message" && level == Some(h.as_str())))
     }
 }
 
@@ -233,25 +215,22 @@ pub(crate) fn decode(history: Vec<Map<String, Value>>) -> Result<Vec<Record>, St
         let record = decode_record(fields).map_err(|e| err(&e))?;
         match &record {
             Record::System { .. } if i != 0 => return Err(err("system must be first")),
-            Record::User { .. } | Record::Assistant { .. } if !pending.is_empty() => {
+            Record::User { .. } | Record::Agent { .. } if !pending.is_empty() => {
                 return Err(err("missing tool result before user or agent"));
             }
-            Record::Assistant { tool_calls, .. } => {
+            Record::Agent { tool_calls, .. } => {
                 for c in tool_calls {
                     if c.id.is_empty() || !pending.insert(c.id.clone()) {
                         return Err(err("empty or duplicate tool call id"));
                     }
                 }
             }
-            Record::Tool { id, .. } if !pending.remove(id) => {
+            Record::Lua { id, .. } if !pending.remove(id) => {
                 return Err(err("unexpected or duplicate tool result"));
-            }
-            Record::Hook { vars, .. } if !vars.is_object() => {
-                return Err(err("vars must be a table"));
             }
             _ => {}
         }
-        if let Record::Tool { images, .. } | Record::User { images, .. } = &record
+        if let Record::Lua { images, .. } | Record::User { images, .. } = &record
             && images.iter().any(|u| {
                 !u.split_once(',').is_some_and(|(meta, data)| {
                     meta.strip_prefix("data:image/")
@@ -272,60 +251,27 @@ pub(crate) fn decode(history: Vec<Map<String, Value>>) -> Result<Vec<Record>, St
 
 fn decode_record(mut f: Map<String, Value>) -> Result<Record, String> {
     f.remove("summary");
-    let role = f.remove("role").ok_or("missing role")?;
-    let t = match role.as_str().ok_or("role must be a string")? {
-        "system" => "system",
-        "user" => "user",
-        "notification" => "notification",
-        "agent" => "assistant",
-        "lua" | "tool" => {
-            let lua = role == "lua";
-            if f.get("name")
-                .and_then(Value::as_str)
-                .is_none_or(|name| (name == "lua") != lua)
-            {
-                return Err("tool name does not match its role".into());
-            }
-            rename(&mut f, "name", "tool");
-            "tool"
+    match f.get("role") {
+        None => return Err("missing role".into()),
+        Some(Value::String(role)) if !tuse_config::HISTORY_ROLES.contains(&role.as_str()) => {
+            return Err(format!("unknown history role {role}"));
         }
-        "notice" => "notice",
-        "error" => "error",
-        "flash" => "flash",
-        "title" => {
-            rename(&mut f, "text", "new");
-            "title"
-        }
-        "usage" => {
-            let usage: Map<String, Value> = ["input", "output", "cached", "cache_write"]
-                .into_iter()
-                .filter_map(|k| Some((k.into(), f.remove(k)?)))
-                .collect();
-            f.insert("usage".into(), Value::Object(usage));
-            "usage"
-        }
-        "model" => "settings",
-        "turn" => "turn_end",
-        "hook" => "hook",
-        "task" | "command" | "open" => {
-            f.insert("kind".into(), role);
-            "job"
-        }
-        "show" => "ui_markdown",
-        "pick" | "ask" => {
-            let kind = if role == "pick" { "picker" } else { "question" };
-            f.insert("kind".into(), json!(kind));
-            "ui_result"
-        }
-        _ => return Err(format!("unknown history role {role}")),
-    };
-    f.insert("t".into(), json!(t));
+        Some(Value::String(_)) => {}
+        Some(_) => return Err("role must be a string".into()),
+    }
+    if f.get("role").and_then(Value::as_str) == Some("usage") {
+        let usage: Map<String, Value> = ["input", "output", "cached", "cache_write"]
+            .into_iter()
+            .filter_map(|k| Some((k.into(), f.remove(k)?)))
+            .collect();
+        f.insert("usage".into(), Value::Object(usage));
+    }
     serde_json::from_value(Value::Object(f)).map_err(|e| e.to_string())
 }
 
 pub(crate) fn keep_replay(records: &mut [Record], old: &[Record]) {
     for (i, record) in records.iter_mut().enumerate() {
-        let Record::Assistant {
+        let Record::Agent {
             text,
             tool_calls,
             replay,
@@ -335,7 +281,7 @@ pub(crate) fn keep_replay(records: &mut [Record], old: &[Record]) {
             continue;
         };
         *replay = match old.get(i) {
-            Some(Record::Assistant {
+            Some(Record::Agent {
                 text: saved,
                 tool_calls: calls,
                 replay,

@@ -1,13 +1,28 @@
 use serde::{Deserialize, Serialize};
 use tuse_api::{Replay, ToolCall, Usage};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Level {
+    Flash,
+    Notice,
+    Error,
+}
+
+impl Level {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Level::Flash => "flash",
+            Level::Notice => "notice",
+            Level::Error => "error",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "t", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "role", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Record {
     System {
-        text: String,
-    },
-    Flash {
         text: String,
     },
     User {
@@ -17,7 +32,7 @@ pub enum Record {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<String>,
     },
-    Assistant {
+    Agent {
         text: String,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         reasoning: String,
@@ -28,13 +43,12 @@ pub enum Record {
         #[serde(default)]
         cancelled: bool,
     },
-    Tool {
+    Lua {
         id: String,
-        tool: String,
-        input: String,
+        code: String,
         output: String,
         #[serde(default)]
-        code: Option<i32>,
+        exit: Option<i32>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -43,10 +57,8 @@ pub enum Record {
     Notification {
         text: String,
     },
-    Notice {
-        text: String,
-    },
-    Error {
+    Message {
+        level: Level,
         text: String,
     },
     Usage {
@@ -55,16 +67,13 @@ pub enum Record {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         llm: bool,
     },
-    Settings {
-        model: String,
-        effort: String,
-    },
-    Hook {
-        name: String,
-        event: String,
-        vars: serde_json::Value,
-        error: Option<String>,
-        ms: u64,
+    Meta {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        effort: Option<String>,
     },
     TurnEnd {
         elapsed_ms: u64,
@@ -76,20 +85,22 @@ pub enum Record {
         #[serde(default)]
         cancelled: bool,
     },
-    UiMarkdown {
+    Show {
         name: String,
         text: String,
         pin: bool,
-        removed: bool,
     },
-    UiResult {
+    Pick {
         id: u64,
-        kind: String,
         prompt: String,
         value: String,
     },
-    Job {
-        kind: String,
+    Ask {
+        id: u64,
+        prompt: String,
+        value: String,
+    },
+    Task {
         name: String,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         code: String,
@@ -98,9 +109,66 @@ pub enum Record {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
-    Title {
-        new: String,
+    Command {
+        name: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        code: String,
+        status: String,
+        ms: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
+    Open {
+        name: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        code: String,
+        status: String,
+        ms: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+}
+
+impl Record {
+    pub fn message(level: Level, text: impl Into<String>) -> Self {
+        Record::Message {
+            level,
+            text: text.into(),
+        }
+    }
+
+    pub(crate) fn job(
+        kind: &str,
+        name: String,
+        code: String,
+        status: String,
+        ms: u64,
+        error: Option<String>,
+    ) -> Self {
+        match kind {
+            "task" => Record::Task {
+                name,
+                code,
+                status,
+                ms,
+                error,
+            },
+            "command" => Record::Command {
+                name,
+                code,
+                status,
+                ms,
+                error,
+            },
+            _ => Record::Open {
+                name,
+                code,
+                status,
+                ms,
+                error,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

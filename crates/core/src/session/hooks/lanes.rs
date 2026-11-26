@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tuse_lua::mlua::{Function, Lua, MultiValue};
 use tuse_lua::{Done, Job, Out, Stop};
 
@@ -64,13 +64,12 @@ impl Session {
         let is_lua_hook = matches!(vars["event"].as_str(), Some("lua_start" | "lua_end"));
         let stop = Stop::new(cancel, None);
         let weak = Arc::downgrade(self);
-        let started = Instant::now();
         self.vm.post(move |lua| {
             let s2 = weak.clone();
-            let (n2, v2) = (name.clone(), vars.clone());
+            let n2 = name.clone();
             let done = move |_: &Lua, d: Done| {
                 if let Some(s) = s2.upgrade() {
-                    s.hook_done(&n2, &v2, d, started);
+                    s.hook_done(&n2, d);
                 }
             };
             let start = || -> tuse_lua::mlua::Result<()> {
@@ -100,28 +99,21 @@ impl Session {
                     diffs: vec![],
                     images: vec![],
                 };
-                s.hook_done(&name, &vars, d, started);
+                s.hook_done(&name, d);
             }
         });
     }
 
-    fn hook_done(self: &Arc<Self>, name: &str, vars: &Value, d: Done, started: Instant) {
-        let error = (!d.ok).then(|| crate::text::error_line(&d.text));
-        let notice = error.as_ref().map(|e| format!("hook {name}: {e}"));
-        let r = Record::Hook {
-            name: name.to_string(),
-            event: vars["event"].as_str().unwrap_or("").to_string(),
-            vars: vars.clone(),
-            error,
-            ms: started.elapsed().as_millis() as u64,
-        };
-        let mut st = self.state.lock().unwrap();
-        let mut records = vec![r];
-        if let Some(text) = &notice {
-            records.push(Record::Notice { text: text.clone() });
+    fn hook_done(self: &Arc<Self>, name: &str, d: Done) {
+        if !d.ok {
+            let text = format!("hook {name}: {}", crate::text::error_line(&d.text));
+            let mut st = self.state.lock().unwrap();
+            self.record(
+                &mut st,
+                &[Record::message(crate::Level::Notice, text.clone())],
+                [crate::Event::Notice(text)],
+            );
         }
-        self.record(&mut st, &records, notice.map(crate::Event::Notice));
-        drop(st);
         self.next_hook(name.to_string());
         if self.reload_after_hook.swap(false, Ordering::AcqRel) {
             let s = self.clone();

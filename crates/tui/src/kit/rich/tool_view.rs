@@ -437,7 +437,7 @@ mod tests {
         let mut stored = false;
         app2.session.with_records(|recs| {
             stored = recs.iter().any(|r| {
-                matches!(r, Record::Tool { diffs, .. } if diffs.iter().any(|d| d.diff.contains("row19")))
+                matches!(r, Record::Lua { diffs, .. } if diffs.iter().any(|d| d.diff.contains("row19")))
             });
         });
         assert!(

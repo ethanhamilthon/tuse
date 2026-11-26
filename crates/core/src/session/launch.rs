@@ -59,7 +59,7 @@ pub fn fork(session: &Arc<Session>, index: usize) -> Result<(Arc<Session>, Strin
 
 pub(crate) fn check_fork(records: &[Record], index: usize) -> Result<(), String> {
     match records.get(index) {
-        Some(Record::User { .. } | Record::Assistant { .. }) => Ok(()),
+        Some(Record::User { .. } | Record::Agent { .. }) => Ok(()),
         Some(_) => Err(format!(
             "record {} is not a user or agent message",
             index + 1
@@ -85,12 +85,12 @@ pub(crate) fn check_resume(session: &Session, id: &str) -> Result<(), String> {
 fn fork_records(records: &[Record], index: usize) -> Result<(Vec<Record>, String), String> {
     let (end, draft) = match records.get(index) {
         Some(Record::User { text, .. }) => (index, text.clone()),
-        Some(Record::Assistant { tool_calls, .. }) => {
+        Some(Record::Agent { tool_calls, .. }) => {
             let mut end = index + 1;
             for (at, record) in records.iter().enumerate().skip(index + 1) {
                 match record {
-                    Record::User { .. } | Record::Assistant { .. } => break,
-                    Record::Tool { id, .. } if tool_calls.iter().any(|c| c.id == *id) => {
+                    Record::User { .. } | Record::Agent { .. } => break,
+                    Record::Lua { id, .. } if tool_calls.iter().any(|c| c.id == *id) => {
                         end = at + 1;
                     }
                     _ => {}
@@ -233,7 +233,7 @@ mod tests {
         vec![
             Record::System { text: "s".into() },
             user("one"),
-            Record::Assistant {
+            Record::Agent {
                 text: String::new(),
                 reasoning: String::new(),
                 tool_calls: vec![ToolCall {
@@ -249,12 +249,11 @@ mod tests {
                 usage: Usage::default(),
                 llm: false,
             },
-            Record::Tool {
+            Record::Lua {
                 id: "c".into(),
-                tool: "lua".into(),
-                input: String::new(),
+                code: String::new(),
                 output: "ok".into(),
-                code: Some(0),
+                exit: Some(0),
                 images: vec![],
                 diffs: vec![],
             },
@@ -269,7 +268,7 @@ mod tests {
         assert_eq!((copy.len(), draft.as_str()), (4, "two"));
         let (copy, draft) = fork_records(&records, 2).unwrap();
         assert_eq!((copy.len(), draft.as_str()), (4, ""));
-        assert!(matches!(copy.last(), Some(Record::Tool { .. })));
+        assert!(matches!(copy.last(), Some(Record::Lua { .. })));
         assert!(copy.iter().all(|r| !matches!(r, Record::Usage { .. })));
         assert!(fork_records(&records, 0).is_err());
         assert!(fork_records(&records, 9).is_err());

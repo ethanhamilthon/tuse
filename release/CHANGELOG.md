@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.0
+
+- **Breaking: sessions are reset.** The history format changed, so saved sessions and history are dropped on first start. Providers and the default model stay.
+- **Breaking: one name per history record.** The database, `session().history`, `set_session`, JSON-RPC, and `history.hide` use the same roles: `system`, `user`, `agent`, `lua`, `notification`, `message`, `usage`, `meta`, `turn_end`, `show`, `pick`, `ask`, `task`, `command`, `open`.
+  - `flash`, `notice`, and `error` are now `message` with `level`. `history.hide` accepts the levels too, e.g. `{ "flash" }`.
+  - `title` and `model` are now `meta` with `title`, `model`, `effort`.
+  - `tool` is gone; `lua` records have `id`, `code`, `output`, `exit`, `images`, `diffs`.
+  - `show` records drop `removed`: empty `text` without `pin` removes the block.
+- **Breaking: hooks are not recorded.** Hook runs no longer appear in history; a failing hook still leaves a `notice` message.
+- A `lua` call shows once: `agent` entries no longer repeat their tool calls, and `/history` and `/fork` skip replies that only call a tool.
+
 ## 0.12.0
 
 - **Breaking: new config layout.** `settings` is gone. UI keys live in `ui` (`lines`, `input`, `space`, `theme`), `hide_history` became `history.hide`, and `settings.open` became a top-level `open`. Old keys fail loading with a `moved to` error.

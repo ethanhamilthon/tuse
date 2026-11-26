@@ -43,7 +43,7 @@ fn fork_waits_for_the_result_and_stops_the_turn() {
         match e {
             Event::ToolEnd { .. } => seen.push("result"),
             Event::Switch(Switch::Fork(index)) => {
-                assert!(matches!(s.records()[index], Record::Assistant { .. }));
+                assert!(matches!(s.records()[index], Record::Agent { .. }));
                 seen.push("switch");
             }
             Event::TurnEnd { .. } => break,
@@ -52,10 +52,10 @@ fn fork_waits_for_the_result_and_stops_the_turn() {
     }
     assert_eq!(seen, ["result", "switch"]);
     let records = s.records();
-    assert!(records.iter().any(|r| matches!(r, Record::Tool { .. })));
+    assert!(records.iter().any(|r| matches!(r, Record::Lua { .. })));
     let agents = records
         .iter()
-        .filter(|r| matches!(r, Record::Assistant { .. }))
+        .filter(|r| matches!(r, Record::Agent { .. }))
         .count();
     assert_eq!(agents, 1);
     s.close();

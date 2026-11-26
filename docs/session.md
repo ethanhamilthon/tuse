@@ -34,21 +34,23 @@ The first line of the first message becomes the session title (up to 80 characte
 
 ## History and session data
 
-`/history` shows the stored history, one entry per record. `history.hide` filters this list only. `session().history` and JSON-RPC `session.history` both return all structured records. Each has a `role`, a display-only `summary`, and these fields:
+`/history` shows the stored history, one entry per record. Agent replies with only tool calls are left out of `/history` and `/fork`; their `lua` entries show the code. `history.hide` filters this list only. `session().history` and JSON-RPC `session.history` both return all structured records. Each has a `role`, a display-only `summary`, and the same fields as stored in the database:
 
 | Role | Fields |
 | --- | --- |
-| `system`, `notification`, `notice`, `error`, `flash`, `title` | `text` |
+| `system`, `notification` | `text` |
+| `message` | `level` (`flash`, `notice`, `error`), `text` |
 | `user` | `text`, `context` (hidden attachments), `images` (data URLs) |
 | `agent` | `text`, `reasoning`, `tool_calls` (`{id, name, arguments}`), `replay`, `cancelled` |
-| `lua`, `tool` | `id`, `name`, `input`, `output`, `code`, `images`, `diffs` (`{path, diff}`) |
+| `lua` | `id`, `code`, `output`, `exit`, `images`, `diffs` (`{path, diff}`) |
 | `usage` | `model`, `input`, `output`, `cached`, `cache_write`, `llm` |
-| `model` | `model`, `effort` |
-| `turn` | `elapsed_ms`, `calls`, `model`, `effort`, `cancelled` |
-| `hook` | `name`, `event`, `vars`, `error`, `ms` |
+| `meta` | `title`, `model`, `effort` (only what changed) |
+| `turn_end` | `elapsed_ms`, `calls`, `model`, `effort`, `cancelled` |
 | `task`, `command`, `open` | `name`, `code`, `status`, `ms`, `error` |
-| `show` | `name`, `text`, `pin`, `removed` |
+| `show` | `name`, `text`, `pin`; empty `text` without `pin` removes the block |
 | `pick`, `ask` | `id`, `prompt`, `value` |
+
+Hook runs are not recorded; a failing hook leaves a `notice` message.
 
 `replay` holds opaque provider data (`{provider, api, model, items}`). It is sent back only to the matching provider, API, and model. Editing an agent's text or tool calls drops its replay.
 

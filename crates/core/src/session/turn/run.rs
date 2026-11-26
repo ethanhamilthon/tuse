@@ -155,7 +155,7 @@ impl Session {
                         format!("Retry {}/{} in {}s: {}", r.attempt, r.max, r.delay, r.error);
                     self.record(
                         &mut st,
-                        &[Record::Flash { text: text.clone() }],
+                        &[Record::message(crate::Level::Flash, text.clone())],
                         [Event::StreamReset, Event::Flash(text)],
                     );
                 }
@@ -185,7 +185,7 @@ impl Session {
             });
         }
         let calls = reply.tool_calls;
-        records.push(Record::Assistant {
+        records.push(Record::Agent {
             text: reply.text.clone(),
             reasoning: reply.reasoning,
             tool_calls: calls.clone(),
@@ -234,7 +234,7 @@ impl Session {
         self.set_activity(&mut st, crate::Activity::Idle);
         let saved = self.record(
             &mut st,
-            &[Record::Error { text: text.clone() }],
+            &[Record::message(crate::Level::Error, text.clone())],
             [Event::Error(text.clone())],
         );
         drop(st);

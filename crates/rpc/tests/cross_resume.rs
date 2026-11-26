@@ -83,7 +83,7 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
         tui_s
             .records()
             .iter()
-            .any(|r| matches!(r, Record::Assistant { text, .. } if text == "rpc reply"))
+            .any(|r| matches!(r, Record::Agent { text, .. } if text == "rpc reply"))
     );
     let snap = tui_s.ui_snapshot();
     assert_eq!(snap.markdowns.len(), 1);
@@ -103,7 +103,7 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
         tui_s
             .records()
             .iter()
-            .any(|r| matches!(r, Record::Assistant { text, .. } if text == "tui continued"))
+            .any(|r| matches!(r, Record::Agent { text, .. } if text == "tui continued"))
     );
     tui_s.close();
 

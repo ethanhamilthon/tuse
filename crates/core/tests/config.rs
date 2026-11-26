@@ -148,7 +148,7 @@ fn require_session_validation_and_reload_rollback() {
                 Event::TurnEnd { .. }
             ) {}
             assert!(s.records().iter().any(
-                |r| matches!(r, Record::Tool { output, .. } if output.trim_end() == "project:rex-v1")
+                |r| matches!(r, Record::Lua { output, .. } if output.trim_end() == "project:rex-v1")
             ));
             fs::write(shared.join("rex.lua"), "return { tag = 'rex-v2' }").unwrap();
             s.reload().unwrap();

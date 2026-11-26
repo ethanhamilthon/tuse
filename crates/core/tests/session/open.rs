@@ -122,10 +122,7 @@ return {{
             .iter()
             .any(|t| t.role == "user" && t.detail == long_arg)
     );
-    assert!(
-        history.iter().any(|t| t.role == "hook"
-            && t.fields["vars"] == serde_json::json!({"event": "user_message"}))
-    );
+    assert!(history.iter().all(|t| t.role != "hook"));
     assert!(
         history
             .iter()

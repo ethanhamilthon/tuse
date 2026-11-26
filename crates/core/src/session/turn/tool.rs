@@ -144,12 +144,11 @@ impl Session {
         st.calls += 1;
         self.record(
             &mut st,
-            &[Record::Tool {
+            &[Record::Lua {
                 id: call.id.clone(),
-                tool: call.name.clone(),
-                input,
+                code: input,
                 output: out.text.clone(),
-                code: out.code,
+                exit: out.code,
                 images: out.images,
                 diffs: out.diffs.clone(),
             }],

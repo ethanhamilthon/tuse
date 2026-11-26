@@ -302,7 +302,7 @@ return {
     assert!(
         s.records()
             .iter()
-            .any(|r| matches!(r, Record::Tool { output, .. } if output.trim() == "{a = 1}"))
+            .any(|r| matches!(r, Record::Lua { output, .. } if output.trim() == "{a = 1}"))
     );
     s.close();
     common::cleanup(&dir);

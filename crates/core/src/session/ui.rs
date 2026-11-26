@@ -52,19 +52,16 @@ impl UiHistory {
         let mut ui = Self::default();
         for r in records {
             match r {
-                Record::UiMarkdown {
-                    name,
-                    text,
-                    pin,
-                    removed,
-                } => ui.apply_markdown(name.clone(), text.clone(), *pin, *removed),
-                Record::UiResult {
-                    id,
-                    kind,
-                    prompt,
-                    value,
+                Record::Show { name, text, pin } => {
+                    ui.apply_markdown(name.clone(), text.clone(), *pin, text.is_empty() && !pin)
+                }
+                Record::Pick {
+                    id, prompt, value, ..
+                }
+                | Record::Ask {
+                    id, prompt, value, ..
                 } => {
-                    let kind = if kind == "picker" {
+                    let kind = if matches!(r, Record::Pick { .. }) {
                         "picker"
                     } else {
                         "question"
@@ -97,11 +94,10 @@ impl Session {
     pub(crate) fn ui_markdown(&self, name: String, text: String, pin: bool) {
         let removed = text.is_empty() && !pin;
         self.message(
-            Record::UiMarkdown {
+            Record::Show {
                 name: name.clone(),
                 text: text.clone(),
                 pin,
-                removed,
             },
             Event::UiMarkdown {
                 name,
@@ -128,7 +124,7 @@ impl Session {
             let last = self.with_records(|rs| {
                 rs.iter()
                     .filter_map(|r| match r {
-                        Record::UiResult { id, .. } => Some(*id),
+                        Record::Pick { id, .. } | Record::Ask { id, .. } => Some(*id),
                         _ => None,
                     })
                     .max()
@@ -184,11 +180,18 @@ impl Session {
                     value: v.clone(),
                 };
                 self.message(
-                    Record::UiResult {
-                        id,
-                        kind: kind.into(),
-                        prompt,
-                        value: v.clone(),
+                    if kind == "picker" {
+                        Record::Pick {
+                            id,
+                            prompt,
+                            value: v.clone(),
+                        }
+                    } else {
+                        Record::Ask {
+                            id,
+                            prompt,
+                            value: v.clone(),
+                        }
                     },
                     Event::UiResult(e),
                 );

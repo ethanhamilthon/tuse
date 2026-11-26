@@ -5,7 +5,7 @@ use crate::kit::style::Palette;
 use crate::kit::text::{Line, MessageRow};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tuse_core::{Record, Session};
+use tuse_core::{Level, Record, Session};
 
 type Cache = Option<(usize, Vec<MessageRow>)>;
 #[derive(Default)]
@@ -46,7 +46,7 @@ impl Chat {
                 text: text.clone(),
                 images: images.len(),
             },
-            Record::Assistant {
+            Record::Agent {
                 text, reasoning, ..
             } => {
                 if !reasoning.trim().is_empty() {
@@ -57,22 +57,28 @@ impl Chat {
                 }
                 Entry::Assistant(text.clone())
             }
-            Record::Tool {
+            Record::Lua {
                 id,
-                input,
-                output,
                 code,
+                output,
+                exit,
                 diffs,
                 ..
             } => Entry::Tool {
                 id: id.clone(),
-                input: input.clone(),
+                input: code.clone(),
                 output: Some(output.clone()),
-                code: *code,
+                code: *exit,
                 diffs: diffs.clone(),
             },
-            Record::Notice { text } => Entry::Notice(text.clone()),
-            Record::Error { text } => Entry::Error(text.clone()),
+            Record::Message {
+                level: Level::Notice,
+                text,
+            } => Entry::Notice(text.clone()),
+            Record::Message {
+                level: Level::Error,
+                text,
+            } => Entry::Error(text.clone()),
             Record::TurnEnd {
                 elapsed_ms,
                 model,
@@ -89,25 +95,17 @@ impl Chat {
                 effort: effort.clone(),
                 cancelled: *cancelled,
             },
-            Record::UiMarkdown {
-                name,
-                text,
-                pin,
-                removed,
-            } => {
-                self.set_markdown(name.clone(), text.clone(), *pin, *removed);
+            Record::Show { name, text, pin } => {
+                self.set_markdown(name.clone(), text.clone(), *pin, text.is_empty() && !pin);
                 return;
             }
-            Record::UiResult {
-                kind,
-                prompt,
-                value,
-                ..
-            } => Entry::UiResult {
-                is_picker: kind == "picker",
-                prompt: prompt.clone(),
-                value: value.clone(),
-            },
+            Record::Pick { prompt, value, .. } | Record::Ask { prompt, value, .. } => {
+                Entry::UiResult {
+                    is_picker: matches!(r, Record::Pick { .. }),
+                    prompt: prompt.clone(),
+                    value: value.clone(),
+                }
+            }
             _ => return,
         };
         self.push(e);
@@ -431,11 +429,10 @@ mod tests {
             context: String::new(),
             images: vec![],
         };
-        let md = |name: &str, text: &str, pin: bool, removed: bool| Record::UiMarkdown {
+        let md = |name: &str, text: &str, pin: bool, _: bool| Record::Show {
             name: name.into(),
             text: text.into(),
             pin,
-            removed,
         };
         let c = Chat::from_records(
             &[
@@ -443,9 +440,8 @@ mod tests {
                 md("p", "pinned-1", true, false),
                 md("tmp", "drop", false, false),
                 user("turn 1"),
-                Record::UiResult {
+                Record::Pick {
                     id: 1,
-                    kind: "picker".into(),
                     prompt: "Picker".into(),
                     value: "optA".into(),
                 },
@@ -493,9 +489,7 @@ mod tests {
                 Record::Notification {
                     text: "ready".into(),
                 },
-                Record::Notice {
-                    text: "notice".into(),
-                },
+                Record::message(Level::Notice, "notice"),
             ],
             &str::to_owned,
         );
@@ -602,31 +596,26 @@ mod tests {
                 context: String::new(),
                 images: vec![],
             },
-            Record::Assistant {
+            Record::Agent {
                 text: "first\n\nsecond".into(),
                 reasoning: "thought".into(),
                 tool_calls: vec![],
                 replay: None,
                 cancelled: false,
             },
-            Record::Tool {
+            Record::Lua {
                 id: "t".into(),
-                tool: "lua".into(),
-                input: "return 1".into(),
+                code: "return 1".into(),
                 output: "output".into(),
-                code: Some(0),
+                exit: Some(0),
                 images: vec![],
                 diffs: vec![tuse_core::FileDiff {
                     path: "file".into(),
                     diff: "+line".into(),
                 }],
             },
-            Record::Notice {
-                text: "note".into(),
-            },
-            Record::Error {
-                text: "error".into(),
-            },
+            Record::message(Level::Notice, "note"),
+            Record::message(Level::Error, "error"),
             Record::TurnEnd {
                 elapsed_ms: 1000,
                 cancelled: false,
@@ -634,23 +623,20 @@ mod tests {
                 effort: "e".into(),
                 calls: 0,
             },
-            Record::UiResult {
+            Record::Pick {
                 id: 1,
-                kind: "picker".into(),
                 prompt: "prompt".into(),
                 value: "answer".into(),
             },
-            Record::UiMarkdown {
+            Record::Show {
                 name: "a".into(),
                 text: "unpinned".into(),
                 pin: false,
-                removed: false,
             },
-            Record::UiMarkdown {
+            Record::Show {
                 name: "b".into(),
                 text: "pinned".into(),
                 pin: true,
-                removed: false,
             },
         ];
         let mut chat = Chat::from_records(&records, &str::to_owned);

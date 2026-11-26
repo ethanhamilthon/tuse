@@ -121,7 +121,7 @@ fn replay_resume_provider_isolation_and_truncation() {
     s.submit(UserInput::text("s1"));
     wait_turn(&rx);
     assert!(s.stats().totals.input == 250 && ab.lock().unwrap()[1].to_string().contains("SIG1"));
-    assert!(s.records().iter().any(|r| matches!(r, Record::Tool { output, .. } if output.starts_with("false|") && output.contains("does not support effort `max`"))));
+    assert!(s.records().iter().any(|r| matches!(r, Record::Lua { output, .. } if output.starts_with("false|") && output.contains("does not support effort `max`"))));
     s.close();
 
     let s = open(Some(sid));

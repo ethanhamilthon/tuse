@@ -116,11 +116,17 @@ impl Session {
     }
 
     pub fn error(&self, text: String) {
-        self.message(Record::Error { text: text.clone() }, Event::Error(text));
+        self.message(
+            Record::message(crate::Level::Error, text.clone()),
+            Event::Error(text),
+        );
     }
 
     pub fn flash(&self, text: String) -> bool {
-        self.message(Record::Flash { text: text.clone() }, Event::Flash(text))
+        self.message(
+            Record::message(crate::Level::Flash, text.clone()),
+            Event::Flash(text),
+        )
     }
 
     pub(crate) fn message(&self, r: Record, e: Event) -> bool {

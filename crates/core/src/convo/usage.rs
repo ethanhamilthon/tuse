@@ -39,7 +39,7 @@ impl Stats {
             match r {
                 Record::Usage { llm: true, .. } => s.llm_requests += 1,
                 Record::Usage { .. } => s.requests += 1,
-                Record::Assistant { .. } => s.steps += 1,
+                Record::Agent { .. } => s.steps += 1,
                 Record::TurnEnd { calls, .. } => {
                     s.turns += 1;
                     s.calls += calls;

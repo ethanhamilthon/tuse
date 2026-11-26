@@ -74,8 +74,7 @@ impl Host for SessionHost {
                     } else {
                         "failed"
                     };
-                    let record = crate::Record::Job {
-                        kind: "task".into(),
+                    let record = crate::Record::Task {
                         name: t.name,
                         code: t.code,
                         status: status.into(),

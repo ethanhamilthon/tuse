@@ -68,11 +68,17 @@ fn initialize_schema(c: &mut Connection) -> rusqlite::Result<()> {
             DROP TABLE IF EXISTS providers; DROP TABLE IF EXISTS state;",
         )?;
         tx.execute_batch(SCHEMA)?;
-    } else if version == 1 {
-        tx.execute_batch("ALTER TABLE providers ADD COLUMN headers TEXT NOT NULL DEFAULT '{}';")?;
+    } else if version < 3 {
+        if version == 1 {
+            tx.execute_batch(
+                "ALTER TABLE providers ADD COLUMN headers TEXT NOT NULL DEFAULT '{}';",
+            )?;
+        }
+        tx.execute_batch("DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS history;")?;
+        tx.execute_batch(SCHEMA)?;
     }
-    if version < 2 {
-        tx.pragma_update(None, "user_version", 2)?;
+    if version < 3 {
+        tx.pragma_update(None, "user_version", 3)?;
     }
 
     tx.commit()
@@ -234,6 +240,34 @@ mod tests {
             )
             .unwrap();
         assert_eq!((key.as_str(), headers.as_str()), ("$KEY", "{}"));
+    }
+
+    #[test]
+    fn schema_v3_drops_sessions_and_keeps_providers() {
+        let mut c = Connection::open_in_memory().unwrap();
+        c.execute_batch(SCHEMA).unwrap();
+        c.execute_batch(
+            "INSERT INTO providers(name, base_url, api_key) VALUES ('p', 'u', 'k');
+            INSERT INTO state VALUES ('model', 'm');
+            INSERT INTO sessions(id, cwd, title, model, effort, created, updated) VALUES ('s', '/', 't', 'm', 'e', '', '');
+            INSERT INTO history VALUES ('s', 1, '{}');
+            PRAGMA user_version = 2;",
+        )
+        .unwrap();
+        initialize_schema(&mut c).unwrap();
+        let count = |t: &str| -> i64 {
+            c.query_row(&format!("SELECT COUNT(*) FROM {t}"), [], |r| r.get(0))
+                .unwrap()
+        };
+        assert_eq!(
+            [
+                count("sessions"),
+                count("history"),
+                count("providers"),
+                count("state")
+            ],
+            [0, 0, 1, 1]
+        );
     }
 
     #[test]

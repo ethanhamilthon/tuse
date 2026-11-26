@@ -170,9 +170,9 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     std::thread::sleep(Duration::from_millis(120));
     s.ui_reply(treq.id, Some("yes".into())).unwrap();
     let answered = || {
-        s.records().iter().any(
-            |r| matches!(r, tuse_core::Record::Tool { output, .. } if output.contains("yes:1")),
-        )
+        s.records()
+            .iter()
+            .any(|r| matches!(r, tuse_core::Record::Lua { output, .. } if output.contains("yes:1")))
     };
     let deadline = Instant::now() + Duration::from_secs(5);
     while !(answered() && !s.busy()) && Instant::now() < deadline {

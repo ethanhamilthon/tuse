@@ -58,19 +58,19 @@ impl Session {
         error: Option<String>,
     ) {
         if let Some((kind, name, code)) = self.jobs.lock().unwrap().remove(&id) {
-            let r = crate::convo::record::Record::Job {
-                kind: kind.into(),
+            let r = crate::convo::record::Record::job(
+                kind,
                 name,
                 code,
-                status: if kind == "task" && status == "error" {
+                if kind == "task" && status == "error" {
                     "failed"
                 } else {
                     status
                 }
                 .into(),
-                ms: elapsed.as_millis() as u64,
-                error: error.clone(),
-            };
+                elapsed.as_millis() as u64,
+                error.clone(),
+            );
             let mut st = self.state.lock().unwrap();
             self.push(&mut st, r);
         }

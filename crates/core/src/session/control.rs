@@ -78,7 +78,7 @@ impl Session {
             .into_iter()
             .enumerate()
         {
-            if let Record::Tool { id, output, .. } = &mut r {
+            if let Record::Lua { id, output, .. } = &mut r {
                 if i == 0 {
                     *output = "[cancelled]".into();
                 }
@@ -97,7 +97,7 @@ impl Session {
         let reasoning = std::mem::take(&mut st.reasoning);
         let streaming = std::mem::take(&mut st.streaming);
         if streaming {
-            let r = Record::Assistant {
+            let r = Record::Agent {
                 text: text.clone(),
                 reasoning,
                 tool_calls: vec![],

@@ -2,7 +2,13 @@ use crate::convo::record::Record;
 use tuse_api::{Message, ToolImage};
 
 pub fn messages(records: &[Record]) -> Vec<Message> {
-    records.iter().filter_map(full).collect()
+    let mut names = std::collections::HashMap::new();
+    for r in records {
+        if let Record::Agent { tool_calls, .. } = r {
+            names.extend(tool_calls.iter().map(|c| (c.id.as_str(), c.name.as_str())));
+        }
+    }
+    records.iter().filter_map(|r| full(r, &names)).collect()
 }
 
 pub fn system(records: &[Record]) -> String {
@@ -12,7 +18,7 @@ pub fn system(records: &[Record]) -> String {
     }
 }
 
-fn full(r: &Record) -> Option<Message> {
+fn full(r: &Record, names: &std::collections::HashMap<&str, &str>) -> Option<Message> {
     match r {
         Record::Notification { text } => Some(Message::User {
             text: text.clone(),
@@ -27,7 +33,7 @@ fn full(r: &Record) -> Option<Message> {
             text: join_context(text, context),
             images: images.clone(),
         }),
-        Record::Assistant {
+        Record::Agent {
             text,
             tool_calls,
             replay,
@@ -37,19 +43,18 @@ fn full(r: &Record) -> Option<Message> {
             tool_calls: tool_calls.clone(),
             replay: replay.clone(),
         }),
-        Record::Tool {
+        Record::Lua {
             id,
-            tool,
-            input,
+            code,
             output,
             images,
             ..
         } => Some(Message::ToolResult {
             id: id.clone(),
-            name: tool.clone(),
+            name: names.get(id.as_str()).unwrap_or(&"lua").to_string(),
             output: output.clone(),
             images: (!images.is_empty()).then(|| ToolImage {
-                label: input.clone(),
+                label: code.clone(),
                 urls: images.clone(),
             }),
         }),
@@ -68,11 +73,11 @@ pub(crate) fn join_context(text: &str, context: &str) -> String {
 pub fn missing_results(records: &[Record]) -> Vec<Record> {
     let Some(pos) = records
         .iter()
-        .rposition(|r| matches!(r, Record::Assistant { tool_calls, .. } if !tool_calls.is_empty()))
+        .rposition(|r| matches!(r, Record::Agent { tool_calls, .. } if !tool_calls.is_empty()))
     else {
         return vec![];
     };
-    let Record::Assistant { tool_calls, .. } = &records[pos] else {
+    let Record::Agent { tool_calls, .. } = &records[pos] else {
         return vec![];
     };
     tool_calls
@@ -80,17 +85,16 @@ pub fn missing_results(records: &[Record]) -> Vec<Record> {
         .filter(|c| {
             !records[pos..]
                 .iter()
-                .any(|r| matches!(r, Record::Tool { id, .. } if *id == c.id))
+                .any(|r| matches!(r, Record::Lua { id, .. } if *id == c.id))
         })
-        .map(|c| Record::Tool {
+        .map(|c| Record::Lua {
             id: c.id.clone(),
-            tool: c.name.clone(),
-            input: serde_json::from_str::<serde_json::Value>(&c.arguments)
+            code: serde_json::from_str::<serde_json::Value>(&c.arguments)
                 .ok()
                 .and_then(|v| v["code"].as_str().map(String::from))
                 .unwrap_or_else(|| c.arguments.clone()),
             output: "[interrupted: no output]".into(),
-            code: None,
+            exit: None,
             images: vec![],
             diffs: vec![],
         })

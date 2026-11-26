@@ -1,3 +1,4 @@
+use super::render::{chat_inset, chat_marker};
 use crate::kit::style::{MORE, Palette, Style, TOOL_PREFIX};
 use crate::kit::text::{Line, clip, span, width};
 use tuse_core::FileDiff;
@@ -27,7 +28,7 @@ pub fn finish(
     width: usize,
     p: &Palette,
 ) -> Vec<Line> {
-    let pad = " ".repeat(crate::kit::text::width(TOOL_PREFIX));
+    let pad = " ".repeat(chat_inset(width));
     let keep = tuse_config::limit(p.ui.tool_line, lines.len());
     if keep < lines.len() {
         lines.truncate(keep);
@@ -68,13 +69,16 @@ pub fn source(
     } else {
         cleaned
     };
-    let pad = " ".repeat(width(TOOL_PREFIX));
+    let pad = " ".repeat(chat_inset(w));
     let colored = if failed {
         code.split('\n').map(|l| vec![span(l, head)]).collect()
     } else {
         crate::kit::rich::syntax::highlight(&code, head, p)
     };
-    let (lead, rest) = (vec![span(TOOL_PREFIX, head)], vec![span(pad, head)]);
+    let (lead, rest) = (
+        vec![span(chat_marker(TOOL_PREFIX, w), head)],
+        vec![span(pad, head)],
+    );
     colored
         .into_iter()
         .enumerate()

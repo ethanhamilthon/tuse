@@ -66,21 +66,21 @@ impl Editor {
         } else {
             return false;
         };
-        self.cursor = self.at_col(&rows[to], col, cols);
+        self.cursor = self.at_col(&rows[to], col, cols, false);
         true
     }
 
-    pub(super) fn click(&mut self, row: usize, col: usize, cols: usize) {
+    pub(super) fn click(&mut self, row: usize, col: usize, cols: usize, drag: bool) {
         let cols = cols.max(1);
         let (rows, _) = self.placed(cols);
         if let Some(r) = rows.get(row).or(rows.last()) {
             let col = if row < rows.len() { col } else { usize::MAX };
-            self.cursor = self.at_col(r, col, cols);
+            self.cursor = self.at_col(r, col, cols, drag);
         }
     }
 
-    fn at_col(&self, row: &Row, col: usize, cols: usize) -> usize {
-        let last = if row.eol {
+    fn at_col(&self, row: &Row, col: usize, cols: usize, drag: bool) -> usize {
+        let last = if row.eol || drag {
             row.end
         } else {
             row.end.saturating_sub(1)
@@ -251,23 +251,23 @@ mod tests {
     #[test]
     fn a_click_lands_on_the_cell_in_wrapped_wide_and_atom_text() {
         let mut e = ed("hello big world");
-        e.click(1, 2, 8);
+        e.click(1, 2, 8, false);
         assert_eq!(e.cursor, 8);
-        e.click(1, 40, 8);
+        e.click(1, 40, 8, false);
         assert_eq!(e.cursor, 9);
-        e.click(9, 0, 8);
+        e.click(9, 0, 8, false);
         assert_eq!(e.cursor, 15);
         let mut e = ed("日本語");
-        e.click(0, 3, 10);
+        e.click(0, 3, 10, false);
         assert_eq!(e.cursor, 1);
-        e.click(0, 4, 10);
+        e.click(0, 4, 10, false);
         assert_eq!(e.cursor, 2);
         let mut e = ed("a ");
         e.insert_image("/x.png".into());
         e.insert("b");
-        e.click(0, 5, 40);
+        e.click(0, 5, 40, false);
         assert_eq!(e.cursor, 2);
-        e.click(0, 12, 40);
+        e.click(0, 12, 40, false);
         assert_eq!(e.cursor, 3);
     }
 

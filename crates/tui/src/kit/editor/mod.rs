@@ -34,10 +34,17 @@ pub enum Edit {
     KillToEnd,
     SelectAll,
     Anchor,
-    AnchorAt(usize),
     Deselect,
     DeleteSelection,
-    Click { row: usize, col: usize },
+    Click {
+        row: usize,
+        col: usize,
+    },
+    Drag {
+        row: usize,
+        col: usize,
+        anchor: usize,
+    },
 }
 
 pub struct View {
@@ -77,12 +84,15 @@ impl Editor {
             Edit::Anchor => {
                 self.anchor.get_or_insert(self.cursor);
             }
-            Edit::AnchorAt(index) => self.anchor = Some(index),
             Edit::Deselect => self.clear_selection(),
             Edit::DeleteSelection => {
                 self.delete_selection();
             }
-            Edit::Click { row, col } => self.click(row, col, cols),
+            Edit::Click { row, col } => self.click(row, col, cols, false),
+            Edit::Drag { row, col, anchor } => {
+                self.click(row, col, cols, true);
+                self.anchor = Some(anchor.min(self.buf.len()));
+            }
         }
     }
 
@@ -104,10 +114,6 @@ impl Editor {
 
     pub fn differs_from(&self, before: &[char]) -> bool {
         self.buf != before
-    }
-
-    pub fn has_selection(&self) -> bool {
-        self.selection_range().is_some()
     }
 
     fn selection_range(&self) -> Option<(usize, usize)> {

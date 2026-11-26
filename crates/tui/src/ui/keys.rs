@@ -21,14 +21,16 @@ impl App {
         let alt = k.modifiers.contains(KeyModifiers::ALT);
         let shift = k.modifiers.contains(KeyModifiers::SHIFT);
         let primary = ctrl || k.modifiers.contains(KeyModifiers::SUPER);
-        if primary
-            && k.code == KeyCode::Char('c')
-            && (!self.selection.text.is_empty() || self.editor.has_selection())
-        {
-            self.copy_selection(false);
+        if primary && k.code == KeyCode::Char('c') && self.copy_selection(false) {
             return;
         }
         self.selection = Default::default();
+        if primary && k.code == KeyCode::Char('a') {
+            if !self.input_disabled() {
+                self.editor.apply(Edit::SelectAll, self.input_cols);
+            }
+            return;
+        }
         let page_delta = match k.code {
             KeyCode::PageUp => -(page as isize),
             KeyCode::PageDown => page as isize,
@@ -90,8 +92,9 @@ impl App {
             KeyCode::Char('v') if ctrl || k.modifiers.contains(KeyModifiers::SUPER) => {
                 return self.paste_clipboard();
             }
-            KeyCode::Char('a') if primary => e.apply(Edit::SelectAll, cols),
-            KeyCode::Char('x') if primary => self.copy_selection(true),
+            KeyCode::Char('x') if primary => {
+                self.copy_selection(true);
+            }
             KeyCode::Char('e') if ctrl => e.apply(Edit::End, cols),
             KeyCode::Char('u') if ctrl => e.apply(Edit::KillToStart, cols),
             KeyCode::Char('k') if ctrl => e.apply(Edit::KillToEnd, cols),
@@ -116,14 +119,16 @@ impl App {
         self.finish_edit(before);
     }
 
-    fn copy_selection(&mut self, cut: bool) {
-        let text = if !cut && !self.selection.text.is_empty() {
-            Some(self.selection.text.clone())
-        } else {
+    fn copy_selection(&mut self, cut: bool) -> bool {
+        let text = if !cut && let Some(message) = self.selection.message {
+            message.text(&self.chat_hits)
+        } else if !self.input_disabled() {
             self.editor.selected_text()
+        } else {
+            None
         };
         let Some(text) = text else {
-            return;
+            return false;
         };
         match crate::kit::clipboard::write(&text) {
             Ok(()) => {
@@ -137,6 +142,7 @@ impl App {
             }
             Err(e) => self.error(e),
         }
+        true
     }
     fn question_key(&mut self, code: KeyCode, modified: bool) -> bool {
         let Some(q) = &mut self.question else {

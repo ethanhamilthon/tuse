@@ -19,6 +19,13 @@ pub struct InputArea {
     pub boxed: bool,
 }
 
+impl InputArea {
+    pub fn contains(self, (row, col): (usize, usize)) -> bool {
+        (self.row..self.row + self.height).contains(&row)
+            && (self.col..self.col + self.cols).contains(&col)
+    }
+}
+
 #[derive(Default)]
 pub struct Pump {
     pub dirty: bool,
@@ -43,6 +50,8 @@ pub struct App {
     pub refresh_history: bool,
     pub editor: Editor,
     pub selection: crate::kit::selection::Selection,
+    pub chat_pad: usize,
+    pub chat_hits: Vec<Option<crate::kit::selection::HitRow>>,
     pub links: Vec<crate::kit::links::LinkBox>,
     pub hover: Option<u32>,
     pub pointer: Option<(usize, usize)>,
@@ -107,6 +116,8 @@ impl App {
             refresh_history: false,
             editor: Editor::default(),
             selection: Default::default(),
+            chat_pad: 0,
+            chat_hits: vec![],
             links: vec![],
             hover: None,
             pointer: None,

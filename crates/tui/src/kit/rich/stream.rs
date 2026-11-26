@@ -1,5 +1,6 @@
-use crate::kit::style::{NOTICE_PREFIX, Palette, REASONING_PREFIX, Style};
-use crate::kit::text::Line;
+use crate::kit::rich::render::{chat_inset, chat_marker, fit_chat};
+use crate::kit::style::{Palette, REASONING_PREFIX, Style};
+use crate::kit::text::{Line, MessageRow};
 use std::ops::Range;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -9,19 +10,19 @@ pub struct Cut {
     pub fence: Option<Range<usize>>,
 }
 
-pub struct Prefix {
+pub struct Prefix<T> {
     width: usize,
     cut: Cut,
-    lines: Vec<Line>,
+    lines: Vec<T>,
 }
 
-fn incremental(
-    cache: &mut Option<Prefix>,
+fn incremental<T: Clone + Default>(
+    cache: &mut Option<Prefix<T>>,
     width: usize,
     start: Cut,
     cut: Cut,
-    render: impl Fn(&Cut, Option<usize>) -> Vec<Line>,
-) -> Vec<Line> {
+    render: impl Fn(&Cut, Option<usize>) -> Vec<T>,
+) -> Vec<T> {
     if cache.as_ref().is_none_or(|c| {
         c.width != width
             || c.cut.at < start.at
@@ -45,15 +46,20 @@ fn incremental(
     lines
 }
 
-fn join(lines: &mut Vec<Line>, more: Vec<Line>, gap: bool) {
+fn join<T: Default>(lines: &mut Vec<T>, more: Vec<T>, gap: bool) {
     if gap && !lines.is_empty() && !more.is_empty() {
-        lines.push(vec![]);
+        lines.push(T::default());
     }
     lines.extend(more);
 }
 
-pub fn markdown(cache: &mut Option<Prefix>, text: &str, width: usize, p: &Palette) -> Vec<Line> {
-    let render = |s: &str| crate::kit::rich::markdown::render(s, width, p);
+pub fn markdown(
+    cache: &mut Option<Prefix<MessageRow>>,
+    text: &str,
+    width: usize,
+    p: &Palette,
+) -> Vec<MessageRow> {
+    let render = |s: &str| crate::kit::rich::markdown::rows(s, width, p, true);
     incremental(cache, width, Cut::default(), split(text), |c, end| {
         let body = &text[c.at..end.unwrap_or(text.len())];
         let Some(open) = &c.fence else {
@@ -66,10 +72,16 @@ pub fn markdown(cache: &mut Option<Prefix>, text: &str, width: usize, p: &Palett
     })
 }
 
-pub fn reasoning(cache: &mut Option<Prefix>, text: &str, width: usize, p: &Palette) -> Vec<Line> {
+pub fn reasoning(
+    cache: &mut Option<Prefix<Line>>,
+    text: &str,
+    width: usize,
+    p: &Palette,
+) -> Vec<Line> {
     let base = text.len() - text.trim_start().len();
     let st = Style::fg(p.muted).italic();
-    let pad = " ".repeat(crate::kit::text::width(NOTICE_PREFIX));
+    let pad = " ".repeat(chat_inset(width));
+    let marker = chat_marker(REASONING_PREFIX, width);
     let start = Cut {
         at: base,
         ..Cut::default()
@@ -80,16 +92,19 @@ pub fn reasoning(cache: &mut Option<Prefix>, text: &str, width: usize, p: &Palet
         start,
         line_cut(text, base, false),
         |c, end| {
-            let first = if c.at == base { REASONING_PREFIX } else { &pad };
+            let first = if c.at == base { &marker } else { &pad };
             match body(text, c.at, end) {
-                Some(b) => crate::kit::rich::render::plain(b, width, st, first, &pad),
+                Some(b) => fit_chat(
+                    crate::kit::rich::render::plain(b, width, st, first, &pad),
+                    width,
+                ),
                 None => vec![],
             }
         },
     )
 }
 
-pub fn tool(cache: &mut Option<Prefix>, input: &str, width: usize, p: &Palette) -> Vec<Line> {
+pub fn tool(cache: &mut Option<Prefix<Line>>, input: &str, width: usize, p: &Palette) -> Vec<Line> {
     let base = input.len() - input.trim_start().len();
     let head = Style::fg(p.info);
     let start = Cut {
@@ -109,7 +124,10 @@ pub fn tool(cache: &mut Option<Prefix>, input: &str, width: usize, p: &Palette) 
             }
         },
     );
-    crate::kit::rich::tool_view::finish(lines, None, &[], width, p)
+    fit_chat(
+        crate::kit::rich::tool_view::finish(lines, None, &[], width, p),
+        width,
+    )
 }
 
 fn body(text: &str, at: usize, end: Option<usize>) -> Option<&str> {
@@ -410,10 +428,10 @@ mod tests {
         }
     }
 
-    fn check(
+    fn check<T: std::fmt::Debug + PartialEq>(
         text: &str,
-        stream: impl Fn(&mut Option<Prefix>, &str) -> Vec<Line>,
-        full: impl Fn(&str) -> Vec<Line>,
+        stream: impl Fn(&mut Option<Prefix<T>>, &str) -> Vec<T>,
+        full: impl Fn(&str) -> Vec<T>,
     ) {
         let ends: Vec<usize> = (1..=text.len())
             .filter(|n| text.is_char_boundary(*n))
@@ -437,7 +455,7 @@ mod tests {
         check(
             &md.repeat(2),
             |c, t| markdown(c, t, 30, &p),
-            |t| crate::kit::rich::markdown::render(t, 30, &p),
+            |t| crate::kit::rich::markdown::rows(t, 30, &p, true),
         );
         let thought =
             "  First thought that is long enough to wrap around.\n\nSecond\n  \nthird line\n\n";

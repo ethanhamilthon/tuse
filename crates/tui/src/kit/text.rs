@@ -68,8 +68,122 @@ pub fn clip_line(line: &Line, max: usize, more: &str) -> Line {
     out
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CopySpan {
+    pub col: usize,
+    pub text: String,
+    pub soft: Option<String>,
+}
+
+impl CopySpan {
+    pub fn end(&self) -> usize {
+        self.col + width(&self.text)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CopyRow {
+    Text(CopySpan),
+    Table {
+        record: usize,
+        cells: Vec<(usize, CopySpan)>,
+    },
+}
+
+impl CopyRow {
+    pub fn spans(&self) -> impl Iterator<Item = &CopySpan> {
+        let (text, cells) = match self {
+            Self::Text(text) => (Some(text), &[][..]),
+            Self::Table { cells, .. } => (None, cells.as_slice()),
+        };
+        text.into_iter().chain(cells.iter().map(|(_, cell)| cell))
+    }
+
+    pub fn place(&mut self, inset: usize, width: usize) {
+        let place = |span: &mut CopySpan| {
+            if span.end() > width {
+                span.text = clip(&span.text, width.saturating_sub(span.col), "");
+            }
+            span.col += inset;
+        };
+        match self {
+            Self::Text(text) => place(text),
+            Self::Table { cells, .. } => cells.iter_mut().for_each(|(_, cell)| place(cell)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MessageRow {
+    pub line: Line,
+    pub copy: Option<CopyRow>,
+}
+
+impl Default for MessageRow {
+    fn default() -> Self {
+        Self {
+            line: vec![],
+            copy: Some(CopyRow::Text(CopySpan::default())),
+        }
+    }
+}
+
+impl MessageRow {
+    pub fn decoration(line: Line) -> Self {
+        Self { line, copy: None }
+    }
+}
+
 pub fn wrap(content: &Line, width: usize, first: &Line, rest: &Line) -> Vec<Line> {
-    let cells: Vec<(char, Style)> = content
+    let mut out = vec![];
+    wrap_rows(content, width, first, rest, |prefix, visible, _| {
+        out.push(join(prefix, visible))
+    });
+    out
+}
+
+pub fn wrap_message(
+    content: &Line,
+    width: usize,
+    first: &Line,
+    rest: &Line,
+    first_content: usize,
+) -> Vec<MessageRow> {
+    let mut out = vec![];
+    wrap_rows(content, width, first, rest, |prefix, visible, skipped| {
+        let mut col = line_width(prefix);
+        let mut text = String::new();
+        if out.is_empty() && first_content > 0 {
+            col -= first_content;
+            let mut at = 0;
+            for c in prefix.iter().flat_map(|span| span.text.chars()) {
+                if at >= col {
+                    text.push(c);
+                }
+                at += char_width(c);
+            }
+        }
+        text.extend(visible.iter().map(|&(c, _)| c));
+        out.push(MessageRow {
+            line: join(prefix, visible),
+            copy: Some(CopyRow::Text(CopySpan {
+                col,
+                text,
+                soft: skipped.map(|cells| cells.iter().map(|&(c, _)| c).collect()),
+            })),
+        });
+    });
+    out
+}
+
+fn wrap_rows(
+    content: &Line,
+    width: usize,
+    first: &Line,
+    rest: &Line,
+    mut emit: impl FnMut(&Line, &[(char, Style)], Option<&[(char, Style)]>),
+) {
+    let cells: Vec<_> = content
         .iter()
         .flat_map(|s| {
             s.text
@@ -77,36 +191,31 @@ pub fn wrap(content: &Line, width: usize, first: &Line, rest: &Line) -> Vec<Line
                 .map(move |c| (if c == '\t' { ' ' } else { c }, s.style))
         })
         .collect();
-    let mut out: Vec<Line> = vec![];
-    let mut cur: Vec<(char, Style)> = vec![];
-    let mut cur_w = 0;
-    let mut prefix = first;
     let rooms = [first, rest].map(|p| width.saturating_sub(line_width(p)).max(1));
-    let mut room = rooms[0];
-    for cell in cells {
-        let w = char_width(cell.0);
-        if cur_w + w > room && !cur.is_empty() {
-            let carry = match cur.iter().rposition(|(c, _)| *c == ' ') {
-                Some(i) if i > 0 && cell.0 != ' ' => cur.split_off(i + 1),
-                _ => vec![],
+    let (mut start, mut used, mut prefix, mut room) = (0, 0, first, rooms[0]);
+    for (i, &(c, _)) in cells.iter().enumerate() {
+        let w = char_width(c);
+        if used + w > room && i > start {
+            let split = match cells[start..i].iter().rposition(|(ch, _)| *ch == ' ') {
+                Some(j) if j > 0 && c != ' ' => start + j + 1,
+                _ => i,
             };
-            while cur.last().is_some_and(|(c, _)| *c == ' ') && cur.len() > 1 {
-                cur.pop();
+            let mut end = split;
+            while end > start + 1 && cells[end - 1].0 == ' ' {
+                end -= 1;
             }
-            out.push(join(prefix, &cur));
-            prefix = rest;
-            room = rooms[1];
-            cur = carry;
-            cur_w = cur.iter().map(|(c, _)| char_width(*c)).sum();
-            if cell.0 == ' ' && cur.is_empty() {
+            let skip = c == ' ' && split == i;
+            let next = split + usize::from(skip);
+            emit(prefix, &cells[start..end], Some(&cells[end..next]));
+            (prefix, room, start) = (rest, rooms[1], next);
+            used = cells[split..i].iter().map(|(ch, _)| char_width(*ch)).sum();
+            if skip {
                 continue;
             }
         }
-        cur.push(cell);
-        cur_w += w;
+        used += w;
     }
-    out.push(join(prefix, &cur));
-    out
+    emit(prefix, &cells[start..], None);
 }
 
 fn join(prefix: &Line, cells: &[(char, Style)]) -> Line {

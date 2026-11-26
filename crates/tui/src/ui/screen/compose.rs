@@ -23,7 +23,7 @@ impl App {
     pub(crate) fn compose(&mut self, w: usize, h: usize) -> Frame {
         let p = &self.palette;
         let ui = &p.ui;
-        let pad = ui.pad_x as usize;
+        let pad = (ui.pad_x as usize).min(w.saturating_sub(1) / 2);
         let inner = w.saturating_sub(pad * 2).max(1);
         let inset = if ui.input_style == InputStyle::Boxed {
             BOXED_INSET
@@ -87,6 +87,8 @@ impl App {
                 InputStyle::Bar => input_h,
             };
         self.overlay_rows = start..start + overlay.len();
+        self.chat_pad = pad;
+        self.chat_hits.clear();
         if history_h > 0 {
             if self.scroll > 0 {
                 let total = self.chat.total(inner, p);
@@ -100,10 +102,14 @@ impl App {
             } else {
                 self.chat_anchor = None;
             }
-            let (view, clamped) = self.chat.window(inner, p, self.scroll, history_h);
+            let (view, clamped) = self.chat.viewport(inner, p, self.scroll, history_h);
             self.scroll = clamped;
             screen.resize_with(history_h - view.len(), Vec::new);
-            screen.extend(view);
+            self.chat_hits.resize_with(screen.len(), || None);
+            for row in view {
+                screen.push(row.line);
+                self.chat_hits.push(row.hit);
+            }
         }
         if gap == 1 {
             screen.push(Vec::new());
@@ -151,8 +157,9 @@ impl App {
             self.pressed_link.map(|(_, id)| id).or(self.hover),
             p.fg,
         );
-        self.selection
-            .render(&mut screen, pad, Style::fg(p.bg).on(p.accent));
+        if let Some(selection) = self.selection.message {
+            selection.render(&self.chat_hits, &mut screen, Style::fg(p.bg).on(p.accent));
+        }
 
         let first = history_h + gap + lead;
         self.input_area = Some(crate::ui::app::InputArea {

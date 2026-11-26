@@ -1,6 +1,6 @@
 mod code_block;
 use crate::kit::style::{BULLET, LIST_INDENT, Palette, QUOTE_PREFIX, RULE_CHAR, Style};
-use crate::kit::text::{Line, span, wrap};
+use crate::kit::text::{Line, MessageRow, line_width, span, wrap_message};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
@@ -8,6 +8,13 @@ pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
 }
 
 pub fn render_with_links(text: &str, width: usize, p: &Palette, links: bool) -> Vec<Line> {
+    rows(text, width, p, links)
+        .into_iter()
+        .map(|r| r.line)
+        .collect()
+}
+
+pub fn rows(text: &str, width: usize, p: &Palette, links: bool) -> Vec<MessageRow> {
     let mut r = Renderer {
         links,
         p,
@@ -29,7 +36,7 @@ pub fn render_with_links(text: &str, width: usize, p: &Palette, links: bool) -> 
         r.event(ev);
     }
     r.flush();
-    while r.out.last().is_some_and(|l| l.is_empty()) {
+    while r.out.last().is_some_and(|r| r.line.is_empty()) {
         r.out.pop();
     }
     r.out
@@ -39,7 +46,7 @@ pub(crate) struct Renderer<'a> {
     pub(crate) links: bool,
     pub(crate) p: &'a Palette,
     pub(crate) width: usize,
-    pub(crate) out: Vec<Line>,
+    pub(crate) out: Vec<MessageRow>,
     cur: Line,
     styles: Vec<Style>,
     lists: Vec<Option<u64>>,
@@ -106,14 +113,21 @@ impl Renderer<'_> {
             return;
         }
         let content = std::mem::take(&mut self.cur);
+        let item = self.item_first.is_some();
         let (first, rest) = self.prefixes();
-        self.out.extend(wrap(&content, self.width, &first, &rest));
+        let marker = if item {
+            line_width(&first) - crate::kit::text::width(&QUOTE_PREFIX.repeat(self.quote))
+        } else {
+            0
+        };
+        self.out
+            .extend(wrap_message(&content, self.width, &first, &rest, marker));
     }
 
     fn blank(&mut self) {
         self.flush();
-        if self.lists.is_empty() && self.out.last().is_some_and(|l| !l.is_empty()) {
-            self.out.push(vec![]);
+        if self.lists.is_empty() && self.out.last().is_some_and(|r| !r.line.is_empty()) {
+            self.out.push(MessageRow::default());
         }
     }
 
@@ -145,9 +159,11 @@ impl Renderer<'_> {
             Event::Rule => {
                 self.flush();
                 let w = self.width.min(40);
-                self.out
-                    .push(vec![span(RULE_CHAR.repeat(w), Style::fg(self.p.dim))]);
-                self.out.push(vec![]);
+                self.out.push(MessageRow::decoration(vec![span(
+                    RULE_CHAR.repeat(w),
+                    Style::fg(self.p.dim),
+                )]));
+                self.out.push(MessageRow::default());
             }
             Event::TaskListMarker(done) => self.text(if done { "[x] " } else { "[ ] " }),
             Event::Html(t) | Event::InlineHtml(t) => self.text(&t),

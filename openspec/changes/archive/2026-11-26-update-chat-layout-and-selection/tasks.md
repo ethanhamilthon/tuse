@@ -1,0 +1,5 @@
+- [x] 1. Add shared chat text alignment and symmetric message padding. Audit every chat entry variant, including Lua output and diffs, the prompts and answers of UI results, pinned and unpinned `show()` blocks, and entries loaded from history.
+- [x] 2. Carry message identity, content bounds, and logical text boundaries through layout to the visible rows, including streamed replies. Keep full and incremental rendering consistent.
+- [x] 3. Scope mouse drags to the editor or a single message, and make Ctrl+A / Cmd+A switch selection to the editor. Preserve ordinary cursor placement and link clicks.
+- [x] 4. Copy the selected logical text without layout whitespace; preserve intentional whitespace and the editor's existing copy and cut behavior.
+- [x] 5. Test alignment, narrow widths, both drag directions across target boundaries, non-selectable rows, both select-all shortcuts, and clipboard text at different wrap widths. Update the usage guide.

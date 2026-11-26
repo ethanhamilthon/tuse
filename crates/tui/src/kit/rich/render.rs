@@ -3,7 +3,7 @@ use crate::kit::style::{
     ERROR_PREFIX, INPUT_PREFIX, LABEL_SEP, NOTICE_PREFIX, Palette, REASONING_PREFIX, Style,
     UI_MARKDOWN_PREFIX, UI_RESULT_PREFIX,
 };
-use crate::kit::text::{Line, line_width, span, wrap};
+use crate::kit::text::{Line, MessageRow, clip, clip_line, line_width, span, wrap, wrap_message};
 use std::time::Duration;
 
 pub fn duration(d: Duration) -> String {
@@ -31,23 +31,75 @@ pub fn plain(text: &str, width: usize, style: Style, first: &str, rest: &str) ->
         .collect()
 }
 
-pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
-    let pad = " ".repeat(crate::kit::text::width(NOTICE_PREFIX));
-    match e {
+pub fn chat_inset(width: usize) -> usize {
+    2.min(width.saturating_sub(2) / 2)
+}
+
+pub fn message_width(width: usize) -> usize {
+    width - 2 * chat_inset(width)
+}
+
+pub fn pad_message(row: &mut MessageRow, width: usize, st: Style) {
+    let inset = chat_inset(width);
+    let room = message_width(width);
+    let line = &mut row.line;
+    if line_width(line) > room {
+        *line = clip_line(line, room, "");
+    }
+    if let Some(copy) = &mut row.copy {
+        copy.place(inset, line_width(line));
+    }
+    if inset > 0 {
+        line.insert(0, span(" ".repeat(inset), st));
+    }
+    let right = width.saturating_sub(line_width(line));
+    if right > 0 {
+        line.push(span(" ".repeat(right), st));
+    }
+}
+
+pub fn message(e: &Entry, width: usize, p: &Palette) -> Vec<MessageRow> {
+    let room = message_width(width);
+    let (mut rows, st) = match e {
         Entry::User { text, images } => {
             let st = Style::fg(p.user).on(p.surface);
-            let mut text = text.clone();
+            let mut text = crate::kit::text::clean(text);
             if *images > 0 && !text.contains("[Image") {
                 text.push_str(&format!("\n[{images} image(s)]"));
             }
-            let mut lines = plain(&text, width, st, "", "");
-            for l in &mut lines {
-                let fill = width.saturating_sub(line_width(l));
-                l.push(span(" ".repeat(fill), st));
-            }
-            lines
+            let empty = vec![span("", st)];
+            let rows = text
+                .split('\n')
+                .flat_map(|line| wrap_message(&vec![span(line, st)], room, &empty, &empty, 0))
+                .collect();
+            (rows, st)
         }
-        Entry::Assistant(text) => crate::kit::rich::markdown::render(text, width, p),
+        Entry::Assistant(text) => (
+            crate::kit::rich::markdown::rows(text, room, p, true),
+            Style::default(),
+        ),
+        _ => unreachable!(),
+    };
+    for row in &mut rows {
+        pad_message(row, width, st);
+    }
+    rows
+}
+
+pub fn chat_marker(marker: &str, width: usize) -> String {
+    clip(marker, chat_inset(width), "")
+}
+
+pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
+    let pad = " ".repeat(chat_inset(width));
+    let marker = |prefix| chat_marker(prefix, width);
+    let lines = match e {
+        Entry::User { .. } | Entry::Assistant(_) => {
+            return message(e, width, p)
+                .into_iter()
+                .map(|row| row.line)
+                .collect();
+        }
         Entry::Reasoning(text) if text.trim().is_empty() => vec![],
         Entry::Reasoning(text) => {
             let st = Style::fg(p.muted).italic();
@@ -55,9 +107,10 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             let cut = usize::try_from(p.ui.reasoning_line)
                 .ok()
                 .and_then(|n| text.rmatch_indices('\n').nth(n.saturating_sub(1)));
+            let prefix = marker(REASONING_PREFIX);
             let (text, first) = match cut {
                 Some((i, _)) => (&text[i + 1..], pad.as_str()),
-                None => (text, REASONING_PREFIX),
+                None => (text, prefix.as_str()),
             };
             let all = plain(text, width, st, first, &pad);
             let n = tuse_config::limit(p.ui.reasoning_line, all.len());
@@ -70,8 +123,8 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             diffs,
             ..
         } => crate::kit::rich::tool_view::tool(input, output.as_deref(), *code, diffs, width, p),
-        Entry::Notice(text) => plain(text, width, Style::fg(p.dim), NOTICE_PREFIX, &pad),
-        Entry::Error(text) => plain(text, width, Style::fg(p.err), ERROR_PREFIX, &pad),
+        Entry::Notice(text) => plain(text, width, Style::fg(p.dim), &marker(NOTICE_PREFIX), &pad),
+        Entry::Error(text) => plain(text, width, Style::fg(p.err), &marker(ERROR_PREFIX), &pad),
         Entry::TurnEnd {
             elapsed,
             model,
@@ -87,14 +140,20 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
                 parts.push(format!("{model}/{effort}"));
             }
             let text = parts.join(LABEL_SEP);
-            plain(&text, width, Style::fg(p.muted), NOTICE_PREFIX, &pad)
+            plain(
+                &text,
+                width,
+                Style::fg(p.muted),
+                &marker(NOTICE_PREFIX),
+                &pad,
+            )
         }
         Entry::Markdown { text, .. } => ui_markdown(text, width, p),
         Entry::UiResult {
             is_picker,
             prompt,
             value,
-        } => marked(UI_RESULT_PREFIX, width, p, |room| {
+        } => marked(&marker(UI_RESULT_PREFIX), width, p, |room| {
             let mut out = if *is_picker {
                 plain(prompt, room, Style::fg(p.dim), "", "")
             } else {
@@ -103,19 +162,33 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             if out.is_empty() {
                 out.push(vec![]);
             }
-            let answer = marked(INPUT_PREFIX, room, p, |room| {
-                plain(value, room, Style::fg(p.fg), "", "")
-            });
-            out.extend(answer);
             out
-        }),
+        })
+        .into_iter()
+        .chain(marked(&marker(INPUT_PREFIX), width, p, |room| {
+            plain(value, room, Style::fg(p.fg), "", "")
+        }))
+        .collect(),
+    };
+    fit_chat(lines, width)
+}
+
+pub fn fit_chat(mut lines: Vec<Line>, width: usize) -> Vec<Line> {
+    for line in &mut lines {
+        if line_width(line) > width {
+            *line = clip_line(line, width, "");
+        }
     }
+    lines
 }
 
 pub fn ui_markdown(text: &str, width: usize, p: &Palette) -> Vec<Line> {
-    marked(UI_MARKDOWN_PREFIX, width, p, |room| {
-        crate::kit::rich::markdown::render(text, room, p)
-    })
+    fit_chat(
+        marked(&chat_marker(UI_MARKDOWN_PREFIX, width), width, p, |room| {
+            crate::kit::rich::markdown::render(text, room, p)
+        }),
+        width,
+    )
 }
 
 fn marked(
@@ -124,13 +197,12 @@ fn marked(
     p: &Palette,
     render: impl FnOnce(usize) -> Vec<Line>,
 ) -> Vec<Line> {
-    let marker = crate::kit::text::clip(marker, width.saturating_sub(1), "");
-    let indent = crate::kit::text::width(&marker);
+    let indent = crate::kit::text::width(marker);
     let mut lines = render(width.saturating_sub(indent));
     if !marker.is_empty() {
         for (i, line) in lines.iter_mut().enumerate() {
             if i == 0 {
-                line.insert(0, span(marker.clone(), Style::fg(p.accent)));
+                line.insert(0, span(marker, Style::fg(p.accent)));
             } else if !line.is_empty() {
                 line.insert(0, span(" ".repeat(indent), Style::default()));
             }
@@ -174,8 +246,7 @@ mod tests {
             };
             let lines = render(&entry, 20, &p);
             assert_eq!(lines[0][0], span("? ", Style::fg(p.accent)));
-            assert_eq!(lines[1][0].text, "  ");
-            assert_eq!(lines[1][1], span("› ", Style::fg(p.accent)));
+            assert_eq!(lines[1][0], span("› ", Style::fg(p.accent)));
         }
         let lines = ui_markdown("**one two three**", 9, &p);
         assert_eq!(lines[0][0], span("◆ ", Style::fg(p.accent)));
@@ -213,7 +284,7 @@ mod tests {
         assert_eq!(lines.len(), 2);
         for (l, want) in lines.iter().zip(["hi there", "second"]) {
             let text: String = l.iter().map(|s| s.text.as_str()).collect();
-            assert_eq!(text.trim_end(), want);
+            assert_eq!(text.trim_end(), format!("  {want}"));
             assert_eq!(line_width(l), 20);
             assert!(l.iter().all(|s| s.style.bg == p.surface));
         }

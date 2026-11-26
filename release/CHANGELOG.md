@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.9
+
+- **Aligned chat.** User messages and agent replies have two columns of padding on both sides, lining up with Lua output, `show()` blocks, and other chat entries.
+- **Scoped selection.** Ctrl+A / Cmd+A selects the draft. Mouse drags stay within the draft or one message, excluding events, Lua tool blocks, and UI. Copying a message preserves real line breaks and indentation without adding visual wraps.
+
 ## 0.11.8
 
 - **More open handlers.** `settings.open` keys can now be masks matched against the file name (`*.test.lua`, `.env*`), `*` for any file or folder without a better handler, `@dir` for folders, and `@url` for `http://`, `https://`, and `mailto:` links. A file uses its extension, then the most specific mask, then `*`; a folder uses `@dir`, then `*`. Other keys fail loading, and `/config` lists the new keys as written.

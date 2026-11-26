@@ -49,7 +49,7 @@ Every command accepts `-h`/`--help`, which prints its usage and exits without re
 
 From top to bottom:
 
-- **Chat.** Your messages sit on a `surface` block. Agent replies render as Markdown, and a Markdown image `![alt](path)` shows as a clickable `alt` (or the path when `alt` is empty). Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
+- **Chat.** Your messages sit on a `surface` block. Both your messages and agent replies leave two columns on each side and line up with the rest of the chat text. Agent replies render as Markdown, and a Markdown image `![alt](path)` shows as a clickable `alt` (or the path when `alt` is empty). Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
 - **Gap.** One empty row above the input in every style.
 - **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`.
 - **Input.** Grows with the text up to `settings.ui.input_max_height`.
@@ -95,14 +95,15 @@ Text files send their first 1,024 bytes (`truncated="true" size="…"` when long
 | `Ctrl+P` / `Ctrl+N` | Move in a picker. |
 | `Home` / `End`, `Ctrl+E` | Start / end of line. |
 | `Ctrl` or `Alt` + `Left`/`Right`, `Alt+B`/`Alt+F` | Move by word. |
-| `Shift` + arrows / `Home` / `End`, `Ctrl+A` | Select input. |
+| `Shift` + arrows / `Home` / `End` | Extend the draft selection. |
+| `Ctrl+A` / `Cmd+A` | Select the entire draft, not the chat. |
 | `Ctrl+C` / `Cmd+C` | Copy the selection, else clear the input, else quit. |
 | `Ctrl+X` / `Cmd+X` | Cut. In `/tasks`, stop the selected task. |
 | `Ctrl+W`, `Alt+Backspace`, `Ctrl+Backspace` | Delete the previous word. |
 | `Ctrl+U` / `Ctrl+K` | Delete to start / end of line. |
 | `Esc` | Close, or stop everything (see above). |
 
-Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text (copy with `Ctrl+C`). Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `settings.open` handler from config (extension, mask, `*`, `@dir`, or `@url`) or the OS opener.
+Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text within the draft or within one user or agent message at a time. Lua tool blocks, events, and other UI text are not selectable. Copying with `Ctrl+C` or `Cmd+C` leaves out visual wraps and layout padding but preserves intentional line breaks. Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `settings.open` handler from config (extension, mask, `*`, `@dir`, or `@url`) or the OS opener.
 
 ## Slash commands
 

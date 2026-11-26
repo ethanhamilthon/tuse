@@ -1,5 +1,5 @@
 use crate::kit::style::{Palette, RULE_CHAR, Style, TABLE_SEP};
-use crate::kit::text::{Line, line_width, span, width, wrap};
+use crate::kit::text::{CopyRow, Line, MessageRow, line_width, span, width, wrap_message};
 use pulldown_cmark::Alignment;
 
 #[derive(Default)]
@@ -46,26 +46,39 @@ impl Table {
         }
         Some(floor)
     }
-    pub fn prefixed(self, available: usize, p: &Palette, first: Line, rest: Line) -> Vec<Line> {
+    pub fn prefixed(
+        self,
+        available: usize,
+        p: &Palette,
+        first: Line,
+        rest: Line,
+    ) -> Vec<MessageRow> {
         let room = available.saturating_sub(line_width(&first).max(line_width(&rest)));
         self.render(room, p)
             .into_iter()
             .enumerate()
-            .map(|(i, l)| {
-                let mut row = if i == 0 { first.clone() } else { rest.clone() };
-                row.extend(l);
+            .map(|(i, mut row)| {
+                let mut prefix = if i == 0 { first.clone() } else { rest.clone() };
+                if let Some(copy) = &mut row.copy {
+                    copy.place(line_width(&prefix), room);
+                }
+                prefix.append(&mut row.line);
+                row.line = prefix;
                 row
             })
             .collect()
     }
-    pub fn render(self, available: usize, p: &Palette) -> Vec<Line> {
+    fn render(self, available: usize, p: &Palette) -> Vec<MessageRow> {
         let dim = Style::fg(p.dim);
         let mut out = vec![];
         let Some(widths) = self.widths(available) else {
             if let Some((headers, rows)) = self.rows.split_first() {
                 for (r, row) in rows.iter().enumerate() {
                     if r > 0 {
-                        out.push(vec![span(RULE_CHAR.repeat(available), dim)]);
+                        out.push(MessageRow::decoration(vec![span(
+                            RULE_CHAR.repeat(available),
+                            dim,
+                        )]));
                     }
                     for (i, cell) in row.iter().enumerate() {
                         let key: String = headers
@@ -74,13 +87,26 @@ impl Table {
                             .flatten()
                             .map(|s| s.text.as_str())
                             .collect();
-                        let mut line = vec![span(format!("{key}: "), dim)];
-                        line.extend(cell.clone());
-                        let pad = vec![span(
-                            " ".repeat((width(&key) + 2).min(available.saturating_sub(2))),
-                            dim,
-                        )];
-                        out.extend(wrap(&line, available, &vec![], &pad));
+                        let label = crate::kit::text::clip(
+                            &format!("{key}: "),
+                            available.saturating_sub(2),
+                            "",
+                        );
+                        let pad = vec![span(" ".repeat(width(&label)), dim)];
+                        let first = vec![span(label, dim)];
+                        out.extend(
+                            wrap_message(cell, available, &first, &pad, 0)
+                                .into_iter()
+                                .map(|mut row| {
+                                    if let Some(CopyRow::Text(copy)) = row.copy.take() {
+                                        row.copy = Some(CopyRow::Table {
+                                            record: r,
+                                            cells: vec![(i, copy)],
+                                        });
+                                    }
+                                    row
+                                }),
+                        );
                     }
                 }
             }
@@ -99,17 +125,18 @@ impl Table {
                             s.style = s.style.bold();
                         }
                     }
-                    wrap(&cell, w, &vec![], &vec![])
+                    wrap_message(&cell, w, &vec![], &vec![], 0)
                 })
                 .collect();
             for j in 0..cells.iter().map(Vec::len).max().unwrap_or(0) {
                 let mut line = vec![];
+                let mut copy_cells = vec![];
                 for (i, lines) in cells.iter().enumerate() {
                     if i > 0 {
                         line.push(span(TABLE_SEP, dim));
                     }
-                    let cell = lines.get(j).cloned().unwrap_or_default();
-                    let space = widths[i].saturating_sub(line_width(&cell));
+                    let cell = lines.get(j);
+                    let space = widths[i].saturating_sub(cell.map_or(0, |r| line_width(&r.line)));
                     let left = match self.align.get(i) {
                         Some(Alignment::Right) => space,
                         Some(Alignment::Center) => space / 2,
@@ -118,15 +145,30 @@ impl Table {
                     if left > 0 {
                         line.push(span(" ".repeat(left), Style::default()));
                     }
-                    line.extend(cell);
+                    if let Some(cell) = cell {
+                        if let Some(CopyRow::Text(mut copy)) = cell.copy.clone() {
+                            copy.col += line_width(&line);
+                            copy_cells.push((i, copy));
+                        }
+                        line.extend(cell.line.iter().cloned());
+                    }
                     if i + 1 < cells.len() && space > left {
                         line.push(span(" ".repeat(space - left), Style::default()));
                     }
                 }
-                out.push(line);
+                out.push(MessageRow {
+                    line,
+                    copy: Some(CopyRow::Table {
+                        record: r,
+                        cells: copy_cells,
+                    }),
+                });
             }
             if r == 0 {
-                out.push(vec![span(RULE_CHAR.repeat(total), dim)]);
+                out.push(MessageRow::decoration(vec![span(
+                    RULE_CHAR.repeat(total),
+                    dim,
+                )]));
             }
         }
         out
@@ -149,7 +191,11 @@ mod tests {
         };
         let p = Palette::new(&Default::default(), &Default::default());
         for (n, w, records) in [(3, 35, false), (15, 80, true)] {
-            let lines = make(n).render(w, &p);
+            let lines: Vec<_> = make(n)
+                .render(w, &p)
+                .into_iter()
+                .map(|row| row.line)
+                .collect();
             assert!(lines.iter().all(|l| line_width(l) <= w));
             assert_eq!(
                 lines.iter().flatten().any(|s| s.text.contains("Name:")),

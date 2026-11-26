@@ -1,6 +1,6 @@
 use super::Renderer;
 use crate::kit::style::Style;
-use crate::kit::text::{span, wrap};
+use crate::kit::text::{MessageRow, span, wrap_message};
 use pulldown_cmark::CodeBlockKind;
 
 impl Renderer<'_> {
@@ -17,7 +17,7 @@ impl Renderer<'_> {
             let (first, _) = self.prefixes();
             let mut l = first;
             l.push(span(lang.to_string(), Style::fg(self.p.dim)));
-            self.out.push(l);
+            self.out.push(MessageRow::decoration(l));
         }
     }
 
@@ -25,7 +25,7 @@ impl Renderer<'_> {
         let st = Style::fg(self.p.fg);
         let pad = " ".repeat(crate::kit::style::CODE_INDENT);
         let lua = self.lang == "lua";
-        for line in t.trim_end_matches('\n').split('\n') {
+        for line in t.split_terminator('\n') {
             let (mut first, _) = self.prefixes();
             first.push(span(pad.clone(), st));
             let rest = first.clone();
@@ -42,7 +42,8 @@ impl Renderer<'_> {
             } else {
                 content
             };
-            self.out.extend(wrap(&content, self.width, &first, &rest));
+            self.out
+                .extend(wrap_message(&content, self.width, &first, &rest, 0));
         }
     }
 }

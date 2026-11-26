@@ -163,18 +163,18 @@ return {
     end,
   },
   commands = {
-    check_cmd = function()
+    check_cmd = { run = function()
       assert(my_secret_fn == nil)
       local out = t.sh("printf trusted-sh").out
       t.show("cmd", out, false)
-    end,
+    end },
   },
-  settings = { open = {
+  open = {
     md = function(path)
       assert(my_secret_fn == nil)
       t.show("opened", t.sh("printf open-ok").out .. ":" .. path, false)
     end,
-  } },
+  },
   hooks = {
     check_hook = {
       events = { "session_created" },

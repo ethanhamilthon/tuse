@@ -40,31 +40,32 @@ fn validates_config_and_preserves_state_on_failed_reload() {
         ("return { unknown_top = 1 }", "unknown_top: unknown key"),
         (
             "return { settings = { nope = 1 } }",
-            "settings.nope: unknown key",
+            "settings: moved to ui, history, and open",
+        ),
+        ("return { ui = { nope = 1 } }", "ui.nope: unknown key"),
+        (
+            "return { ui = { scroll_step = 3 } }",
+            "ui.scroll_step: unknown key",
         ),
         (
-            "return { settings = { retries = 'x' } }",
-            "settings.retries: unknown key",
+            "return { ui = { lines = { input = 0 } } }",
+            "ui.lines.input: must be -1 or >= 1",
         ),
         (
-            "return { settings = { max_image_bytes = 1 } }",
-            "settings.max_image_bytes: unknown key",
+            "return { theme = { accent = 'red' } }",
+            "theme: moved to ui.theme",
         ),
         (
-            "return { settings = { ui = { scroll_step = 0 } } }",
-            "settings.ui.scroll_step: value 0 out of range",
+            "return { ui = { theme = { accent = 'notacolor' } } }",
+            "ui.theme.accent: invalid color",
         ),
         (
-            "return { settings = { ui = { input_max_height = 0 } } }",
-            "settings.ui.input_max_height: must be -1 or >= 1",
+            "return { ui = { theme = { bogus = 'red' } } }",
+            "ui.theme.bogus: unknown key",
         ),
         (
-            "return { theme = { accent = 'notacolor' } }",
-            "theme.accent: invalid color",
-        ),
-        (
-            "return { theme = { bogus = 'red' } }",
-            "theme.bogus: unknown key",
+            "return { ui = { theme = { user = 'input', input = 'user' } } }",
+            "ui.theme.user: link cycle",
         ),
         (
             "return { systems = { a = 'x' } }",
@@ -111,12 +112,16 @@ fn validates_config_and_preserves_state_on_failed_reload() {
             "functions.f: expected function or false, got boolean",
         ),
         (
-            "return { commands = { session = function() end } }",
+            "return { commands = { session = { run = function() end } } }",
             "commands: `session`: cannot override built-in",
         ),
         (
             "return { commands = { bad = 1 } }",
-            "commands.bad: expected function",
+            "commands.bad: expected a table",
+        ),
+        (
+            "return { commands = { c = function() end } }",
+            "commands.c: expected a table",
         ),
         (
             "return { commands = { c = { desc = 1, run = function() end } } }",
@@ -135,20 +140,20 @@ fn validates_config_and_preserves_state_on_failed_reload() {
             "commands.c.nope: unknown key",
         ),
         (
-            "return { settings = { open = { ['.md'] = function() end } } }",
-            "settings.open: `.md`: extension must not start with `.`",
+            "return { open = { ['.md'] = function() end } }",
+            "open: `.md`: extension must not start with `.`",
         ),
         (
-            "return { settings = { open = { md = 'nope' } } }",
-            "settings.open.md: expected function",
+            "return { open = { md = 'nope' } }",
+            "open.md: expected function",
         ),
         (
-            "return { settings = { open = { ['@file'] = function() end } } }",
-            "settings.open: `@file`: unknown special key",
+            "return { open = { ['@file'] = function() end } }",
+            "open: `@file`: unknown special key",
         ),
         (
-            "return { open = { md = function() end } }",
-            "open: moved to settings.open",
+            "return { settings = { open = { md = function() end } } }",
+            "settings: moved to ui, history, and open",
         ),
     ];
     for (src, want) in bad_cases {
@@ -164,7 +169,7 @@ fn validates_config_and_preserves_state_on_failed_reload() {
         &cfg,
         r#"return {
             prompts = { keep = "alive" },
-            commands = { ok = function() require("tuse").show("m", "still-active", false) end },
+            commands = { ok = { run = function() require("tuse").show("m", "still-active", false) end } },
         }"#,
     )
     .unwrap();
@@ -200,8 +205,8 @@ fn commands_take_words_by_parameters_or_args() {
     let addr = common::provider(vec![]);
     let extra = r##"
   commands = {
-    mv = function(a, b) require("tuse").show("mv", tostring(a) .. "|" .. tostring(b), false) end,
-    vary = function(...) require("tuse").show("vary", tostring(select("#", ...)), false) end,
+    mv = { run = function(a, b) require("tuse").show("mv", tostring(a) .. "|" .. tostring(b), false) end },
+    vary = { run = function(...) require("tuse").show("vary", tostring(select("#", ...)), false) end },
     deploy = {
       desc = "ship it",
       args = { "staging", "prod" },

@@ -62,7 +62,7 @@ pub fn message(e: &Entry, width: usize, p: &Palette) -> Vec<MessageRow> {
     let room = message_width(width);
     let (mut rows, st) = match e {
         Entry::User { text, images } => {
-            let st = Style::fg(p.user).on(p.surface);
+            let st = Style::fg(p.user).on(p.user_bg);
             let mut text = crate::kit::text::clean(text);
             if *images > 0 && !text.contains("[Image") {
                 text.push_str(&format!("\n[{images} image(s)]"));
@@ -104,7 +104,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
         Entry::Reasoning(text) => {
             let st = Style::fg(p.muted).italic();
             let text = text.trim();
-            let cut = usize::try_from(p.ui.reasoning_line)
+            let cut = usize::try_from(p.ui.lines.reasoning)
                 .ok()
                 .and_then(|n| text.rmatch_indices('\n').nth(n.saturating_sub(1)));
             let prefix = marker(REASONING_PREFIX);
@@ -113,7 +113,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
                 None => (text, prefix.as_str()),
             };
             let all = plain(text, width, st, first, &pad);
-            let n = tuse_config::limit(p.ui.reasoning_line, all.len());
+            let n = tuse_config::limit(p.ui.lines.reasoning, all.len());
             all[all.len() - n..].to_vec()
         }
         Entry::Tool {
@@ -123,8 +123,14 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             diffs,
             ..
         } => crate::kit::rich::tool_view::tool(input, output.as_deref(), *code, diffs, width, p),
-        Entry::Notice(text) => plain(text, width, Style::fg(p.dim), &marker(NOTICE_PREFIX), &pad),
-        Entry::Error(text) => plain(text, width, Style::fg(p.err), &marker(ERROR_PREFIX), &pad),
+        Entry::Notice(text) => plain(
+            text,
+            width,
+            Style::fg(p.muted),
+            &marker(NOTICE_PREFIX),
+            &pad,
+        ),
+        Entry::Error(text) => plain(text, width, Style::fg(p.error), &marker(ERROR_PREFIX), &pad),
         Entry::TurnEnd {
             elapsed,
             model,
@@ -155,7 +161,7 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
             value,
         } => marked(&marker(UI_RESULT_PREFIX), width, p, |room| {
             let mut out = if *is_picker && prompt == "Picker" {
-                plain(prompt, room, Style::fg(p.dim), "", "")
+                plain(prompt, room, Style::fg(p.muted), "", "")
             } else {
                 crate::kit::rich::markdown::render_with_links(prompt, room, p, false)
             };
@@ -202,7 +208,7 @@ fn marked(
     if !marker.is_empty() {
         for (i, line) in lines.iter_mut().enumerate() {
             if i == 0 {
-                line.insert(0, span(marker, Style::fg(p.accent)));
+                line.insert(0, span(marker, Style::fg(p.icons)));
             } else if !line.is_empty() {
                 line.insert(0, span(" ".repeat(indent), Style::default()));
             }
@@ -237,7 +243,7 @@ mod tests {
 
     #[test]
     fn ui_entries_use_accent_markers_and_keep_wrapped_content_aligned() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         for (is_picker, prompt) in [
             (true, "Picker"),
             (true, "**Question**"),
@@ -267,7 +273,7 @@ mod tests {
 
     #[test]
     fn the_turn_summary_is_muted() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         let entry = Entry::TurnEnd {
             elapsed: Duration::from_secs(70),
             model: "provider/model".into(),
@@ -285,7 +291,7 @@ mod tests {
 
     #[test]
     fn a_user_message_is_a_surface_block_without_a_prefix() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         let e = Entry::User {
             text: "hi there\nsecond".into(),
             images: 0,
@@ -296,22 +302,25 @@ mod tests {
             let text: String = l.iter().map(|s| s.text.as_str()).collect();
             assert_eq!(text.trim_end(), format!("  {want}"));
             assert_eq!(line_width(l), 20);
-            assert!(l.iter().all(|s| s.style.bg == p.surface));
+            assert!(l.iter().all(|s| s.style.bg == p.user_bg));
         }
     }
 
     #[test]
     fn user_and_lua_colors_follow_the_theme() {
-        let t = tuse_config::Theme {
+        let theme = tuse_config::Theme {
             user: "#112233".into(),
-            lua: tuse_config::LuaTheme {
-                keyword: "info".into(),
+            code: tuse_config::CodeTheme {
+                keyword: "accent".into(),
                 field: "#445566".into(),
                 ..Default::default()
             },
             ..Default::default()
         };
-        let p = Palette::new(&t, &Default::default());
+        let p = Palette::new(&tuse_config::Ui {
+            theme,
+            ..Default::default()
+        });
         let e = Entry::User {
             text: "hi".into(),
             images: 0,
@@ -320,11 +329,11 @@ mod tests {
         assert_ne!(p.user, p.fg);
         let base = Style::fg(p.fg);
         let kw = crate::kit::rich::syntax::style(crate::kit::rich::syntax::Kind::Keyword, base, &p);
-        assert_eq!(kw.fg, p.info);
+        assert_eq!(kw.fg, p.accent);
         let plain =
             crate::kit::rich::syntax::style(crate::kit::rich::syntax::Kind::Variable, base, &p);
         assert_eq!(plain.fg, p.fg);
-        let linked = Palette::new(&Default::default(), &Default::default());
+        let linked = Palette::new(&Default::default());
         assert_eq!(linked.user, linked.fg);
     }
 }

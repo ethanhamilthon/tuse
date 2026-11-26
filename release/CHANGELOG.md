@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0
+
+- **Breaking: new config layout.** `settings` is gone. UI keys live in `ui` (`lines`, `input`, `space`, `theme`), `hide_history` became `history.hide`, and `settings.open` became a top-level `open`. Old keys fail loading with a `moved to` error.
+  - `ui.lines`: `tool`, `output`, `diff`, `reasoning`, `strings`, `input` (default 10), and `list`. `strings` replaces `fold_strings` and sets how many lines of a multiline Lua string a tool call shows (`0` shows only `…`).
+  - `ui.input` replaces `input_style`; the `classic` alias is removed.
+  - `ui.space`: `padding`, `steps` (rows between tool calls and reasoning), and `messages` (rows around messages).
+  - `scroll_step` is removed; the wheel scrolls 2 lines.
+- **Breaking: new theme.** `ui.theme` has `bg`, `accent`, `fg`, `user`, `user_bg`, `muted`, `input`, `input_bg`, `border`, `icons`, and `error`, plus `code` (Lua tokens, `added`, `removed`) and `markdown` (`heading`, `link`, `code`, `quote`, `list`). `surface`, `dim`, `ok`, `err`, `info`, and `theme.lua` are removed.
+- **Breaking: `commands` are tables.** Use `{ args?, desc?, run }`; a bare function fails loading.
+- **Breaking: `scope_models` is removed.** When `models` is set, `/models` lists only those models.
+- **`fork(position)` and `resume(id)` in Lua.** Switch sessions from commands, hooks, and the agent. The switch waits for the tool calls of the current step, and JSON-RPC sends a `session_switched` event.
 ## 0.11.13
 
 - **Background task indicator.** While background tasks run, the status shows `⠋ 2 tasks` in the accent color in place of the project path, and `12s · 2 tasks` after the timer during a turn.

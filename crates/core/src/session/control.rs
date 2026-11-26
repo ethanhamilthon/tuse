@@ -91,6 +91,7 @@ impl Session {
                 self.record(&mut st, &[r], [event]);
             }
         }
+        st.pending_switch = None;
         self.end_tool_step(&mut st);
         let text = std::mem::take(&mut st.partial);
         let reasoning = std::mem::take(&mut st.reasoning);

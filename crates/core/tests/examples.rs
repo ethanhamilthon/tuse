@@ -52,7 +52,7 @@ fn examples_load_and_are_linked_from_the_docs() {
     fs::write(
         &cfg,
         format!(
-            "local g = {{ prompts = {{}} }}\n{}\ng.theme = require('{e}/themes').gruvbox\n\
+            "local g = {{ prompts = {{}} }}\n{}\ng.ui = {{ theme = require('{e}/themes').gruvbox }}\n\
              g.prompts.openspec = require('{e}/openspec').prompt\n\
              g.prompts = require('{e}/skills').load(g.prompts)\n\
              g.functions = require('{e}/mcp').functions({{ 'true' }}, g.functions)\n\
@@ -72,7 +72,7 @@ fn examples_load_and_are_linked_from_the_docs() {
     .unwrap();
     let c = s.config();
     assert_eq!(c.prompts["openspec"].args[1], "propose");
-    assert!(c.settings.open.contains(&"md".to_string()));
+    assert!(c.open.contains(&"md".to_string()));
     let got = s
         .resolve_prompts(&["openspec propose".into()], true)
         .unwrap();
@@ -93,7 +93,7 @@ fn examples_load_and_are_linked_from_the_docs() {
         start: Start::Launch,
     })
     .unwrap();
-    assert_eq!(s.config().settings.ui.hide_history, ["usage", "hook"]);
+    assert_eq!(s.config().history.hide, ["usage", "hook"]);
     s.close();
     common::cleanup(&dir);
 }

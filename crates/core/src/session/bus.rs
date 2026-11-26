@@ -43,6 +43,7 @@ pub(crate) enum Signal {
     Models,
     Reloaded,
     HistoryReplaced,
+    Switch(crate::event::Switch),
     UiRequest(UiRequest),
     UiClear {
         id: u64,
@@ -101,6 +102,7 @@ impl Session {
             Signal::Models => Event::Models,
             Signal::Reloaded => Event::Reloaded,
             Signal::HistoryReplaced => Event::HistoryReplaced,
+            Signal::Switch(switch) => Event::Switch(switch),
             Signal::UiRequest(value) => Event::UiRequest(value),
             Signal::UiClear { id } => Event::UiClear { id },
         });

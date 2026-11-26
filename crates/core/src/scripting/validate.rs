@@ -9,12 +9,13 @@ pub(crate) fn table(lua: &Lua, t: &Table, source: &str) -> Result<tuse_config::C
     {
         return fail("plugins".into(), "unknown key");
     }
-    if !t
-        .raw_get::<Value>("open")
-        .map_err(|e| e.to_string())?
-        .is_nil()
-    {
-        return fail("open".into(), "moved to settings.open");
+    for (key, msg) in [
+        ("settings", "moved to ui, history, and open"),
+        ("theme", "moved to ui.theme"),
+    ] {
+        if !t.raw_get::<Value>(key).map_err(|e| e.to_string())?.is_nil() {
+            return fail(key.into(), msg);
+        }
     }
     validate_functions(t, source)?;
     for (name, v) in entries(t, "hooks") {
@@ -28,22 +29,14 @@ pub(crate) fn table(lua: &Lua, t: &Table, source: &str) -> Result<tuse_config::C
     }
     for (name, v) in entries(t, "commands") {
         match v {
-            Value::Function(_) => {}
             Value::Table(c) => validate_command(&c)
                 .map_err(|(k, m)| format!("{source}: commands.{name}{k}: {m}"))?,
-            other => {
-                return fail(
-                    format!("commands.{name}"),
-                    &format!("expected function or table, got {}", other.type_name()),
-                );
-            }
+            _ => return fail(format!("commands.{name}"), "expected a table"),
         }
     }
-    if let Some(s) = sub(t, "settings") {
-        for (name, v) in entries(&s, "open") {
-            if !matches!(v, Value::Function(_)) {
-                return fail(format!("settings.open.{name}"), &expected(&v));
-            }
+    for (name, v) in entries(t, "open") {
+        if !matches!(v, Value::Function(_)) {
+            return fail(format!("open.{name}"), &expected(&v));
         }
     }
     for (name, v) in entries(t, "prompts") {
@@ -209,13 +202,10 @@ fn json(lua: &Lua, t: &Table) -> serde_json::Value {
             }
             obj.insert("commands".into(), serde_json::Value::Object(map));
         }
-        if let Some(s) = sub(t, "settings")
-            && let Some(so) = obj.get_mut("settings").and_then(|v| v.as_object_mut())
-            && s.raw_get::<Value>("open").is_ok_and(|v| v.is_table())
-        {
-            let mut names: Vec<String> = entries(&s, "open").into_iter().map(|e| e.0).collect();
+        if sub(t, "open").is_some() {
+            let mut names: Vec<String> = entries(t, "open").into_iter().map(|e| e.0).collect();
             names.sort();
-            so.insert("open".into(), serde_json::json!(names));
+            obj.insert("open".into(), serde_json::json!(names));
         }
         if sub(t, "prompts").is_some() {
             let mut map = serde_json::Map::new();
@@ -244,7 +234,6 @@ fn command_json(lua: &Lua, v: Value) -> serde_json::Value {
         (!info.is_vararg).then_some(info.num_params as usize)
     };
     match v {
-        Value::Function(f) => serde_json::json!({ "params": params(&f) }),
         Value::Table(c) => {
             let desc = match c.raw_get::<Value>("desc") {
                 Ok(Value::String(s)) => s.to_string_lossy(),

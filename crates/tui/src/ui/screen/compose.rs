@@ -36,16 +36,16 @@ impl App {
     pub(crate) fn compose(&mut self, w: usize, h: usize) -> Frame {
         let p = &self.palette;
         let ui = &p.ui;
-        let pad = (ui.pad_x as usize).min(w.saturating_sub(1) / 2);
+        let pad = (ui.space.padding as usize).min(w.saturating_sub(1) / 2);
         let inner = w.saturating_sub(pad * 2).max(1);
-        let inset = if ui.input_style == InputStyle::Boxed {
+        let inset = if ui.input == InputStyle::Boxed {
             BOXED_INSET
         } else {
             0
         };
         let min_width = if inset == 0 { 4 } else { 2 * inset + 2 };
         let (style, inset) = if h >= 5 && inner >= min_width {
-            (ui.input_style, inset)
+            (ui.input, inset)
         } else {
             (InputStyle::Lines, 0)
         };
@@ -63,7 +63,7 @@ impl App {
         };
         let gap = usize::from(h >= extra + 2);
         let editor_room = h.saturating_sub(extra + gap).max(1);
-        let input_h = tuse_config::limit(ui.input_max_height, view.rows.len())
+        let input_h = tuse_config::limit(ui.lines.input, view.rows.len())
             .max(1)
             .min(editor_room);
         let input_top = crow
@@ -73,7 +73,7 @@ impl App {
         self.page_rows = chat_h;
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
-        let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.list_max_height);
+        let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.lines.list);
         let (mut overlay, mut overlay_hits) = if let Some(pk) = &mut self.picker {
             let mut rows = pk.title.as_deref().map_or_else(Vec::new, |title| {
                 crate::kit::rich::markdown::rows(title, inner, p, false)
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn boxed_layout_tracks_the_cursor_and_survives_resize() {
         let mut app = test_app("boxed-layout");
-        app.palette.ui.input_style = InputStyle::Boxed;
+        app.palette.ui.input = InputStyle::Boxed;
         app.editor.insert("one\ntwo\nthree\nfour");
         app.display_flash("Waiting");
         let frame = app.compose(80, 10);
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn boxed_status_clips_both_labels_inside_the_padding() {
         let mut app = test_app("boxed-status");
-        app.palette.ui.input_style = InputStyle::Boxed;
+        app.palette.ui.input = InputStyle::Boxed;
         app.session.set_model("model-abcdefghijklmnop", "default");
         app.display_flash("waiting for a reply");
         let frame = app.compose(20, 6);
@@ -282,8 +282,8 @@ mod tests {
     #[test]
     fn boxed_requires_two_content_columns_after_margins_and_padding() {
         let mut app = test_app("boxed-width");
-        app.palette.ui.input_style = InputStyle::Boxed;
-        app.palette.ui.pad_x = 1;
+        app.palette.ui.input = InputStyle::Boxed;
+        app.palette.ui.space.padding = 1;
         app.editor.insert("界z");
         let frame = app.compose(8, 8);
         let area = app.input_area.unwrap();
@@ -291,7 +291,7 @@ mod tests {
         assert_eq!(text(&frame.screen[area.row]), "│ 界 │");
         let narrow = app.compose(7, 8);
         assert!(!narrow.screen.iter().any(|row| text(row).starts_with('╭')));
-        assert_eq!(app.palette.ui.input_style, InputStyle::Boxed);
+        assert_eq!(app.palette.ui.input, InputStyle::Boxed);
         let restored = app.compose(8, 8);
         assert_eq!(restored.screen, frame.screen);
         assert_eq!(restored.cursor, frame.cursor);
@@ -303,14 +303,14 @@ mod tests {
     #[test]
     fn fill_layout_pads_the_input_and_puts_the_status_below_a_gap() {
         let mut app = test_app("fill-layout");
-        app.palette.ui.input_style = InputStyle::Fill;
+        app.palette.ui.input = InputStyle::Fill;
         app.editor.insert("one\ntwo");
         app.display_flash("Waiting");
         let frame = app.compose(40, 10);
         let area = app.input_area.unwrap();
         assert_eq!((area.row, area.col, area.height), (5, 2, 2));
         assert_eq!(frame.cursor, Some((5, 6)));
-        let bg = app.palette.border;
+        let bg = app.palette.input_bg;
         for row in &frame.screen[4..=7] {
             assert_eq!(line_width(row), 40);
             assert!(row.iter().all(|s| s.style.bg == bg));
@@ -340,7 +340,7 @@ mod tests {
             (0..8).map(|i| format!("choice {i}")).collect(),
             Some("**Choose one**".into()),
         );
-        app.palette.ui.list_max_height = 3;
+        app.palette.ui.lines.list = 3;
         let frame = app.compose(40, 20);
         assert!(frame.cursor.is_none());
         let overlay = &frame.screen[app.overlay_rows.clone()];
@@ -358,7 +358,7 @@ mod tests {
         assert!(text(&overlay[0]).contains("Choose one"));
         assert!(text(&overlay[2]).contains("choice 2"));
 
-        app.palette.ui.list_max_height = 1;
+        app.palette.ui.lines.list = 1;
         let frame = app.compose(40, 20);
         let overlay = &frame.screen[app.overlay_rows.clone()];
         assert_eq!(overlay.len(), 1);
@@ -385,7 +385,7 @@ mod tests {
             (InputStyle::Bar, 0),
         ] {
             let mut app = test_app("gap-layout");
-            app.palette.ui.input_style = style;
+            app.palette.ui.input = style;
             app.notice("history");
             let frame = app.compose(40, 14);
             let row = app.input_area.unwrap().row - lead - 1;
@@ -401,7 +401,7 @@ mod tests {
     #[test]
     fn lists_open_below_the_input() {
         let mut app = test_app("list-below");
-        app.palette.ui.input_style = InputStyle::Boxed;
+        app.palette.ui.input = InputStyle::Boxed;
         open_list(&mut app);
         let frame = app.compose(40, 20);
         let bottom = frame
@@ -413,7 +413,7 @@ mod tests {
         assert!(text(&frame.screen[bottom + 1]).contains("one"));
         assert_eq!(frame.screen.len(), 20);
 
-        app.palette.ui.input_style = InputStyle::Fill;
+        app.palette.ui.input = InputStyle::Fill;
         let frame = app.compose(40, 20);
         let list = app.overlay_rows.clone();
         assert!(text(&frame.screen[list.start]).contains("one"));
@@ -422,7 +422,7 @@ mod tests {
         assert!(
             frame.screen[list.start - 1]
                 .iter()
-                .all(|s| s.style.bg == app.palette.border)
+                .all(|s| s.style.bg == app.palette.input_bg)
         );
         assert_eq!(frame.screen.len(), 20);
         cleanup(app);
@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn bar_rows_start_with_the_accent_bar_and_the_status_follows_a_gap() {
         let mut app = test_app("bar-layout");
-        app.palette.ui.input_style = InputStyle::Bar;
+        app.palette.ui.input = InputStyle::Bar;
         app.editor.insert("one\ntwo\nthree");
         app.display_flash("Waiting");
         let frame = app.compose(40, 12);
@@ -441,7 +441,7 @@ mod tests {
             let row = &frame.screen[area.row + i];
             assert_eq!(
                 (row[0].text.as_str(), row[0].style.fg),
-                ("▌ ", app.palette.accent)
+                ("▌ ", app.palette.icons)
             );
             assert_eq!(row[1].text, *want);
         }
@@ -460,10 +460,10 @@ mod tests {
     fn small_viewports_drop_the_gap_and_fall_back_without_losing_the_draft() {
         let mut app = test_app("small-layout");
         app.editor.insert("draft");
-        app.palette.ui.input_style = InputStyle::Boxed;
+        app.palette.ui.input = InputStyle::Boxed;
         let frame = app.compose(40, 5);
         assert!(text(&frame.screen[0]).starts_with('╭'));
-        app.palette.ui.input_style = InputStyle::Bar;
+        app.palette.ui.input = InputStyle::Bar;
         let frame = app.compose(40, 4);
         assert!(!frame.screen.iter().any(|r| text(r).contains('▌')));
         assert_eq!(frame.screen.len(), 4);

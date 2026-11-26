@@ -106,7 +106,7 @@ pub fn reasoning(
 
 pub fn tool(cache: &mut Option<Prefix<Line>>, input: &str, width: usize, p: &Palette) -> Vec<Line> {
     let base = input.len() - input.trim_start().len();
-    let head = Style::fg(p.info);
+    let head = Style::fg(p.fg);
     let start = Cut {
         at: base,
         ..Cut::default()
@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn streaming_renders_like_the_whole_text() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         let md = "# T\n\npara **b**\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```py\nx = 1\n\ny\n```\n\n\
             - i\n- j\n  - nested\n\n  more\n- k\n* other\n\n> q\n\n1. a\n2. b\n\n3. c\n9) d\n1. x\n1. y\n\n\
             - - -\n\n---\n\n```lua\nlocal s = [[\nlong\n]]\nprint(s)\n```\n\n- item\n  ```\n  code\n  ```\n- next\n\n\

@@ -82,7 +82,7 @@ For `session.new`, `session.resume`, and `session.fork`, events left over from t
 
 ### Config
 
-- `config.get` → the resolved config: `settings`, `theme`, `models`, `systems`, `prompts` (`{kind: "text" | "function", body, args}`), `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands` (`{desc, args, params}` per name), `settings.open`, and `path` (`""` when the defaults are used). Secrets and Lua function bodies are left out.
+- `config.get` → the resolved config: `ui`, `history`, `open`, `models`, `systems`, `prompts` (`{kind: "text" | "function", body, args}`), `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands` (`{desc, args, params}` per name), and `path` (`""` when the defaults are used). Secrets and Lua function bodies are left out.
 - `config.reload` → `null`, or `-32000` with the reason. If the reload fails, the old config stays.
 
 ### Tasks and commands
@@ -128,6 +128,7 @@ Events come as `{"jsonrpc":"2.0","method":"event","params":{"type": …}}`:
 | `models` | | A provider listed its models: read `model.list {cached: true}`. |
 | `reloaded` | | The config was reloaded. |
 | `history_replaced` | | Lua replaced the stored history; call `session.history` to refresh. |
+| `session_switched` | `session`, `model`, `effort`, `draft` | Lua called `fork` or `resume` and the switch happened. It follows the last event of the old session and comes before the first event of the new one. `draft` is the text of the user record a fork stopped before, or empty. |
 | `ui_markdown` | `name`, `text`, `pin`, `removed` | A `show()` block changed. |
 | `ui_request` | `id`, `kind`, plus `options` and optional `title` (`picker`) or `text` (`question`) | A prompt became active. |
 | `ui_clear` | `id` | Tuse withdrew the active prompt. |

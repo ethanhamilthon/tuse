@@ -430,7 +430,7 @@ pub fn highlight(code: &str, base: Style, p: &Palette) -> Vec<Line> {
 
 pub fn style(k: Kind, base: Style, p: &Palette) -> Style {
     let Some(slot) = k.slot() else { return base };
-    let color = p.lua.get(slot).copied().flatten();
+    let color = p.code.get(slot).copied().flatten();
     Style {
         fg: color.or(base.fg),
         ..base
@@ -480,9 +480,9 @@ mod tests {
             (Parameter, "parameter"),
             (Variable, "variable"),
         ];
-        assert_eq!(names.len(), tuse_config::LuaTheme::TOKENS.len());
+        assert_eq!(names.len() + 2, tuse_config::CodeTheme::TOKENS.len());
         for (kind, name) in names {
-            assert_eq!(tuse_config::LuaTheme::TOKENS[kind.slot().unwrap()], name);
+            assert_eq!(tuse_config::CodeTheme::TOKENS[kind.slot().unwrap()], name);
         }
     }
 

@@ -25,12 +25,15 @@ function M.apply(g, model)
       if first then t.set_session{ title = title(first, model) } end
     end,
   }
-  g.commands.rename = function()
-    local name = t.ask("New session title:")
-    if name and name ~= "" then
-      t.set_session{ title = name }
-    end
-  end
+  g.commands.rename = {
+    desc = "set the session title",
+    run = function()
+      local name = t.ask("New session title:")
+      if name and name ~= "" then
+        t.set_session{ title = name }
+      end
+    end,
+  }
   return g
 end
 

@@ -12,7 +12,7 @@ pub fn tool(
     p: &Palette,
 ) -> Vec<Line> {
     let failed = output.is_some() && code != Some(0);
-    let head = Style::fg(if failed { p.err } else { p.info });
+    let head = Style::fg(if failed { p.error } else { p.fg });
     let lines = if input.trim().is_empty() {
         vec![]
     } else {
@@ -29,7 +29,7 @@ pub fn finish(
     p: &Palette,
 ) -> Vec<Line> {
     let pad = " ".repeat(chat_inset(width));
-    let keep = tuse_config::limit(p.ui.tool_line, lines.len());
+    let keep = tuse_config::limit(p.ui.lines.tool, lines.len());
     if keep < lines.len() {
         lines.truncate(keep);
         if keep > 0 {
@@ -39,7 +39,7 @@ pub fn finish(
     let Some(out) = output else { return lines };
     let out = crate::kit::text::clean(out);
     let all: Vec<&str> = out.trim_end().lines().collect();
-    let shown = tuse_config::limit(p.ui.output_line, all.len());
+    let shown = tuse_config::limit(p.ui.lines.output, all.len());
     let st = Style::fg(p.muted);
     let room = width.saturating_sub(pad.len());
     for l in all.iter().take(shown) {
@@ -64,10 +64,9 @@ pub fn source(
     p: &Palette,
 ) -> Vec<Line> {
     let cleaned = crate::kit::text::clean(input);
-    let code = if p.ui.fold_strings {
-        crate::kit::rich::fold::fold_multiline_strings(&cleaned)
-    } else {
-        cleaned
+    let code = match usize::try_from(p.ui.lines.strings) {
+        Ok(keep) => crate::kit::rich::fold::fold_multiline_strings(&cleaned, keep),
+        Err(_) => cleaned,
     };
     let pad = " ".repeat(chat_inset(w));
     let colored = if failed {
@@ -76,7 +75,10 @@ pub fn source(
         crate::kit::rich::syntax::highlight(&code, head, p)
     };
     let (lead, rest) = (
-        vec![span(chat_marker(TOOL_PREFIX, w), head)],
+        vec![span(
+            chat_marker(TOOL_PREFIX, w),
+            Style::fg(if failed { p.error } else { p.icons }),
+        )],
         vec![span(pad, head)],
     );
     colored
@@ -90,7 +92,7 @@ pub fn source(
 }
 
 fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
-    if p.ui.diff_line == 0 {
+    if p.ui.lines.diff == 0 {
         return vec![];
     }
     let room = w.saturating_sub(pad.len());
@@ -100,13 +102,13 @@ fn diff(d: &FileDiff, w: usize, pad: &str, p: &Palette) -> Vec<Line> {
         Style::fg(p.border),
     );
     let mut out = vec![vec![span(pad.to_string(), Style::fg(p.border)), hdr]];
-    let shown = tuse_config::limit(p.ui.diff_line, all.len());
+    let shown = tuse_config::limit(p.ui.lines.diff, all.len());
     let pairs = pair_windows(&all[..shown], room, MORE);
     for (l, text) in all.iter().zip(pairs) {
         let color = match l.chars().next() {
-            Some('+') => p.ok,
-            Some('-') => p.err,
-            _ => p.dim,
+            Some('+') => p.added,
+            Some('-') => p.removed,
+            _ => p.muted,
         };
         let st = Style::fg(color);
         out.push(vec![span(pad.to_string(), st), span(text, st)]);
@@ -168,7 +170,7 @@ mod tests {
 
     #[test]
     fn output_is_muted_and_cut_marks_are_border() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         let fg = |l: &Line| l.last().unwrap().style.fg;
         let lines = tool(
             "a = 1\nb = 2",
@@ -183,11 +185,14 @@ mod tests {
         assert!(lines[n - 1].last().unwrap().text.ends_with("2 more lines"));
         assert_eq!(fg(&lines[n - 1]), p.border, "`N more lines`");
 
-        let ui = tuse_config::UiSettings {
-            tool_line: 1,
+        let ui = tuse_config::Ui {
+            lines: tuse_config::Lines {
+                tool: 1,
+                ..Default::default()
+            },
             ..Default::default()
         };
-        let p = Palette::new(&Default::default(), &ui);
+        let p = Palette::new(&ui);
         let lines = tool("a = 1\nb = 2", None, None, &[], 40, &p);
         assert_eq!(lines.len(), 2);
         assert!(lines[1][0].text.ends_with(MORE));
@@ -205,7 +210,7 @@ mod tests {
 
     #[test]
     fn tool_output_tabs_do_not_reach_the_terminal() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         let lines = tool("x = 1", Some("1\tx\n2\t\x1b[31my"), Some(0), &[], 40, &p);
         let text: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
         assert!(!text.contains('\t') && !text.contains('\x1b'), "{text:?}");
@@ -218,7 +223,7 @@ mod tests {
         use crate::ui::app::App;
         use crate::ui::chat::Chat;
         use std::io::{BufRead, BufReader, Read, Write};
-        use tuse_config::UiSettings;
+        use tuse_config::{Lines, Ui};
         use tuse_core::{Event, Options, Record, Session};
 
         let make_diff = |path: &str, n: usize| FileDiff {
@@ -232,7 +237,7 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join("\n")
         };
-        let pal = |ui| Palette::new(&Default::default(), &ui);
+        let pal = |ui| Palette::new(&ui);
         let diffs = vec![
             make_diff("a.rs", 10),
             make_diff("b.rs", 5),
@@ -247,8 +252,11 @@ mod tests {
             Some(0),
             &diffs,
             60,
-            &pal(UiSettings {
-                diff_line: 0,
+            &pal(Ui {
+                lines: Lines {
+                    diff: 0,
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         );
@@ -262,10 +270,13 @@ mod tests {
                 && !ht.contains("more lines")
         );
 
-        let p_zero = pal(UiSettings {
-            tool_line: 0,
-            output_line: 0,
-            diff_line: 0,
+        let p_zero = pal(Ui {
+            lines: Lines {
+                tool: 0,
+                output: 0,
+                diff: 0,
+                ..Default::default()
+            },
             ..Default::default()
         });
         let mut c = Chat::default();
@@ -286,8 +297,11 @@ mod tests {
             Some(0),
             &[make_diff("a.rs", 10)],
             60,
-            &pal(UiSettings {
-                diff_line: 2,
+            &pal(Ui {
+                lines: Lines {
+                    diff: 2,
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         );
@@ -299,8 +313,11 @@ mod tests {
             Some(0),
             &[make_diff("a.rs", 20)],
             60,
-            &pal(UiSettings {
-                diff_line: -1,
+            &pal(Ui {
+                lines: Lines {
+                    diff: -1,
+                    ..Default::default()
+                },
                 ..Default::default()
             }),
         );
@@ -362,7 +379,7 @@ mod tests {
             std::fs::write(
                 &cfg,
                 format!(
-                    "return {{ settings = {{ ui = {{ diff_line = {n} }} }}, commands = {{ r = function() require('tuse').reload() end }} }}"
+                    "return {{ ui = {{ lines = {{ diff = {n} }} }}, commands = {{ r = {{ run = function() require('tuse').reload() end }} }} }}"
                 ),
             )
             .unwrap();

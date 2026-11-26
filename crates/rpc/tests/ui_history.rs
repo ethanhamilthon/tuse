@@ -54,13 +54,13 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
     let (addr, requests) = capture_provider(vec!["reply-1", "reply-2", "reply-3"]);
     let cfg_body = r#"
   commands = {
-    ui_only = function()
+    ui_only = { run = function()
       local t = require("tuse")
       t.show("only", "ephemeral", false)
       t.pick({"p1"})
       t.ask("ephemeral-q")
-    end,
-    step1 = function()
+    end },
+    step1 = { run = function()
       local t = require("tuse")
       t.show("a", "v1", false)
       t.show("tmp", "drop-me", false)
@@ -70,23 +70,23 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
       local _ = t.ask("CANCELLED_PROMPT")
       t.show("tmp", "", false)
       t.show("done1", tostring(c) .. ":" .. tostring(a), false)
-    end,
-    step2 = function()
+    end },
+    step2 = { run = function()
       local t = require("tuse")
       t.show("a", "v2-updated", false)
       t.show("p", "p-unpinned", false)
       t.show("b", "SECRET_UI_BLOCK", false)
       t.show("keep_pin", "pinned-tail", true)
       t.ask("PENDING_AT_CLOSE")
-    end,
-    remove_b = function()
+    end },
+    remove_b = { run = function()
       require("tuse").show("b", "", false)
-    end,
-    ask_again = function()
+    end },
+    ask_again = { run = function()
       local t = require("tuse")
       local v = t.ask("AFTER_RESUME_ASK")
       t.show("after_ans", tostring(v), false)
-    end,
+    end },
   },
 "#;
     let (dir, cfg) = common::setup("ui-history", &addr, cfg_body);

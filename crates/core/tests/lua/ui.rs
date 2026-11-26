@@ -24,7 +24,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     ]);
     let extra = r###"
   commands = {
-    ask_flow = function()
+    ask_flow = { run = function()
       local t = require("tuse")
       t.show("note", "## First", false)
       t.show("note", "## Updated", false)
@@ -36,12 +36,12 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
       local ans = t.ask("**Name?**")
       local skip = t.pick({"x", "y"}, "Cancel this?")
       t.show("summary", tostring(pick) .. "|" .. tostring(ans) .. "|" .. tostring(skip), true)
-    end,
-    second = function()
+    end },
+    second = { run = function()
       local t = require("tuse")
       local v = t.ask("Queued?")
       t.show("q2", tostring(v), false)
-    end,
+    end },
   },
   hooks = {
     interactive = {
@@ -146,7 +146,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
 
     std::fs::write(
         &cfg,
-        "return { commands = { updated_cmd = function() require('tuse').ask('still open') end } }",
+        "return { commands = { updated_cmd = { run = function() require('tuse').ask('still open') end } } }",
     )
     .unwrap();
     s.reload().unwrap();
@@ -158,7 +158,11 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     assert_eq!(after_reload.markdowns, snap.markdowns);
     assert_eq!(after_reload.entries, snap.entries);
 
-    std::fs::write(&cfg, "return { commands = { reload = function() end } }").unwrap();
+    std::fs::write(
+        &cfg,
+        "return { commands = { reload = { run = function() end } } }",
+    )
+    .unwrap();
     assert!(s.reload().unwrap_err().contains("cannot override built-in"));
 
     s.submit(UserInput::text("persist me"));

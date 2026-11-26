@@ -14,7 +14,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
   prompts = { review = "Check edge cases." },
   commands = {
     deploy = { desc = "ship it", args = { "staging", "prod" }, run = function(env) end },
-    rewrite = function()
+    rewrite = { run = function()
       local t = require("tuse")
       local s = t.session()
       assert(not pcall(t.set_session, {title = "invalid", history = {{role = "agent", text = "x", tool_calls = {{id = "1", name = "lua", arguments = "{}"}}}}}))
@@ -22,8 +22,8 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
       t.set_session{history = s.history}
       s.history[1].text = "custom system"
       t.set_session{history = s.history}
-    end,
-    ui_demo = function()
+    end },
+    ui_demo = { run = function()
       local t = require("tuse")
       t.show("m1", "Hello", true)
       t.show("drop", "Temp", false)
@@ -32,7 +32,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
       local q = t.ask("Why?")
       local c = t.pick({"x"}, "  ")
       t.show("done", tostring(p) .. ":" .. tostring(q) .. ":" .. tostring(c), false)
-    end,
+    end },
   },
 "#;
     let (dir, cfg) = common::setup("rpc-parity", &addr, extra);

@@ -112,7 +112,7 @@ impl App {
     fn wheel(&mut self, dir: isize, row: usize) {
         self.selection = Default::default();
         self.clear_link_hover();
-        let step = self.palette.ui.scroll_step as isize;
+        let step = crate::kit::style::WHEEL_STEP as isize;
         if self.overlay_rows.contains(&row) {
             if let Some(p) = &mut self.picker {
                 let n = p.shown.len() as isize;
@@ -177,7 +177,7 @@ mod tests {
         );
         std::fs::write(&note, "hi").unwrap();
         std::fs::write(&other, "hi2").unwrap();
-        std::fs::write(&cfg, "local t=require('tuse')\nreturn { settings={ open={ txt=function(p) t.write('opened.txt', p) end } } }").unwrap();
+        std::fs::write(&cfg, "local t=require('tuse')\nreturn { open={ txt=function(p) t.write('opened.txt', p) end } }").unwrap();
         app.run_command("reload");
 
         let mut r = crate::frame::draw::Renderer::default();
@@ -293,7 +293,7 @@ mod tests {
 
         std::fs::write(
             &cfg,
-            "return { theme = { accent = 'none', fg = '#445566' } }",
+            "return { ui = { theme = { accent = 'none', fg = '#445566' } } }",
         )
         .unwrap();
         app.session.reload().unwrap();
@@ -313,7 +313,7 @@ mod tests {
         for cmd in ["config", "session"] {
             std::fs::write(
                 &cfg,
-                "return { theme = { accent = '#112233', fg = '#445566' } }",
+                "return { ui = { theme = { accent = '#112233', fg = '#445566' } } }",
             )
             .unwrap();
             app.run_command("reload");
@@ -321,7 +321,7 @@ mod tests {
             assert!(draw(&mut r, &mut app, 80, 20).contains("\x1b[38;2;17;34;51m"));
             std::fs::write(
                 &cfg,
-                "return { theme = { accent = '#778899', fg = '#445566' } }",
+                "return { ui = { theme = { accent = '#778899', fg = '#445566' } } }",
             )
             .unwrap();
             app.session.reload().unwrap();
@@ -347,7 +347,7 @@ mod tests {
         assert!(String::from_utf8_lossy(&screen).contains("latest message"));
         let border = app.overlay_rows.start as u16;
         assert!(border > 0 && !app.overlay_rows.is_empty());
-        let step = app.palette.ui.scroll_step as usize;
+        let step = crate::kit::style::WHEEL_STEP;
         app.mouse(event(MouseEventKind::ScrollDown, 0, border));
         assert_eq!(app.question.as_ref().unwrap().panel.scroll(), step);
         assert_eq!(app.scroll, 0);
@@ -372,8 +372,8 @@ mod tests {
     #[test]
     fn boxed_mouse_selection_aligns_with_wrapped_text_not_padding() {
         let mut app = crate::ui::app::test_app("boxed-mouse");
-        app.palette.ui.input_style = tuse_config::InputStyle::Boxed;
-        app.palette.ui.pad_x = 1;
+        app.palette.ui.input = tuse_config::InputStyle::Boxed;
+        app.palette.ui.space.padding = 1;
         app.editor.insert("abcd界efghi");
         let frame = app.compose(12, 8);
         let area = app.input_area.unwrap();
@@ -436,8 +436,8 @@ mod tests {
         use crate::kit::entry::Entry;
         use crossterm::event::{KeyCode, KeyEvent};
         let mut app = crate::ui::app::test_app("scoped-selection");
-        app.palette.ui.pad_x = 2;
-        app.palette.ui.reasoning_line = -1;
+        app.palette.ui.space.padding = 2;
+        app.palette.ui.lines.reasoning = -1;
         app.chat.push(Entry::User {
             text: "user text".into(),
             images: 0,
@@ -460,7 +460,7 @@ mod tests {
         app.chat
             .set_markdown("card".into(), "show".into(), true, false);
         app.editor.insert("draft\n  first line\nlast line\n");
-        app.palette.ui.input_max_height = 2;
+        app.palette.ui.lines.input = 2;
         app.panel = Some(crate::ui::panel::Panel::new("overlay"));
         let frame = app.compose(44, 25);
         let (user, agent_end) = chat_bounds(&app);
@@ -578,7 +578,7 @@ mod tests {
     #[test]
     fn the_wheel_scrolls_the_chat_and_a_click_moves_the_cursor() {
         let mut app = crate::ui::app::test_app("mouse");
-        let step = app.palette.ui.scroll_step as usize;
+        let step = crate::kit::style::WHEEL_STEP;
         app.mouse(event(MouseEventKind::ScrollUp, 0, 0));
         assert_eq!(app.scroll, step);
         app.mouse(event(MouseEventKind::ScrollDown, 0, 0));

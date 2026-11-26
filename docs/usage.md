@@ -52,11 +52,11 @@ From top to bottom:
 - **Chat.** Your messages sit on a `surface` block. Both your messages and agent replies leave two columns on each side and line up with the rest of the chat text. Agent replies render as Markdown, and a Markdown image `![alt](path)` shows as a clickable `alt` (or the path when `alt` is empty). Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
 - **Gap.** One empty row above the input in every style.
 - **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`. While background tasks run, the count follows the timer (`12s · 2 tasks`), and when idle it replaces the project path as `⠋ 2 tasks` in the accent color.
-- **Input.** Grows with the text up to `settings.ui.input_max_height`.
+- **Input.** Grows with the text up to `ui.lines.input`.
 - **Bottom rule.** `<model> · <effort> · <used>/<window> · $<cost>`. The context and cost parts are hidden while unknown.
 - **Overlay.** At most one picker, panel, or `ask()` question, shown below the input. With `fill` and `bar` it sits between the input and the status line and ends with a rule ([Config](config.md#theme-and-ui)).
 
-How many lines of code, output, diffs, and reasoning appear is set by `settings.ui`, and the colors by `theme` ([Config](config.md#theme-and-ui)).
+How many lines of code, output, diffs, and reasoning appear is set by `ui.lines`, and the colors by `ui.theme` ([Config](config.md#theme-and-ui)).
 
 ## Typing a message
 
@@ -112,13 +112,13 @@ Type `/` to get a picker. Pickers filter by their text, ignoring case, and show 
 - `/new` starts a fresh session in the current folder.
 - `/resume` picks another titled session from this folder, newest first.
 - `/fork` picks one of the user and agent messages of this session and opens a new session in the same folder with the history up to it, titled `[fork] ` plus the old title. Forking at an agent message keeps it; forking at a user message leaves it out and puts its text in the input. The original session stays in `/resume`.
-- `/models` picks a model (limited by `settings.ui.scope_models`), then an effort (`default`, `low`, `medium`, `high`, `xhigh`, `max`). The choice applies to this session and becomes the default for new ones.
+- `/models` picks a model (only the configured `models`, when set), then an effort (`default`, `low`, `medium`, `high`, `xhigh`, `max`). The choice applies to this session and becomes the default for new ones.
 - `/tasks` lists background tasks. `Enter` shows the task: id, name, status, start and end, how long it has run, the source of its function, and the last 200 log lines. `Ctrl+X` stops one.
 - `/session` shows the session: ID, name, folder, config, model, context, turns, usage, cost.
-- `/history` lists everything in the session, starting with the system prompt. `Enter` opens an entry, `Left`/`Right` step through entries, `Esc` goes back. Roles in `settings.ui.hide_history` are left out.
+- `/history` lists everything in the session, starting with the system prompt. `Enter` opens an entry, `Left`/`Right` step through entries, `Esc` goes back. Roles in `history.hide` are left out.
 - `/config` shows the resolved config, without secrets or Lua bodies.
 - `/reload` runs the config again. If it fails, the old config stays.
 - `/stop` stops the turn, background tasks, hooks, and commands, also when the session is idle.
 - `/quit` exits.
 
-Custom commands from `commands` show up in the same picker with their `desc`, and run as Lua jobs. `/name words` passes the words to the command, and a command with `args` opens a picker of them ([Config](config.md#commands-and-settingsopen)). Built-in names cannot be overridden.
+Custom commands from `commands` show up in the same picker with their `desc`, and run as Lua jobs. `/name words` passes the words to the command, and a command with `args` opens a picker of them ([Config](config.md#commands-and-open)). Built-in names cannot be overridden.

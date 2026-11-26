@@ -31,11 +31,11 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
     ]);
     let extra = r#"
   commands = {
-    ui = function()
+    ui = { run = function()
       local t = require("tuse")
       t.show("pin", "Stay?", true)
       t.ask("Pending?")
-    end,
+    end },
   },
 "#;
     let (dir, cfg) = common::setup("cross-resume", &addr, extra);

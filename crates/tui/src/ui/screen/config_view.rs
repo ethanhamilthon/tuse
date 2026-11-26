@@ -9,8 +9,8 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         Style::fg(p.accent).bold(),
         Style::fg(p.border),
         Style::fg(p.fg),
-        Style::fg(p.dim),
-        Style::fg(p.info),
+        Style::fg(p.muted),
+        Style::fg(p.heading),
     );
     let mut lines: Vec<Line> = vec![];
     let mut sec = |title: &str, rows: Vec<Line>| {
@@ -26,7 +26,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
     };
     let kv = |k: &str, v: String, st: Style| vec![span(format!("  {k:<18}"), key), span(v, st)];
 
-    let ui = &cfg.settings.ui;
+    let ui = &cfg.ui;
     let file_row = if cfg.path.is_empty() {
         vec![span("  (none, defaults)", dim)]
     } else {
@@ -44,37 +44,36 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         }
     };
     sec(
-        "Settings",
+        "UI",
         vec![
             kv(
                 "ui.lines",
                 format!(
-                    "tool={} diff={} output={} reasoning={}",
-                    ui.tool_line, ui.diff_line, ui.output_line, ui.reasoning_line
+                    "tool={} output={} diff={} reasoning={} strings={} input={} list={}",
+                    ui.lines.tool,
+                    ui.lines.output,
+                    ui.lines.diff,
+                    ui.lines.reasoning,
+                    ui.lines.strings,
+                    ui.lines.input,
+                    ui.lines.list
                 ),
                 dim,
             ),
+            kv("ui.input", ui.input.as_str().into(), dim),
             kv(
-                "ui.layout",
+                "ui.space",
                 format!(
-                    "fold_strings={} scroll={} pad_x={} gap={} list_max={} input_max={}",
-                    ui.fold_strings,
-                    ui.scroll_step,
-                    ui.pad_x,
-                    ui.message_gap,
-                    ui.list_max_height,
-                    ui.input_max_height
+                    "padding={} steps={} messages={}",
+                    ui.space.padding, ui.space.steps, ui.space.messages
                 ),
                 dim,
             ),
-            kv("ui.input_style", ui.input_style.as_str().into(), dim),
-            kv("ui.hide_history", list(&ui.hide_history), dim),
-            kv("ui.scope_models", list(&ui.scope_models), dim),
+            kv("history.hide", list(&cfg.history.hide), dim),
             kv(
                 "open",
                 list(
-                    &cfg.settings
-                        .open
+                    &cfg.open
                         .iter()
                         .map(|e| tuse_config::open_label(e))
                         .collect::<Vec<_>>(),
@@ -122,35 +121,13 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             .collect(),
     );
 
-    let t = &cfg.theme;
-    let mut theme_pairs = vec![
-        ("bg".to_string(), t.bg.as_str()),
-        ("surface".to_string(), t.surface.as_str()),
-        ("fg".to_string(), t.fg.as_str()),
-        ("user".to_string(), t.user.as_str()),
-        ("dim".to_string(), t.dim.as_str()),
-        ("muted".to_string(), t.muted.as_str()),
-        ("border".to_string(), t.border.as_str()),
-        ("accent".to_string(), t.accent.as_str()),
-        ("ok".to_string(), t.ok.as_str()),
-        ("err".to_string(), t.err.as_str()),
-        ("info".to_string(), t.info.as_str()),
-    ];
-    let lua_values = t.lua.values();
-    for (name, value) in tuse_config::LuaTheme::TOKENS.iter().zip(lua_values) {
-        theme_pairs.push((format!("lua.{name}"), value));
-    }
+    let t = &ui.theme;
     sec(
         "Theme",
-        theme_pairs
+        t.entries()
             .into_iter()
             .map(|(n, v)| {
-                let linked = t.named(v).unwrap_or(v);
-                let sw = color(if linked.trim() == "accent" {
-                    &t.accent
-                } else {
-                    linked
-                });
+                let sw = color(t.resolve(v));
                 vec![
                     span(format!("  {n:<18}"), key),
                     span("■ ", Style::fg(sw)),
@@ -272,9 +249,8 @@ mod tests {
             path: "/home/me/.config/tuse/init.lua".into(),
             ..Default::default()
         };
-        cfg.settings.open = vec!["md".into()];
-        cfg.settings.ui.hide_history = vec!["usage".into()];
-        cfg.settings.ui.scope_models = vec!["p/*".into()];
+        cfg.open = vec!["md".into()];
+        cfg.history.hide = vec!["usage".into()];
         cfg.models.push(tuse_config::ModelDef {
             name: "p/big".into(),
             display: "Big".into(),
@@ -323,34 +299,29 @@ mod tests {
             .flatten()
             .map(|s| s.text)
             .collect();
-        for s in "Settings|Models|Theme|System prompts|Prompts|Functions|Hooks|Commands".split('|')
-        {
+        for s in "UI|Models|Theme|System prompts|Prompts|Functions|Hooks|Commands".split('|') {
             assert!(text.contains(s), "missing {s}");
         }
         let json: serde_json::Value = serde_json::from_str(&cfg.to_json()).unwrap();
         let mut keys = vec![];
         for (k, v) in json.as_object().unwrap() {
             keys.push(k.clone());
-            if k == "settings" {
+            if k == "ui" {
                 for (k2, v2) in v.as_object().unwrap() {
                     keys.push(k2.clone());
-                    if k2 == "ui" {
+                    if k2 == "lines" || k2 == "space" {
                         keys.extend(v2.as_object().unwrap().keys().cloned());
                     }
                 }
+            }
+            if k == "history" {
+                keys.extend(v.as_object().unwrap().keys().cloned());
             }
         }
         let flat = text.replace(' ', "");
         for k in keys {
             let shown = match k.as_str() {
-                "ui" | "settings" | "path" | "theme" => continue,
-                "tool_line" | "diff_line" | "output_line" | "reasoning_line" => {
-                    k.trim_end_matches("_line").to_string()
-                }
-                "scroll_step" => "scroll".into(),
-                "message_gap" => "gap".into(),
-                "list_max_height" => "list_max".into(),
-                "input_max_height" => "input_max".into(),
+                "ui" | "history" | "path" | "theme" | "lines" | "space" => continue,
                 "systems" => "Systemprompts".into(),
                 k => k.replace('_', ""),
             };
@@ -361,7 +332,7 @@ mod tests {
                 "/config misses `{k}`"
             );
         }
-        assert!(text.contains("p/big") && text.contains("fn(apply)") && text.contains("p/*"));
+        assert!(text.contains("p/big") && text.contains("fn(apply)"));
         assert!(
             text.contains("/hello")
                 && text.contains("#rev")

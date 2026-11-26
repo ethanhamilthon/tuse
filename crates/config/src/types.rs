@@ -1,5 +1,5 @@
 use crate::names::{FunctionKind, HOST_FUNCTIONS};
-use crate::theme::{Theme, UiSettings};
+use crate::ui::Ui;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
@@ -10,8 +10,10 @@ pub struct Config {
     pub connect: Vec<Connect>,
     #[serde(skip_serializing)]
     pub providers: BTreeMap<String, crate::ProviderConfig>,
-    pub settings: Settings,
-    pub theme: Theme,
+    pub ui: Ui,
+    pub history: History,
+    #[serde(deserialize_with = "crate::names::open")]
+    pub open: Vec<String>,
     #[serde(deserialize_with = "crate::de::list")]
     pub models: Vec<ModelDef>,
     #[serde(deserialize_with = "crate::de::list")]
@@ -63,10 +65,9 @@ impl Connect {
 
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Settings {
-    pub ui: UiSettings,
-    #[serde(deserialize_with = "crate::names::open")]
-    pub open: Vec<String>,
+pub struct History {
+    #[serde(deserialize_with = "crate::names::history_roles")]
+    pub hide: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]

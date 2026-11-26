@@ -69,7 +69,7 @@ impl Table {
             .collect()
     }
     fn render(self, available: usize, p: &Palette) -> Vec<MessageRow> {
-        let dim = Style::fg(p.dim);
+        let dim = Style::fg(p.muted);
         let mut out = vec![];
         let Some(widths) = self.widths(available) else {
             if let Some((headers, rows)) = self.rows.split_first() {
@@ -189,7 +189,7 @@ mod tests {
                 ..Default::default()
             }
         };
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         for (n, w, records) in [(3, 35, false), (15, 80, true)] {
             let lines: Vec<_> = make(n)
                 .render(w, &p)

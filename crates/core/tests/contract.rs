@@ -64,10 +64,17 @@ fn docs_cover_the_config_keys_tokens_events_and_roles() {
     let session = tuse_core::docs(Some("session"));
     let mut keys = json_keys(&tuse_config::Config::default());
     keys.retain(|k| k != "path");
-    keys.extend(json_keys(&tuse_config::UiSettings::default()));
+    keys.extend(json_keys(&tuse_config::Ui::default()));
+    keys.extend(json_keys(&tuse_config::Lines::default()));
+    keys.extend(json_keys(&tuse_config::Space::default()));
+    keys.extend(json_keys(&tuse_config::History::default()));
     keys.extend(json_keys(&tuse_config::Theme::default()));
-    keys.retain(|k| k != "lua");
-    keys.extend(tuse_config::LuaTheme::TOKENS.iter().map(|t| t.to_string()));
+    keys.extend(tuse_config::CodeTheme::TOKENS.iter().map(|t| t.to_string()));
+    keys.extend(
+        tuse_config::MarkdownTheme::TOKENS
+            .iter()
+            .map(|t| t.to_string()),
+    );
     for key in keys {
         assert!(
             config.contains(&format!("`{key}`")),

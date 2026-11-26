@@ -52,5 +52,9 @@ name = "session_and_open"
 path = "tests/session/open.rs"
 
 [[test]]
+name = "session_switch"
+path = "tests/session/switch.rs"
+
+[[test]]
 name = "session_model"
 path = "tests/session/model.rs"

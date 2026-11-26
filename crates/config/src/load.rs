@@ -25,7 +25,7 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
     if !value.is_object() {
         return Err(format!("{name}: the config must return a table"));
     }
-    serde_path_to_error::deserialize(value).map_err(|e| {
+    let config: Config = serde_path_to_error::deserialize(value).map_err(|e| {
         let path = e
             .path()
             .iter()
@@ -50,7 +50,13 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
         } else {
             format!("{name}: {path}: {msg}")
         }
-    })
+    })?;
+    config
+        .ui
+        .theme
+        .check()
+        .map_err(|m| format!("{name}: {m}"))?;
+    Ok(config)
 }
 
 #[cfg(test)]
@@ -61,82 +67,88 @@ mod tests {
     #[test]
     fn builds_from_a_table_and_checks_it() {
         let c = from_value(
-            json!({"settings": {"ui": {"tool_line": 7, "hide_history": ["hook"], "scope_models": ["a/*"]}, "open": ["md"]},
-                "theme": {"accent": "blue", "info": "green"},
+            json!({"ui": {"lines": {"tool": 7}, "theme": {"accent": "blue", "markdown": {"heading": "green"}}},
+                "history": {"hide": ["hook"]}, "open": ["md"],
                 "prompts": {"a": "x", "b": {"kind": "function", "args": ["p"]}},
                 "systems": {}, "hooks": {"h": {"events": ["user_message"]}}}),
             "t",
         )
         .unwrap();
-        let t = &c.theme;
-        assert_eq!((t.accent.as_str(), t.info.as_str()), ("blue", "green"));
-        assert_eq!(c.settings.ui.tool_line, 7);
+        let t = &c.ui.theme;
+        assert_eq!(
+            (t.accent.as_str(), t.markdown.heading.as_str()),
+            ("blue", "green")
+        );
+        assert_eq!(c.ui.lines.tool, 7);
+        assert_eq!(c.history.hide, ["hook"]);
         assert_eq!(c.hooks["h"].events, ["user_message"]);
-        assert_eq!(c.settings.open, ["md"]);
+        assert_eq!(c.open, ["md"]);
         assert_eq!(c.prompts["a"].body, "x");
         assert_eq!(c.prompts["b"].args, ["p"]);
-        assert!(crate::scope_matches(&c.settings.ui.scope_models, "a/m"));
-        assert!(!crate::scope_matches(&c.settings.ui.scope_models, "b/m"));
-        assert!(
-            from_value(
-                json!({"settings": {"ui": {"hide_history": ["hooks"]}}}),
-                "t"
-            )
-            .is_err()
-        );
+        assert!(from_value(json!({"history": {"hide": ["hooks"]}}), "t").is_err());
         assert!(from_value(json!("x"), "t").is_err());
         assert!(from_value(json!({"unknown_key": 1}), "t").is_err());
     }
 
     #[test]
-    fn input_style_defaults_validates_and_serializes() {
-        let cfg = |v| from_value(v, "test");
-        assert_eq!(
-            cfg(json!({})).unwrap().settings.ui.input_style,
-            crate::InputStyle::Boxed
-        );
-        for (given, shown) in [
-            ("fill", "fill"),
-            ("bar", "bar"),
-            ("lines", "lines"),
-            ("classic", "lines"),
-        ] {
-            let c = cfg(json!({"settings":{"ui":{"input_style":given}}})).unwrap();
-            assert_eq!(
-                serde_json::to_value(c).unwrap()["settings"]["ui"]["input_style"],
-                shown
-            );
-        }
-        let err = cfg(json!({"settings":{"ui":{"input_style":"other"}}})).unwrap_err();
-        assert!(err.contains("settings.ui.input_style"), "{err}");
-    }
-
-    #[test]
-    fn theme_user_and_lua_tokens_default_validate_and_serialize() {
+    fn ui_defaults_ranges_and_old_keys() {
         let cfg = |v| from_value(v, "test");
         let c = cfg(json!({})).unwrap();
-        assert_eq!(c.theme.user, "fg");
-        assert_eq!(c.theme.lua.values().len(), crate::LuaTheme::TOKENS.len());
-        assert_eq!(
-            c.theme.named(&c.theme.lua.keyword),
-            Some(c.theme.err.as_str())
-        );
-        let c = cfg(
-            json!({"theme": {"user": "#fff", "lua": {"operator": "info", "string": "#00ff00"}}}),
-        )
-        .unwrap();
-        let shown = serde_json::to_value(c).unwrap();
-        assert_eq!(shown["theme"]["user"], "#fff");
-        assert_eq!(shown["theme"]["lua"]["operator"], "info");
-        assert_eq!(shown["theme"]["lua"]["keyword"], "err");
+        let (l, s) = (&c.ui.lines, &c.ui.space);
+        assert_eq!((l.strings, l.input, l.list, l.diff), (1, 10, 16, 12));
+        assert_eq!((s.padding, s.steps, s.messages), (0, 1, 1));
+        assert_eq!(c.ui.input, crate::InputStyle::Boxed);
         for bad in [
-            json!({"theme": {"lua": {"nope": "red"}}}),
-            json!({"theme": {"lua": {"keyword": "user"}}}),
-            json!({"theme": {"user": "user"}}),
-            json!({"theme": {"fg": "info"}}),
+            json!({"ui": {"lines": {"input": 0}}}),
+            json!({"ui": {"lines": {"list": 0}}}),
+            json!({"ui": {"lines": {"diff": -2}}}),
+            json!({"ui": {"lines": {"fold_strings": true}}}),
+            json!({"ui": {"space": {"pad_x": 1}}}),
+            json!({"ui": {"scroll_step": 3}}),
+            json!({"ui": {"input": "classic"}}),
+            json!({"settings": {}}),
         ] {
             assert!(cfg(bad).is_err());
         }
+        let err = cfg(json!({"ui": {"input": "other"}})).unwrap_err();
+        assert!(err.contains("ui.input"), "{err}");
+    }
+
+    #[test]
+    fn input_style_serializes() {
+        for given in ["boxed", "fill", "bar", "lines"] {
+            let c = from_value(json!({"ui": {"input": given}}), "t").unwrap();
+            assert_eq!(serde_json::to_value(c).unwrap()["ui"]["input"], given);
+        }
+    }
+
+    #[test]
+    fn theme_defaults_links_and_errors() {
+        let cfg = |v| from_value(v, "test");
+        let c = cfg(json!({})).unwrap();
+        let t = &c.ui.theme;
+        assert_eq!(t.user, "fg");
+        assert_eq!(t.resolve(&t.input), t.fg);
+        assert_eq!(t.resolve(&t.icons), t.accent);
+        assert_eq!(t.code.values().len(), crate::CodeTheme::TOKENS.len());
+        let c =
+            cfg(json!({"ui": {"theme": {"accent": "#FFB86C", "code": {"operator": "accent"}}}}))
+                .unwrap();
+        let t = &c.ui.theme;
+        assert_eq!(t.resolve(&t.code.operator), "#FFB86C");
+        assert_eq!(t.resolve(&t.icons), "#FFB86C");
+        for bad in [
+            json!({"ui": {"theme": {"code": {"nope": "red"}}}}),
+            json!({"ui": {"theme": {"code": {"keyword": "nope"}}}}),
+            json!({"ui": {"theme": {"user": "user"}}}),
+            json!({"ui": {"theme": {"user": "input", "input": "user"}}}),
+            json!({"ui": {"theme": {"surface": "red"}}}),
+            json!({"ui": {"theme": {"lua": {}}}}),
+        ] {
+            assert!(cfg(bad).is_err());
+        }
+        let err = cfg(json!({"ui": {"theme": {"user": "input", "input": "user"}}})).unwrap_err();
+        assert!(err.contains("link cycle"), "{err}");
     }
 
     #[test]

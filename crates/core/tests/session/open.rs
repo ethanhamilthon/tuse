@@ -67,14 +67,14 @@ end
 return {{
   models = {{{{ name = "p/m", display = "M", window = 100000,
     prices = {{ input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 }} }}}},
-  settings = {{ open = {{
+  open = {{
     md = rec("md"),
     ["*.note"] = rec("mask"),
     ["*"] = rec("any"),
     ["@dir"] = rec("dir"),
     ["@url"] = rec("url"),
     bad = function() error("opener crashed") end,
-  }} }},
+  }},
   hooks = {{
     keep = {{
       events = {{"user_message"}},

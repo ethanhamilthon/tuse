@@ -23,7 +23,6 @@ impl Session {
         }
         let key = self
             .config()
-            .settings
             .open
             .iter()
             .find(|k| k.as_str() == tuse_config::OPEN_URL)
@@ -44,8 +43,7 @@ impl Session {
             return;
         }
         let key =
-            tuse_config::pick_open_key(&self.config().settings.open, &resolved, resolved.is_dir())
-                .cloned();
+            tuse_config::pick_open_key(&self.config().open, &resolved, resolved.is_dir()).cloned();
         match key {
             Some(key) => self.run_open_callback(key, resolved.display().to_string()),
             None => self.spawn_os_open(resolved.display().to_string()),

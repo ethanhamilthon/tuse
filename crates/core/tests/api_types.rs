@@ -132,7 +132,7 @@ fn replay_resume_provider_isolation_and_truncation() {
 
     std::fs::write(
         dir.join("tuse.lua"),
-        r#"return { commands = { rewrite = function()
+        r#"return { commands = { rewrite = { run = function()
       local t = require('tuse')
       local h = t.session().history
       t.set_session{ history = h }
@@ -140,7 +140,7 @@ fn replay_resume_provider_isolation_and_truncation() {
         if r.role == 'agent' and r.replay then r.text = 'edited'; break end
       end
       t.set_session{ history = h }
-    end } }"#,
+    end } } }"#,
     )
     .unwrap();
     s.reload().unwrap();

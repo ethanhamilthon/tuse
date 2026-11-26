@@ -39,11 +39,11 @@ local function log_line(s)
 end
 return {{
   commands = {{
-    boom = function() error("cmd fail") end,
+    boom = {{ run = function() error("cmd fail") end }},
   }},
-  settings = {{ open = {{
+  open = {{
     md = function(path) return "opened:" .. path end,
-  }} }},
+  }},
   hooks = {{
     watch = {{
       events = {{"lua_start", "lua_end"}},

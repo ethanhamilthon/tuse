@@ -35,11 +35,11 @@ Tuse SHALL ship exactly eight documentation topics, in this order: `readme`, `us
 - **THEN** it gets the content of `README.md`
 
 ### Requirement: Topics cover the public surface
-The topics SHALL document every public surface: `usage` every CLI subcommand and every built-in slash command, `lua` every host function in `HOST_FUNCTIONS` and every hook event, `config` every `require("tuse")` export, every top-level config key, every `settings.ui` key, every theme color, every `theme.lua` token, and the naming rules for prompts, commands, and `open` extensions, `json` every JSON-RPC method, and `session` every history role.
+The topics SHALL document every public surface: `usage` every CLI subcommand and every built-in slash command, `lua` every host function in `HOST_FUNCTIONS` and every hook event, `config` every `require("tuse")` export, every top-level config key, every `ui` key, every `ui.theme` token, and the naming rules for prompts, commands, and `open` extensions, `json` every JSON-RPC method, and `session` every history role.
 
 #### Scenario: Coverage tests
 - **WHEN** `cargo test` runs
-- **THEN** it fails if a CLI subcommand or slash command is missing from `docs("usage")`, a host function or hook event from `docs("lua")`, a top-level key, `settings.ui` key, theme color, or `theme.lua` token from `docs("config")`, a JSON-RPC method from `docs("json")`, or a history role from `docs("session")`
+- **THEN** it fails if a CLI subcommand or slash command is missing from `docs("usage")`, a host function or hook event from `docs("lua")`, a top-level key, `ui` key, or `ui.theme` token from `docs("config")`, a JSON-RPC method from `docs("json")`, or a history role from `docs("session")`
 
 #### Scenario: Color aliases
 - **WHEN** a color accepted by validation, such as `gray` or `dark_gray`, is looked up in `docs("config")`
@@ -68,7 +68,7 @@ The system prompt template SHALL be loaded from a file inside `crates/core/src`,
 - **THEN** its first system history record contains the rendered prompt
 
 ### Requirement: Prompt points the agent to the docs
-When `docs` is enabled, the system prompt SHALL end its rules with three bullets: questions about Tuse are answered from `docs()` and not from memory; a change of agent behavior (prompt, functions, hooks, commands, models) is made by editing the Lua config as `docs("config")` and `docs("examples")` describe, then reloading; a change of the UI (theme, input style, limits) is made with `theme` and `settings.ui` in that config, with keys and slash commands in `docs("usage")`. When `docs` is disabled, the bullets MUST be absent and the prompt MUST NOT mention `docs`.
+When `docs` is enabled, the system prompt SHALL end its rules with three bullets: questions about Tuse are answered from `docs()` and not from memory; a change of agent behavior (prompt, functions, hooks, commands, models) is made by editing the Lua config as `docs("config")` and `docs("examples")` describe, then reloading; a change of the UI (theme, input style, limits) is made with `ui` in that config, with keys and slash commands in `docs("usage")`. When `docs` is disabled, the bullets MUST be absent and the prompt MUST NOT mention `docs`.
 
 #### Scenario: Default config
 - **WHEN** a session starts with the default config
@@ -84,3 +84,10 @@ The Lua reference and agent system prompt SHALL describe `pick(options, title)` 
 #### Scenario: Find the picker title contract
 - **WHEN** an agent or a JSON-RPC client author looks up picker questions
 - **THEN** the Lua reference and agent prompt show how to supply a Markdown title, the Lua reference explains history behavior, and the JSON-RPC reference explains when the raw Markdown field appears in `ui_request` and `ui.state.active`
+
+### Requirement: Document session switching from Lua
+`docs("lua")` SHALL describe `fork(index)` and `resume(id)`: the 1-based index into `session().history`, the allowed roles, the draft for a `user` record, the wait for running tool calls, and the errors. `docs("json")` SHALL describe the `session_switched` event, and the agent's system prompt SHALL list both functions with the other host functions.
+
+#### Scenario: Coverage
+- **WHEN** `cargo test` runs
+- **THEN** it fails if `fork` or `resume` is missing from `docs("lua")` or `session_switched` from `docs("json")`

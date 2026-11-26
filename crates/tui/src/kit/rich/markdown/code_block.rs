@@ -16,7 +16,7 @@ impl Renderer<'_> {
         {
             let (first, _) = self.prefixes();
             let mut l = first;
-            l.push(span(lang.to_string(), Style::fg(self.p.dim)));
+            l.push(span(lang.to_string(), Style::fg(self.p.muted)));
             self.out.push(MessageRow::decoration(l));
         }
     }

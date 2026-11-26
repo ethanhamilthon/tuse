@@ -15,10 +15,10 @@ impl App {
             let visible = match &e {
                 Event::Text(t) => Some(!t.trim().is_empty()),
                 Event::Reasoning(t) => {
-                    Some(self.palette.ui.reasoning_line != 0 && !t.trim().is_empty())
+                    Some(self.palette.ui.lines.reasoning != 0 && !t.trim().is_empty())
                 }
                 Event::ToolDelta { code, .. } => {
-                    Some(self.palette.ui.tool_line != 0 && !code.trim().is_empty())
+                    Some(self.palette.ui.lines.tool != 0 && !code.trim().is_empty())
                 }
                 _ => None,
             };
@@ -329,6 +329,8 @@ impl App {
             Event::HistoryReplaced => {
                 self.refresh_history = true;
             }
+            Event::Switch(tuse_core::Switch::Fork(index)) => self.fork(index),
+            Event::Switch(tuse_core::Switch::Resume(id)) => self.switch(Some(id)),
             Event::Models => {
                 if matches!(&self.picker, Some(p) if p.kind == crate::ui::picker::Kind::Model) {
                     self.open_models();

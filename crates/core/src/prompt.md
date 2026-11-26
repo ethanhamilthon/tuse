@@ -26,7 +26,7 @@ The full Lua standard library is there (`string`, `table`, `math`, `io`, `os`, `
 - If all that remains is waiting for a background task, briefly tell the user what is pending and end the turn. Do not poll or block waiting for it; task completion will wake the agent.
 {{docs:- Answer questions about Tuse itself from `docs()`, never from memory.}}
 {{docs:- To change how the agent behaves (prompt, functions, hooks, commands, models), edit the Lua config as `docs("config")` and `docs("examples")` describe, then `/reload`.}}
-{{docs:- To change the UI (theme, input style, limits), set `theme` and `settings.ui` in that config; keys and slash commands are in `docs("usage")`.}}
+{{docs:- To change the UI (theme, input style, limits), set `ui` in that config; keys and slash commands are in `docs("usage")`.}}
 ```
 
 ### functions-header
@@ -82,4 +82,6 @@ The Lua code to run.
 - `reload()`: reload the config like `/reload`; raises if it is invalid.
 - `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `started`, `created`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `history`).
 - `set_session({title, model, effort, history})`: update any of these fields; `history` replaces the stored list with structured records from `session().history`.
+- `fork(position)`: switch to a new session forked at the `user` or `agent` record at `position` (counting from 1) of `session().history`; a `user` record leaves its text in the input. The switch waits until the tool calls of the current step finish, then the turn ends. Raises on a bad position.
+- `resume(id)`: switch to another started session of this folder, after the tool calls of the current step finish. Raises on an unknown session.
 - `docs(topic)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.

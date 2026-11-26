@@ -59,6 +59,8 @@ Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~
 - `llm(prompt, model, effort)`: Sends one prompt to a model, with no tools, history, or system prompt, and returns the text. `model` and `effort` default to the session's. It uses the same retries as turns, and its usage is counted as `llm_cost`.
 - `reload()`: Reloads the config like `/reload` and raises an error if the config is invalid. Inside a hook, it runs after the hook returns.
 - `set_session{title, model, effort, history}`: Pass any subset of these keys. The title is one line, up to 80 characters. Model and effort must match a configured provider and its supported efforts. History replaces the whole list; use `session().history` as a starting point. Each tool call must have exactly one result before the next user or agent record. Images must be data URLs, and a `system` record, if present, must come first. Invalid input raises without changing anything. A replacement requested during tool calls waits until the step's final result is recorded, before queued input. Usage totals and `ctx` are unaffected.
+- `fork(position)`: Opens a new session forked at the `user` or `agent` record at `position` of `session().history` (counting from 1), like `/fork`: the new history ends with an agent record, or just before a user record, whose text goes into the input. It raises on a position that is out of range or not a `user` or `agent` record, and when another switch is already pending. A switch requested during tool calls waits until the step's final result is recorded, after a pending `set_session` history, and then the turn ends in the old session. Queued messages stay with the old session. The old session closes like with `/new`, and the TUI and JSON-RPC (`session_switched` event) show the new one.
+- `resume(id)`: Switches to the started session `id` of this folder, like `/resume`, with the same timing and errors as `fork`.
 - `docs(topic)`: `docs()` lists the topics and `docs("lua")` reads one. These are the pages of this documentation.
 - `json.encode(value)` / `json.decode(text)`: JSON, where `null` becomes `nil`.
 - `inspect(value)`: Formats any value readably, the same formatting used for tool results.
@@ -142,7 +144,7 @@ The full Lua standard library is there (`string`, `table`, `math`, `io`, `os`, `
 - If all that remains is waiting for a background task, briefly tell the user what is pending and end the turn. Do not poll or block waiting for it; task completion will wake the agent.
 - Answer questions about Tuse itself from `docs()`, never from memory.
 - To change how the agent behaves (prompt, functions, hooks, commands, models), edit the Lua config as `docs("config")` and `docs("examples")` describe, then `/reload`.
-- To change the UI (theme, input style, limits), set `theme` and `settings.ui` in that config; keys and slash commands are in `docs("usage")`.
+- To change the UI (theme, input style, limits), set `ui` in that config; keys and slash commands are in `docs("usage")`.
 
 # Functions in `lua`
 They are Lua globals, not tools: call them inside `lua` code. Errors are Lua errors (catch them with `pcall`). Prefer `read` for file contents, `grep` for search, and `write`/`edit`/`append`/`delete` for file changes so the user sees diffs. Use `sh` for running programs and processing their output, not as the default for file operations.
@@ -164,6 +166,8 @@ They are Lua globals, not tools: call them inside `lua` code. Errors are Lua err
 - `reload()`: reload the config like `/reload`; raises if it is invalid.
 - `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `started`, `created`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `history`).
 - `set_session({title, model, effort, history})`: update any of these fields; `history` replaces the stored list with structured records from `session().history`.
+- `fork(position)`: switch to a new session forked at the `user` or `agent` record at `position` (counting from 1) of `session().history`; a `user` record leaves its text in the input. The switch waits until the tool calls of the current step finish, then the turn ends. Raises on a bad position.
+- `resume(id)`: switch to another started session of this folder, after the tool calls of the current step finish. Raises on an unknown session.
 - `docs(topic)`: call `docs()` to list documentation topics, or `docs("<topic>")` to read one.
 ```
 

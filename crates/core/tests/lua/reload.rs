@@ -8,7 +8,7 @@ fn config(tag: &str) -> String {
     format!(
         r#"return {{
   prompts = {{ tag = "{tag}" }},
-  commands = {{ again = function() require("tuse").reload() end }},
+  commands = {{ again = {{ run = function() require("tuse").reload() end }} }},
   hooks = {{
     on_user = {{ events = {{ "user_message" }}, run = function() require("tuse").reload() end }},
   }},

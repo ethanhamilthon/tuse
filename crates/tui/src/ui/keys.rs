@@ -151,7 +151,7 @@ impl App {
         let Some(q) = &mut self.question else {
             return false;
         };
-        let step = self.palette.ui.scroll_step as isize;
+        let step = crate::kit::style::WHEEL_STEP as isize;
         match code {
             KeyCode::Esc => {
                 let id = self.question.take().unwrap().id;
@@ -257,7 +257,7 @@ impl App {
         let Some(panel) = &mut self.panel else {
             return false;
         };
-        let step = self.palette.ui.scroll_step as isize;
+        let step = crate::kit::style::WHEEL_STEP as isize;
         match code {
             KeyCode::Esc => {
                 self.panel = None;

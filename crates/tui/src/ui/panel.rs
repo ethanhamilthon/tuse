@@ -100,7 +100,7 @@ impl Panel {
     ) -> (Vec<Line>, Vec<Option<HitRow>>) {
         let inner = width.max(1);
         let len = self.wrapped(inner, p).len();
-        let body = max_rows.min(p.ui.list_max_height).max(1).min(len);
+        let body = max_rows.min(p.ui.lines.list).max(1).min(len);
         self.scroll = self.scroll.min(len.saturating_sub(body));
         let (id, scroll) = (self.id, self.scroll);
         let window = &self.wrapped(inner, p)[scroll..scroll + body];
@@ -154,7 +154,7 @@ mod tests {
     use crate::ui::app::App;
     use crate::ui::picker::{Kind, Picker};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use tuse_config::{Theme, UiSettings};
+    use tuse_config::Ui;
     use tuse_core::HistoryItem;
 
     fn press(app: &mut App, code: KeyCode, mods: KeyModifiers) {
@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn panel_scrolls_within_its_text_and_fits_the_rows() {
-        let p = Palette::new(&Theme::default(), &UiSettings::default());
+        let p = Palette::new(&Ui::default());
         let mut panel = Panel::new(
             (0..30)
                 .map(|i| i.to_string())
@@ -249,7 +249,7 @@ mod tests {
                 .lines(60, 16, &app.palette)
                 .iter()
                 .flatten()
-                .any(|s| s.text == "local" && s.style.fg == app.palette.err)
+                .any(|s| s.text == "local" && s.style.fg == app.palette.code[1])
         );
         app.panel.as_mut().unwrap().scroll_by(4);
         k(&mut app, KeyCode::Left);
@@ -295,7 +295,7 @@ mod tests {
         assert!(panel_text(&mut app).contains("ID"));
         k(&mut app, KeyCode::Esc);
 
-        app.palette.ui.list_max_height = 4;
+        app.palette.ui.lines.list = 4;
         app.list_rows = 3;
         open_history_with(
             &mut app,

@@ -57,6 +57,31 @@ pub fn fork(session: &Arc<Session>, index: usize) -> Result<(Arc<Session>, Strin
     Ok((switch(session, Some(id))?, draft))
 }
 
+pub(crate) fn check_fork(records: &[Record], index: usize) -> Result<(), String> {
+    match records.get(index) {
+        Some(Record::User { .. } | Record::Assistant { .. }) => Ok(()),
+        Some(_) => Err(format!(
+            "record {} is not a user or agent message",
+            index + 1
+        )),
+        None => Err(format!("no record {}", index + 1)),
+    }
+}
+
+pub(crate) fn check_resume(session: &Session, id: &str) -> Result<(), String> {
+    if id == session.id {
+        return Err(format!("session {id} is already open"));
+    }
+    let meta = Meta::read(id)?.ok_or_else(|| format!("no session {id}"))?;
+    if !meta.started {
+        return Err(format!("session {id} has no messages"));
+    }
+    if meta.cwd != session.cwd.display().to_string() {
+        return Err(format!("session {id} belongs to another folder"));
+    }
+    Ok(())
+}
+
 fn fork_records(records: &[Record], index: usize) -> Result<(Vec<Record>, String), String> {
     let (end, draft) = match records.get(index) {
         Some(Record::User { text, .. }) => (index, text.clone()),
@@ -146,6 +171,7 @@ impl Prepared {
             activity: Default::default(),
             cache: None,
             pending_history: None,
+            pending_switch: None,
             tool_step: false,
             busy: false,
             generation: 0,

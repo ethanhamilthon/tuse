@@ -9,13 +9,13 @@ pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Ve
     let half = (inner / 2).max(1);
     let mut lines: Vec<Line> = vec![];
     if pk.shown.is_empty() {
-        lines.push(vec![span("no matches", Style::fg(p.dim))]);
+        lines.push(vec![span("no matches", Style::fg(p.muted))]);
     }
     for (n, &i) in pk.shown.iter().enumerate().skip(pk.scroll).take(rows) {
         let it = &pk.items[i];
         let sel = n == pk.selected;
         let (st, det_st) = if sel {
-            (Style::fg(p.accent), Style::fg(p.dim))
+            (Style::fg(p.accent), Style::fg(p.muted))
         } else {
             (Style::fg(p.muted), Style::fg(p.muted))
         };
@@ -57,10 +57,10 @@ pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Ve
 mod tests {
     use super::*;
     use crate::ui::picker::{Kind, item};
-    use tuse_config::{Theme, UiSettings};
+    use tuse_config::Ui;
 
     fn rows(pk: &mut Picker, w: usize) -> Vec<String> {
-        let p = Palette::new(&Theme::default(), &UiSettings::default());
+        let p = Palette::new(&Ui::default());
         options(pk, 20, w, &p)
             .into_iter()
             .map(|l| l.into_iter().map(|s| s.text).collect())

@@ -34,7 +34,7 @@ The first line of the first message becomes the session title (up to 80 characte
 
 ## History and session data
 
-`/history` shows the stored history, one entry per record. `settings.ui.hide_history` filters this list only. `session().history` and JSON-RPC `session.history` both return all structured records. Each has a `role`, a display-only `summary`, and these fields:
+`/history` shows the stored history, one entry per record. `history.hide` filters this list only. `session().history` and JSON-RPC `session.history` both return all structured records. Each has a `role`, a display-only `summary`, and these fields:
 
 | Role | Fields |
 | --- | --- |

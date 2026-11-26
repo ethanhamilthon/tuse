@@ -218,8 +218,10 @@ impl Session {
                 Some(false) => {}
             }
         }
-        if let Some(mut st) = self.lock_live(generation) {
-            self.end_tool_step(&mut st);
+        if let Some(mut st) = self.lock_live(generation)
+            && self.end_tool_step(&mut st)
+        {
+            return Step::Done;
         }
         Step::Continue
     }

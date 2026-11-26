@@ -43,6 +43,12 @@ pub struct UiSnapshot {
     pub entries: Vec<UiEntry>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Switch {
+    Fork(usize),
+    Resume(String),
+}
+
 #[derive(Debug, Clone)]
 pub enum Event {
     Notification(String),
@@ -92,6 +98,7 @@ pub enum Event {
     Models,
     Reloaded,
     HistoryReplaced,
+    Switch(Switch),
     UiMarkdown {
         name: String,
         text: String,

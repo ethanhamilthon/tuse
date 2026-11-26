@@ -15,6 +15,8 @@ pub const HOST_FUNCTIONS: &[&str] = &[
     "docs",
     "set_session",
     "session",
+    "fork",
+    "resume",
     "task_get",
     "task_list",
     "task_stop",
@@ -179,32 +181,11 @@ pub fn history_roles<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::
         .find(|(_, r)| !HISTORY_ROLES.contains(&r.as_str()))
     {
         return Err(D::Error::custom(format!(
-            "settings.ui.hide_history[{}]: unknown history role `{r}`",
+            "history.hide[{}]: unknown history role `{r}`",
             i + 1
         )));
     }
     Ok(list)
-}
-
-pub fn model_scope<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-    let list: Vec<String> = list(d)?;
-    for s in &list {
-        let (provider, id) = split_model(s);
-        if provider.is_empty() || id.is_empty() || s.chars().any(char::is_whitespace) {
-            return Err(D::Error::custom(format!(
-                "expected `provider/model` or `provider/*`, got `{s}`"
-            )));
-        }
-    }
-    Ok(list)
-}
-
-pub fn scope_matches(scope: &[String], model: &str) -> bool {
-    scope.is_empty()
-        || scope.iter().any(|s| match s.strip_suffix("/*") {
-            Some(p) => split_model(model).0 == p,
-            None => s == model,
-        })
 }
 
 #[derive(Deserialize)]

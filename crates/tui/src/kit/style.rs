@@ -1,7 +1,8 @@
 use crossterm::style::Color;
-use tuse_config::{Config, Theme, UiSettings};
+use tuse_config::{Config, Ui};
 
 pub const FRAME_MS: u64 = 33;
+pub const WHEEL_STEP: usize = 2;
 pub const FILE_PICKER_MAX: usize = 20_000;
 pub const LIST_INDENT: usize = 2;
 pub const CODE_INDENT: usize = 2;
@@ -112,56 +113,63 @@ pub fn color(s: &str) -> Option<Color> {
 }
 
 pub struct Palette {
-    pub ui: UiSettings,
+    pub ui: Ui,
     pub cwd: std::path::PathBuf,
     pub bg: Option<Color>,
-    pub surface: Option<Color>,
-    pub fg: Option<Color>,
-    pub dim: Option<Color>,
-    pub muted: Option<Color>,
-    pub border: Option<Color>,
     pub accent: Option<Color>,
-    pub ok: Option<Color>,
-    pub err: Option<Color>,
-    pub info: Option<Color>,
+    pub fg: Option<Color>,
     pub user: Option<Color>,
-    pub lua: Vec<Option<Color>>,
+    pub user_bg: Option<Color>,
+    pub muted: Option<Color>,
+    pub input: Option<Color>,
+    pub input_bg: Option<Color>,
+    pub border: Option<Color>,
+    pub icons: Option<Color>,
+    pub error: Option<Color>,
+    pub code: Vec<Option<Color>>,
+    pub added: Option<Color>,
+    pub removed: Option<Color>,
+    pub heading: Option<Color>,
+    pub link: Option<Color>,
+    pub inline_code: Option<Color>,
+    pub quote: Option<Color>,
+    pub list: Option<Color>,
 }
 
 impl Palette {
-    pub fn new(t: &Theme, ui: &UiSettings) -> Self {
-        let c = |v: &str| {
-            if v.trim() == "accent" {
-                color(&t.accent)
-            } else {
-                color(v)
-            }
-        };
+    pub fn new(ui: &Ui) -> Self {
+        let t = &ui.theme;
+        let c = |v: &str| color(t.resolve(v));
+        let mut code: Vec<Option<Color>> = t.code.values().into_iter().map(c).collect();
+        let removed = code.pop().flatten();
+        let added = code.pop().flatten();
         Self {
             ui: ui.clone(),
             cwd: std::path::PathBuf::new(),
             bg: c(&t.bg),
-            surface: c(&t.surface),
-            fg: c(&t.fg),
-            dim: c(&t.dim),
-            muted: c(&t.muted),
-            border: c(&t.border),
             accent: c(&t.accent),
-            ok: c(&t.ok),
-            err: c(&t.err),
-            info: c(&t.info),
-            user: c(t.named(&t.user).unwrap_or(&t.user)),
-            lua: t
-                .lua
-                .values()
-                .into_iter()
-                .map(|v| c(t.named(v).unwrap_or(v)))
-                .collect(),
+            fg: c(&t.fg),
+            user: c(&t.user),
+            user_bg: c(&t.user_bg),
+            muted: c(&t.muted),
+            input: c(&t.input),
+            input_bg: c(&t.input_bg),
+            border: c(&t.border),
+            icons: c(&t.icons),
+            error: c(&t.error),
+            code,
+            added,
+            removed,
+            heading: c(&t.markdown.heading),
+            link: c(&t.markdown.link),
+            inline_code: c(&t.markdown.code),
+            quote: c(&t.markdown.quote),
+            list: c(&t.markdown.list),
         }
     }
 
     pub fn from_config(cfg: &Config) -> Self {
-        Self::new(&cfg.theme, &cfg.settings.ui)
+        Self::new(&cfg.ui)
     }
 
     pub fn for_session(cfg: &Config, cwd: &std::path::Path) -> Self {

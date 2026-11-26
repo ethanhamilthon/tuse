@@ -56,6 +56,7 @@ pub fn to_json(e: &Event) -> Value {
         Event::Usage => json!({"type": "usage"}),
         Event::Models => json!({"type": "models"}),
         Event::HistoryReplaced => json!({"type": "history_replaced"}),
+        Event::Switch(_) => json!({"type": "switch"}),
         Event::Reloaded => json!({"type": "reloaded"}),
         Event::UiMarkdown {
             name,

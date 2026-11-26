@@ -39,13 +39,20 @@ pub fn serve(
         std::sync::mpsc::Receiver<tuse_core::Event>,
         std::sync::mpsc::Sender<()>,
     )>();
+    let (switch_tx, switch_rx) = std::sync::mpsc::channel::<tuse_core::Switch>();
     let pump = {
         let (out, ready, done) = (out.clone(), ready.clone(), done.clone());
         std::thread::spawn(move || {
+            let forward = |e: tuse_core::Event| match e {
+                tuse_core::Event::Switch(switch) => {
+                    let _ = switch_tx.send(switch);
+                }
+                e => out.send(&notify("event", events::to_json(&e))),
+            };
             while !done.load(Ordering::Relaxed) {
                 if let Ok((next, ack)) = swap_rx.try_recv() {
                     while let Ok(e) = events.try_recv() {
-                        out.send(&notify("event", events::to_json(&e)));
+                        forward(e);
                     }
                     events = next;
                     let _ = ack.send(());
@@ -54,7 +61,7 @@ pub fn serve(
                 if !ready.load(Ordering::Acquire) {
                     std::thread::sleep(Duration::from_millis(10));
                 } else if let Ok(e) = events.recv_timeout(Duration::from_millis(20)) {
-                    out.send(&notify("event", events::to_json(&e)));
+                    forward(e);
                 }
             }
         })
@@ -68,9 +75,35 @@ pub fn serve(
         }
     });
     let mut shutdown = false;
+    let swap = |session: &mut Arc<Session>, next: Arc<Session>| {
+        ready.store(false, Ordering::Release);
+        let (ack_tx, ack_rx) = std::sync::mpsc::channel();
+        let _ = swap_tx.send((next.subscribe(), ack_tx));
+        let _ = ack_rx.recv();
+        *session = next;
+    };
     loop {
         if stop.load(Ordering::Relaxed) {
             break;
+        }
+        if let Ok(switch) = switch_rx.try_recv() {
+            let switched = match &switch {
+                tuse_core::Switch::Fork(index) => session.fork(*index),
+                tuse_core::Switch::Resume(id) => session
+                    .switch(Some(id.clone()))
+                    .map(|next| (next, String::new())),
+            };
+            match switched {
+                Ok((next, draft)) => {
+                    swap(&mut session, next);
+                    let mut event = methods::switched(&session);
+                    event["type"] = "session_switched".into();
+                    event["draft"] = draft.into();
+                    out.send(&notify("event", event));
+                    ready.store(true, Ordering::Release);
+                }
+                Err(e) => session.error(e),
+            }
         }
         let line = match lines.recv_timeout(Duration::from_millis(100)) {
             Ok(Ok(line)) => line,
@@ -126,11 +159,7 @@ pub fn serve(
                 };
                 match switched {
                     Ok((next, draft)) => {
-                        ready.store(false, Ordering::Release);
-                        let (ack_tx, ack_rx) = std::sync::mpsc::channel();
-                        let _ = swap_tx.send((next.subscribe(), ack_tx));
-                        let _ = ack_rx.recv();
-                        session = next;
+                        swap(&mut session, next);
                         if let Some(id) = req.id {
                             let mut result = methods::switched(&session);
                             if let Some(draft) = draft {

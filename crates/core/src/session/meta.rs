@@ -132,7 +132,7 @@ impl Session {
         Ok(changed)
     }
 
-    pub(crate) fn end_tool_step(&self, st: &mut State) {
+    pub(crate) fn end_tool_step(&self, st: &mut State) -> bool {
         st.tool_step = false;
         if let Some(history) = st.pending_history.take()
             && self
@@ -140,6 +140,13 @@ impl Session {
                 .is_ok()
         {
             self.emit(Signal::HistoryReplaced);
+        }
+        match st.pending_switch.take() {
+            Some(switch) => {
+                self.emit(Signal::Switch(switch));
+                true
+            }
+            None => false,
         }
     }
 }

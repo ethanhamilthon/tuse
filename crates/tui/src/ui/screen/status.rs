@@ -40,7 +40,7 @@ impl App {
         if self.steering.is_some() {
             let wave = STEERING_FRAMES[self.tick % STEERING_FRAMES.len()];
             return vec![
-                span(format!("{wave} "), Style::fg(p.accent)),
+                span(format!("{wave} "), Style::fg(p.icons)),
                 span(STEERING_LABEL, Style::fg(p.muted)),
             ];
         }
@@ -54,7 +54,7 @@ impl App {
         let spin = frames[self.tick % frames.len()];
         vec![span(
             format!("{spin} {}", duration(elapsed)),
-            Style::fg(p.accent),
+            Style::fg(p.icons),
         )]
     }
 
@@ -68,7 +68,7 @@ impl App {
         let spin = SPINNER[self.tick % SPINNER.len()];
         Some(vec![span(
             format!("{spin} {text}"),
-            Style::fg(self.palette.accent),
+            Style::fg(self.palette.icons),
         )])
     }
 
@@ -127,7 +127,7 @@ mod tests {
         let mut app = crate::ui::app::test_app("task-indicator");
         std::fs::write(
             app.cwd.join("tuse.lua"),
-            "local t = require('tuse')\nreturn { commands = { bg = function() t.spawn(function() t.sh('sleep 30') end, 'nap') end } }",
+            "local t = require('tuse')\nreturn { commands = { bg = { run = function() t.spawn(function() t.sh('sleep 30') end, 'nap') end } } }",
         )
         .unwrap();
         app.run_command("reload");

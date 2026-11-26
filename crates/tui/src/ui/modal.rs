@@ -275,7 +275,7 @@ mod tests {
             panel_lines
                 .iter()
                 .flatten()
-                .any(|s| s.text == "local" && s.style.fg == app.palette.err),
+                .any(|s| s.text == "local" && s.style.fg == app.palette.code[1]),
             "lua keyword should be syntax highlighted"
         );
 
@@ -292,7 +292,7 @@ mod tests {
         let cfg = app.cwd.join("tuse.lua");
         std::fs::write(
             &cfg,
-            "return { commands = { hello_ui = function() require('tuse').show('h', 'hi', false) end } }",
+            "return { commands = { hello_ui = { run = function() require('tuse').show('h', 'hi', false) end } } }",
         )
         .unwrap();
         app.run_command("reload");
@@ -300,7 +300,11 @@ mod tests {
         assert_eq!(labels(&app), ["/hello_ui"]);
         press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
         app.editor.clear();
-        std::fs::write(&cfg, "return { commands = { fresh_cmd = function() end } }").unwrap();
+        std::fs::write(
+            &cfg,
+            "return { commands = { fresh_cmd = { run = function() end } } }",
+        )
+        .unwrap();
         app.run_command("reload");
         type_text(&mut app, "/");
         let all = labels(&app);
@@ -315,7 +319,7 @@ mod tests {
             r#"return { commands = {
                 deploy = { desc = "ship it", args = { "staging", "prod" },
                     run = function(env) require("tuse").show("d", "ran:" .. tostring(env), false) end },
-                mv = function(a, b) require("tuse").show("m", tostring(a) .. "|" .. tostring(b), false) end,
+                mv = { run = function(a, b) require("tuse").show("m", tostring(a) .. "|" .. tostring(b), false) end },
             } }"#,
         )
         .unwrap();

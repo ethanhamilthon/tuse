@@ -11,10 +11,10 @@ pub fn panel(session: &Session, p: &Palette) -> Panel {
 pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, p: &Palette) -> Panel {
     let key = Style::fg(p.border);
     let fg = Style::fg(p.fg);
-    let dim = Style::fg(p.dim);
-    let info = Style::fg(p.info);
+    let dim = Style::fg(p.muted);
+    let info = Style::fg(p.heading);
     let accent = Style::fg(p.accent).bold();
-    let ok = Style::fg(p.ok).bold();
+    let ok = Style::fg(p.accent).bold();
 
     let row = |label: &str, mut rest: Line| -> Line {
         let mut out = vec![span(format!("{label:<13}"), key)];

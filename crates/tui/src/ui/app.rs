@@ -160,7 +160,7 @@ impl App {
             return self.list_rows.max(1);
         }
         self.list_rows
-            .min(self.palette.ui.list_max_height.saturating_sub(1).max(1))
+            .min(self.palette.ui.lines.list.saturating_sub(1).max(1))
             .max(1)
     }
 

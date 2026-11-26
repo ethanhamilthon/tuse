@@ -30,7 +30,7 @@ impl App {
         let mark = if self.scroll > 0 {
             vec![span(
                 format!("{SCROLL_MARK}{} ", self.scroll),
-                Style::fg(p.dim),
+                Style::fg(p.muted),
             )]
         } else {
             vec![]
@@ -75,7 +75,7 @@ impl App {
         top: usize,
         overlay: Vec<Line>,
     ) -> Vec<Line> {
-        let bg = Style::default().on(self.palette.border);
+        let bg = Style::default().on(self.palette.input_bg);
         let blank = || vec![span(" ".repeat(w), bg)];
         let mut out = vec![blank()];
         for mut row in self.input_rows(view, rows, top, InputStyle::Fill) {
@@ -121,7 +121,7 @@ impl App {
         rows: &[String],
         top: usize,
     ) -> Vec<Line> {
-        let border = Style::fg(self.palette.border);
+        let border = Style::fg(self.palette.input_bg);
         let surround = |line: Line| {
             let mut out = vec![span("│", border), span(BOXED_PAD, Style::default())];
             let fill = w.saturating_sub(line_width(&line)) + BOXED_PAD.len();
@@ -175,7 +175,7 @@ impl App {
     ) -> Vec<Line> {
         let p = &self.palette;
         let dim = self.steering.is_some() && self.saved_editor.is_none();
-        let style = Style::fg(if dim { p.dim } else { p.user });
+        let style = Style::fg(if dim { p.muted } else { p.input });
         let left = self.input_left(mode);
         let mut out = vec![];
         for (i, text) in rows.iter().enumerate() {
@@ -193,7 +193,7 @@ impl App {
                     p.border
                 }
             } else {
-                p.accent
+                p.icons
             };
             let mut line = vec![];
             if !prefix.is_empty() {
@@ -257,7 +257,7 @@ mod tests {
             (top.text.as_str(), top.style.fg),
             (cwd.as_str(), app.palette.muted)
         );
-        app.palette.ui.input_style = InputStyle::Boxed;
+        app.palette.ui.input = InputStyle::Boxed;
         let boxed = app.boxed_input(&view, 120, &["x".into()], 0);
         assert_eq!(boxed[3][2].text, cwd);
         app.flash("Copied.");

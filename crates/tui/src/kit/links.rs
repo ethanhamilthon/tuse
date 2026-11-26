@@ -79,7 +79,7 @@ pub fn resolve_markdown_target(dest: &str, cwd: &Path) -> Option<LinkTarget> {
 pub fn styled(dest: &str, st: Style, p: &Palette) -> Style {
     let link = resolve_markdown_target(dest, &p.cwd).map(intern);
     Style {
-        fg: if link.is_some() { p.accent } else { p.info },
+        fg: if link.is_some() { p.link } else { p.muted },
         underline: true,
         link,
         ..st
@@ -92,7 +92,7 @@ pub fn path_span(label: impl Into<String>, path: &str, st: Style, p: &Palette) -
         Some(rp) => span(
             label,
             Style {
-                fg: p.accent,
+                fg: p.link,
                 underline: true,
                 link: Some(intern_path(rp.canonicalize().unwrap_or(rp))),
                 ..st
@@ -109,7 +109,7 @@ pub fn spans(text: &str, st: Style, p: &Palette) -> Vec<Span> {
             Some(id) => span(
                 piece,
                 Style {
-                    fg: p.accent,
+                    fg: p.link,
                     underline: true,
                     link: Some(id),
                     ..st
@@ -508,7 +508,7 @@ mod tests {
         let file = dir.join("deep/folder/name/example.md");
         std::fs::write(&file, "hello").unwrap();
         let canon = file.canonicalize().unwrap();
-        let mut p = Palette::new(&Default::default(), &Default::default());
+        let mut p = Palette::new(&Default::default());
         p.cwd = dir.clone();
 
         let mut wrapped = crate::kit::rich::markdown::render(
@@ -550,7 +550,7 @@ mod tests {
         assert!(
             link_spans(&wrapped, url_id)
                 .iter()
-                .all(|s| s.style.underline && !s.style.bold && s.style.fg == p.accent)
+                .all(|s| s.style.underline && !s.style.bold && s.style.fg == p.link)
         );
         highlight(&mut wrapped, Some(url_id), p.fg);
         assert!(
@@ -579,7 +579,7 @@ mod tests {
         assert!(
             link_spans(&dup, dup_id)
                 .iter()
-                .all(|s| s.style.fg == p.accent && s.style.underline)
+                .all(|s| s.style.fg == p.link && s.style.underline)
         );
         let img = crate::kit::rich::markdown::render(
             "![pic](https://dup.example) ![](https://dup.example)",
@@ -592,20 +592,20 @@ mod tests {
             .collect();
         assert_eq!(img_texts, ["pic", "https://dup.example"]);
         let sec = dup.iter().flatten().find(|s| s.text == "sec").unwrap();
-        assert!(sec.style.link.is_none() && sec.style.underline && sec.style.fg == p.info);
+        assert!(sec.style.link.is_none() && sec.style.underline && sec.style.fg == p.muted);
         highlight(&mut dup, Some(dup_id), p.fg);
         assert!(
             link_spans(&dup, dup_id)
                 .iter()
                 .all(|s| s.style.fg == p.fg && s.style.bold && s.style.underline)
         );
-        let mut p_none = Palette::new(
-            &tuse_config::Theme {
+        let mut p_none = Palette::new(&tuse_config::Ui {
+            theme: tuse_config::Theme {
                 accent: "none".into(),
                 ..Default::default()
             },
-            &Default::default(),
-        );
+            ..Default::default()
+        });
         p_none.cwd = dir.clone();
         let code_link =
             crate::kit::rich::markdown::render("[`cfg`](https://dup.example)", 40, &p_none);
@@ -615,7 +615,7 @@ mod tests {
                 .all(|s| s.style.fg.is_none() && s.style.underline)
         );
         let ps = path_span("label", &file.display().to_string(), Style::fg(p.fg), &p);
-        assert!(ps.style.link.is_some() && ps.style.fg == p.accent && ps.style.underline);
+        assert!(ps.style.link.is_some() && ps.style.fg == p.link && ps.style.underline);
 
         let path = "deep/folder/name/example.md";
         let text = format!("[doc]({path}) https://example.com");

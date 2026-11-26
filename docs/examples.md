@@ -8,7 +8,7 @@ Each example is a module. Most export `apply(g)`, which adds its keys to the con
 local g = require("global")
 require("tmux").apply(g)
 require("notify").apply(g)
-g.theme = require("themes").gruvbox
+g.ui = { theme = require("themes").gruvbox }
 return g
 ```
 
@@ -24,7 +24,7 @@ Wraps a stdio MCP server as two agent functions, `mcp_tools()` and `mcp_call(nam
 
 ## Themes
 
-Full `theme` tables: light, gruvbox, solarized, and one that uses the terminal colors. [`themes.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/themes.lua)
+Full `ui.theme` tables: light, gruvbox, solarized, and one that uses the terminal colors. [`themes.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/themes.lua)
 
 ## Rename
 
@@ -72,7 +72,7 @@ Wraps the agent's `sh` with a timeout and a deny list, and removes `delete`. [`s
 
 ## Open handlers
 
-`settings.open` handlers: Markdown in a `show()` block, images and PDFs in the OS viewer. [`open.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/open.lua)
+`open` handlers: Markdown in a `show()` block, images and PDFs in the OS viewer. [`open.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/open.lua)
 
 ## OpenSpec
 
@@ -80,7 +80,7 @@ One `#openspec` prompt with args (`explore`, `propose`, `apply`, `verify`, `arch
 
 ## Project config
 
-A per-project `tuse.lua` on top of `require("global")`, with `hide_history` and `scope_models`. [`project.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/project.lua)
+A per-project `tuse.lua` on top of `require("global")`, with `history.hide` and a short `models` list. [`project.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/project.lua)
 
 ## Compaction
 

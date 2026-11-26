@@ -85,7 +85,7 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn prefixes(&mut self) -> (Line, Line) {
-        let q = Style::fg(self.p.dim);
+        let q = Style::fg(self.p.quote);
         let quote = QUOTE_PREFIX.repeat(self.quote);
         let mut first = vec![span(quote.clone(), q)];
         let mut rest = first.clone();
@@ -93,7 +93,7 @@ impl Renderer<'_> {
             let marker = self.item_first.take();
             let pad = self.indent() + &" ".repeat(self.marker_width());
             match marker {
-                Some(m) => first.push(span(self.indent() + &m, Style::fg(self.p.accent))),
+                Some(m) => first.push(span(self.indent() + &m, Style::fg(self.p.list))),
                 None => first.push(span(pad.clone(), Style::default())),
             }
             rest.push(span(pad, Style::default()));
@@ -151,7 +151,11 @@ impl Renderer<'_> {
             Event::Text(t) => self.text(&t),
             Event::Code(t) => {
                 let st = self.style();
-                let fg = if st.link.is_some() { st.fg } else { self.p.ok };
+                let fg = if st.link.is_some() {
+                    st.fg
+                } else {
+                    self.p.inline_code
+                };
                 self.push_text(&t, Style { fg, ..st });
             }
             Event::SoftBreak => self.text(" "),
@@ -161,7 +165,7 @@ impl Renderer<'_> {
                 let w = self.width.min(40);
                 self.out.push(MessageRow::decoration(vec![span(
                     RULE_CHAR.repeat(w),
-                    Style::fg(self.p.dim),
+                    Style::fg(self.p.border),
                 )]));
                 self.out.push(MessageRow::default());
             }
@@ -175,7 +179,7 @@ impl Renderer<'_> {
         match tag {
             Tag::Heading { .. } => {
                 self.flush();
-                self.push_style(|_| Style::fg(self.p.info).bold());
+                self.push_style(|_| Style::fg(self.p.heading).bold());
             }
             Tag::Emphasis => self.push_style(|s| s.italic()),
             Tag::Strong => self.push_style(|s| s.bold()),

@@ -113,7 +113,7 @@ impl App {
     }
 
     fn open_history(&mut self) {
-        let hide = self.session.config().settings.ui.hide_history.clone();
+        let hide = self.session.config().history.hide.clone();
         let mut items = self.session.history();
         if !hide.is_empty() {
             items.retain(|it| !hide.iter().any(|h| h == it.role));
@@ -286,13 +286,17 @@ impl App {
     pub fn open_models(&mut self) {
         let config = self.session.config();
         let (current, _) = self.session.model();
-        let mut names = self.session.available_models();
-        let scope = &config.settings.ui.scope_models;
-        names.retain(|n| tuse_config::scope_matches(scope, n));
-        if !names.contains(&current) {
-            names.insert(0, current.clone());
-        }
+        let mut names = if config.models.is_empty() {
+            let mut names = self.session.available_models();
+            if !names.contains(&current) {
+                names.insert(0, current.clone());
+            }
+            names
+        } else {
+            config.models.iter().map(|m| m.name.clone()).collect()
+        };
         names.sort();
+        names.dedup();
         let items: Vec<Item> = names
             .iter()
             .map(|n| {

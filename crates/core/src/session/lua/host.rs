@@ -152,6 +152,8 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     )?;
     g.set("set_session", lua.create_function(set_session)?)?;
     g.set("session", lua.create_function(|lua, ()| lua_session(lua))?)?;
+    g.set("fork", lua.create_function(fork)?)?;
+    g.set("resume", lua.create_function(resume)?)?;
     install_tasks(lua)?;
     install_ui(lua)?;
     install_llm(lua)?;
@@ -165,6 +167,8 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
         "docs",
         "set_session",
         "session",
+        "fork",
+        "resume",
         "task_get",
         "task_stop",
         "task_list",
@@ -579,6 +583,22 @@ fn set_session(lua: &Lua, table: Table) -> mlua::Result<()> {
         }
     }
     session(lua)?.set_session(update).map_err(err)
+}
+
+fn fork(lua: &Lua, position: i64) -> mlua::Result<()> {
+    let index = usize::try_from(position)
+        .ok()
+        .and_then(|n| n.checked_sub(1))
+        .ok_or_else(|| mlua::Error::runtime("fork position must be >= 1"))?;
+    session(lua)?
+        .request_switch(crate::event::Switch::Fork(index))
+        .map_err(err)
+}
+
+fn resume(lua: &Lua, id: String) -> mlua::Result<()> {
+    session(lua)?
+        .request_switch(crate::event::Switch::Resume(id))
+        .map_err(err)
 }
 
 fn dense(t: &Table, name: &str) -> mlua::Result<Vec<Value>> {

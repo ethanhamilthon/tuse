@@ -14,7 +14,7 @@ pub use convo::input::{FILE_LIMIT, Refs, build as build_input};
 pub use convo::record::{FileDiff, Record, UserInput};
 pub use convo::usage::Stats;
 pub use docs::docs;
-pub use event::{Event, InputId, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
+pub use event::{Event, InputId, Switch, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 pub use id::elapsed_since;
 pub use mode::{Mode, Options, Start};
 pub use session::hooks::lanes::EVENTS;

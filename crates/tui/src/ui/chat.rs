@@ -205,7 +205,7 @@ impl Chat {
                     lines
                 }
                 (Entry::Reasoning(t), Some((_, s)))
-                    if p.ui.reasoning_line < 0 && !t.trim().is_empty() =>
+                    if p.ui.lines.reasoning < 0 && !t.trim().is_empty() =>
                 {
                     decorations(stream::reasoning(&mut s.decoration, t, width, p))
                 }
@@ -244,9 +244,11 @@ impl Chat {
     }
 
     pub fn total(&mut self, width: usize, p: &Palette) -> usize {
-        let gap = p.ui.message_gap as usize;
-        let mut n = 0;
-        let mut parts: usize = 0;
+        let mut parts: Vec<(bool, usize)> = vec![];
+        for i in 0..self.entries.len() {
+            let message = is_message(&self.entries[i].0);
+            parts.push((message, self.rows(i, width, p).len()));
+        }
         for i in 0..self.pinned.len() {
             let (_, text, cache) = &mut self.pinned[i];
             if cache.as_ref().is_none_or(|(w, _)| *w != width) {
@@ -255,20 +257,15 @@ impl Chat {
                     decorations(crate::kit::rich::render::ui_markdown(text, width, p)),
                 ));
             }
-            let len = cache.as_ref().unwrap().1.len();
-            if len > 0 {
-                n += len;
-                parts += 1;
-            }
+            parts.push((false, cache.as_ref().unwrap().1.len()));
         }
-        for i in 0..self.entries.len() {
-            let len = self.rows(i, width, p).len();
-            if len > 0 {
-                n += len;
-                parts += 1;
-            }
+        let mut n = 0;
+        let mut above: Option<bool> = None;
+        for (message, len) in parts.into_iter().filter(|(_, len)| *len > 0) {
+            n += len + above.map_or(0, |a| gap_between(p, a, message));
+            above = Some(message);
         }
-        n + gap * parts.saturating_sub(1)
+        n
     }
 
     pub fn viewport(
@@ -278,9 +275,9 @@ impl Chat {
         scroll: usize,
         height: usize,
     ) -> (Vec<ChatRow>, usize) {
-        let gap = p.ui.message_gap as usize;
         let need = scroll + height;
         let mut rev: Vec<ChatRow> = Vec::with_capacity(need);
+        let mut below: Option<bool> = None;
         for i in (0..self.pinned.len()).rev() {
             if rev.len() >= need {
                 break;
@@ -292,15 +289,25 @@ impl Chat {
                     decorations(crate::kit::rich::render::ui_markdown(text, width, p)),
                 ));
             }
-            push_rev(&mut rev, &cache.as_ref().unwrap().1, 0, need, gap);
+            let lines = &cache.as_ref().unwrap().1;
+            let gap = below.map_or(0, |b| gap_between(p, b, false));
+            push_rev(&mut rev, lines, 0, need, gap);
+            if !lines.is_empty() {
+                below = Some(false);
+            }
         }
         for i in (0..self.entries.len()).rev() {
             if rev.len() >= need {
                 break;
             }
             let id = self.entries[i].2;
+            let message = is_message(&self.entries[i].0);
             let rows = self.rows(i, width, p);
+            let gap = below.map_or(0, |b| gap_between(p, b, message));
             push_rev(&mut rev, rows, id, need, gap);
+            if !rows.is_empty() {
+                below = Some(message);
+            }
         }
         let clamped = scroll.min(rev.len().saturating_sub(height));
         let end = rev.len().min(clamped + height);
@@ -319,6 +326,18 @@ impl Chat {
         let (rows, clamped) = self.viewport(width, p, scroll, height);
         (rows.into_iter().map(|row| row.line).collect(), clamped)
     }
+}
+
+fn is_message(e: &Entry) -> bool {
+    matches!(e, Entry::User { .. } | Entry::Assistant(_))
+}
+
+fn gap_between(p: &Palette, a: bool, b: bool) -> usize {
+    usize::from(if a || b {
+        p.ui.space.messages
+    } else {
+        p.ui.space.steps
+    })
 }
 
 fn decorations(lines: Vec<Line>) -> Vec<MessageRow> {
@@ -546,26 +565,37 @@ mod tests {
         assert_eq!(app.chat.len(), n + 1);
         assert!(matches!(&app.chat.entries[n].0, Entry::Tool { input, .. } if input == "1"));
         app.chat.tick = 1;
-        assert_eq!(app.chat.lines(n, 40, &app.palette)[0][0].text, "✧ ");
+        assert!(
+            app.chat.lines(n, 40, &app.palette)[0][0]
+                .text
+                .starts_with("✧ ")
+        );
         app.handle_event(Event::ToolEnd {
             id: "id".into(),
             output: "1".into(),
             code: Some(0),
             diffs: vec![],
         });
-        assert_eq!(app.chat.lines(n, 40, &app.palette)[0][0].text, "* ");
+        assert!(
+            app.chat.lines(n, 40, &app.palette)[0][0]
+                .text
+                .starts_with("* ")
+        );
         crate::ui::app::cleanup(app);
     }
 
     #[test]
     fn restored_chat_aligns_all_entry_types_and_fits_narrow_widths() {
         use crate::kit::text::{line_width, width};
-        let settings = tuse_config::UiSettings {
-            reasoning_line: -1,
-            diff_line: -1,
+        let settings = tuse_config::Ui {
+            lines: tuse_config::Lines {
+                reasoning: -1,
+                diff: -1,
+                ..Default::default()
+            },
             ..Default::default()
         };
-        let p = Palette::new(&Default::default(), &settings);
+        let p = Palette::new(&settings);
         let records = [
             Record::User {
                 text: "first\nsecond".into(),
@@ -653,9 +683,29 @@ mod tests {
     }
 
     #[test]
+    fn steps_and_messages_have_their_own_gaps() {
+        let total = |steps: u16, messages: u16| {
+            let mut p = Palette::new(&Default::default());
+            p.ui.space.steps = steps;
+            p.ui.space.messages = messages;
+            let mut c = Chat::default();
+            c.push(Entry::Notice("a".into()));
+            c.push(Entry::Notice("b".into()));
+            c.push(Entry::Assistant("c".into()));
+            let total = c.total(40, &p);
+            assert_eq!(c.window(40, &p, 0, 100).0.len(), total);
+            total
+        };
+        let base = total(0, 0);
+        assert_eq!(total(3, 0), base + 3);
+        assert_eq!(total(0, 2), base + 2);
+    }
+
+    #[test]
     fn window_slices_and_invalidate_clears_cache() {
-        let mut p = Palette::new(&Default::default(), &Default::default());
-        p.ui.message_gap = 4;
+        let mut p = Palette::new(&Default::default());
+        p.ui.space.steps = 4;
+        p.ui.space.messages = 4;
         let mut c = Chat::default();
         c.push(Entry::Notice("one".into()));
         c.push(Entry::Notice("two".into()));
@@ -668,7 +718,7 @@ mod tests {
         c.push(Entry::Assistant("a\n\nb\n\nc".into()));
         c.push(Entry::Reasoning(String::new()));
         c.push(Entry::Error("e".into()));
-        let gap = p.ui.message_gap as usize;
+        let gap = p.ui.space.steps as usize;
         let mut all: Vec<Line> = vec![];
         for (e, _, _) in &c.entries {
             let lines = crate::kit::rich::render::render(e, 40, &p);
@@ -698,7 +748,7 @@ mod tests {
     #[test]
     #[ignore]
     fn bench_stream() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         let block = "## Section\n\nSome **bold** text with `code` and a [link](x). More words here to wrap around.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n- one\n- two\n\n";
         let full = block.repeat(30000 / block.len() + 1);
         let mut c = Chat::default();
@@ -722,7 +772,7 @@ mod tests {
     #[test]
     #[ignore]
     fn bench_resize() {
-        let p = Palette::new(&Default::default(), &Default::default());
+        let p = Palette::new(&Default::default());
         let mut c = Chat::default();
         for i in 0..2000 {
             c.push(Entry::User {

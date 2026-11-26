@@ -6,6 +6,7 @@ pub(crate) mod launch;
 pub(crate) mod lua;
 pub(crate) mod meta;
 pub(crate) mod state;
+pub(crate) mod switch;
 pub(crate) mod turn;
 pub(crate) mod ui;
 pub(crate) mod view;
@@ -59,6 +60,7 @@ pub(crate) struct State {
     pub activity: Activity,
     pub cache: Option<Arc<ReadCache>>,
     pub pending_history: Option<Vec<Record>>,
+    pub pending_switch: Option<crate::event::Switch>,
     pub tool_step: bool,
     pub busy: bool,
     pub generation: u64,

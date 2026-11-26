@@ -76,7 +76,7 @@ fn require_session_validation_and_reload_rollback() {
         assert(require(dir .. '/lib/file.lua') == 'lib file')
         return {
             systems = { 'first', s.mode },
-            settings = { ui = { pad_x = 3 } },
+            ui = { space = { padding = 3 } },
             prompts = { shared = 'kept', rex = rex.tag },
             functions = {
                 from_global = function()
@@ -85,7 +85,7 @@ fn require_session_validation_and_reload_rollback() {
                     return require('rex').tag
                 end,
             },
-            commands = { ping = function() require('tuse').show('p', require('rex').tag, false) end },
+            commands = { ping = { run = function() require('tuse').show('p', require('rex').tag, false) end } },
         }
     "#,
     )
@@ -104,7 +104,7 @@ fn require_session_validation_and_reload_rollback() {
             headers = { ['X-Tenant'] = '$CUSTOM_USER_VAR' },
         } }
         g.systems[#g.systems + 1] = 'last'
-        g.settings.ui.scroll_step = 5
+        g.ui.space.steps = 5
         g.prompts.local_wins = 'from project'
         return g
     "#,
@@ -135,7 +135,7 @@ fn require_session_validation_and_reload_rollback() {
                 .unwrap()
                 .contains("local-secret")
         );
-        assert_eq!((cfg.settings.ui.pad_x, cfg.settings.ui.scroll_step), (3, 5));
+        assert_eq!((cfg.ui.space.padding, cfg.ui.space.steps), (3, 5));
         assert_eq!(cfg.prompts["local_wins"].body, "from project");
         assert_eq!(cfg.prompts["rex"].body, "rex-v1");
         if mode == Mode::Tui {

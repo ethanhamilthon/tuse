@@ -62,7 +62,7 @@ How many lines of code, output, diffs, and reasoning appear is set by `ui.lines`
 
 - `Enter` sends the message, or runs an exact `/command`. `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` inserts a newline.
 - `#` opens a picker of your configured `prompts`. The picked `#name` is sent with the prompt body attached. A prompt with `args` then opens a picker of its args, and a space after the prompt opens it again. The result is one atom such as `#openspec propose`, drawn in the accent color.
-- `@` opens a file picker for the session folder. `@dir/q` browses `dir/`, and `@/` or `@~/` go outside the project. `Tab` completes a folder or attaches a file. `Enter` attaches the highlighted file or folder.
+- `@` opens a file picker for the session folder. It matches any part of the file or folder name, ignoring case. Prefix matches come first, then other matches. Each group is newest first by modification time (creation time if unavailable). With no query, the newest entries come first, and older entries are dropped first in large folders. `@dir/q` browses `dir/`, and `@/` or `@~/` go outside the project. `Tab` completes a folder or attaches a file. `Enter` attaches the highlighted file or folder.
 - `Ctrl+V`/`Cmd+V` pastes an image from the clipboard as `[Image #N]` (saved under `~/.tuse/<id>/images/`), or pastes text otherwise.
 
 Picked prompts, files, and images are atoms: arrows and Backspace treat each one as a single unit. Typing `#name` or `@path` by hand is plain text. The model receives the attachments in a hidden block after your text:
@@ -103,11 +103,11 @@ Text files send their first 1,024 bytes (`truncated="true" size="…"` when long
 | `Ctrl+U` / `Ctrl+K` | Delete to start / end of line. |
 | `Esc` | Close, or stop everything (see above). |
 
-Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text within the draft or within one user or agent message at a time. Lua tool blocks, events, and other UI text are not selectable. Copying with `Ctrl+C` or `Cmd+C` leaves out visual wraps and layout padding but preserves intentional line breaks. Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `settings.open` handler from config (extension, mask, `*`, `@dir`, or `@url`) or the OS opener.
+Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text within one target at a time: the draft, a user or agent message, a `show()` block (pinned or not), a `pick` or `ask` result, or the open text panel. Reasoning, Lua tool blocks, events, and built-in pickers are not selectable. Copying with `Ctrl+C` or `Cmd+C` leaves out visual wraps and layout padding but preserves intentional line breaks. Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `settings.open` handler from config (extension, mask, `*`, `@dir`, or `@url`) or the OS opener.
 
 ## Slash commands
 
-Type `/` to get a picker. Pickers filter by their text, ignoring case, and show it in aligned columns.
+Type `/` to get a picker. The `/` and `#` pickers and their argument pickers match the start of the name, ignoring case. They do not search descriptions or the `/` and `#` markers. Pickers show aligned columns; `/history`, `/resume`, `/fork`, `/models`, and `/tasks` search the whole row.
 
 - `/new` starts a fresh session in the current folder.
 - `/resume` picks another titled session from this folder, newest first.

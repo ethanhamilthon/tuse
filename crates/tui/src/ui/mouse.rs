@@ -452,13 +452,6 @@ mod tests {
             diffs: vec![],
         });
         app.chat.push(Entry::Notice("event".into()));
-        app.chat.push(Entry::UiResult {
-            is_picker: true,
-            prompt: "picker".into(),
-            value: "result".into(),
-        });
-        app.chat
-            .set_markdown("card".into(), "show".into(), true, false);
         app.editor.insert("draft\n  first line\nlast line\n");
         app.palette.ui.lines.input = 2;
         app.panel = Some(crate::ui::panel::Panel::new("overlay"));
@@ -497,6 +490,73 @@ mod tests {
         let area = app.input_area.unwrap();
         drag(&mut app, (area.row, area.col + 5), user);
         assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), "hello");
+        crate::ui::app::cleanup(app);
+    }
+
+    #[test]
+    fn show_blocks_copy_without_markers_padding_or_visual_wraps() {
+        use crate::kit::entry::Entry;
+        let mut app = crate::ui::app::test_app("show-selection");
+        app.palette.ui.space.padding = 2;
+        app.chat.push(Entry::Assistant("message".into()));
+        let text = "line one has enough words to wrap here\n\nline two";
+        for pin in [false, true] {
+            let show = |text: &str| tuse_core::Event::UiMarkdown {
+                name: "report".into(),
+                text: text.into(),
+                pin,
+                removed: false,
+            };
+            app.handle_event(show(text));
+            app.compose(28, 25);
+            let id = app.chat.markdown_id("report").unwrap();
+            let mut points = app.chat_hits.iter().enumerate().filter_map(|(y, hit)| {
+                let h = hit.as_ref().filter(|h| h.id == id && h.is_text())?;
+                Some(((y, app.chat_pad + h.start()), (y, app.chat_pad + h.end())))
+            });
+            let start = points.next().unwrap().0;
+            let end = points.next_back().unwrap().1;
+            assert!(end.0 - start.0 > 2);
+            drag(&mut app, (start.0, start.1 - 1), end);
+            assert!(app.selection.message.is_none());
+            drag(&mut app, (end.0, end.1 + 1), start);
+            assert!(app.selection.message.is_none());
+            let (msg, _) = chat_bounds(&app);
+            drag(&mut app, end, msg);
+            assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), text);
+            drag(&mut app, msg, end);
+            assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), "message");
+            drag(&mut app, start, end);
+            assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), text);
+            app.handle_event(show("updated"));
+            assert!(app.selection.message.is_none());
+            app.compose(28, 25);
+            assert_eq!(app.chat.markdown_id("report"), Some(id));
+            let (_, end) = chat_bounds(&app);
+            drag(&mut app, (end.0, start.1), end);
+            assert_eq!(clipboard(&mut app, KeyModifiers::CONTROL), "updated");
+        }
+        crate::ui::app::cleanup(app);
+    }
+
+    #[test]
+    fn lua_results_copy_the_displayed_question_and_plain_answer() {
+        let mut app = crate::ui::app::test_app("result-selection");
+        for is_picker in [true, false] {
+            app.chat = Default::default();
+            app.chat.push(crate::kit::entry::Entry::UiResult {
+                is_picker,
+                prompt: "**Question**".into(),
+                value: "**long plain answer goes here**\nsecond line".into(),
+            });
+            app.compose(24, 20);
+            let (start, end) = chat_bounds(&app);
+            drag(&mut app, start, end);
+            assert_eq!(
+                clipboard(&mut app, KeyModifiers::CONTROL),
+                "Question\n**long plain answer goes here**\nsecond line"
+            );
+        }
         crate::ui::app::cleanup(app);
     }
 

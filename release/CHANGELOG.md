@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.1
+
+- Select and copy `show()` blocks and Lua `pick()` and `ask()` results directly in the chat, without markers or visual wraps.
+- Command, prompt, and argument pickers match name prefixes only. The `@` picker lists prefix matches first and keeps the newest files and folders.
+
 ## 0.13.0
 
 - **Breaking: sessions are reset.** The history format changed, so saved sessions and history are dropped on first start. Providers and the default model stay.

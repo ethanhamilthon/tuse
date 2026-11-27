@@ -78,6 +78,14 @@ pub fn message(e: &Entry, width: usize, p: &Palette) -> Vec<MessageRow> {
             crate::kit::rich::markdown::rows(text, room, p, true),
             Style::default(),
         ),
+        Entry::Markdown { text, .. } => return ui_markdown(text, width, p),
+        Entry::UiResult {
+            is_picker,
+            prompt,
+            value,
+        } => {
+            return ui_result(*is_picker, prompt, value, width, p);
+        }
         _ => unreachable!(),
     };
     for row in &mut rows {
@@ -94,7 +102,10 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
     let pad = " ".repeat(chat_inset(width));
     let marker = |prefix| chat_marker(prefix, width);
     let lines = match e {
-        Entry::User { .. } | Entry::Assistant(_) => {
+        Entry::User { .. }
+        | Entry::Assistant(_)
+        | Entry::Markdown { .. }
+        | Entry::UiResult { .. } => {
             return message(e, width, p)
                 .into_iter()
                 .map(|row| row.line)
@@ -154,27 +165,6 @@ pub fn render(e: &Entry, width: usize, p: &Palette) -> Vec<Line> {
                 &pad,
             )
         }
-        Entry::Markdown { text, .. } => ui_markdown(text, width, p),
-        Entry::UiResult {
-            is_picker,
-            prompt,
-            value,
-        } => marked(&marker(UI_RESULT_PREFIX), width, p, |room| {
-            let mut out = if *is_picker && prompt == "Picker" {
-                plain(prompt, room, Style::fg(p.muted), "", "")
-            } else {
-                crate::kit::rich::markdown::render_with_links(prompt, room, p, false)
-            };
-            if out.is_empty() {
-                out.push(vec![]);
-            }
-            out
-        })
-        .into_iter()
-        .chain(marked(&marker(INPUT_PREFIX), width, p, |room| {
-            plain(value, room, Style::fg(p.fg), "", "")
-        }))
-        .collect(),
     };
     fit_chat(lines, width)
 }
@@ -188,33 +178,69 @@ pub fn fit_chat(mut lines: Vec<Line>, width: usize) -> Vec<Line> {
     lines
 }
 
-pub fn ui_markdown(text: &str, width: usize, p: &Palette) -> Vec<Line> {
-    fit_chat(
-        marked(&chat_marker(UI_MARKDOWN_PREFIX, width), width, p, |room| {
-            crate::kit::rich::markdown::render(text, room, p)
-        }),
-        width,
-    )
+pub fn ui_markdown(text: &str, width: usize, p: &Palette) -> Vec<MessageRow> {
+    marked(UI_MARKDOWN_PREFIX, width, p, |room| {
+        crate::kit::rich::markdown::rows(text, room, p, true)
+    })
+}
+
+fn ui_result(
+    is_picker: bool,
+    prompt: &str,
+    value: &str,
+    width: usize,
+    p: &Palette,
+) -> Vec<MessageRow> {
+    let plain_rows = |text: &str, room, st| {
+        crate::kit::text::clean(text)
+            .split('\n')
+            .flat_map(|line| wrap_message(&vec![span(line, st)], room, &vec![], &vec![], 0))
+            .collect()
+    };
+    let mut rows = marked(UI_RESULT_PREFIX, width, p, |room| {
+        let mut rows = if is_picker && prompt == "Picker" {
+            plain_rows(prompt, room, Style::fg(p.muted))
+        } else {
+            crate::kit::rich::markdown::rows(prompt, room, p, false)
+        };
+        if rows.is_empty() {
+            rows.push(MessageRow::decoration(vec![]));
+        }
+        rows
+    });
+    rows.extend(marked(INPUT_PREFIX, width, p, |room| {
+        plain_rows(value, room, Style::fg(p.fg))
+    }));
+    rows
 }
 
 fn marked(
-    marker: &str,
+    prefix: &str,
     width: usize,
     p: &Palette,
-    render: impl FnOnce(usize) -> Vec<Line>,
-) -> Vec<Line> {
-    let indent = crate::kit::text::width(marker);
-    let mut lines = render(width.saturating_sub(indent));
-    if !marker.is_empty() {
-        for (i, line) in lines.iter_mut().enumerate() {
+    render: impl FnOnce(usize) -> Vec<MessageRow>,
+) -> Vec<MessageRow> {
+    let marker = chat_marker(prefix, width);
+    let indent = crate::kit::text::width(&marker);
+    let room = width - indent;
+    let mut rows = render(room);
+    for (i, row) in rows.iter_mut().enumerate() {
+        if line_width(&row.line) > room {
+            row.line = clip_line(&row.line, room, "");
+        }
+        if let Some(copy) = &mut row.copy {
+            copy.place(indent, line_width(&row.line));
+        }
+        if indent > 0 {
             if i == 0 {
-                line.insert(0, span(marker, Style::fg(p.icons)));
-            } else if !line.is_empty() {
-                line.insert(0, span(" ".repeat(indent), Style::default()));
+                row.line.insert(0, span(&marker, Style::fg(p.icons)));
+            } else if !row.line.is_empty() {
+                row.line
+                    .insert(0, span(" ".repeat(indent), Style::default()));
             }
         }
     }
-    lines
+    rows
 }
 
 pub fn framed(rows: Vec<Line>, w: usize, p: &Palette) -> Vec<Line> {
@@ -264,7 +290,10 @@ mod tests {
                     .any(|s| s.text == "**answer**" && !s.style.bold)
             );
         }
-        let lines = ui_markdown("**one two three**", 9, &p);
+        let lines: Vec<_> = ui_markdown("**one two three**", 9, &p)
+            .into_iter()
+            .map(|row| row.line)
+            .collect();
         assert_eq!(lines[0][0], span("◆ ", Style::fg(p.accent)));
         assert!(lines[0].iter().any(|s| s.text == "one two" && s.style.bold));
         assert_eq!(lines[1][0].text, "  ");

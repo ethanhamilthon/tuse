@@ -1,5 +1,7 @@
 use crate::kit::entry::Entry;
-use crate::kit::rich::render::{chat_inset, message, message_width, pad_message, render};
+use crate::kit::rich::render::{
+    chat_inset, message, message_width, pad_message, render, ui_markdown,
+};
 use crate::kit::selection::HitRow;
 use crate::kit::style::Palette;
 use crate::kit::text::{Line, MessageRow};
@@ -25,7 +27,7 @@ const STREAMS: usize = 8;
 #[derive(Default)]
 pub struct Chat {
     pub(crate) entries: Vec<(Entry, Cache, u64)>,
-    pub(crate) pinned: Vec<(String, String, Cache)>,
+    pub(crate) pinned: Vec<(String, String, Cache, u64)>,
     pub(crate) tick: usize,
     streams: Vec<(usize, Stream)>,
 }
@@ -184,7 +186,7 @@ impl Chat {
         for (_, cache, _) in self.entries.iter_mut() {
             *cache = None;
         }
-        for (_, _, cache) in self.pinned.iter_mut() {
+        for (_, _, cache, _) in self.pinned.iter_mut() {
             *cache = None;
         }
     }
@@ -215,7 +217,13 @@ impl Chat {
                     },
                     Some((_, s)),
                 ) => decorations(stream::tool(&mut s.decoration, input, width, p)),
-                (Entry::User { .. } | Entry::Assistant(_), _) => message(e, width, p),
+                (
+                    Entry::User { .. }
+                    | Entry::Assistant(_)
+                    | Entry::Markdown { .. }
+                    | Entry::UiResult { .. },
+                    _,
+                ) => message(e, width, p),
                 (e, _) => decorations(render(e, width, p)),
             };
             *cache = Some((width, lines));
@@ -247,13 +255,9 @@ impl Chat {
             let message = is_message(&self.entries[i].0);
             parts.push((message, self.rows(i, width, p).len()));
         }
-        for i in 0..self.pinned.len() {
-            let (_, text, cache) = &mut self.pinned[i];
+        for (_, text, cache, _) in &mut self.pinned {
             if cache.as_ref().is_none_or(|(w, _)| *w != width) {
-                *cache = Some((
-                    width,
-                    decorations(crate::kit::rich::render::ui_markdown(text, width, p)),
-                ));
+                *cache = Some((width, ui_markdown(text, width, p)));
             }
             parts.push((false, cache.as_ref().unwrap().1.len()));
         }
@@ -280,16 +284,13 @@ impl Chat {
             if rev.len() >= need {
                 break;
             }
-            let (_, text, cache) = &mut self.pinned[i];
+            let (_, text, cache, id) = &mut self.pinned[i];
             if cache.as_ref().is_none_or(|(w, _)| *w != width) {
-                *cache = Some((
-                    width,
-                    decorations(crate::kit::rich::render::ui_markdown(text, width, p)),
-                ));
+                *cache = Some((width, ui_markdown(text, width, p)));
             }
             let lines = &cache.as_ref().unwrap().1;
             let gap = below.map_or(0, |b| gap_between(p, b, false));
-            push_rev(&mut rev, lines, 0, need, gap);
+            push_rev(&mut rev, lines, *id, need, gap);
             if !lines.is_empty() {
                 below = Some(false);
             }
@@ -373,6 +374,18 @@ impl Chat {
         chat
     }
 
+    pub(crate) fn markdown_id(&self, name: &str) -> Option<u64> {
+        self.pinned
+            .iter()
+            .find(|(n, _, _, _)| n == name)
+            .map(|slot| slot.3)
+            .or_else(|| {
+                self.entries.iter().find_map(|(entry, _, id)| {
+                    matches!(entry, Entry::Markdown { name: n, .. } if n == name).then_some(*id)
+                })
+            })
+    }
+
     pub fn set_markdown(
         &mut self,
         name: String,
@@ -389,20 +402,21 @@ impl Chat {
             Some(pos)
         };
         if removed {
-            self.pinned.retain(|(n, _, _)| n != &name);
+            self.pinned.retain(|(n, _, _, _)| n != &name);
             return remove_entry(self, &name);
         }
         if pin {
             let shifted = remove_entry(self, &name);
-            if let Some(slot) = self.pinned.iter_mut().find(|(n, _, _)| n == &name) {
+            if let Some(slot) = self.pinned.iter_mut().find(|(n, _, _, _)| n == &name) {
                 slot.1 = text;
                 slot.2 = None;
             } else {
-                self.pinned.push((name, text, None));
+                self.pinned
+                    .push((name, text, None, NEXT_ENTRY.fetch_add(1, Ordering::Relaxed)));
             }
             return shifted;
         }
-        self.pinned.retain(|(n, _, _)| n != &name);
+        self.pinned.retain(|(n, _, _, _)| n != &name);
         if let Some(pos) = self
             .entries
             .iter()

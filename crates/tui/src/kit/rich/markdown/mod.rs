@@ -3,12 +3,9 @@ use crate::kit::style::{BULLET, LIST_INDENT, Palette, QUOTE_PREFIX, RULE_CHAR, S
 use crate::kit::text::{Line, MessageRow, line_width, span, wrap_message};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
+#[cfg(test)]
 pub fn render(text: &str, width: usize, p: &Palette) -> Vec<Line> {
-    render_with_links(text, width, p, true)
-}
-
-pub fn render_with_links(text: &str, width: usize, p: &Palette, links: bool) -> Vec<Line> {
-    rows(text, width, p, links)
+    rows(text, width, p, true)
         .into_iter()
         .map(|r| r.line)
         .collect()

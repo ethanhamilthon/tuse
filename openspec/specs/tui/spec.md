@@ -267,8 +267,39 @@ When `ui.input` is `bar` and the viewport fits, the composer SHALL draw each edi
 - **WHEN** the terminal is too small for the bar
 - **THEN** the lines composer is drawn and the configured style is unchanged
 
+### Requirement: Token picker matching
+The `/` and `#` pickers, and the arg pickers of a command or prompt, SHALL list only the items whose name starts with the typed text, ignoring case. The `/` or `#` mark and the description MUST NOT be searched. An empty query SHALL list every item. Items keep the order of the list. The `@` picker SHALL list the files and folders whose name contains the typed text, ignoring case, with the names that start with it first. Inside each group, and for an empty query, the `@` picker SHALL order items by the last modified time, newest first, using the created time when the modified time is missing. The directory listing SHALL be sorted before the picker size cap, so the newest entries are kept.
+
+#### Scenario: Prompt prefix
+- **WHEN** the prompts are `imagegen`, `openspec`, `release`, `srt`, and `use-figma` and the user types `#r`
+- **THEN** the picker lists only `#release`
+
+#### Scenario: Description is not searched
+- **WHEN** the user types `/r` and `/config` has the description `show the resolved config`
+- **THEN** `/config` is not listed, and `/resume`, `/reload` are
+
+#### Scenario: Case is ignored
+- **WHEN** the user types `#REL`
+- **THEN** the picker lists `#release`
+
+#### Scenario: Arg prefix
+- **WHEN** the user types `#openspec ` followed by `pr`
+- **THEN** the picker lists only `propose`
+
+#### Scenario: File substring with prefix first
+- **WHEN** the folder holds `main.rs` (older), `domain.rs` (newest), and `mod.rs`, and the user types `@ma`
+- **THEN** the picker lists `main.rs` first, then `domain.rs`
+
+#### Scenario: Newest files first
+- **WHEN** the user types `@` and `old.txt` was modified before `new.txt` and the folder `docs/`
+- **THEN** the picker lists the most recently modified entry first
+
+#### Scenario: Large folder
+- **WHEN** a folder holds more entries than the picker cap
+- **THEN** the picker keeps the newest entries, not the first by name
+
 ### Requirement: Picker columns are aligned
-A picker list SHALL draw each item as columns. Every cell of a column SHALL start at the same display column on every row, padded to the widest cell of that column among all items of the picker, with two spaces between columns. The last column is free text clipped at the row end. A column wider than half of the row width SHALL be clipped with the ellipsis so the next column keeps its room. `/history` rows SHALL have the columns index, role, and summary. Items with a label and a detail SHALL align the detail as the second column. Search SHALL match the cells joined by a space.
+A picker list SHALL draw each item as columns. Every cell of a column SHALL start at the same display column on every row, padded to the widest cell of that column among all items of the picker, with two spaces between columns. The last column is free text clipped at the row end. A column wider than half of the row width SHALL be clipped with the ellipsis so the next column keeps its room. `/history` rows SHALL have the columns index, role, and summary. Items with a label and a detail SHALL align the detail as the second column. Search in the `/history`, `/resume`, `/fork`, `/models`, and `/tasks` pickers SHALL match the cells joined by a space. The `/`, `#`, `@`, and arg pickers follow the token picker matching requirement.
 
 #### Scenario: History rows
 - **WHEN** `/history` lists records 0 to 14
@@ -285,6 +316,10 @@ A picker list SHALL draw each item as columns. Every cell of a column SHALL star
 #### Scenario: Narrow terminal
 - **WHEN** the first column is wider than half of the row
 - **THEN** it is clipped with the ellipsis and the second column still starts at one column on every row
+
+#### Scenario: Row search
+- **WHEN** the user types a word that appears only in the summary of a `/history` row
+- **THEN** that row is listed
 
 ### Requirement: Config models are aligned
 The `Models` section of the `/config` panel SHALL pad every model name to the widest name in the section and start the details (`display=…`, `window=…`, `prices=…`) at one column after two spaces. The other sections of `/config` and the `/session` panel keep their current alignment.
@@ -354,7 +389,7 @@ User and agent message rows SHALL reserve two display columns on each side for p
 - **THEN** restored entries use the same text alignment and wrapping as live entries at the same width
 
 ### Requirement: Selection is limited to one text target
-Ctrl+A and Cmd+A SHALL clear any chat or panel selection and select the entire editable input, including draft lines outside the viewport. Mouse selection SHALL be limited to the input, a single user or agent message, or the open panel (`/config`, `/session`, a `/history` entry, task details, and the Lua `pick` and `ask` panels, including their question text and choices). A drag moving outside its starting target SHALL stop at that target's boundary and MUST NOT add text from another target. Starting a new selection SHALL replace the previous one. Prompt atoms in user messages SHALL be selectable as their displayed text. Reasoning, Lua tool blocks, event entries, `show()` blocks, built-in pickers, and layout decorations MUST NOT be selectable. The highlight SHALL match the selected text rather than the whole screen row. Closing a panel or stepping to another entry SHALL clear the panel selection. Scrolling clears the selection.
+Ctrl+A and Cmd+A SHALL clear any chat or panel selection and select the entire editable input, including draft lines outside the viewport. Mouse selection SHALL be limited to the input, a single user or agent message, a single `show()` block (pinned or not), a single `pick` or `ask` result in the chat, or the open panel (`/config`, `/session`, a `/history` entry, task details, and the Lua `pick` and `ask` panels, including their question text and choices). A drag moving outside its starting target SHALL stop at that target's boundary and MUST NOT add text from another target. Starting a new selection SHALL replace the previous one. Prompt atoms in user messages SHALL be selectable as their displayed text. The marker icon and the padding of a `show()` block or a `pick` or `ask` result MUST NOT be selected or copied. Reasoning, Lua tool blocks, event entries, built-in pickers, and layout decorations MUST NOT be selectable. The highlight SHALL match the selected text rather than the whole screen row. Closing a panel or stepping to another entry SHALL clear the panel selection. Scrolling clears the selection.
 
 #### Scenario: Select all with a message selected
 - **WHEN** a chat message is selected and the user presses Ctrl+A or Cmd+A with an editable multiline draft
@@ -392,8 +427,24 @@ Ctrl+A and Cmd+A SHALL clear any chat or panel selection and select the entire e
 - **WHEN** a panel text is selected and the user presses Ctrl+A or Cmd+A
 - **THEN** the panel selection clears and only the entire draft is selected
 
+#### Scenario: Select a show block
+- **WHEN** Lua calls `show("report", "line one\n\nline two")` and the user drags across the block and presses Ctrl+C
+- **THEN** only the block text is highlighted and the clipboard holds `line one\n\nline two`, without the marker icon or padding
+
+#### Scenario: Select a pinned show block
+- **WHEN** a pinned `show()` block sits at the end of the chat and the user drags across it
+- **THEN** its text is highlighted and copies the same way as an unpinned block
+
+#### Scenario: Select a pick result
+- **WHEN** the chat shows the result of `pick(options, title)` and the user drags across it
+- **THEN** the displayed question and answer are highlighted and copy as displayed, without the marker icon
+
+#### Scenario: Drag between a show block and a message
+- **WHEN** the user starts a drag in a `show()` block and moves into an agent message, or starts in the message and moves into the block
+- **THEN** only the range inside the starting target is highlighted
+
 #### Scenario: Drag from non-selectable UI
-- **WHEN** the user starts a selection drag on reasoning, Lua output, an event, a `show()` block, or a built-in picker and moves into a message or panel
+- **WHEN** the user starts a selection drag on reasoning, Lua output, an event, or a built-in picker and moves into a message, a `show()` block, or a panel
 - **THEN** neither that UI text nor the target is selected
 
 ### Requirement: Copy logical text without layout whitespace

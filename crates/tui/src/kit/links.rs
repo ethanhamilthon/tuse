@@ -619,7 +619,10 @@ mod tests {
 
         let path = "deep/folder/name/example.md";
         let text = format!("[doc]({path}) https://example.com");
-        let md_block = crate::kit::rich::render::ui_markdown(&text, 60, &p);
+        let md_block: Vec<_> = crate::kit::rich::render::ui_markdown(&text, 60, &p)
+            .into_iter()
+            .map(|row| row.line)
+            .collect();
         assert!(!scan(&md_block, 0).is_empty());
         let agent = crate::kit::entry::Entry::Assistant(text.clone());
         assert!(!scan(&crate::kit::rich::render::render(&agent, 60, &p), 0).is_empty());

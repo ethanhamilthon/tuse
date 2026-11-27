@@ -41,6 +41,13 @@ impl Item {
         self
     }
 
+    fn match_key(&self, kind: &Kind) -> &str {
+        match kind {
+            Kind::File => self.label.trim_end_matches('/'),
+            _ => &self.value,
+        }
+    }
+
     pub fn cells(&self) -> Vec<String> {
         self.lead
             .iter()
@@ -98,11 +105,30 @@ impl Picker {
             .items
             .iter()
             .enumerate()
-            .filter(|(_, item)| {
-                query.is_empty() || item.cells().join(" ").to_lowercase().contains(&query)
+            .filter_map(|(i, item)| {
+                let matches = if query.is_empty() {
+                    true
+                } else if self.kind.is_token() {
+                    let key = item.match_key(&self.kind).to_lowercase();
+                    if self.kind == Kind::File {
+                        key.contains(&query)
+                    } else {
+                        key.starts_with(&query)
+                    }
+                } else {
+                    item.cells().join(" ").to_lowercase().contains(&query)
+                };
+                matches.then_some(i)
             })
-            .map(|(i, _)| i)
             .collect();
+        if self.kind == Kind::File && !query.is_empty() {
+            self.shown.sort_by_cached_key(|&i| {
+                !self.items[i]
+                    .match_key(&self.kind)
+                    .to_lowercase()
+                    .starts_with(&query)
+            });
+        }
         self.selected = 0;
         self.scroll = 0;
     }
@@ -159,14 +185,57 @@ mod tests {
     use super::*;
 
     #[test]
-    fn filters_by_case_insensitive_substring_in_list_order() {
-        let items = ["Mars One", "Gallery", "mars Two"].map(|s| item(s, "", s));
-        let mut picker = Picker::new(Kind::File, items.into());
-        picker.filter("mArS");
-        assert_eq!(picker.shown, [0, 2]);
-        picker.filter("m One");
-        assert!(picker.shown.is_empty());
+    fn token_pickers_match_name_prefixes_only() {
+        let names = ["imagegen", "openspec", "release", "srt", "use-figma"];
+        let mut prompts = Picker::new(
+            Kind::Prompt,
+            names.map(|n| item(format!("#{n}"), "release", n)).into(),
+        );
+        for q in ["r", "REL"] {
+            prompts.filter(q);
+            assert_eq!(prompts.shown, [2]);
+        }
+        let mut commands = Picker::new(
+            Kind::Command,
+            COMMANDS.map(|(n, d)| item(format!("/{n}"), d, n)).into(),
+        );
+        commands.filter("r");
+        assert_eq!(
+            commands
+                .shown
+                .iter()
+                .map(|&i| commands.items[i].value.as_str())
+                .collect::<Vec<_>>(),
+            ["resume", "reload"]
+        );
+        for kind in [
+            Kind::PromptArg("openspec".into()),
+            Kind::CommandArg("custom".into()),
+        ] {
+            let mut args = Picker::new(
+                kind,
+                ["propose", "repro", "apply"].map(|a| item(a, "", a)).into(),
+            );
+            args.filter("PR");
+            assert_eq!(args.shown, [0]);
+        }
+    }
 
+    #[test]
+    fn file_picker_groups_prefixes_first_without_changing_recency_within_groups() {
+        let items = ["domain.rs", "map.rs", "roman.rs", "main.rs", "mod.rs"];
+        let mut picker = Picker::new(
+            Kind::File,
+            items.map(|n| item(n, "", format!("ma/{n}"))).into(),
+        );
+        picker.filter("");
+        assert_eq!(picker.shown, [0, 1, 2, 3, 4]);
+        picker.filter("MA");
+        assert_eq!(picker.shown, [1, 3, 0, 2]);
+    }
+
+    #[test]
+    fn modal_picker_searches_detail_and_preserves_column_widths() {
         let items = vec![item("a", "needle here", "a"), item("bb", "", "b")];
         let mut picker = Picker::new(Kind::Resume, items);
         let widths = picker.widths.clone();

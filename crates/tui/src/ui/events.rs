@@ -342,6 +342,20 @@ impl App {
                 pin,
                 removed,
             } => {
+                if let Some(id) = self.chat.markdown_id(&name) {
+                    if self.selection.message.is_some_and(|s| s.id == id) {
+                        self.selection.message = None;
+                    }
+                    if matches!(self.selection.gesture, Some(crate::kit::selection::Gesture::Chat { id: selected, .. }) if selected == id)
+                    {
+                        self.selection.gesture = None;
+                    }
+                    for hit in &mut self.chat_hits {
+                        if hit.as_ref().is_some_and(|h| h.id == id) {
+                            *hit = None;
+                        }
+                    }
+                }
                 if let Some(pos) = self.chat.set_markdown(name, text, pin, removed) {
                     for idx in [&mut self.streaming, &mut self.thinking]
                         .into_iter()

@@ -60,3 +60,35 @@ case ":$PATH:" in
   *":$bin_dir:"*) ;;
   *) echo "Add $bin_dir to your PATH." ;;
 esac
+choose_plugins() {
+  printf '\nOptional official plugins (press Enter to skip):\n'
+  for plugin in login themes status rename; do
+    case "$plugin" in
+      login) description='subscription sign-in, limits, and API keys' ;;
+      themes) description='31 color themes' ;;
+      status) description='terminal and multiplexer status' ;;
+      rename) description='automatic session titles and /rename' ;;
+    esac
+    if [ -f "$HOME/.tuse/plugins/$plugin/tuse-plugin.json" ]; then
+      printf '  %s is already installed.\n' "$plugin"
+      continue
+    fi
+    printf '  Install %s (%s)? [y/N] ' "$plugin" "$description"
+    IFS= read -r answer <&3 || return 0
+    case "$answer" in
+      y|Y|yes|YES|Yes)
+        if ! "$bin_dir/tuse" plugins add "$repo/plugins/$plugin"; then
+          printf 'tuse: could not install %s; the Tuse binary is installed.\n' "$plugin" >&2
+        fi
+        ;;
+    esac
+  done
+}
+
+if [ -t 0 ]; then
+  choose_plugins 3<&0
+elif [ -t 1 ]; then
+  if (exec 3</dev/tty) 2>/dev/null; then
+    choose_plugins 3</dev/tty
+  fi
+fi

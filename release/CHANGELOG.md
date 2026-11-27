@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.3
+
+- Added four official, separately installable Lua plugins: `login`, `themes`, `status`, and `rename`. The interactive installer offers each one individually and skips existing plugins.
+- `login` adds `/login`, `/logout`, `/usage`, and `/connect-api`; `themes` adds `/theme` with 31 palettes, including Lavender Mist. `status` reports session titles and activity to supported terminals; `rename` adds automatic session titles and manual `/rename`.
+- Updated the README and configuration examples for the namespaced Lua and plugin APIs.
+
 ## 0.14.2
 
 - Lua `reload(ns)` refreshes one active config namespace in the current session. `reload()` still reloads the full config.

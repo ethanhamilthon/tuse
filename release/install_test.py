@@ -1,10 +1,14 @@
+import errno
 import hashlib
 import os
+import pty
+import select
 import subprocess
 import sys
 import tarfile
 import tempfile
 import threading
+import time
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
@@ -64,6 +68,46 @@ def install(home: Path, url: str, *args):
     )
 
 
+def interactive_install(home: Path, url: str) -> str:
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "TUSE_BIN_DIR": str(home / "bin"),
+        "TUSE_RELEASE_URL": url + "/ok",
+        "TUSE_PLUGINS_URL": url,
+    }
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execve("/bin/sh", ["sh", "-c", 'cat "$1" | sh', "sh", str(INSTALLER)], env)
+    output = bytearray()
+    deadline = time.monotonic() + 15
+    prompts = [b"Install login", b"Install themes", b"Install rename"]
+    answers = iter([b"\n", b"y\n", b"\n"])
+    try:
+        while time.monotonic() < deadline:
+            if not select.select([fd], [], [], max(0, deadline - time.monotonic()))[0]:
+                raise AssertionError(bytes(output))
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError as exc:
+                if exc.errno != errno.EIO:
+                    raise
+                break
+            if not chunk:
+                break
+            output.extend(chunk)
+            if prompts and prompts[0] in output:
+                prompts.pop(0)
+                os.write(fd, next(answers))
+        else:
+            raise AssertionError(bytes(output))
+    finally:
+        os.close(fd)
+        _, status = os.waitpid(pid, 0)
+    assert status == 0 and not prompts, bytes(output)
+    return output.decode()
+
+
 def main() -> None:
     real_bin = Path(os.environ["TUSE_BIN"])
     with tempfile.TemporaryDirectory(prefix="tuse-inst-") as tmp:
@@ -71,12 +115,30 @@ def main() -> None:
         build_release(root / "ok", real_bin)
         build_release(root / "bad-sha", real_bin, bad_sha=True)
         build_release(root / "bad-version", "#!/bin/sh\nexit 2\n")
+        archive = root / "ethanhamilthon/tuse.tar.gz"
+        archive.parent.mkdir()
+        with tarfile.open(archive, "w:gz") as tf:
+            tf.add(ROOT / "plugins", arcname="tuse-fixture/plugins")
         server, url = serve(root)
         try:
             home = root / "fresh"
             result = install(home, f"{url}/ok")
             assert result.returncode == 0 and "Installed tuse " in result.stdout, result
             assert (home / "bin/tuse").is_file() and not (home / ".config").exists()
+
+            assert "Optional official plugins" not in result.stdout
+            assert not (home / ".tuse/plugins").exists()
+
+            interactive = root / "interactive"
+            existing = interactive / ".tuse/plugins/status"
+            existing.mkdir(parents=True)
+            (existing / "tuse-plugin.json").write_text('{"version":"local"}')
+            output = interactive_install(interactive, url)
+            assert "status is already installed" in output, output
+            plugins = existing.parent
+            assert {p.name for p in plugins.iterdir()} == {"status", "themes"}
+            assert (existing / "tuse-plugin.json").read_text() == '{"version":"local"}'
+            assert (plugins / "themes/lavender-mist.lua").is_file()
 
             config = home / ".config/tuse/init.lua"
             config.parent.mkdir(parents=True)

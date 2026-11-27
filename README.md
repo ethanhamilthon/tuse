@@ -1,75 +1,72 @@
 # Tuse
+
 ![Tuse](docs/demo.gif)
 
-The simplest, most powerful AI coding agent for the terminal.
+Tuse is a terminal coding agent you can shape with Lua. Run it as-is, adapt it to a project with `tuse.lua`, or share an entire setup without maintaining a fork. The core is written in Rust; the model uses one Lua tool to work with files, run shell commands, and compose operations.
 
-Tuse is a minimal layer that is all a modern model needs to do real work: files and a shell. Everything else you shape yourself with a small Lua config.
-
-Tuse itself stays tiny and fast. It is written in Rust, so you can run hundreds of instances without thinking about it.
-
-- **Code mode by default.** The agent writes Lua that does many steps at once, instead of calling tools one by one.
-- **No skills, no MCP, no plugins.** Need something? Ask the agent to change its own config, and it just works.
-- **TUI and JSON modes.** A fast full-screen terminal UI, and a JSON-RPC mode if you want to put your own GUI on top.
-- **Under 20k lines of code.** Any agent or person can read, understand, and change Tuse.
-- **Per-project configs.** Drop a `tuse.lua` into a repo and the harness is tuned for that project.
-- **Any model, any provider, any multiplexer.** OpenAI, Anthropic, Gemini, or anything OpenAI-compatible.
+- **Two interfaces:** a full-screen TUI and [JSON-RPC](https://ethanhamilthon.github.io/tuse/json.html) for your own front end, with shared sessions and history.
+- **Bring your own provider:** OpenAI Chat Completions and Responses, Anthropic Messages, Gemini, or a compatible gateway.
+- **Layered Lua configuration:** combine project config, personal defaults, and optional plugins. Add prompts, tools, commands, hooks, or themes, then reload without restarting.
 
 ## Quickstart
 
-Install the binary (macOS and Linux):
+Install on macOS or Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 ```
 
-Connect a provider. The key stays in your environment, and Tuse only stores the `$VAR` reference:
+The installer offers official plugins one at a time when run interactively. Each is optional. Without a terminal it installs only the binary.
+
+If you installed `login`, run `tuse` and use `/login` for subscriptions or `/connect-api` for an API key. You can also connect directly from the shell:
 
 ```sh
-tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai
-tuse connect --base https://api.anthropic.com/v1 --key '$ANTHROPIC_API_KEY' --name anthropic --api anthropic-messages
+tuse connect --name openai --base https://api.openai.com/v1 --api openai-responses --key '$OPENAI_API_KEY'
+tuse connect --name anthropic --base https://api.anthropic.com/v1 --api anthropic-messages --key '$ANTHROPIC_API_KEY'
 ```
 
-Run `tuse` in your project, pick a model with `/models`, and start talking. To customize it for a project, run `tuse init` and edit `./tuse.lua`.
+Pick a model with `/models`, then send your first message. Use `tuse init` to create a project config. To update the binary, run `tuse update` and restart Tuse.
 
-## Subscriptions
+## Official plugins
 
-Tuse does not log in to subscriptions itself, because plans and models change too fast to keep up with.
+| Plugin | What it adds |
+| --- | --- |
+| [`login`](https://github.com/ethanhamilthon/tuse/tree/main/plugins/login) | `/login`, `/logout`, `/usage`, and `/connect-api`. Connect Codex, Claude, Antigravity, Kimi, or Grok via CLIProxyAPI, or OpenCode Go directly. `/usage` shows remaining 5-hour and 7-day quotas when the provider reports them. |
+| [`themes`](https://github.com/ethanhamilthon/tuse/tree/main/plugins/themes) | `/theme` with 31 palettes, including Lavender Mist. Use `/theme lavender-mist` to apply it directly, or `/theme reset` to return to your configured colors. |
+| [`status`](https://github.com/ethanhamilthon/tuse/tree/main/plugins/status) | Session titles and activity in Herdr, Herdr.app, Rex, and cmux, with an OSC 7501 fallback. |
+| [`rename`](https://github.com/ethanhamilthon/tuse/tree/main/plugins/rename) | An optional model-generated title from the first message, plus `/rename` for manual titles. |
 
-We leave that to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI). Install it, sign in, and connect it like any other provider:
+Install any plugin later by name, then reload the running session:
 
 ```sh
-tuse connect --base http://localhost:8317/v1 --key '$CLIPROXY_KEY' --name subs
+tuse plugins add ethanhamilthon/tuse/plugins/themes
+tuse plugins list
+tuse plugins update
 ```
 
-EasyCLIProxyAPI is also a handy desktop client for all your subscriptions.
+Plugins are Lua code that you trust. They load automatically after installation; use the [plugin selector](https://ethanhamilthon.github.io/tuse/config.html#plugins) to exclude them or pass options per project. Installing `login` does not install CLIProxyAPI or sign you in; it offers setup when you choose a subscription that needs it. OpenCode Go uses `OPENCODE_GO_API_KEY`.
 
-## [cmux](https://github.com/ethanhamilthon/tuse/blob/main/examples/cmux.lua), [Orca](https://github.com/ethanhamilthon/tuse/blob/main/examples/orca.lua), [Herdr](https://github.com/ethanhamilthon/tuse/blob/main/examples/herdr.lua), [tmux](https://github.com/ethanhamilthon/tuse/blob/main/examples/tmux.lua), [Rex](https://github.com/ethanhamilthon/tuse/blob/main/examples/rex.lua)…
+## Make it yours
 
-Ask Tuse to write a small config for your terminal or multiplexer and `require` it from `~/.config/tuse/init.lua`. Hooks, commands, and `sh` cover [notifications](https://github.com/ethanhamilthon/tuse/blob/main/examples/notify.lua), panes, [titles](https://github.com/ethanhamilthon/tuse/blob/main/examples/rename.lua), and the rest.
-
-## Skills, MCP, plugins
-
-Tuse ships none of these, on purpose.
-
-**[Skills](https://github.com/ethanhamilthon/tuse/blob/main/examples/skills.lua)** are an over-engineered name for reusable prompts. Add one to your config:
+Project config returns a table of named namespaces. You can start with a prompt:
 
 ```lua
 return {
-  prompts = {
-    showme = "Explain what changed in the last commit and why, with file paths.",
+  project = {
+    prompts = {
+      showme = "Explain what changed in the last commit and why, with file paths.",
+    },
   },
 }
 ```
 
-Then type `#showme` in the TUI.
+Type `#showme` in the TUI. Your global `~/.config/tuse/init.lua` returns a function that supplies defaults; `TUSE_GLOBAL_CONFIG` can point to a different setup. Local settings take priority over global and plugin UI settings.
 
-**[MCP](https://github.com/ethanhamilthon/tuse/blob/main/examples/mcp.lua)** is one of dozens of agent protocols, and we see no reason to build it into Tuse. If you have MCP servers you want to use, ask Tuse to wrap them in `functions`, and the agent will call them like any other Lua function.
-
-**Plugins** made everything more complicated, so we removed them. Write the few lines you need yourself, or ask Tuse to write them, and load them from `init.lua`. See [`examples/`](https://github.com/ethanhamilthon/tuse/tree/main/examples) for ready ones.
+See [`examples/`](https://github.com/ethanhamilthon/tuse/tree/main/examples) for [skills](https://github.com/ethanhamilthon/tuse/blob/main/examples/skills.lua), [MCP](https://github.com/ethanhamilthon/tuse/blob/main/examples/mcp.lua), [themes](https://github.com/ethanhamilthon/tuse/blob/main/examples/themes.lua), [titles](https://github.com/ethanhamilthon/tuse/blob/main/examples/rename.lua), [notifications](https://github.com/ethanhamilthon/tuse/blob/main/examples/notify.lua), and integrations for [cmux](https://github.com/ethanhamilthon/tuse/blob/main/examples/cmux.lua), [Herdr](https://github.com/ethanhamilthon/tuse/blob/main/examples/herdr.lua), [Rex](https://github.com/ethanhamilthon/tuse/blob/main/examples/rex.lua), [Orca](https://github.com/ethanhamilthon/tuse/blob/main/examples/orca.lua), and [tmux](https://github.com/ethanhamilthon/tuse/blob/main/examples/tmux.lua).
 
 ## Benchmark
 
-This is a small benchmark. What matters here is not quality but the efficiency of the agents. Like Pi, Tuse uses 2-3x fewer input tokens than the others, thanks to its minimalism. But unlike Pi, Tuse has much more functionality out of the box, and that does not make it slower.
+An earlier 50-case benchmark, included for reference. These are not measurements of the current release.
 
 | Agent | Full passes | Time* | Input* | Output* |
 | :-- | --: | --: | --: | --: |
@@ -78,11 +75,6 @@ This is a small benchmark. What matters here is not quality but the efficiency o
 | Claude Code | 47/50 | 69.0 s | 153.8k | 13.7k |
 | Pi | 46/50 | 55.3 s | **52.6k** | 11.2k |
 | Codex | 46/50 | **54.4 s** | 154.0k | **9.7k** |
+## Docs and contributing
 
-## Docs, license, contributing
-
-Docs are at https://ethanhamilthon.github.io/tuse/. The agent reads the same pages with `docs()`. Tuse is MIT licensed, see [LICENSE](LICENSE).
-
-Discussions and pull requests are welcome. The project is still in beta and I work on it actively. Honestly, I don't know where it is heading, but I'm glad I built a harness that makes it hard to go back to any other.
-
-Give Tuse a try, and if you like it too, tell me. Let's build it together!
+Read the [documentation](https://ethanhamilthon.github.io/tuse/) or ask the agent to look it up through `docs()`. See the [changelog](https://github.com/ethanhamilthon/tuse/blob/main/release/CHANGELOG.md) for release history. Issues and pull requests are welcome. Tuse is [MIT licensed](LICENSE).

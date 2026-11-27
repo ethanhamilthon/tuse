@@ -10,7 +10,7 @@ Prebuilt binaries exist for macOS 11+ (`arm64`, `amd64`) and Linux with glibc 2.
 curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
 ```
 
-The script picks the archive for your OS and CPU, checks its SHA-256 against the release's `checksums.txt`, and installs `tuse` into `~/.local/bin`. It only installs the binary and never creates or changes config files. Settings:
+The script picks the archive for your OS and CPU, checks its SHA-256 against the release's `checksums.txt`, and installs `tuse` into `~/.local/bin`. With a terminal, it offers the official `login`, `themes`, `status`, and `rename` plugins individually; Enter skips each one. Without a terminal it installs only the binary. It never overwrites an installed plugin or creates or changes config files. Settings:
 
 | Variable | Meaning |
 | --- | --- |

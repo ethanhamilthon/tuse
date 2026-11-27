@@ -36,8 +36,8 @@ The repo SHALL have an `examples/` folder with self-contained Lua config modules
 - **THEN** it fails if a file in `examples/` has no link or a link points to a missing file
 
 ### Requirement: README links examples
-README SHALL only gain links, on top of its current edits, to the matching example wherever it mentions skills, MCP, plugins, themes, multiplexers, or titles.
+README SHALL link to the current example modules when describing skills, MCP, themes, titles, or terminal integrations. It SHALL distinguish the example modules from the separately installable official plugins.
 
-#### Scenario: README link
-- **WHEN** a reader opens the `cmux, Orca, Herdr, tmux, Rex…` section
-- **THEN** it links the multiplexer examples, including `rex.lua`, on GitHub
+#### Scenario: README links terminal integrations
+- **WHEN** a reader looks up terminal integrations in the README
+- **THEN** it links the relevant examples, including `rex.lua`, and identifies `status` as an official plugin

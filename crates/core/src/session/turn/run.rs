@@ -113,6 +113,10 @@ impl Session {
         let cache = self.cached(&mut st);
         let model = cache.meta.model.clone();
         let effort = cache.meta.effort.clone();
+        if let Err(e) = config.check_effort(&model, &effort) {
+            drop(st);
+            return self.fail(generation, e);
+        }
         let (provider, raw_model) = split_model(&model);
         let req = Request {
             provider: provider.to_string(),
@@ -120,7 +124,7 @@ impl Session {
             system: wire::system(&cache.records),
             messages: wire::messages(&cache.records),
             tools: prompt::tools(&config),
-            effort: (effort != "default").then_some(effort),
+            effort: (!effort.is_empty()).then_some(effort),
         };
         drop(st);
         let Some(conn) = config.connect(provider) else {
@@ -178,11 +182,7 @@ impl Session {
         self.set_activity(&mut st, crate::Activity::Idle);
         let mut records = Vec::with_capacity(2);
         if let Some(usage) = reply.usage {
-            records.push(Record::Usage {
-                model,
-                usage,
-                llm: false,
-            });
+            records.push(Record::usage(model, usage, false));
         }
         let calls = reply.tool_calls;
         records.push(Record::Agent {

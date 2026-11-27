@@ -17,7 +17,7 @@ fn a_client_drives_a_session() {
     let (dir, cfg) = common::setup("rpc", &addr, "");
     std::fs::write(
         &cfg,
-        "return { models = {{ name = 'p/m', display = 'M', window = 50000 }} }",
+        "return { test = { models = {{ name = 'p/m', display = 'M', window = 50000 }} } }",
     )
     .unwrap();
     let session = Session::open(Options {
@@ -32,7 +32,7 @@ fn a_client_drives_a_session() {
     let call =
         |id: u64, method: &str, params: Value| support::call(&req_tx, &out, id, method, params);
 
-    assert_eq!(call(1, "session.info", json!({}))["error"]["code"], -32002);
+    assert_eq!(call(1, "session.state", json!({}))["error"]["code"], -32002);
     req_tx.send("{not json\n".into()).unwrap();
     assert_eq!(
         until(&out, |v| v.get("error").is_some())["error"]["code"],
@@ -41,11 +41,11 @@ fn a_client_drives_a_session() {
     let init = call(
         2,
         "initialize",
-        json!({"protocolVersion": 1, "client": {"name": "t"}}),
+        json!({"protocolVersion": 2, "client": {"name": "t"}}),
     )["result"]
         .clone();
-    assert_eq!(init["protocolVersion"], 1);
-    assert_eq!(init["model"], "p/m");
+    assert_eq!(init["protocolVersion"], 2);
+    assert_eq!(init["session"]["model"], "p/m");
     assert!(init["capabilities"]["methods"].as_array().unwrap().len() > 10);
     assert_eq!(call(3, "nope", json!({}))["error"]["code"], -32601);
 
@@ -62,27 +62,37 @@ fn a_client_drives_a_session() {
     assert_eq!(event(&out, "assistant")["text"], "deployed");
     assert_eq!(event(&out, "turn_end")["cancelled"], false);
 
-    let stats = call(6, "session.stats", json!({}))["result"].clone();
-    assert_eq!(
-        (stats["requests"].clone(), stats["turns"].clone()),
-        (json!(2), json!(1))
-    );
-    let snap = call(61, "session.snapshot", json!({}))["result"].clone();
+    let snap = call(61, "session.state", json!({}))["result"].clone();
     assert_eq!(
         (
             snap["mode"].clone(),
             snap["model"].clone(),
             snap["provider"].clone(),
             snap["steps"].clone(),
-            snap["turns"].clone()
+            snap["turns"].clone(),
+            snap["requests"].clone(),
         ),
-        (json!("json"), json!("p/m"), json!("p"), json!(2), json!(1))
+        (
+            json!("json"),
+            json!("p/m"),
+            json!("p"),
+            json!(2),
+            json!(1),
+            json!(2),
+        )
     );
-    assert!(snap["history"].as_array().unwrap().len() >= 4);
-    assert_eq!(snap["ctx_size"], 50000);
+    assert!(snap.get("history").is_none());
+    assert_eq!(snap["context_window"], 50000);
     let config = call(62, "config.get", json!({}))["result"].clone();
     assert_eq!(config["models"][0]["display"], "M");
-    assert!(config.get("plugins").is_none());
+    assert_eq!(config["plugins"], json!([]));
+    assert!(
+        config["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["name"] == "p" && p["type"] == "openai-chat")
+    );
     let records = call(7, "session.history", json!({}))["result"].clone();
     assert!(
         records

@@ -33,11 +33,11 @@ const RESERVED: &str = "and break do else elseif end false for function goto if 
 
 pub fn check_function_name(name: &str) -> Option<&'static str> {
     let mut chars = name.chars();
-    if !chars
+    let ok = chars
         .next()
         .is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
-        || !chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
-    {
+        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric());
+    if !ok {
         Some("invalid Lua name")
     } else if RESERVED.split_whitespace().any(|r| r == name) {
         Some("reserved name")
@@ -71,7 +71,7 @@ pub fn check_open_ext(key: &str) -> Option<&'static str> {
         Some("extension must not be empty")
     } else if key
         .chars()
-        .any(|c| c == '/' || c == '\\' || c.is_whitespace() || c.is_control())
+        .any(|c| matches!(c, '/' | '\\') || c.is_whitespace() || c.is_control())
     {
         Some("invalid file extension")
     } else if key == OPEN_DIR || key == OPEN_URL || is_mask(key) {
@@ -170,17 +170,76 @@ pub const HISTORY_ROLES: [&str; 15] = [
 
 pub const MESSAGE_LEVELS: [&str; 3] = ["flash", "notice", "error"];
 
-pub fn history_roles<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-    let list: Vec<String> = list(d)?;
-    if let Some((i, r)) = list.iter().enumerate().find(|(_, r)| {
-        !HISTORY_ROLES.contains(&r.as_str()) && !MESSAGE_LEVELS.contains(&r.as_str())
-    }) {
-        return Err(D::Error::custom(format!(
-            "history.hide[{}]: unknown history role `{r}`",
-            i + 1
-        )));
+struct HistoryRole(String);
+
+impl<'de> Deserialize<'de> for HistoryRole {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let r = String::deserialize(d)?;
+        if !HISTORY_ROLES.contains(&r.as_str()) && !MESSAGE_LEVELS.contains(&r.as_str()) {
+            return Err(D::Error::custom(format!("unknown history role `{r}`")));
+        }
+        Ok(Self(r))
     }
-    Ok(list)
+}
+
+pub fn history_roles<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    let list: Vec<HistoryRole> = list(d)?;
+    Ok(list.into_iter().map(|r| r.0).collect())
+}
+
+pub fn model_efforts<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<String>>, D::Error> {
+    struct Seed<'a>(&'a mut Vec<String>);
+    impl<'de> serde::de::DeserializeSeed<'de> for Seed<'_> {
+        type Value = ();
+        fn deserialize<D: Deserializer<'de>>(self, d: D) -> Result<(), D::Error> {
+            let s = String::deserialize(d)?;
+            if !crate::DEFAULT_EFFORTS.contains(&s.as_str()) {
+                return Err(D::Error::custom(format!(
+                    "unknown effort `{s}` (supported: {})",
+                    crate::DEFAULT_EFFORTS.join(", ")
+                )));
+            }
+            if self.0.contains(&s) {
+                return Err(D::Error::custom(format!("duplicate effort `{s}`")));
+            }
+            self.0.push(s);
+            Ok(())
+        }
+    }
+    struct V;
+    impl<'de> serde::de::Visitor<'de> for V {
+        type Value = Option<Vec<String>>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a list of effort names")
+        }
+        fn visit_none<E: Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+        fn visit_unit<E: Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+        fn visit_some<D: Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
+            d.deserialize_any(V)
+        }
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            let mut out = vec![];
+            while seq.next_element_seed(Seed(&mut out))?.is_some() {}
+            Ok(Some(out))
+        }
+        fn visit_map<A: serde::de::MapAccess<'de>>(
+            self,
+            mut map: A,
+        ) -> Result<Self::Value, A::Error> {
+            match map.next_key::<String>()? {
+                None => Ok(Some(vec![])),
+                Some(k) => Err(A::Error::custom(format!("expected a list, got key `{k}`"))),
+            }
+        }
+    }
+    d.deserialize_any(V)
 }
 
 #[derive(Deserialize)]

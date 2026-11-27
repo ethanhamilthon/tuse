@@ -167,34 +167,32 @@ impl Session {
             }
             let pending = ui.queue.pop_front().unwrap();
             if let Some(v) = &value {
-                let (kind, prompt) = match pending.req.prompt {
+                let (is_pick, prompt) = match pending.req.prompt {
                     UiPrompt::Picker { title, .. } => {
-                        ("picker", title.unwrap_or_else(|| "Picker".into()))
+                        (true, title.unwrap_or_else(|| "Picker".into()))
                     }
-                    UiPrompt::Question { text } => ("question", text),
+                    UiPrompt::Question { text } => (false, text),
                 };
                 let e = UiEntry {
                     id,
-                    kind,
+                    kind: if is_pick { "picker" } else { "question" },
                     prompt: prompt.clone(),
                     value: v.clone(),
                 };
-                self.message(
-                    if kind == "picker" {
-                        Record::Pick {
-                            id,
-                            prompt,
-                            value: v.clone(),
-                        }
-                    } else {
-                        Record::Ask {
-                            id,
-                            prompt,
-                            value: v.clone(),
-                        }
-                    },
-                    Event::UiResult(e),
-                );
+                let rec = if is_pick {
+                    Record::Pick {
+                        id,
+                        prompt,
+                        value: v.clone(),
+                    }
+                } else {
+                    Record::Ask {
+                        id,
+                        prompt,
+                        value: v.clone(),
+                    }
+                };
+                self.message(rec, Event::UiResult(e));
             }
             let reply = value.map_or(serde_json::Value::Null, serde_json::Value::String);
             let _ = pending.tx.send(Ok(reply));
@@ -256,12 +254,16 @@ impl Session {
         }
     }
 
-    pub(crate) fn ui_cancel_all(&self) {
+    fn ui_drain(&self, close: bool, msg: &str) {
         let active = {
             let mut ui = self.ui.lock().unwrap();
+            if close {
+                ui.closed = true;
+                ui.deny_hooks = true;
+            }
             let active = ui.queue.front().map(|p| p.req.id);
             for p in ui.queue.drain(..) {
-                let _ = p.tx.send(Err("cancelled".into()));
+                let _ = p.tx.send(Err(msg.into()));
             }
             active
         };
@@ -270,19 +272,11 @@ impl Session {
         }
     }
 
+    pub(crate) fn ui_cancel_all(&self) {
+        self.ui_drain(false, "cancelled");
+    }
+
     pub(crate) fn ui_close(&self) {
-        let cleared = {
-            let mut ui = self.ui.lock().unwrap();
-            ui.closed = true;
-            ui.deny_hooks = true;
-            let active = ui.queue.front().map(|p| p.req.id);
-            for p in ui.queue.drain(..) {
-                let _ = p.tx.send(Err("session closed".into()));
-            }
-            active
-        };
-        if let Some(id) = cleared {
-            self.emit(Signal::UiClear { id });
-        }
+        self.ui_drain(true, "session closed");
     }
 }

@@ -38,6 +38,7 @@ local function log_line(s)
   f:close()
 end
 return {{
+  test = {{
   commands = {{
     boom = {{ run = function() error("cmd fail") end }},
   }},
@@ -49,7 +50,6 @@ return {{
       events = {{"lua_start", "lua_end"}},
       run = function(e)
         if e.event == "lua_start" then
-          -- Spawning inside a lua_start hook must NOT recursively trigger lua_start/lua_end.
           if e.kind == "open" then
             t.spawn(function() end, "from_hook")
           end
@@ -64,6 +64,7 @@ return {{
         end
       end,
     }},
+  }},
   }},
 }}
 "#,

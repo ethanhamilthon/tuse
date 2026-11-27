@@ -2,9 +2,9 @@ use tuse_api::Usage;
 use tuse_config::Prices;
 
 pub fn cost(u: &Usage, p: &Prices) -> f64 {
-    let plain = u.input.saturating_sub(u.cached + u.cache_write);
+    let plain = u.input.saturating_sub(u.cache_read + u.cache_write);
     (plain as f64 * p.input
-        + u.cached as f64 * p.cache_read
+        + u.cache_read as f64 * p.cache_read
         + u.cache_write as f64 * p.cache_write
         + u.output as f64 * p.output)
         / 1_000_000.0

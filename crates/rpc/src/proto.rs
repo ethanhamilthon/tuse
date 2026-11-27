@@ -68,6 +68,24 @@ pub fn str_param(p: &Value, name: &str) -> Result<String, Fail> {
         .ok_or_else(|| Fail::params(format!("`{name}` must be a string")))
 }
 
+pub fn opt_str(p: &Value, name: &str) -> Result<Option<String>, Fail> {
+    match &p[name] {
+        Value::Null => Ok(None),
+        Value::String(s) => Ok(Some(s.clone())),
+        _ => Err(Fail::params(format!("`{name}` must be a string"))),
+    }
+}
+
+pub fn opt_u64(p: &Value, name: &str) -> Result<Option<u64>, Fail> {
+    match &p[name] {
+        Value::Null => Ok(None),
+        v => v
+            .as_u64()
+            .map(Some)
+            .ok_or_else(|| Fail::params(format!("`{name}` must be a non-negative integer"))),
+    }
+}
+
 pub fn index_param(p: &Value, name: &str) -> Result<usize, Fail> {
     p[name]
         .as_u64()

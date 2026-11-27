@@ -4,7 +4,6 @@ use crate::ui::app::App;
 use crate::ui::panel::Panel;
 use crate::ui::picker::Item;
 use crate::ui::picker::{Kind, Picker, item};
-use tuse_config::EFFORTS;
 use tuse_config::ModelDef;
 
 impl App {
@@ -175,13 +174,15 @@ impl App {
                 self.run_command(&v);
             }
             (Kind::CommandArg(name), Some(v)) => {
-                self.editor.clear();
-                self.run_custom(name, vec![v]);
+                if self.session.run_command(name, &[v]).is_ok() {
+                    self.editor.cut_command_arg();
+                }
             }
             (Kind::CommandArg(name), None) => {
                 let typed = self.editor.token().1;
-                self.editor.clear();
-                self.run_custom(name, vec![typed]);
+                if self.session.run_command(name, &[typed]).is_ok() {
+                    self.editor.cut_command_arg();
+                }
             }
             (Kind::Prompt, Some(v)) => {
                 self.cut_token();
@@ -206,27 +207,22 @@ impl App {
             (Kind::Model, Some(v)) => {
                 let (_, effort) = self.session.model();
                 let cfg = self.session.config();
-                let provider = tuse_config::split_model(&v).0;
-                let supported = cfg
-                    .connect(provider)
-                    .map(|c| tuse_core::supported_efforts(c.api_type()))
-                    .unwrap_or(&EFFORTS);
-                let items = EFFORTS
-                    .iter()
-                    .map(|e| {
-                        item(
-                            *e,
-                            if supported.contains(e) {
-                                ""
-                            } else {
-                                "unsupported"
-                            },
-                            *e,
-                        )
-                    })
-                    .collect();
-                let ep = Picker::new(Kind::Effort(v.clone()), items);
-                self.open_modal(ep).select(&effort);
+                let efforts = cfg.model_efforts(&v);
+                if efforts.is_empty() {
+                    self.restore_draft();
+                    if let Err(e) = self.session.select_model(&v, "", true) {
+                        self.error(format!("Can't save the model: {e}"));
+                    }
+                } else {
+                    let items = efforts.iter().map(|e| item(e, "", e)).collect();
+                    let target = if efforts.iter().any(|e| e == &effort) {
+                        effort
+                    } else {
+                        cfg.fallback_effort(&v)
+                    };
+                    let ep = Picker::new(Kind::Effort(v.clone()), items);
+                    self.open_modal(ep).select(&target);
+                }
             }
             (Kind::Effort(model), Some(v)) => {
                 if let Err(e) = self.session.select_model(model, &v, true) {

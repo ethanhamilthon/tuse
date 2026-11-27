@@ -177,7 +177,7 @@ mod tests {
         );
         std::fs::write(&note, "hi").unwrap();
         std::fs::write(&other, "hi2").unwrap();
-        std::fs::write(&cfg, "local t=require('tuse')\nreturn { open={ txt=function(p) t.write('opened.txt', p) end } }").unwrap();
+        std::fs::write(&cfg, "local t=require('tuse')\nreturn { test = { open={ txt=function(p) t.write('opened.txt', p) end } } }").unwrap();
         app.run_command("reload");
 
         let mut r = crate::frame::draw::Renderer::default();
@@ -293,7 +293,7 @@ mod tests {
 
         std::fs::write(
             &cfg,
-            "return { ui = { theme = { accent = 'none', fg = '#445566' } } }",
+            "return { test = { ui = { theme = { accent = 'none', fg = '#445566' } } } }",
         )
         .unwrap();
         app.session.reload().unwrap();
@@ -313,7 +313,7 @@ mod tests {
         for cmd in ["config", "session"] {
             std::fs::write(
                 &cfg,
-                "return { ui = { theme = { accent = '#112233', fg = '#445566' } } }",
+                "return { test = { ui = { theme = { accent = '#112233', fg = '#445566' } } } }",
             )
             .unwrap();
             app.run_command("reload");
@@ -321,7 +321,7 @@ mod tests {
             assert!(draw(&mut r, &mut app, 80, 20).contains("\x1b[38;2;17;34;51m"));
             std::fs::write(
                 &cfg,
-                "return { ui = { theme = { accent = '#778899', fg = '#445566' } } }",
+                "return { test = { ui = { theme = { accent = '#778899', fg = '#445566' } } } }",
             )
             .unwrap();
             app.session.reload().unwrap();

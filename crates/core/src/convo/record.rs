@@ -20,6 +20,18 @@ impl Level {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JobRecord {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub code: String,
+    pub status: String,
+    pub ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "role", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Record {
     System {
@@ -63,7 +75,10 @@ pub enum Record {
     },
     Usage {
         model: String,
-        usage: Usage,
+        input: u64,
+        output: u64,
+        cache_read: u64,
+        cache_write: u64,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         llm: bool,
     },
@@ -100,36 +115,23 @@ pub enum Record {
         prompt: String,
         value: String,
     },
-    Task {
-        name: String,
-        #[serde(default, skip_serializing_if = "String::is_empty")]
-        code: String,
-        status: String,
-        ms: u64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        error: Option<String>,
-    },
-    Command {
-        name: String,
-        #[serde(default, skip_serializing_if = "String::is_empty")]
-        code: String,
-        status: String,
-        ms: u64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        error: Option<String>,
-    },
-    Open {
-        name: String,
-        #[serde(default, skip_serializing_if = "String::is_empty")]
-        code: String,
-        status: String,
-        ms: u64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        error: Option<String>,
-    },
+    Task(JobRecord),
+    Command(JobRecord),
+    Open(JobRecord),
 }
 
 impl Record {
+    pub fn usage(model: String, u: Usage, llm: bool) -> Self {
+        Record::Usage {
+            model,
+            input: u.input,
+            output: u.output,
+            cache_read: u.cache_read,
+            cache_write: u.cache_write,
+            llm,
+        }
+    }
+
     pub fn message(level: Level, text: impl Into<String>) -> Self {
         Record::Message {
             level,
@@ -145,28 +147,17 @@ impl Record {
         ms: u64,
         error: Option<String>,
     ) -> Self {
+        let j = JobRecord {
+            name,
+            code,
+            status,
+            ms,
+            error,
+        };
         match kind {
-            "task" => Record::Task {
-                name,
-                code,
-                status,
-                ms,
-                error,
-            },
-            "command" => Record::Command {
-                name,
-                code,
-                status,
-                ms,
-                error,
-            },
-            _ => Record::Open {
-                name,
-                code,
-                status,
-                ms,
-                error,
-            },
+            "task" => Record::Task(j),
+            "command" => Record::Command(j),
+            _ => Record::Open(j),
         }
     }
 }

@@ -175,7 +175,7 @@ fn adapters_request_stream_tools_usage_replay_and_models() {
         Some(Usage {
             input: 100,
             output: 20,
-            cached: 40,
+            cache_read: 40,
             cache_write: 10
         })
     );
@@ -213,7 +213,7 @@ fn adapters_request_stream_tools_usage_replay_and_models() {
     assert!(
         rp.items[1]["call_id"] == "call_42"
             && rp.items[1]["arguments"] == r#"{"code":"x=2"}"#
-            && r1.usage.unwrap().cached == 15
+            && r1.usage.unwrap().cache_read == 15
     );
     assert_eq!(
         run(&c, &rich("resp", "gpt-5", Some("high"), Some(rp)))
@@ -249,7 +249,7 @@ fn adapters_request_stream_tools_usage_replay_and_models() {
         Some(Usage {
             input: 175,
             output: 42,
-            cached: 50,
+            cache_read: 50,
             cache_write: 25
         })
     );
@@ -376,15 +376,52 @@ fn redirects_truncation_validation_and_cancel() {
         assert!(matches!(e, Error::Transport(_)) && e.retryable(), "{api:?}");
     }
 
+    let (pass_u, pass_l) = serve(vec![
+        j(
+            r#"{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}"#,
+        ),
+        j(r#"{"stop_reason":"end_turn","content":[{"type":"text","text":"ok"}]}"#),
+        j(r#"{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}"#),
+        j(
+            r#"{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}"#,
+        ),
+    ]);
+    run(
+        &Client::new(&pass_u, "k", ApiType::OpenAiResponses),
+        &ureq("p", "gpt-5", Some("max")),
+    )
+    .unwrap();
+    run(
+        &Client::new(&pass_u, "k", ApiType::AnthropicMessages),
+        &ureq("p", "claude-4", Some("xhigh")),
+    )
+    .unwrap();
+    run(
+        &Client::new(&pass_u, "k", ApiType::GoogleGemini),
+        &ureq("p", "gemini-3-pro", Some("xhigh")),
+    )
+    .unwrap();
+    run(
+        &Client::new(&pass_u, "k", ApiType::OpenAiResponses),
+        &ureq("p", "gpt-5", None),
+    )
+    .unwrap();
+    let pl = pass_l.lock().unwrap();
+    assert_eq!(pv(&pl[0].2)["reasoning"]["effort"], "max");
+    assert_eq!(pv(&pl[1].2)["output_config"]["effort"], "xhigh");
+    assert_eq!(
+        pv(&pl[2].2)["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+        "xhigh"
+    );
+    assert!(pv(&pl[3].2).get("reasoning").is_none());
+
     let (unused_u, unused_l) = serve(vec![j("{}")]);
-    for (api, ef) in [
-        (ApiType::OpenAiResponses, "max"),
-        (ApiType::AnthropicMessages, "xhigh"),
-        (ApiType::GoogleGemini, "xhigh"),
-        (ApiType::GoogleGemini, "max"),
-    ] {
+    for ef in ["xhigh", "max"] {
         assert!(matches!(
-            run(&Client::new(&unused_u, "k", api), &ureq("p", "m", Some(ef))),
+            run(
+                &Client::new(&unused_u, "k", ApiType::GoogleGemini),
+                &ureq("p", "gemini-2.5-pro", Some(ef))
+            ),
             Err(Error::Unsupported(_))
         ));
     }

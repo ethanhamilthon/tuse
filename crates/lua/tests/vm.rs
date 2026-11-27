@@ -62,6 +62,13 @@ fn runs_code_keeps_globals_and_shows_values() {
     assert_eq!(d.text, "42\n[exit code 3]");
     let d = vm.run("json.encode(json.decode('{\"a\":[1,2]}'))", "lua", stop(5));
     assert_eq!(d.text, "{\"a\":[1,2]}");
+    let home = std::env::var("HOME").unwrap();
+    let expected = std::fs::canonicalize(&home).unwrap_or_else(|_| PathBuf::from(&home));
+    let d = vm.run("sh('pwd -P', {cwd = '~'}).out", "lua", stop(5));
+    assert_eq!(
+        std::fs::canonicalize(d.text.trim()).unwrap_or_else(|_| PathBuf::from(d.text.trim())),
+        expected
+    );
 }
 
 #[test]

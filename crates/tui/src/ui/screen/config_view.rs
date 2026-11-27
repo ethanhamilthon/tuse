@@ -43,6 +43,8 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             v.join(", ")
         }
     };
+    let l = &ui.lines;
+    let sp = &ui.space;
     sec(
         "UI",
         vec![
@@ -50,13 +52,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 "ui.lines",
                 format!(
                     "tool={} output={} diff={} reasoning={} strings={} input={} list={}",
-                    ui.lines.tool,
-                    ui.lines.output,
-                    ui.lines.diff,
-                    ui.lines.reasoning,
-                    ui.lines.strings,
-                    ui.lines.input,
-                    ui.lines.list
+                    l.tool, l.output, l.diff, l.reasoning, l.strings, l.input, l.list
                 ),
                 dim,
             ),
@@ -65,7 +61,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 "ui.space",
                 format!(
                     "padding={} steps={} messages={}",
-                    ui.space.padding, ui.space.steps, ui.space.messages
+                    sp.padding, sp.steps, sp.messages
                 ),
                 dim,
             ),
@@ -82,12 +78,54 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             ),
         ],
     );
-    let name_w = cfg
-        .models
-        .iter()
-        .map(|m| crate::kit::text::width(&m.name))
-        .max()
-        .unwrap_or(0);
+    let max_w = |it: Box<dyn Iterator<Item = usize> + '_>| it.max().unwrap_or(0);
+    let pad = |s: &str, w: usize| {
+        format!(
+            "{s}{}  ",
+            " ".repeat(w.saturating_sub(crate::kit::text::width(s)))
+        )
+    };
+    let pw = max_w(Box::new(
+        cfg.connect.iter().map(|c| crate::kit::text::width(&c.name)),
+    ));
+    let tw = max_w(Box::new(
+        cfg.connect
+            .iter()
+            .map(|c| crate::kit::text::width(c.api_type())),
+    ));
+    sec(
+        "Providers",
+        cfg.connect
+            .iter()
+            .map(|c| {
+                vec![
+                    span(format!("  {}", pad(&c.name, pw)), fg),
+                    span(pad(c.api_type(), tw), info),
+                    span(c.base_url.clone(), dim),
+                ]
+            })
+            .collect(),
+    );
+    let plw = max_w(Box::new(
+        cfg.plugins
+            .iter()
+            .map(|pl| crate::kit::text::width(&pl.name)),
+    ));
+    sec(
+        "Plugins",
+        cfg.plugins
+            .iter()
+            .map(|pl| {
+                vec![
+                    span(format!("  {}", pad(&pl.name, plw)), fg),
+                    span(pl.version.clone(), dim),
+                ]
+            })
+            .collect(),
+    );
+    let name_w = max_w(Box::new(
+        cfg.models.iter().map(|m| crate::kit::text::width(&m.name)),
+    ));
     sec(
         "Models",
         cfg.models
@@ -100,6 +138,13 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 if m.window > 0 {
                     parts.push(format!("window={}", tokens(m.window)));
                 }
+                if let Some(effs) = &m.efforts {
+                    parts.push(if effs.is_empty() {
+                        "efforts=none".into()
+                    } else {
+                        format!("efforts={}", effs.join(","))
+                    });
+                }
                 if let Some(p) = &m.prices {
                     parts.push(format!(
                         "prices={}/{}/{}/{}",
@@ -107,14 +152,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                     ));
                 }
                 vec![
-                    span(
-                        format!(
-                            "  {}{}  ",
-                            m.name,
-                            " ".repeat(name_w - crate::kit::text::width(&m.name))
-                        ),
-                        fg,
-                    ),
+                    span(format!("  {}", pad(&m.name, name_w)), fg),
                     span(parts.join(" "), dim),
                 ]
             })
@@ -162,14 +200,14 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         "Functions",
         cfg.functions
             .iter()
-            .map(|(n, kind)| match kind {
-                tuse_config::FunctionKind::Custom => vec![span(format!("  {n}"), fg)],
-                tuse_config::FunctionKind::Override => {
-                    vec![span(format!("  {n}"), fg), span("  [override]", info)]
+            .map(|(n, kind)| {
+                let mut row = vec![span(format!("  {n}"), fg)];
+                match kind {
+                    tuse_config::FunctionKind::Custom => {}
+                    tuse_config::FunctionKind::Override => row.push(span("  [override]", info)),
+                    tuse_config::FunctionKind::Disabled => row.push(span("  [disabled]", dim)),
                 }
-                tuse_config::FunctionKind::Disabled => {
-                    vec![span(format!("  {n}"), fg), span("  [disabled]", dim)]
-                }
+                row
             })
             .collect(),
     );
@@ -188,9 +226,8 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 let mut row = vec![span(format!("  /{n}"), info)];
                 let args = c.args.join(" | ");
                 let detail = [c.desc.as_str(), args.as_str()]
-                    .iter()
+                    .into_iter()
                     .filter(|s| !s.is_empty())
-                    .copied()
                     .collect::<Vec<_>>()
                     .join("  ");
                 if !detail.is_empty() {
@@ -255,7 +292,12 @@ mod tests {
             name: "p/big".into(),
             display: "Big".into(),
             window: 200_000,
+            efforts: Some(vec![]),
             prices: Some(Default::default()),
+        });
+        cfg.plugins.push(tuse_config::PluginSummary {
+            name: "demo".into(),
+            version: "1.0.0".into(),
         });
         cfg.prompts.insert(
             "spec".into(),
@@ -299,7 +341,9 @@ mod tests {
             .flatten()
             .map(|s| s.text)
             .collect();
-        for s in "UI|Models|Theme|System prompts|Prompts|Functions|Hooks|Commands".split('|') {
+        for s in "UI|Providers|Plugins|Models|Theme|System prompts|Prompts|Functions|Hooks|Commands"
+            .split('|')
+        {
             assert!(text.contains(s), "missing {s}");
         }
         let json: serde_json::Value = serde_json::from_str(&cfg.to_json()).unwrap();

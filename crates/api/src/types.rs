@@ -46,19 +46,6 @@ impl ApiType {
             Self::GoogleGemini => "google-gemini",
         }
     }
-
-    pub fn supported_efforts(self) -> &'static [&'static str] {
-        match self {
-            Self::OpenAiChat => &["default", "low", "medium", "high", "xhigh", "max"],
-            Self::OpenAiResponses => &["default", "low", "medium", "high", "xhigh"],
-            Self::AnthropicMessages => &["default", "low", "medium", "high", "max"],
-            Self::GoogleGemini => &["default", "low", "medium", "high"],
-        }
-    }
-
-    pub fn supports_effort(self, effort: &str) -> bool {
-        self.supported_efforts().contains(&effort)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -126,7 +113,7 @@ impl Replay {
 pub struct Usage {
     pub input: u64,
     pub output: u64,
-    pub cached: u64,
+    pub cache_read: u64,
     pub cache_write: u64,
 }
 
@@ -134,7 +121,7 @@ impl Usage {
     pub fn add(&mut self, o: &Usage) {
         self.input += o.input;
         self.output += o.output;
-        self.cached += o.cached;
+        self.cache_read += o.cache_read;
         self.cache_write += o.cache_write;
     }
 }

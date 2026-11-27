@@ -3,44 +3,22 @@ use std::sync::{Mutex, OnceLock};
 
 static DB: OnceLock<Mutex<Vec<(std::path::PathBuf, Connection)>>> = OnceLock::new();
 
+const SCHEMA_VERSION: i64 = 4;
+
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    cwd TEXT NOT NULL,
-    title TEXT NOT NULL,
-    model TEXT NOT NULL,
-    effort TEXT NOT NULL,
-    started INTEGER NOT NULL DEFAULT 0,
-    usage_input INTEGER NOT NULL DEFAULT 0,
-    usage_output INTEGER NOT NULL DEFAULT 0,
-    usage_cached INTEGER NOT NULL DEFAULT 0,
-    usage_cache_write INTEGER NOT NULL DEFAULT 0,
-    cost REAL NOT NULL DEFAULT 0,
-    llm_cost REAL NOT NULL DEFAULT 0,
-    priced INTEGER NOT NULL DEFAULT 0,
-    ctx INTEGER NOT NULL DEFAULT 0,
-    revision INTEGER NOT NULL DEFAULT 0,
-    created TEXT NOT NULL,
-    updated TEXT NOT NULL
+    id TEXT PRIMARY KEY, cwd TEXT NOT NULL, title TEXT NOT NULL, model TEXT NOT NULL,
+    effort TEXT NOT NULL, started INTEGER NOT NULL DEFAULT 0,
+    usage_input INTEGER NOT NULL DEFAULT 0, usage_output INTEGER NOT NULL DEFAULT 0,
+    usage_cache_read INTEGER NOT NULL DEFAULT 0, usage_cache_write INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0, llm_cost REAL NOT NULL DEFAULT 0,
+    priced INTEGER NOT NULL DEFAULT 0, ctx INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, updated TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_cwd ON sessions(cwd);
-CREATE TABLE IF NOT EXISTS history (
-    session TEXT NOT NULL,
-    seq INTEGER NOT NULL,
-    body TEXT NOT NULL,
-    PRIMARY KEY (session, seq)
-);
-CREATE TABLE IF NOT EXISTS providers (
-    name TEXT PRIMARY KEY,
-    base_url TEXT NOT NULL,
-    api_key TEXT NOT NULL,
-    api TEXT NOT NULL DEFAULT 'openai-chat',
-    headers TEXT NOT NULL DEFAULT '{}'
-);
-CREATE TABLE IF NOT EXISTS state (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
+CREATE TABLE IF NOT EXISTS history (session TEXT NOT NULL, seq INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY (session, seq));
+CREATE TABLE IF NOT EXISTS providers (name TEXT PRIMARY KEY, base_url TEXT NOT NULL, api_key TEXT NOT NULL, api TEXT NOT NULL DEFAULT 'openai-chat', headers TEXT NOT NULL DEFAULT '{}');
+CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ";
 
 pub(super) fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, String> {
@@ -62,25 +40,26 @@ pub(super) fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Res
 fn initialize_schema(c: &mut Connection) -> rusqlite::Result<()> {
     let tx = c.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version > SCHEMA_VERSION {
+        let msg = format!(
+            "incompatible database schema version {version} (expected <= {SCHEMA_VERSION})"
+        );
+        return Err(rusqlite::Error::ToSqlConversionFailure(msg.into()));
+    }
     if version == 0 {
-        tx.execute_batch(
-            "DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS records;
-            DROP TABLE IF EXISTS providers; DROP TABLE IF EXISTS state;",
-        )?;
-        tx.execute_batch(SCHEMA)?;
-    } else if version < 3 {
+        tx.execute_batch("DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS records; DROP TABLE IF EXISTS history; DROP TABLE IF EXISTS providers; DROP TABLE IF EXISTS state;")?;
+    } else if version < SCHEMA_VERSION {
         if version == 1 {
             tx.execute_batch(
                 "ALTER TABLE providers ADD COLUMN headers TEXT NOT NULL DEFAULT '{}';",
             )?;
         }
         tx.execute_batch("DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS history;")?;
+    }
+    if version < SCHEMA_VERSION {
         tx.execute_batch(SCHEMA)?;
+        tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
-    if version < 3 {
-        tx.pragma_update(None, "user_version", 3)?;
-    }
-
     tx.commit()
 }
 
@@ -114,8 +93,15 @@ impl Prefs {
 
     pub fn effort() -> String {
         match get_state("effort") {
-            Some(e) if tuse_config::EFFORTS.contains(&e.as_str()) => e,
-            _ => "default".into(),
+            Some(e) if tuse_config::DEFAULT_EFFORTS.contains(&e.as_str()) => e,
+            _ => "medium".into(),
+        }
+    }
+
+    pub fn effort_for(config: &tuse_config::Config, model: &str) -> String {
+        match get_state("effort") {
+            Some(e) if config.check_effort(model, &e).is_ok() => e,
+            _ => config.fallback_effort(model),
         }
     }
 }
@@ -139,35 +125,28 @@ impl Providers {
             let mut q = c.prepare(
                 "SELECT name, base_url, api_key, api, headers FROM providers ORDER BY rowid",
             )?;
-            let rows = q.query_map([], |r| {
+            q.query_map([], |r| {
                 let mut conn = tuse_config::Connect {
                     name: r.get(0)?,
                     base_url: r.get(1)?,
                     api_key: r.get(2)?,
                     api: r.get(3)?,
-                    headers: serde_json::from_str(&r.get::<_, String>(4)?).map_err(|_| {
-                        rusqlite::Error::InvalidColumnType(
-                            4,
-                            "headers".into(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?,
+                    headers: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or_default(),
                 };
                 conn.api = conn.api_type().to_string();
                 Ok(conn)
-            })?;
-            rows.collect()
+            })?
+            .collect()
         })
     }
 
     pub fn add(p: &tuse_config::Connect) -> Result<(), String> {
-        let api = p.api_type();
         let headers = serde_json::to_string(&p.headers).map_err(|e| e.to_string())?;
         with(|c| {
             c.execute(
                 "INSERT INTO providers(name, base_url, api_key, api, headers) VALUES (?1, ?2, ?3, ?4, ?5)
                  ON CONFLICT(name) DO UPDATE SET base_url = ?2, api_key = ?3, api = ?4, headers = ?5",
-                params![p.name, p.base_url, p.api_key, api, headers],
+                params![p.name, p.base_url, p.api_key, p.api_type(), headers],
             )
             .map(|_| ())
         })
@@ -183,14 +162,9 @@ impl Providers {
     pub fn json() -> Result<String, String> {
         let rows: Vec<_> = Providers::list()?
             .into_iter()
-            .map(|p| {
-                let api = p.api_type().to_string();
-                serde_json::json!({
-                    "name": p.name,
-                    "base_url": p.base_url,
-                    "api": api,
-                })
-            })
+            .map(
+                |p| serde_json::json!({ "name": p.name, "type": p.api_type(), "base": p.base_url }),
+            )
             .collect();
         serde_json::to_string_pretty(&rows).map_err(|e| e.to_string())
     }
@@ -243,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_v3_drops_sessions_and_keeps_providers() {
+    fn schema_v4_drops_sessions_and_keeps_providers() {
         let mut c = Connection::open_in_memory().unwrap();
         c.execute_batch(SCHEMA).unwrap();
         c.execute_batch(
@@ -251,7 +225,7 @@ mod tests {
             INSERT INTO state VALUES ('model', 'm');
             INSERT INTO sessions(id, cwd, title, model, effort, created, updated) VALUES ('s', '/', 't', 'm', 'e', '', '');
             INSERT INTO history VALUES ('s', 1, '{}');
-            PRAGMA user_version = 2;",
+            PRAGMA user_version = 3;",
         )
         .unwrap();
         initialize_schema(&mut c).unwrap();
@@ -268,6 +242,8 @@ mod tests {
             ],
             [0, 0, 1, 1]
         );
+        c.execute_batch("PRAGMA user_version = 5;").unwrap();
+        assert!(initialize_schema(&mut c).is_err());
     }
 
     #[test]

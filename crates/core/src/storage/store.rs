@@ -11,7 +11,7 @@ use tuse_api::Usage;
 use tuse_config::Config;
 
 const COLS: &str = "id, cwd, title, model, effort, started, created, updated, usage_input,
-    usage_output, usage_cached, usage_cache_write, cost, llm_cost, priced, ctx, revision";
+    usage_output, usage_cache_read, usage_cache_write, cost, llm_cost, priced, ctx, revision";
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Meta {
@@ -137,6 +137,12 @@ impl SessionDir {
                 tx.execute("DELETE FROM history WHERE session=?1", [id])?;
                 tx.execute("UPDATE sessions SET revision=revision+1 WHERE id=?1", [id])?;
                 insert(tx, id, history)?;
+                if history.iter().any(|r| matches!(r, Record::User { .. })) {
+                    tx.execute(
+                        "UPDATE sessions SET started=1 WHERE id=?1 AND started=0",
+                        [id],
+                    )?;
+                }
             }
             insert(tx, id, records)?;
             for r in records {
@@ -149,28 +155,23 @@ impl SessionDir {
                     }
                     Record::Usage {
                         model,
-                        usage: u,
+                        input,
+                        output,
+                        cache_read,
+                        cache_write,
                         llm,
                     } => {
+                        let u = Usage {
+                            input: *input,
+                            output: *output,
+                            cache_read: *cache_read,
+                            cache_write: *cache_write,
+                        };
                         let price = config.model_def(model).and_then(|m| m.prices.as_ref());
-                        let amount = price.map_or(0.0, |p| cost(u, p));
+                        let amount = price.map_or(0.0, |p| cost(&u, p));
                         tx.execute(
-                            "UPDATE sessions SET usage_input=usage_input+?2,
-                            usage_output=usage_output+?3, usage_cached=usage_cached+?4,
-                            usage_cache_write=usage_cache_write+?5, cost=cost+?6,
-                            llm_cost=llm_cost+?7, priced=priced OR ?8,
-                            ctx=CASE WHEN ?9 THEN ctx ELSE ?2+?3 END WHERE id=?1",
-                            params![
-                                id,
-                                u.input,
-                                u.output,
-                                u.cached,
-                                u.cache_write,
-                                amount,
-                                if *llm { amount } else { 0.0 },
-                                price.is_some(),
-                                llm
-                            ],
+                            "UPDATE sessions SET usage_input=usage_input+?2, usage_output=usage_output+?3, usage_cache_read=usage_cache_read+?4, usage_cache_write=usage_cache_write+?5, cost=cost+?6, llm_cost=llm_cost+?7, priced=priced OR ?8, ctx=CASE WHEN ?9 THEN ctx ELSE ?2+?3 END WHERE id=?1",
+                            params![id, u.input, u.output, u.cache_read, u.cache_write, amount, if *llm { amount } else { 0.0 }, price.is_some(), llm],
                         )?;
                     }
                     _ => {}
@@ -259,7 +260,7 @@ impl Meta {
             usage: Usage {
                 input: r.get(8)?,
                 output: r.get(9)?,
-                cached: r.get(10)?,
+                cache_read: r.get(10)?,
                 cache_write: r.get(11)?,
             },
             cost: r.get(12)?,

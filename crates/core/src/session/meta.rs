@@ -29,10 +29,12 @@ impl Session {
 
     pub(crate) fn set_session(self: &Arc<Self>, update: Update) -> Result<(), String> {
         let changed = self.update(update, true)?;
-        self.hook(
-            "session_updated",
-            serde_json::json!({"event": "session_updated", "changed": changed}),
-        );
+        if !changed.is_empty() {
+            self.hook(
+                "session_updated",
+                serde_json::json!({"event": "session_updated", "changed": changed}),
+            );
+        }
         Ok(())
     }
 
@@ -50,6 +52,7 @@ impl Session {
         let mut records = vec![];
         let mut new_title = None;
         let check_effort = update.effort.is_some() || update.model.is_some();
+        let effort_omitted = update.effort.is_none();
         if let Some(title) = update.title {
             let title: String = title
                 .trim()
@@ -79,6 +82,14 @@ impl Session {
                 meta.model = model;
                 changed.push("model");
             }
+            if validate
+                && effort_omitted
+                && config.model_efforts(&meta.model).is_empty()
+                && !meta.effort.is_empty()
+            {
+                meta.effort.clear();
+                changed.push("effort");
+            }
         }
         if let Some(effort) = update.effort
             && effort != meta.effort
@@ -87,16 +98,12 @@ impl Session {
             changed.push("effort");
         }
         if validate && check_effort {
-            let (provider, _) = tuse_config::split_model(&meta.model);
-            let supported = config
-                .connect(provider)
-                .map_or(&["default"][..], |c| crate::supported_efforts(c.api_type()));
-            if !supported.contains(&meta.effort.as_str()) {
-                return Err(format!(
-                    "effort `{}` is not supported by `{}`",
-                    meta.effort, meta.model
-                ));
-            }
+            config.check_effort(&meta.model, &meta.effort)?;
+        }
+        if let Some(rs) = &history
+            && let Some(crate::event::Switch::Fork(index)) = &st.pending_switch
+        {
+            crate::session::launch::check_fork(rs, *index)?;
         }
         let settings = changed.contains(&"model") || changed.contains(&"effort");
         if new_title.is_some() || settings {
@@ -123,8 +130,13 @@ impl Session {
             self.write_history(&mut st, Some(&meta), replacement, &records, &config)?;
         }
         if deferred {
-            if history.is_some() {
-                st.pending_history = history;
+            if let Some(mut h) = history {
+                h.extend(records.iter().cloned());
+                st.pending_history = Some(h);
+            } else if !records.is_empty()
+                && let Some(pending) = &mut st.pending_history
+            {
+                pending.extend(records.iter().cloned());
             }
         } else if replacement.is_some() {
             self.emit(Signal::HistoryReplaced);

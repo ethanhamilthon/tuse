@@ -6,7 +6,11 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    #[serde(skip)]
+    #[serde(
+        skip_deserializing,
+        rename = "providers",
+        serialize_with = "serialize_providers"
+    )]
     pub connect: Vec<Connect>,
     #[serde(skip_serializing)]
     pub providers: BTreeMap<String, crate::ProviderConfig>,
@@ -26,7 +30,29 @@ pub struct Config {
     #[serde(deserialize_with = "crate::names::commands")]
     pub commands: BTreeMap<String, Command>,
     #[serde(skip_deserializing)]
+    pub plugins: Vec<crate::PluginSummary>,
+    #[serde(skip_deserializing)]
     pub path: String,
+}
+
+#[derive(serde::Serialize)]
+struct ProviderView<'a> {
+    name: &'a str,
+    #[serde(rename = "type")]
+    kind: &'a str,
+    base: &'a str,
+}
+
+fn serialize_providers<S: serde::Serializer>(connect: &[Connect], s: S) -> Result<S::Ok, S::Error> {
+    let views: Vec<ProviderView> = connect
+        .iter()
+        .map(|c| ProviderView {
+            name: &c.name,
+            kind: c.api_type(),
+            base: &c.base_url,
+        })
+        .collect();
+    serde::Serialize::serialize(&views, s)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]
@@ -76,7 +102,7 @@ pub struct Prompt {
     pub kind: PromptKind,
     #[serde(default)]
     pub body: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::de::list")]
     pub args: Vec<String>,
 }
 
@@ -84,6 +110,7 @@ pub struct Prompt {
 #[serde(default, deny_unknown_fields)]
 pub struct Command {
     pub desc: String,
+    #[serde(default, deserialize_with = "crate::de::list")]
     pub args: Vec<String>,
     pub params: Option<usize>,
 }
@@ -165,6 +192,12 @@ pub struct ModelDef {
     pub display: String,
     #[serde(default)]
     pub window: u64,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::names::model_efforts"
+    )]
+    pub efforts: Option<Vec<String>>,
     #[serde(default)]
     pub prices: Option<Prices>,
 }
@@ -189,7 +222,7 @@ pub struct Hook {
     pub events: Vec<String>,
 }
 
-pub const EFFORTS: [&str; 6] = ["default", "low", "medium", "high", "xhigh", "max"];
+pub const DEFAULT_EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 
 const DEFAULT_API: &str = "openai-chat";
 
@@ -204,6 +237,42 @@ impl Config {
 
     pub fn model_def(&self, full: &str) -> Option<&ModelDef> {
         self.models.iter().rev().find(|m| m.name == full)
+    }
+
+    pub fn model_efforts(&self, full: &str) -> Vec<String> {
+        match self.model_def(full).and_then(|m| m.efforts.as_ref()) {
+            Some(list) => list.clone(),
+            None => DEFAULT_EFFORTS.iter().map(|s| (*s).to_string()).collect(),
+        }
+    }
+
+    pub fn fallback_effort(&self, full: &str) -> String {
+        let list = self.model_efforts(full);
+        if list.is_empty() {
+            String::new()
+        } else if list.iter().any(|e| e == "medium") {
+            "medium".into()
+        } else {
+            list[0].clone()
+        }
+    }
+
+    pub fn check_effort(&self, full: &str, effort: &str) -> Result<(), String> {
+        let list = self.model_efforts(full);
+        if list.is_empty() {
+            if effort.is_empty() {
+                return Ok(());
+            }
+            return Err(format!("model `{full}` does not support reasoning efforts"));
+        }
+        if list.iter().any(|e| e == effort) {
+            Ok(())
+        } else {
+            Err(format!(
+                "effort `{effort}` is not supported by `{full}` (supported: {})",
+                list.join(", ")
+            ))
+        }
     }
 
     pub fn is_disabled(&self, name: &str) -> bool {

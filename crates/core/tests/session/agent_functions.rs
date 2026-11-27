@@ -129,6 +129,7 @@ local t = require("tuse")
 local tm = require("trusted_mod")
 assert(my_secret_fn == nil)
 return {
+  test = {
   functions = {
     my_secret_fn = function(q)
       assert(my_secret_fn == nil)
@@ -188,6 +189,7 @@ return {
       end,
     },
   },
+  },
 }
 "#;
     fs::write(&cfg, cfg_v1).unwrap();
@@ -230,7 +232,7 @@ return {
             .any(|m| m.name == "opened" && m.text.starts_with("open-ok:"))
     );
 
-    fs::write(&cfg, "return { functions = { typo = false } }").unwrap();
+    fs::write(&cfg, "return { test = { functions = { typo = false } } }").unwrap();
     let err = s.reload().unwrap_err();
     assert!(
         err.contains("functions.typo: cannot disable unknown function"),
@@ -243,6 +245,7 @@ return {
     let cfg_v2 = r#"
 local t = require("tuse")
 return {
+  test = {
   functions = {
     sh = false,
     read = false,
@@ -268,6 +271,7 @@ return {
     check_docs = function(topic)
       return t.docs(topic)
     end,
+  },
   },
 }
 "#;

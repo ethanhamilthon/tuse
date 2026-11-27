@@ -1,6 +1,6 @@
 # Usage
 
-How to install and update Tuse, use the terminal UI, and run the `tuse` command line. For providers and models see [Connect](connect.md), for config files see [Config](config.md).
+How to install and update Tuse, use the terminal UI, and run the `tuse` command line. For providers and models see [Connect](connect.md), for config files and plugins see [Config](config.md).
 
 ## Install
 
@@ -15,7 +15,7 @@ The script picks the archive for your OS and CPU, checks its SHA-256 against the
 | Variable | Meaning |
 | --- | --- |
 | `TUSE_BIN_DIR` | Install directory (default `~/.local/bin`). |
-| `TUSE_VERSION` | Version to install, such as `0.10.3` or `v0.10.3` (default: latest). |
+| `TUSE_VERSION` | Version to install, such as `0.14.0` or `v0.14.0` (default: latest). |
 | `TUSE_RELEASE_URL` | Base download URL. Wins over `TUSE_VERSION`. |
 
 To build from source you need the Rust toolchain from `rust-toolchain.toml`. Run `cargo install --locked --git https://github.com/ethanhamilthon/tuse tuse`, or `make install` in a checkout (`BIN_DIR` defaults to `~/.local/bin`).
@@ -26,41 +26,46 @@ To build from source you need the Rust toolchain from `rust-toolchain.toml`. Run
 
 1. Connect a provider: `tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai` ([Connect](connect.md)).
 2. Run `tuse` in your project and pick a model with `/models`.
-3. Optionally add a config: `tuse init` creates `./tuse.lua` that extends your global config ([Config](config.md)).
+3. Optionally add a config: `tuse init` creates a namespaced starter `./tuse.lua` ([Config](config.md)).
 
 ## Command line
 
-Every command accepts `-h`/`--help`, which prints its usage and exits without reading config or state. Flags take `--flag VALUE` or `--flag=VALUE`. When a flag is repeated the last value wins, and `--` ends flag parsing. Unknown commands, unknown flags, and missing or extra arguments print `tuse: <message>` with the usage line to stderr and exit with 1.
+Every command accepts `-h`/`--help`, which prints its usage and exits without reading config or state. Valued flags take `--flag VALUE` or `--flag=VALUE` (values starting with `-` are accepted unless matching `-h`, `--help`, or a known flag of that command). Plain boolean flags (`--json`, `--replace`, `--key-stdin`) reject inline `=value`. When a flag is repeated the last value wins, and `--` ends flag parsing. Unknown commands, unknown flags, and missing or extra arguments print `tuse: <message>` with the usage line to stderr and exit with 1.
 
 - `tuse [-c|--config PATH] [-r|--resume ID]` opens the TUI in the current folder. `-r ID` opens a saved session instead, using its saved folder if that still exists. On exit it prints `tuse: session <ID>` to stderr.
 - `tuse json [-c|--config PATH] [-r|--resume ID]` serves one session over JSON-RPC on stdin/stdout ([JSON mode](json.md)).
 - `tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--header HEADER]... [--replace]` checks a provider and saves it ([Connect](connect.md)).
 - `tuse disconnect NAME` removes a provider.
-- `tuse providers [--json]` lists providers as `NAME<TAB>BASE_URL`, or as JSON with `api`. Keys are never printed.
+- `tuse providers [--json]` lists saved providers as `NAME<TAB>BASE_URL`, or as JSON objects with `{ name, type, base }`. Keys and headers are never printed.
 - `tuse models [-c|--config PATH]` prints the saved default model and effort and the `models` metadata from the effective config.
-- `tuse init` writes `./tuse.lua`, which loads the global config with `pcall(require, "global")`. It fails if the file exists.
+- `tuse plugins add [--replace] REPO` installs a plugin from a public GitHub repository or subdirectory (`owner/repo[/subdir][@ref]` or GitHub URL) into `~/.tuse/plugins`.
+- `tuse plugins list [--json]` lists installed plugins discovered under `~/.tuse/plugins`.
+- `tuse plugins delete TARGET` removes an installed plugin.
+- `tuse plugins print [--json] TARGET` prints an installed plugin's path, source, and manifest details.
+- `tuse plugins update [TARGET]` updates one installed plugin or all installed plugins from their recorded sources.
+- `tuse init` writes a starter namespaced `./tuse.lua`. It fails if the file exists.
 - `tuse update` updates the binary (see above).
-- `tuse version` (`-V`, `--version`) prints `tuse <version>`.
-- `tuse help` (`-h`, `--help`) prints the full usage. `tuse COMMAND -h` prints the usage of one command.
+- `tuse version` (`-V`, `--version`) prints `tuse <version>`. Extra flags or arguments are rejected.
+- `tuse help [COMMAND]` (`-h`, `--help`) prints the full usage or the usage of one command. Unknown commands or extra arguments are rejected.
 
-`-c PATH` is resolved from the current folder, and `~/` expands to your home. Without it, Tuse uses `./tuse.lua`, then `~/.config/tuse.lua`, then `~/.config/tuse/init.lua`, then built-in defaults.
+Config lookup precedence: `-c PATH` (resolved from cwd, `~/` expands) > `./tuse.lua` for the primary local config; `$TUSE_GLOBAL_CONFIG` (if set and non-empty; directory loads `<dir>/init.lua`; missing target fails fast) > `~/.config/tuse.lua` > `~/.config/tuse/init.lua` for the global config; installed plugins from `~/.tuse/plugins/`.
 
 ## The screen
 
 From top to bottom:
 
-- **Chat.** Your messages sit on a `surface` block. Both your messages and agent replies leave two columns on each side and line up with the rest of the chat text. Agent replies render as Markdown, and a Markdown image `![alt](path)` shows as a clickable `alt` (or the path when `alt` is empty). Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
+- **Chat.** Your messages sit on a `user_bg` block. Both your messages and agent replies leave two columns on each side and line up with the rest of the chat text. Agent replies render as Markdown, and a Markdown image `![alt](path)` shows as a clickable `alt` (or the path when `alt` is empty). Reasoning is shown after `∴`. Each `lua` tool call shows its code with a star spinner while it runs and `*` once it is done, then its output and per-file diffs. `show()` blocks start with `◆`, and answered `pick()`/`ask()` prompts with `?`. Turn summaries look like `✓ 12s · Model/effort`.
 - **Gap.** One empty row above the input in every style.
-- **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`. While background tasks run, the count follows the timer (`12s · 2 tasks`), and when idle it replaces the project path as `⠋ 2 tasks` in the accent color.
+- **Top rule.** Shows `↑N` while scrolled up. On the right: a short flash (`Copied.`, retry countdowns), the busy spinner with elapsed time, or `steering…`. While background tasks run, the count follows the timer (`12s · 2 tasks`), and when idle it replaces the project path with an `icons`-colored spinner and `accent`-colored task count (`⠋ 2 tasks`).
 - **Input.** Grows with the text up to `ui.lines.input`.
-- **Bottom rule.** `<model> · <effort> · <used>/<window> · $<cost>`. The context and cost parts are hidden while unknown.
+- **Bottom rule.** `<model> · <effort> · <used>/<window> · $<cost>` (the effort segment is omitted for `efforts = {}` models; context and cost are hidden while unknown).
 - **Overlay.** At most one picker, panel, or `ask()` question, shown below the input. With `fill` and `bar` it sits between the input and the status line and ends with a rule ([Config](config.md#theme-and-ui)).
 
 How many lines of code, output, diffs, and reasoning appear is set by `ui.lines`, and the colors by `ui.theme` ([Config](config.md#theme-and-ui)).
 
 ## Typing a message
 
-- `Enter` sends the message, or runs an exact `/command`. `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` inserts a newline.
+- `Enter` accepts a highlighted picker item, runs a standalone `/command`, or sends the message. `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` inserts a newline.
 - `#` opens a picker of your configured `prompts`. The picked `#name` is sent with the prompt body attached. A prompt with `args` then opens a picker of its args, and a space after the prompt opens it again. The result is one atom such as `#openspec propose`, drawn in the accent color.
 - `@` opens a file picker for the session folder. It matches any part of the file or folder name, ignoring case. Prefix matches come first, then other matches. Each group is newest first by modification time (creation time if unavailable). With no query, the newest entries come first, and older entries are dropped first in large folders. `@dir/q` browses `dir/`, and `@/` or `@~/` go outside the project. `Tab` completes a folder or attaches a file. `Enter` attaches the highlighted file or folder.
 - `Ctrl+V`/`Cmd+V` pastes an image from the clipboard as `[Image #N]` (saved under `~/.tuse/<id>/images/`), or pastes text otherwise.
@@ -90,7 +95,7 @@ Text files send their first 1,024 bytes (`truncated="true" size="…"` when long
 
 | Key | Action |
 | --- | --- |
-| `PageUp` / `PageDown` | Scroll the chat. `Shift+` scrolls the open panel. |
+| `PageUp` / `PageDown` | Page any open picker (clamping at the ends), or scroll the chat. `Shift+` scrolls the open panel. |
 | `Up` / `Down` | Move through wrapped lines, picker items, or (with empty input) scroll a panel. |
 | `Ctrl+P` / `Ctrl+N` | Move in a picker. |
 | `Home` / `End`, `Ctrl+E` | Start / end of line. |
@@ -103,22 +108,29 @@ Text files send their first 1,024 bytes (`truncated="true" size="…"` when long
 | `Ctrl+U` / `Ctrl+K` | Delete to start / end of line. |
 | `Esc` | Close, or stop everything (see above). |
 
-Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text within one target at a time: the draft, a user or agent message, a `show()` block (pinned or not), a `pick` or `ask` result, or the open text panel. Reasoning, Lua tool blocks, events, and built-in pickers are not selectable. Copying with `Ctrl+C` or `Cmd+C` leaves out visual wraps and layout padding but preserves intentional line breaks. Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `settings.open` handler from config (extension, mask, `*`, `@dir`, or `@url`) or the OS opener.
+Shortcuts with `Ctrl`, `Alt`, or `Cmd` also work on a Russian keyboard layout. With the mouse, the wheel scrolls whatever is under the pointer, and dragging selects text within one target at a time: the draft, a user or agent message, a `show()` block (pinned or not), a `pick` or `ask` result, or the open text panel. Reasoning, Lua tool blocks, events, and built-in pickers are not selectable. Copying with `Ctrl+C` or `Cmd+C` leaves out visual wraps and layout padding but preserves intentional line breaks. Clicking a URL or an existing file path in agent messages, `show()` blocks, `/config`, `/session`, or `/history` opens it, using a matching `open` handler from config (extension, mask, `*`, `@dir`, or `@url`) or the OS opener.
 
 ## Slash commands
 
-Type `/` to get a picker. The `/` and `#` pickers and their argument pickers match the start of the name, ignoring case. They do not search descriptions or the `/` and `#` markers. Pickers show aligned columns; `/history`, `/resume`, `/fork`, `/models`, and `/tasks` search the whole row.
+Type `/` anywhere in a draft to open the command picker (tokens with a second `/`, like `/usr/bin`, do not open it). The `/` and `#` pickers and their argument pickers match name prefixes ignoring case. Pickers show aligned columns; `/history`, `/resume`, `/fork`, `/models`, and `/tasks` search the whole row.
+
+- With the command picker open, `Enter` (or `Tab`) accepts the highlighted command immediately—executing built-in or zero-arg commands (removing only the command token and preserving surrounding draft text) or transitioning to the argument picker for commands with `args`.
+- Typing a space after a zero-argument command (such as `/new `) disengages the picker; pressing ordinary `Enter` on `"/new "` or `"/new foo"` shows `/new takes no words`, preserves the draft, and neither runs `/new` nor sends to the model.
+- Plain mid-draft prose (`explain /new works`, ` /new`) and paths (`/usr/bin/env`, `/etc/hosts is broken`) send cleanly as normal user messages.
+- Standalone unknown single-segment commands at column 0 (`/trace`) and invalid command arguments fail immediately, preserve the draft untouched, and never send to the model.
+
+Built-in commands:
 
 - `/new` starts a fresh session in the current folder.
-- `/resume` picks another titled session from this folder, newest first.
+- `/resume` picks another started session from this folder, newest first.
 - `/fork` picks one of the user and agent messages of this session and opens a new session in the same folder with the history up to it, titled `[fork] ` plus the old title. Forking at an agent message keeps it; forking at a user message leaves it out and puts its text in the input. The original session stays in `/resume`.
-- `/models` picks a model (only the configured `models`, when set), then an effort (`default`, `low`, `medium`, `high`, `xhigh`, `max`). The choice applies to this session and becomes the default for new ones.
-- `/tasks` lists background tasks. `Enter` shows the task: id, name, status, start and end, how long it has run, the source of its function, and the last 200 log lines. `Ctrl+X` stops one.
-- `/session` shows the session: ID, name, folder, config, model, context, turns, usage, cost.
+- `/models` picks a model (only the configured `models`, when set), then an effort from that model's resolved `efforts` (`low`, `medium`, `high`, `xhigh`, `max`, or skips effort selection when `efforts = {}`). The choice applies to this session and becomes the default for new ones.
+- `/tasks` lists background tasks. `Enter` shows the task: id, name, status, start and end, how long it has run, the source of its function, and the last 200 log lines. `Ctrl+X` or `Cmd+X` stops one.
+- `/session` shows the session: ID, title, folder, config, model, context, turns, usage, cost.
 - `/history` lists everything in the session, starting with the system prompt. `Enter` opens an entry, `Left`/`Right` step through entries, `Esc` goes back. Roles in `history.hide` are left out.
-- `/config` shows the resolved config, without secrets or Lua bodies.
-- `/reload` runs the config again. If it fails, the old config stays.
+- `/config` shows the resolved config (including active providers and plugins), without secrets or Lua bodies.
+- `/reload` runs the config and plugins again. If it fails, the old config stays.
 - `/stop` stops the turn, background tasks, hooks, and commands, also when the session is idle.
 - `/quit` exits.
 
-Custom commands from `commands` show up in the same picker with their `desc`, and run as Lua jobs. `/name words` passes the words to the command, and a command with `args` opens a picker of them ([Config](config.md#commands-and-open)). Built-in names cannot be overridden.
+Custom commands from `commands` show up in the same picker with their `desc`, and run as Lua jobs. `/name words` passes the words to the command, and a command with `args` opens a picker of them anywhere in a draft ([Config](config.md#commands-and-open)). Built-in names cannot be overridden.

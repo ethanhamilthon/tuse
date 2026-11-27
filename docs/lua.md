@@ -4,12 +4,12 @@ The agent's single `lua` tool, the persistent VM, every built-in function, backg
 
 ## The VM
 
-Each session has one Lua 5.4 VM. It runs the agent's `lua` tool calls, your config, hooks, commands, `open` handlers, and background tasks, all as coroutines on one scheduler. Globals the agent creates last until the session closes. Resuming a session starts a fresh VM. Errors, timeouts, and cancels never kill the VM.
+Each session has one Lua 5.4 VM. It runs the agent's `lua` tool calls, your config, plugins, hooks, commands, `open` handlers, and background tasks, all as coroutines on one scheduler. Globals the agent creates last until the session closes. Resuming a session starts a fresh VM. Errors, timeouts, and cancels never kill the VM.
 
 The VM has two environments:
 
-- **Agent**: `lua` tool calls, the modules and files they load, and tasks they spawn. Built-ins are globals, together with the agent-only `functions` from the config. `require("tuse")` returns a read-only view of the same built-ins.
-- **Trusted**: the config, its modules, hooks, commands, `open` handlers, and the bodies of configured `functions`. Built-ins are only reachable through `require("tuse")`, always as the originals. Agent-only functions are invisible here.
+- **Agent**: `lua` tool calls, the modules and files they load, and tasks they spawn. Built-ins are globals, together with the agent-only `functions` from the config. `require("tuse")` returns a read-only view of the same built-ins. `require("plugin:<name>")` and `require("plugins")` are not available here.
+- **Trusted**: the config, its modules, plugins, hooks, commands, `open` handlers, and the bodies of configured `functions`. Built-ins are only reachable through `require("tuse")`, always as the originals. Agent-only functions are invisible here.
 
 Each environment has its own `package.loaded`, so neither side can change the other's modules. A function keeps the environment it was defined in, including when it is passed across. Both sides get `string`, `table`, `math`, `utf8`, `io`, `os` (without `os.exit`), and `coroutine`. `debug` is not available.
 
@@ -26,7 +26,7 @@ The model has exactly one tool, `lua`, which takes `{"code": "..."}`.
 
 ## Functions
 
-Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~/…`, or relative to the session folder. Built-ins removed with `functions = { name = false }` are gone in the agent's environment.
+Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~/…`, or relative to the session folder (including `sh(..., { cwd = "~/..." })`). Built-ins removed with `functions = { name = false }` are gone in the agent's environment.
 
 ### Files
 
@@ -39,11 +39,11 @@ Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~
 
 ### Shell and tasks
 
-- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: Runs `bash -c cmd` with stdin closed, merging stdout and stderr. Returns `{out, code, ok, timed_out}` plus `:lines()`. `tostring(r)` adds `[exit code N]` or `[timed out]`. `code` is `nil` when the process was killed. `env` is added to the inherited environment. The command is killed (with its whole process group) on timeout, at the caller's deadline, or on cancel. Use long strings `sh([=[ … ]=])` for commands with quotes or backslashes.
+- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: Runs `bash -c cmd` with stdin closed, merging stdout and stderr. `cwd` expands `~/…` and resolves relative paths against the session folder. Returns `{out, code, ok, timed_out}` plus `:lines()`. `tostring(r)` adds `[exit code N]` or `[timed out]`. `code` is `nil` when the process was killed. `env` is added to the inherited environment. The command is killed (with its whole process group) on timeout, at the caller's deadline, or on cancel. Use long strings `sh([=[ … ]=])` for commands with quotes or backslashes.
 - `spawn(fn, name)`: Runs `fn` as a background task with no deadline and returns its id (`t1`, `t2`, …).
-- `task_get(id, lines=50)`: `{id, name, status, started, ended, code, output}`, where `code` is the source of the task's function and `output` is the end of the log.
-- `task_stop(id)`: Stops a task.
-- `task_list()`: Lists all tasks of the session.
+- `task_get(id, lines=50)`: `{id, name, status, started, ended, log, code, output}`, where `log` is the task log path, `code` is the source of the task's function, and `output` is the end of the log.
+- `task_stop(id)`: Stops a task and returns `{id, name, status, started, ended, log, code}`.
+- `task_list()`: Lists all tasks of the session, each with `{id, name, status, started, ended, log, code}`.
 
 ### UI
 
@@ -55,12 +55,12 @@ Errors are ordinary Lua errors (`pcall` catches them). Paths can be absolute, `~
 
 ### Session and utilities
 
-- `session()`: Returns a fresh snapshot (changing it does nothing) with `mode`, `configpath`, `cwd`, `home`, `id`, `started`, `created`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage` (`input`, `output`, `cache_read`, `cache_write`, `cost`, `llm_cost`), `model_info`, `steps`, `turns`, and `history` (structured records; see [History](session.md#history-and-session-data)). It never contains keys. During config evaluation only the first four fields are set.
-- `llm(prompt, model, effort)`: Sends one prompt to a model, with no tools, history, or system prompt, and returns the text. `model` and `effort` default to the session's. It uses the same retries as turns, and its usage is counted as `llm_cost`.
-- `reload()`: Reloads the config like `/reload` and raises an error if the config is invalid. Inside a hook, it runs after the hook returns.
-- `set_session{title, model, effort, history}`: Pass any subset of these keys. The title is one line, up to 80 characters. Model and effort must match a configured provider and its supported efforts. History replaces the whole list; use `session().history` as a starting point. Each tool call must have exactly one result before the next user or agent record. Images must be data URLs, and a `system` record, if present, must come first. Invalid input raises without changing anything. A replacement requested during tool calls waits until the step's final result is recorded, before queued input. Usage totals and `ctx` are unaffected.
+- `session()`: Returns a fresh snapshot (changing it does nothing) matching JSON-RPC `session.state` (`mode`, `config_path`, `cwd`, `home`, `id`, `started`, `created`, `title`, `model`, `provider`, `effort`, `busy`, `turn`, `context`, `context_window`, `usage` (`input`, `output`, `cache_read`, `cache_write`, `cost`, `llm_cost`), `model_info` (including resolved `efforts`), `requests`, `llm_requests`, `steps`, `turns`, `calls`) plus `history` (structured records; see [History](session.md#history-and-session-data)). It never contains keys. During config evaluation only `mode`, `config_path`, `cwd`, and `home` are set.
+- `llm(prompt, model, effort)`: Sends one prompt to a model, with no tools, history, or system prompt, and returns the text. When `model` is omitted or matches the session's current model and `effort` is omitted, it inherits the session's model and effort. When switching to another model with `effort` omitted, it sends no reasoning parameter if that model declares `efforts = {}`, and otherwise uses `low` (raising if that model's declared `efforts` exclude `low`). Explicit efforts are validated against the target model's resolved efforts. It uses the same retries as turns, and its usage is counted as `llm_cost`.
+- `reload()`: Reloads the config and plugins like `/reload` and raises an error if invalid. Inside a hook, it runs after the hook returns.
+- `set_session{title, model, effort, history}`: Pass any subset of these keys. The title is one line, up to 80 characters. Model and effort must match a configured provider and the model's resolved efforts (empty effort `""` for `efforts = {}`). History replaces the whole list; use `session().history` as a starting point. Each tool call must have exactly one result before the next user or agent record. Images must be data URLs, and a `system` record, if present, must come first. Replacing history with a `user` record marks the session started. Invalid input (including replacing history in a way that invalidates a pending `fork(position)`) raises without changing anything. A replacement requested during tool calls waits until the step's final result is recorded, preserving any `meta` records created in that step. A no-op `set_session` does not fire `session_updated`. Usage totals and `context` are unaffected.
 - `fork(position)`: Opens a new session forked at the `user` or `agent` record at `position` of `session().history` (counting from 1), like `/fork`: the new history ends with an agent record, or just before a user record, whose text goes into the input. It raises on a position that is out of range or not a `user` or `agent` record, and when another switch is already pending. A switch requested during tool calls waits until the step's final result is recorded, after a pending `set_session` history, and then the turn ends in the old session. Queued messages stay with the old session. The old session closes like with `/new`, and the TUI and JSON-RPC (`session_switched` event) show the new one.
-- `resume(id)`: Switches to the started session `id` of this folder, like `/resume`, with the same timing and errors as `fork`.
+- `resume(id)`: Switches to another started session `id` belonging to the current folder, like `/resume`, with the same timing and errors as `fork` (rejecting the current session, unstarted sessions, or sessions from another folder).
 - `docs(topic)`: `docs()` lists the topics and `docs("lua")` reads one. These are the pages of this documentation.
 - `json.encode(value)` / `json.decode(text)`: JSON, where `null` becomes `nil`.
 - `inspect(value)`: Formats any value readably, the same formatting used for tool results.
@@ -82,9 +82,9 @@ end, "tests")
 - Status is `running`, `done`, `failed`, or `stopped`. `started` and `ended` are UTC timestamps, with `ended` empty while the task runs.
 - When a task ends on its own, the agent gets a message. A running turn takes it at its next step. An idle session starts a turn for it:
   ``<task>Task t1 (tests) finished. Last line: tests passed. Output: `task_get("t1").output`.</task>``
-  The last line comes from the return value or the error, not from the log. Stopped tasks send no message.
+  The last line comes from the return value or the error, not from the log; succeeded tasks with no return text omit `Last line:`. Stopped tasks send no message.
 - **Handoff.** If you steer while a `lua` tool call runs, the whole call keeps running as a task named after its run, such as `lua-3`. Locals, a running `sh`, and the rest of the script all continue. The tool result becomes `[continued in background: tN]`. A call is handed off at most once.
-- Stop tasks with `task_stop`, with `Ctrl+X` in `/tasks`, or with JSON-RPC `tasks.stop`. Esc, `/stop`, `turn.cancel`, and closing or switching the session stop all of them. Reload does not.
+- Stop tasks with `task_stop`, with `Ctrl+X`/`Cmd+X` in `/tasks`, or with JSON-RPC `tasks.stop`. Esc, `/stop`, `turn.cancel`, and closing or switching the session stop all of them. Reload does not.
 
 ## Hooks
 
@@ -93,12 +93,14 @@ Hooks are config functions that run on session events:
 ```lua
 local t = require("tuse")
 return {
-  hooks = {
-    notify = {
-      events = { "agent_message" },
-      run = function(e)
-        if e.status == "finished" then t.sh([[osascript -e 'display notification "done"']]) end
-      end,
+  alerts = {
+    hooks = {
+      notify = {
+        events = { "agent_message" },
+        run = function(e)
+          if e.status == "finished" then t.sh([[osascript -e 'display notification "done"']]) end
+        end,
+      },
     },
   },
 }
@@ -114,7 +116,7 @@ Every `e` has `event`, the event name, plus the fields below.
 | `session_created` | A new session is opened. | None |
 | `session_resumed` | A saved session is opened. | None |
 | `session_close` | Before switching sessions, not on quit. | None |
-| `session_updated` | After a successful `set_session` call. | `changed` (list of keys) |
+| `session_updated` | After a `set_session` call that changed at least one field. | `changed` (list of keys) |
 | `user_message` | A user message was recorded. | None |
 | `agent_message` | An agent reply was recorded. | `status` (`working`, `finished`, or `cancelled`) |
 | `turn_error` | A turn failed. | `error` |
@@ -126,7 +128,7 @@ Launch runs `config_load`, `process_start`, and then `session_created` or `sessi
 
 ## What the agent sees
 
-This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order,. The prompt is stored as the first `system` history record and rebuilt on session creation, resume, and config load. Inside a session this section is rendered for that session's config.
+This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order. The prompt is stored as the first `system` history record and rebuilt on session creation, resume, and config load. Inside a session this section is rendered for that session's config.
 
 ### System prompt
 
@@ -154,17 +156,17 @@ They are Lua globals, not tools: call them inside `lua` code. Errors are Lua err
 - `delete(path)`: delete a single file and show its removal as a diff (does not delete directories).
 - `edit(path, old, new, {all=false})`: replace exact text in a file. `old` must be unique unless `all` is set; read the file first. A wrong `old` raises an error.
 - `grep(pattern, {path=".", glob=nil, ignore_case=false, literal=false, context=0, limit=100})`: search file contents with a regex (or plain text with `literal=true`); `path` can be a string or list of paths. Returns `path:line: text` per match and respects `.gitignore`.
-- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E "foo\\bar" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. A command is killed at its explicit timeout or the foreground Lua deadline, whichever comes first. Steering or cancelling the turn can move the whole Lua call to a background task, where the foreground deadline no longer applies.
+- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E "foo\\bar" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. A command is killed at its explicit timeout or the foreground Lua deadline, whichever comes first. Steering the turn can move the whole Lua call to a background task, where the foreground deadline no longer applies.
 - `spawn(fn, name)`: runs `fn` in the background as a task in this same VM (it sees your globals); returns its ID. A task has no deadline; its `print` goes to its log, and you get a message when it ends.
-- `task_get(id, lines=50)`: return `{ id, name, status, started, ended, output }` with the log tail in `.output`.
-- `task_stop(id)`: stop a running background task and return its task info.
-- `task_list()`: list all tasks in the session with `.id`, `.name`, and `.status` (`running`, `done`, `failed`, `stopped`).
+- `task_get(id, lines=50)`: return `{ id, name, status, started, ended, log, code, output }` with the log tail in `.output`.
+- `task_stop(id)`: stop a running background task and return its task info (`{ id, name, status, started, ended, log, code }`).
+- `task_list()`: list all tasks in the session with `{ id, name, status, started, ended, log, code }` (`status`: `running`, `done`, `failed`, `stopped`).
 - `show(name, text, pin)`: render or update a UI-only Markdown block by name (`pin=true` keeps it at the end of the chat after new messages; `show(name, "", false)` removes it).
 - `pick(options, title)`: show a list of strings under an optional Markdown question and return the selected string, or `nil` on Esc or an empty list (pauses your timeout while waiting).
 - `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
-- `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text; `model` and `effort` default to the session's.
+- `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text. Omitting `model` inherits the session's model and effort; passing another model with `effort` omitted sends no reasoning when that model declares `efforts = {}` and otherwise uses `low` (raising if its declared `efforts` exclude `low`).
 - `reload()`: reload the config like `/reload`; raises if it is invalid.
-- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `started`, `created`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `history`).
+- `session()`: return a fresh snapshot of runtime session data (`mode`, `config_path`, `cwd`, `home`, `id`, `started`, `created`, `title`, `model`, `provider`, `effort`, `busy`, `turn`, `context`, `context_window`, `usage`, `model_info`, `requests`, `llm_requests`, `steps`, `turns`, `calls`, `history`).
 - `set_session({title, model, effort, history})`: update any of these fields; `history` replaces the stored list with structured records from `session().history`.
 - `fork(position)`: switch to a new session forked at the `user` or `agent` record at `position` (counting from 1) of `session().history`; a `user` record leaves its text in the input. The switch waits until the tool calls of the current step finish, then the turn ends. Raises on a bad position.
 - `resume(id)`: switch to another started session of this folder, after the tool calls of the current step finish. Raises on an unknown session.

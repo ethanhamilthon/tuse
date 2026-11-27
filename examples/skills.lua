@@ -1,12 +1,10 @@
--- Skills are reusable prompts. This loads every skills/<name>/SKILL.md next to this file as #<name>.
--- Use: local skills = require("skills"); g.prompts = skills.load(g.prompts)
+-- Skills are reusable prompts. This loads every skills/<name>/SKILL.md as #<name>.
+-- Use: return { skills = require("skills")() }
 local t = require("tuse")
 
-local M = {}
-
-function M.load(prompts, dir)
-  prompts = prompts or {}
-  dir = dir or ((t.session().configpath or ""):match("^(.*)/") or t.session().cwd) .. "/skills"
+return function(dir)
+  local prompts = {}
+  dir = dir or ((t.session().config_path or ""):match("^(.*)/") or t.session().cwd) .. "/skills"
   local list = t.sh("ls " .. string.format("%q", dir) .. " 2>/dev/null")
   for name in list.out:gmatch("[^\n]+") do
     local ok, body = pcall(t.read, dir .. "/" .. name .. "/SKILL.md")
@@ -14,7 +12,5 @@ function M.load(prompts, dir)
       prompts[name] = body
     end
   end
-  return prompts
+  return { prompts = prompts }
 end
-
-return M

@@ -14,6 +14,23 @@ pub struct Refs {
     pub cwd: PathBuf,
 }
 
+pub fn is_valid_image_data_url(u: &str) -> bool {
+    u.split_once(',').is_some_and(|(meta, data)| {
+        meta.strip_prefix("data:image/")
+            .and_then(|s| s.strip_suffix(";base64"))
+            .is_some_and(|s| !s.is_empty())
+            && !data.is_empty()
+            && base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .is_ok()
+    })
+}
+
+fn resolve(p: &Path, cwd: &Path) -> PathBuf {
+    p.to_str()
+        .map_or_else(|| cwd.join(p), |s| tuse_config::resolve_path(s, cwd))
+}
+
 pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
     let mut input = UserInput::text(text);
     let mut blocks: Vec<String> = vec![];
@@ -43,7 +60,7 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
         )
     };
     for (id, path) in &refs.images {
-        match std::fs::read(refs.cwd.join(path)) {
+        match std::fs::read(resolve(path, &refs.cwd)) {
             Ok(bytes) => blocks.push(image(&mut input, *id, path, &bytes)),
             Err(e) if refs.strict => return Err(format!("{}: {e}", path.display())),
             Err(_) => {}
@@ -56,8 +73,9 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
         }
         done.push(path);
         let shown = esc(&path.display().to_string());
+        let full = resolve(path, &refs.cwd);
         if crate::text::image_mime(path).is_some() {
-            match std::fs::read(refs.cwd.join(path)) {
+            match std::fs::read(&full) {
                 Ok(bytes) => {
                     blocks.push(image(&mut input, next_id, path, &bytes));
                     next_id += 1;
@@ -67,7 +85,6 @@ pub fn build(text: &str, refs: Refs) -> Result<UserInput, String> {
             }
             continue;
         }
-        let full = refs.cwd.join(path);
         if full.is_dir() {
             match list_dir(&full) {
                 Ok(list) => blocks.push(format!("<dir path=\"{shown}\">{list}</dir>")),

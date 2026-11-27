@@ -18,7 +18,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
       local t = require("tuse")
       local s = t.session()
       assert(not pcall(t.set_session, {title = "invalid", history = {{role = "agent", text = "x", tool_calls = {{id = "1", name = "lua", arguments = "{}"}}}}}))
-      assert(t.session().name == s.name)
+      assert(t.session().title == s.title)
       t.set_session{history = s.history}
       s.history[1].text = "custom system"
       t.set_session{history = s.history}
@@ -38,7 +38,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     let (dir, cfg) = common::setup("rpc-parity", &addr, extra);
     let s1 = Session::open(Options {
         cwd: dir.clone(),
-        config: Some(cfg),
+        config: Some(cfg.clone()),
         mode: Mode::Json,
         resume: None,
         start: Start::Launch,
@@ -211,11 +211,12 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
                 .contains("<prompt name=\"review\">Check edge cases.</prompt>")
     }));
 
-    let usage = call(&tx, &out, 130, "session.snapshot", json!({}))["result"]["usage"].clone();
+    let usage = call(&tx, &out, 130, "session.state", json!({}))["result"]["usage"].clone();
     assert!(call(&tx, &out, 131, "commands.run", json!({"name": "rewrite"}))["error"].is_null());
     event(&out, "history_replaced");
-    let snap = call(&tx, &out, 132, "session.snapshot", json!({}))["result"].clone();
-    assert_eq!(snap["history"][0]["text"], "custom system");
+    let snap = call(&tx, &out, 132, "session.state", json!({}))["result"].clone();
+    let hist_after = call(&tx, &out, 133, "session.history", json!({}))["result"].clone();
+    assert_eq!(hist_after[0]["text"], "custom system");
     assert_eq!(snap["usage"], usage);
 
     let s2 = call(&tx, &out, 14, "session.new", json!({}))["result"].clone();
@@ -230,43 +231,41 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
         [s1_id.as_str()]
     );
     assert_eq!(
-        (s2["model"].clone(), s2["effort"].clone()),
+        (
+            s2["session"]["model"].clone(),
+            s2["session"]["effort"].clone()
+        ),
         (json!("p/alt"), json!("high"))
     );
     assert_eq!(
         call(&tx, &out, 15, "session.resume", json!({"id": "nope"}))["error"]["code"],
-        -32000
+        -32601
     );
     assert_eq!(
-        call(&tx, &out, 16, "session.info", json!({}))["result"]["id"],
+        call(&tx, &out, 16, "session.state", json!({}))["result"]["id"],
         s2["session"]["id"]
     );
-    let back = call(&tx, &out, 17, "session.resume", json!({"id": s1_id}))["result"].clone();
+    call(&tx, &out, 19, "shutdown", json!({}));
+    server.join().unwrap();
+
+    let s1_resumed = Session::open(Options {
+        cwd: dir.clone(),
+        config: Some(cfg),
+        mode: Mode::Json,
+        resume: Some(s1_id.clone()),
+        start: Start::Resume,
+    })
+    .unwrap();
+    let (tx, out, server) = spawn(s1_resumed);
+    let back = call(&tx, &out, 17, "initialize", json!({}))["result"].clone();
     assert_eq!(
         (
             back["session"]["id"].clone(),
-            back["model"].clone(),
-            back["effort"].clone()
+            back["session"]["model"].clone(),
+            back["session"]["effort"].clone()
         ),
         (json!(s1_id), json!("p/alt"), json!("high"))
     );
-    let hist = call(&tx, &out, 170, "session.history", json!({}))["result"].clone();
-    let at = hist
-        .as_array()
-        .unwrap()
-        .iter()
-        .rposition(|t| t["role"] == "user")
-        .unwrap();
-    assert_eq!(
-        call(&tx, &out, 171, "session.fork", json!({"index": 0}))["error"]["code"],
-        -32000
-    );
-    let forked = call(&tx, &out, 172, "session.fork", json!({"index": at}))["result"].clone();
-    assert_eq!(forked["draft"], hist[at]["text"]);
-    assert_ne!(forked["session"]["id"], json!(s1_id));
-    let cut = call(&tx, &out, 173, "session.history", json!({}))["result"].clone();
-    assert!(cut.as_array().unwrap().len() <= at);
-    call(&tx, &out, 174, "session.resume", json!({"id": s1_id}));
     let rui = call(&tx, &out, 18, "ui.state", json!({}))["result"].clone();
     assert!(rui["active"].is_null(), "{rui}");
     assert_eq!(rui["entries"].as_array().unwrap().len(), 2);
@@ -291,6 +290,22 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
             .iter()
             .all(|m| m["name"] != "drop")
     );
+    let hist = call(&tx, &out, 170, "session.history", json!({}))["result"].clone();
+    let at = hist
+        .as_array()
+        .unwrap()
+        .iter()
+        .rposition(|t| t["role"] == "user")
+        .unwrap();
+    assert_eq!(
+        call(&tx, &out, 171, "session.fork", json!({"index": 0}))["error"]["code"],
+        -32000
+    );
+    let forked = call(&tx, &out, 172, "session.fork", json!({"index": at}))["result"].clone();
+    assert_eq!(forked["draft"], hist[at]["text"]);
+    assert_ne!(forked["session"]["id"], json!(s1_id));
+    let cut = call(&tx, &out, 173, "session.history", json!({}))["result"].clone();
+    assert!(cut.as_array().unwrap().len() <= at);
 
     call(&tx, &out, 19, "shutdown", json!({}));
     server.join().unwrap();

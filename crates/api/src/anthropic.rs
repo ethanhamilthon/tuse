@@ -194,7 +194,7 @@ impl Acc {
             self.reply.usage = Some(Usage {
                 input: inp + read + write,
                 output: out,
-                cached: read,
+                cache_read: read,
                 cache_write: write,
             });
         }

@@ -1,18 +1,17 @@
--- A per-project tuse.lua that builds on your global config.
+-- A per-project tuse.lua using the namespaced config format (global config loads automatically).
 -- Use: copy to <repo>/tuse.lua
-local ok, g = pcall(require, "global")
-if not ok or type(g) ~= "table" then
-  g = {}
-end
-
-g.systems = g.systems or {}
-g.prompts = g.prompts or {}
-g.models = g.models or {}
-
-g.systems[#g.systems + 1] = "This is a Rust workspace. Run `cargo test` before you finish."
-g.prompts.release = "Bump the patch version, update the changelog, commit, tag, and push."
-g.history = { hide = { "usage", "flash" } }
-g.models[#g.models + 1] = { name = "anthropic/claude-sonnet-4-5" }
-g.models[#g.models + 1] = { name = "openai/gpt-5" }
-
-return g
+return {
+  project = {
+    systems = {
+      "This is a Rust workspace. Run `cargo test` before you finish.",
+    },
+    prompts = {
+      release = "Bump the patch version, update the changelog, commit, tag, and push.",
+    },
+    history = { hide = { "usage", "flash" } },
+    models = {
+      { name = "anthropic/claude-sonnet-4-5" },
+      { name = "openai/gpt-5" },
+    },
+  },
+}

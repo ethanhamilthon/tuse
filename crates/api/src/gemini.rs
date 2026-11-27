@@ -114,7 +114,13 @@ pub(crate) fn encode(req: &Request) -> Result<Value, Error> {
             let b = match effort {
                 "low" => 1024,
                 "medium" => 8192,
-                _ => 24576,
+                "high" => 24576,
+                other => {
+                    return Err(Error::Unsupported(format!(
+                        "model `{}` uses thinkingBudget which only maps low, medium, high (got `{other}`; set models[].efforts in config)",
+                        req.model
+                    )));
+                }
             };
             json!({"includeThoughts": true, "thinkingBudget": b})
         } else {
@@ -197,7 +203,7 @@ fn chunk(
         reply.usage = Some(Usage {
             input: ju64(u, "promptTokenCount").unwrap_or(0),
             output: out,
-            cached: ju64(u, "cachedContentTokenCount").unwrap_or(0),
+            cache_read: ju64(u, "cachedContentTokenCount").unwrap_or(0),
             cache_write: 0,
         });
     }

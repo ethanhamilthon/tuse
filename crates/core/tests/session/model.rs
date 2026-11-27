@@ -31,7 +31,7 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     .unwrap();
     let cfg = dir.join("tuse.lua");
     let models = dir.join("models.lua");
-    std::fs::write(&cfg, "return { models = require('models') }").unwrap();
+    std::fs::write(&cfg, "return { test = { models = require('models') } }").unwrap();
     std::fs::write(
         &models,
         r#"return {{
@@ -47,13 +47,14 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     let s = open(&cfg, &dir, None);
     assert_eq!(s.model(), ("p/a".into(), "high".into()));
     assert_eq!(s.available_models(), ["p/a"]);
-    assert_eq!(s.snapshot(false).ctx_size, Some(200_000));
+    assert_eq!(s.snapshot(false).context_window, Some(200_000));
     assert_eq!(
         s.model_def("p/a"),
         Some(ModelDef {
             name: "p/a".into(),
             display: "Model A".into(),
             window: 200_000,
+            efforts: None,
             prices: Some(Prices {
                 input: 3.0,
                 output: 15.0,
@@ -74,7 +75,7 @@ fn a_session_keeps_its_selection_and_reloads_model_metadata() {
     std::fs::write(&models, "return {{ name = 'p/a', window = 300000 }}").unwrap();
     s.reload().unwrap();
     assert_eq!(s.model(), ("p/a".into(), "high".into()));
-    assert_eq!(s.snapshot(false).ctx_size, Some(300_000));
+    assert_eq!(s.snapshot(false).context_window, Some(300_000));
     s.close();
     let again = open(&cfg, &dir, Some(id.clone()));
     assert_eq!(again.model(), ("p/a".into(), "high".into()));

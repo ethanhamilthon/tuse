@@ -142,7 +142,7 @@ impl Session {
                 images: vec![],
             }],
             tools: vec![],
-            effort: (effort != "default").then(|| effort.to_string()),
+            effort: (!effort.is_empty()).then(|| effort.to_string()),
         };
         let client = Client::with_agent(
             self.http.clone(),
@@ -164,11 +164,7 @@ impl Session {
             let mut st = self.state.lock().unwrap();
             self.record(
                 &mut st,
-                &[Record::Usage {
-                    model: model.to_string(),
-                    usage: u,
-                    llm: true,
-                }],
+                &[Record::usage(model.to_string(), u, true)],
                 [crate::Event::Usage],
             );
         }

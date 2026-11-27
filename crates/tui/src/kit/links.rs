@@ -36,15 +36,12 @@ pub fn intern(target: LinkTarget) -> u32 {
 pub fn intern_url(url: &str) -> u32 {
     intern(LinkTarget::Url(url.to_string()))
 }
-
 pub fn intern_path(path: PathBuf) -> u32 {
     intern(LinkTarget::Path(path))
 }
-
 pub fn target(id: u32) -> Option<LinkTarget> {
     table().lock().unwrap().targets.get(id as usize).cloned()
 }
-
 pub fn openable_url(url: &str) -> bool {
     tuse_core::openable_url(url)
 }
@@ -58,22 +55,26 @@ pub fn resolve_markdown_target(dest: &str, cwd: &Path) -> Option<LinkTarget> {
         return Some(LinkTarget::Url(dest.to_string()));
     }
     if let Some(rest) = dest.strip_prefix("file://") {
-        let stripped = rest.strip_prefix("localhost").unwrap_or(rest);
-        let decoded = percent_decode(strip_anchor(stripped));
-        if decoded.is_empty() {
-            return None;
-        }
-        return Some(LinkTarget::Path(PathBuf::from(decoded)));
+        let decoded = percent_decode(strip_anchor(rest.strip_prefix("localhost").unwrap_or(rest)));
+        return (!decoded.is_empty()).then(|| LinkTarget::Path(PathBuf::from(decoded)));
     }
     if has_other_scheme(dest) {
         return None;
     }
     let raw = percent_decode(strip_anchor(dest));
-    if raw.is_empty() {
-        return None;
+    (!raw.is_empty())
+        .then(|| resolve_path(&raw, cwd))
+        .flatten()
+        .map(LinkTarget::Path)
+}
+
+fn link_style(st: Style, p: &Palette, id: u32) -> Style {
+    Style {
+        fg: p.link,
+        underline: true,
+        link: Some(id),
+        ..st
     }
-    let resolved = resolve_path(&raw, cwd)?;
-    Some(LinkTarget::Path(resolved))
 }
 
 pub fn styled(dest: &str, st: Style, p: &Palette) -> Style {
@@ -87,16 +88,10 @@ pub fn styled(dest: &str, st: Style, p: &Palette) -> Style {
 }
 
 pub fn path_span(label: impl Into<String>, path: &str, st: Style, p: &Palette) -> Span {
-    let resolved = resolve_path(path, &p.cwd).filter(|rp| rp.exists());
-    match resolved {
+    match resolve_path(path, &p.cwd).filter(|rp| rp.exists()) {
         Some(rp) => span(
             label,
-            Style {
-                fg: p.link,
-                underline: true,
-                link: Some(intern_path(rp.canonicalize().unwrap_or(rp))),
-                ..st
-            },
+            link_style(st, p, intern_path(rp.canonicalize().unwrap_or(rp))),
         ),
         None => span(label, st),
     }
@@ -106,15 +101,7 @@ pub fn spans(text: &str, st: Style, p: &Palette) -> Vec<Span> {
     split(text, &p.cwd)
         .into_iter()
         .map(|(piece, id)| match id {
-            Some(id) => span(
-                piece,
-                Style {
-                    fg: p.link,
-                    underline: true,
-                    link: Some(id),
-                    ..st
-                },
-            ),
+            Some(id) => span(piece, link_style(st, p, id)),
             None => span(piece, st),
         })
         .collect()

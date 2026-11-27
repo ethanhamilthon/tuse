@@ -1,8 +1,6 @@
--- Wraps a stdio MCP server as an agent function. The agent calls mcp_call("tool", { ... }).
--- Use: g.functions = require("mcp").functions({ "npx", "-y", "@modelcontextprotocol/server-everything" })
+-- Wraps a stdio MCP server as agent functions mcp_tools() and mcp_call(name, args).
+-- Use: return { mcp = require("mcp")({ "npx", "-y", "@modelcontextprotocol/server-everything" }) }
 local t = require("tuse")
-
-local M = {}
 
 local function request(cmd, method, params)
   local init = t.json.encode({ jsonrpc = "2.0", id = 1, method = "initialize", params = {
@@ -21,31 +19,30 @@ local function request(cmd, method, params)
   return msg.result
 end
 
-function M.functions(argv, functions)
+return function(argv)
   local quoted = {}
   for i, a in ipairs(argv) do
     quoted[i] = string.format("%q", a)
   end
   local cmd = table.concat(quoted, " ")
-  functions = functions or {}
-  functions.mcp_tools = function()
-    local out = {}
-    for _, tool in ipairs(request(cmd, "tools/list").tools or {}) do
-      out[#out + 1] = tool.name .. ": " .. (tool.description or "")
-    end
-    return table.concat(out, "\n")
-  end
-  functions.mcp_call = function(name, args)
-    local res = request(cmd, "tools/call", { name = name, arguments = args or {} })
-    local out = {}
-    for _, c in ipairs(res.content or {}) do
-      out[#out + 1] = c.text or t.json.encode(c)
-    end
-    return table.concat(out, "\n")
-  end
-  return functions
+  return {
+    systems = { "You have `mcp_tools()` to list MCP tools and `mcp_call(name, args)` to call one." },
+    functions = {
+      mcp_tools = function()
+        local out = {}
+        for _, tool in ipairs(request(cmd, "tools/list").tools or {}) do
+          out[#out + 1] = tool.name .. ": " .. (tool.description or "")
+        end
+        return table.concat(out, "\n")
+      end,
+      mcp_call = function(name, args)
+        local res = request(cmd, "tools/call", { name = name, arguments = args or {} })
+        local out = {}
+        for _, c in ipairs(res.content or {}) do
+          out[#out + 1] = c.text or t.json.encode(c)
+        end
+        return table.concat(out, "\n")
+      end,
+    },
+  }
 end
-
-M.system = "You have `mcp_tools()` to list MCP tools and `mcp_call(name, args)` to call one."
-
-return M

@@ -1,11 +1,6 @@
 use serde::Deserialize;
 use serde::de::{Deserializer, Error};
 
-pub const COLORS: [&str; 11] = [
-    "bg", "accent", "fg", "user", "user_bg", "muted", "input", "input_bg", "border", "icons",
-    "error",
-];
-
 macro_rules! tokens {
     ($name:ident { $($field:ident: $default:literal,)* }) => {
         #[derive(Debug, Clone, Deserialize, serde::Serialize)]
@@ -62,74 +57,42 @@ tokens! {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, serde::Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Theme {
-    #[serde(deserialize_with = "linked_color")]
-    pub bg: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub accent: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub fg: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub user: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub user_bg: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub muted: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub input: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub input_bg: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub border: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub icons: String,
-    #[serde(deserialize_with = "linked_color")]
-    pub error: String,
-    pub code: CodeTheme,
-    pub markdown: MarkdownTheme,
+macro_rules! base_theme {
+    ($($field:ident: $default:literal,)*) => {
+        pub const COLORS: [&str; 11] = [$(stringify!($field)),*];
+
+        #[derive(Debug, Clone, Deserialize, serde::Serialize)]
+        #[serde(default, deny_unknown_fields)]
+        pub struct Theme {
+            $(#[serde(deserialize_with = "linked_color")] pub $field: String,)*
+            pub code: CodeTheme,
+            pub markdown: MarkdownTheme,
+        }
+
+        impl Default for Theme {
+            fn default() -> Self {
+                Self { $($field: $default.to_string(),)* code: CodeTheme::default(), markdown: MarkdownTheme::default() }
+            }
+        }
+
+        impl Theme {
+            pub fn named(&self, name: &str) -> Option<&str> {
+                match name.trim() {
+                    $(stringify!($field) => Some(&self.$field),)*
+                    _ => None,
+                }
+            }
+        }
+    };
 }
 
-impl Default for Theme {
-    fn default() -> Self {
-        let s = |v: &str| v.to_string();
-        Self {
-            bg: s("#121212"),
-            accent: s("#BDDEAB"),
-            fg: s("#DEDEDE"),
-            user: s("fg"),
-            user_bg: s("#1E1E1E"),
-            muted: s("#929292"),
-            input: s("user"),
-            input_bg: s("#333333"),
-            border: s("#333333"),
-            icons: s("accent"),
-            error: s("#E27373"),
-            code: CodeTheme::default(),
-            markdown: MarkdownTheme::default(),
-        }
-    }
+base_theme! {
+    bg: "#121212", accent: "#BDDEAB", fg: "#DEDEDE", user: "fg", user_bg: "#1E1E1E",
+    muted: "#929292", input: "user", input_bg: "#333333", border: "#333333",
+    icons: "accent", error: "#E27373",
 }
 
 impl Theme {
-    pub fn named(&self, name: &str) -> Option<&str> {
-        Some(match name.trim() {
-            "bg" => &self.bg,
-            "accent" => &self.accent,
-            "fg" => &self.fg,
-            "user" => &self.user,
-            "user_bg" => &self.user_bg,
-            "muted" => &self.muted,
-            "input" => &self.input,
-            "input_bg" => &self.input_bg,
-            "border" => &self.border,
-            "icons" => &self.icons,
-            "error" => &self.error,
-            _ => return None,
-        })
-    }
-
     pub fn resolve<'a>(&'a self, value: &'a str) -> &'a str {
         let mut value = value.trim();
         for _ in 0..=COLORS.len() {
@@ -182,38 +145,13 @@ pub fn linked_color<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error>
     Ok(s)
 }
 
+const NAMED_COLORS: &str = "none black red green yellow blue magenta cyan white grey gray dark_grey dark_gray bright_red bright_green bright_yellow bright_blue bright_magenta bright_cyan bright_white";
+
 pub fn valid_color(s: &str) -> bool {
     let s = s.trim().to_ascii_lowercase();
-    if matches!(
-        s.as_str(),
-        "none"
-            | "black"
-            | "red"
-            | "green"
-            | "yellow"
-            | "blue"
-            | "magenta"
-            | "cyan"
-            | "white"
-            | "grey"
-            | "gray"
-            | "dark_grey"
-            | "dark_gray"
-            | "bright_red"
-            | "bright_green"
-            | "bright_yellow"
-            | "bright_blue"
-            | "bright_magenta"
-            | "bright_cyan"
-            | "bright_white"
-    ) {
+    if NAMED_COLORS.split_whitespace().any(|c| c == s) || s.parse::<u8>().is_ok() {
         return true;
     }
-    if s.parse::<u8>().is_ok() {
-        return true;
-    }
-    if let Some(hex) = s.strip_prefix('#') {
-        return matches!(hex.len(), 3 | 6) && hex.chars().all(|c| c.is_ascii_hexdigit());
-    }
-    false
+    s.strip_prefix('#')
+        .is_some_and(|hex| matches!(hex.len(), 3 | 6) && hex.chars().all(|c| c.is_ascii_hexdigit()))
 }

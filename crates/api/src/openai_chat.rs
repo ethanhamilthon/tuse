@@ -116,7 +116,7 @@ impl Accumulator {
             self.reply.usage = Some(Usage {
                 input: ju64(u, "prompt_tokens").unwrap_or(0),
                 output: ju64(u, "completion_tokens").unwrap_or(0),
-                cached: d("cached_tokens"),
+                cache_read: d("cached_tokens"),
                 cache_write: d("cache_write_tokens").max(d("cached_creation_tokens")),
             });
         }

@@ -18,142 +18,189 @@ fn validates_config_and_preserves_state_on_failed_reload() {
     };
 
     let bad_cases = [
-        ("return { plugins = {} }", "plugins: unknown key"),
+        ("return { ui = {} }", "flat top-level section 'ui'"),
+        (
+            "return { prompts = { a = 'b' } }",
+            "flat top-level section 'prompts'",
+        ),
+        ("return { plugins = false }", "plugins: expected a table"),
         (
             "return { plugins = function() end }",
-            "plugins: unknown key",
+            "plugins: expected a table",
         ),
-        ("return { include = { 'x.lua' } }", "include: unknown key"),
-        ("return { model = 'p/m' }", "model: unknown key"),
         (
-            "return { models = { { name = 'm' } } }",
+            "return { plugins = { only = {}, without = {} } }",
+            "plugins: cannot set both only and without",
+        ),
+        (
+            "return { plugins = { only = { 'nope' } } }",
+            "plugins.only[1]: unknown plugin `nope`",
+        ),
+        (
+            "return { plugins = { opts = { nope = {} } } }",
+            "plugins.opts.nope: unknown plugin `nope`",
+        ),
+        (
+            "return { plugins = { nope = 1 } }",
+            "plugins.nope: unknown key",
+        ),
+        (
+            "return { global = 123 }",
+            "global: expected false or a table",
+        ),
+        ("return { top = 123 }", "top: expected a table"),
+        (
+            "return { ns = { include = { 'x.lua' } } }",
+            "ns.include: unknown key",
+        ),
+        ("return { ns = { model = 'p/m' } }", "ns.model: unknown key"),
+        (
+            "return { ns = { models = { { name = 'm' } } } }",
             "models[1].name: expected a provider/model name",
         ),
         (
-            "return { models = { { name = 'p/m', windo = 1 } } }",
+            "return { ns = { models = { { name = 'p/m', windo = 1 } } } }",
             "models[1].windo: unknown key",
         ),
         (
-            "return { models = { { name = 'p/m', prices = { input = -1 } } } }",
+            "return { ns = { models = { { name = 'p/m', prices = { input = -1 } } } } }",
             "models[1].prices.input: expected a finite non-negative number",
         ),
-        ("return { unknown_top = 1 }", "unknown_top: unknown key"),
         (
-            "return { settings = { nope = 1 } }",
-            "settings: moved to ui, history, and open",
+            "return { ns = { unknown_top = 1 } }",
+            "ns.unknown_top: unknown key",
         ),
-        ("return { ui = { nope = 1 } }", "ui.nope: unknown key"),
         (
-            "return { ui = { scroll_step = 3 } }",
+            "return { ns = { settings = { nope = 1 } } }",
+            "ns.settings: moved to ui, history, and open",
+        ),
+        (
+            "return { ns = { ui = { nope = 1 } } }",
+            "ui.nope: unknown key",
+        ),
+        (
+            "return { ns = { ui = { scroll_step = 3 } } }",
             "ui.scroll_step: unknown key",
         ),
         (
-            "return { ui = { lines = { input = 0 } } }",
+            "return { ns = { ui = { lines = { input = 0 } } } }",
             "ui.lines.input: must be -1 or >= 1",
         ),
         (
-            "return { theme = { accent = 'red' } }",
-            "theme: moved to ui.theme",
+            "return { ns = { theme = { accent = 'red' } } }",
+            "ns.theme: moved to ui.theme",
         ),
         (
-            "return { ui = { theme = { accent = 'notacolor' } } }",
+            "return { ns = { ui = { theme = { accent = 'notacolor' } } } }",
             "ui.theme.accent: invalid color",
         ),
         (
-            "return { ui = { theme = { bogus = 'red' } } }",
+            "return { ns = { ui = { theme = { bogus = 'red' } } } }",
             "ui.theme.bogus: unknown key",
         ),
         (
-            "return { ui = { theme = { user = 'input', input = 'user' } } }",
+            "return { ns = { ui = { theme = { user = 'input', input = 'user' } } } }",
             "ui.theme.user: link cycle",
         ),
         (
-            "return { systems = { a = 'x' } }",
+            "return { ns = { systems = { a = 'x' } } }",
             "systems: expected a list",
         ),
         (
-            "return { hooks = { h = { events = {'bogus'}, run = function() end } } }",
+            "return { ns = { systems = { function() end } } }",
+            "ns.systems[1]: unsupported value type function",
+        ),
+        (
+            "return { ns = { hooks = { h = { events = {'bogus'}, run = function() end } } } }",
             "hooks.h.events: unknown event `bogus`",
         ),
         (
-            "return { hooks = { h = { events = {}, run = function() end } } }",
+            "return { ns = { hooks = { h = { events = {}, run = function() end } } } }",
             "hooks.h.events: must contain at least one event",
         ),
         (
-            "return { hooks = { h = { events = {'process_start'} } } }",
-            "hooks.h.run: is required",
+            "return { ns = { hooks = { h = { events = {'process_start'} } } } }",
+            "ns.hooks.h.run: is required",
         ),
         (
-            "return { functions = { f = { description = 'ok', run = function() end } } }",
-            "functions.f: expected function or false, got table",
+            "return { ns = { functions = { f = { description = 'ok', run = function() end } } } }",
+            "ns.functions.f: expected function or false, got table",
         ),
         (
-            "return { functions = { os = false } }",
+            "return { ns = { functions = { os = false } } }",
             "functions: 'os': reserved name",
         ),
         (
-            "return { functions = { package = false } }",
+            "return { ns = { functions = { package = false } } }",
             "functions: 'package': reserved name",
         ),
         (
-            "return { functions = { require = function() end } }",
+            "return { ns = { functions = { require = function() end } } }",
             "functions: 'require': reserved name",
         ),
         (
-            "return { functions = { typo = false } }",
+            "return { ns = { functions = { typo = false } } }",
             "functions.typo: cannot disable unknown function",
         ),
         (
-            "return { functions = { json = function() end } }",
-            "functions.json: 'json' is a table and can only be disabled with false",
+            "return { ns = { functions = { json = function() end } } }",
+            "functions: 'json' is a table and can only be disabled with false",
         ),
         (
-            "return { functions = { f = true } }",
-            "functions.f: expected function or false, got boolean",
+            "return { ns = { functions = { f = true } } }",
+            "ns.functions.f: expected function or false, got boolean",
         ),
         (
-            "return { commands = { session = { run = function() end } } }",
+            "return { ns = { commands = { session = { run = function() end } } } }",
             "commands: `session`: cannot override built-in",
         ),
         (
-            "return { commands = { bad = 1 } }",
-            "commands.bad: expected a table",
+            "return { ns = { commands = { bad = 1 } } }",
+            "ns.commands.bad: expected a table",
         ),
         (
-            "return { commands = { c = function() end } }",
-            "commands.c: expected a table",
+            "return { ns = { commands = { c = function() end } } }",
+            "ns.commands.c: expected a table",
         ),
         (
-            "return { commands = { c = { desc = 1, run = function() end } } }",
-            "commands.c.desc: expected a string",
+            "return { ns = { commands = { c = { desc = 1, run = function() end } } } }",
+            "ns.commands.c.desc: expected a string",
         ),
         (
-            "return { commands = { c = { desc = 'x' } } }",
-            "commands.c.run: is required",
+            "return { ns = { commands = { c = { desc = 'x' } } } }",
+            "ns.commands.c.run: is required",
         ),
         (
-            "return { commands = { c = { args = { 'a b' }, run = function() end } } }",
-            "commands.c.args[1]: must not contain whitespace",
+            "return { ns = { commands = { c = { args = { 'a b' }, run = function() end } } } }",
+            "ns.commands.c.args[1]: must not contain whitespace",
         ),
         (
-            "return { commands = { c = { nope = 1, run = function() end } } }",
-            "commands.c.nope: unknown key",
+            "return { ns = { commands = { c = { args = { [1] = 'a', [3] = 'b' }, run = function() end } } } }",
+            "ns.commands.c.args: list has hole at index 2",
         ),
         (
-            "return { open = { ['.md'] = function() end } }",
+            "return { ns = { commands = { c = { nope = 1, run = function() end } } } }",
+            "ns.commands.c.nope: unknown key",
+        ),
+        (
+            "return { ns = { open = { ['.md'] = function() end } } }",
             "open: `.md`: extension must not start with `.`",
         ),
         (
-            "return { open = { md = 'nope' } }",
-            "open.md: expected function",
+            "return { ns = { open = { md = 'nope' } } }",
+            "ns.open.md: expected function",
         ),
         (
-            "return { open = { ['@file'] = function() end } }",
+            "return { ns = { open = { ['@file'] = function() end } } }",
             "open: `@file`: unknown special key",
         ),
         (
-            "return { settings = { open = { md = function() end } } }",
-            "settings: moved to ui, history, and open",
+            "return { ns = { settings = { open = { md = function() end } } } }",
+            "ns.settings: moved to ui, history, and open",
+        ),
+        (
+            "return { a = { prompts = { x = '1' } }, b = { prompts = { x = '2' } } }",
+            "prompts.x: duplicate",
         ),
     ];
     for (src, want) in bad_cases {
@@ -167,16 +214,26 @@ fn validates_config_and_preserves_state_on_failed_reload() {
 
     fs::write(
         &cfg,
+        r#"return { ns = { providers = { x = { base = 'http://x', key = 'super-secret-value', nope = 1 } } } }"#,
+    )
+    .unwrap();
+    let err = open().err().unwrap();
+    assert!(!err.contains("super-secret-value"), "{err}");
+
+    fs::write(
+        &cfg,
         r#"return {
-            prompts = { keep = "alive" },
-            commands = { ok = { run = function() require("tuse").show("m", "still-active", false) end } },
+            ns = {
+                prompts = { keep = "alive" },
+                commands = { ok = { run = function() require("tuse").show("m", "still-active", false) end } },
+            },
         }"#,
     )
     .unwrap();
     let s = open().unwrap();
-    fs::write(&cfg, r#"return { plugins = { "tuse/default" } }"#).unwrap();
+    fs::write(&cfg, r#"return { bad = { nope = 1 } }"#).unwrap();
     let err = s.reload().unwrap_err();
-    assert!(err.contains("plugins: unknown key"), "{err}");
+    assert!(err.contains("bad.nope: unknown key"), "{err}");
     assert_eq!(s.config().prompts["keep"].body, "alive");
     s.run_command("ok", &[]).unwrap();
     let dl = std::time::Instant::now() + std::time::Duration::from_secs(3);

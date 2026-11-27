@@ -9,42 +9,45 @@ pub fn panel(session: &Session, p: &Palette) -> Panel {
 }
 
 pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, p: &Palette) -> Panel {
-    let key = Style::fg(p.border);
-    let fg = Style::fg(p.fg);
-    let dim = Style::fg(p.muted);
-    let info = Style::fg(p.heading);
-    let accent = Style::fg(p.accent).bold();
-    let ok = Style::fg(p.accent).bold();
-
+    let (key, fg, dim, info, ok) = (
+        Style::fg(p.border),
+        Style::fg(p.fg),
+        Style::fg(p.muted),
+        Style::fg(p.heading),
+        Style::fg(p.accent).bold(),
+    );
     let row = |label: &str, mut rest: Line| -> Line {
         let mut out = vec![span(format!("{label:<13}"), key)];
         out.append(&mut rest);
         out
     };
-    let opt = |v: Option<&str>, st: Style| match v {
-        Some(x) => vec![span(x.to_string(), st)],
-        None => vec![span("(none)", dim)],
+    let opt = |v: Option<&str>, st: Style| {
+        vec![span(
+            v.unwrap_or("(none)"),
+            if v.is_some() { st } else { dim },
+        )]
     };
     let path_row = |label: &str, v: Option<&str>| match v {
         Some(path) => row(label, vec![crate::kit::links::path_span(path, path, fg, p)]),
         None => row(label, vec![span("(none)", dim)]),
     };
 
-    let ctx_used = s.ctx.unwrap_or(0);
-    let mut ctx_spans = vec![span(tokens(ctx_used), accent)];
-    if let Some(size) = s.ctx_size {
-        ctx_spans.push(span(" / ", dim));
-        ctx_spans.push(span(
-            format!(
-                "{} ({:.1}%)",
-                tokens(size),
-                ctx_used as f64 * 100.0 / size as f64
+    let ctx_used = s.context.unwrap_or(0);
+    let ctx_spans = match s.context_window {
+        Some(size) => vec![
+            span(tokens(ctx_used), ok),
+            span(" / ", dim),
+            span(
+                format!(
+                    "{} ({:.1}%)",
+                    tokens(size),
+                    ctx_used as f64 * 100.0 / size as f64
+                ),
+                info,
             ),
-            info,
-        ));
-    } else {
-        ctx_spans.push(span(" / ?", dim));
-    }
+        ],
+        None => vec![span(tokens(ctx_used), ok), span(" / ?", dim)],
+    };
 
     let model_info_spans = match &s.model_info {
         Some(mi) => {
@@ -75,11 +78,11 @@ pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, p: &Palette) -> Panel {
 
     let mut lines = vec![
         row("ID", opt(s.id.as_deref(), dim)),
-        row("Name", opt(s.name.as_deref(), fg)),
+        row("Title", opt(s.title.as_deref(), fg)),
         row("Mode", vec![span(s.mode, info)]),
         path_row("CWD", Some(&s.cwd)),
         path_row("Home", Some(&s.home)),
-        path_row("Config", s.configpath.as_deref()),
+        path_row("Config", s.config_path.as_deref()),
         row("Provider", opt(s.provider.as_deref(), fg)),
         row("Model", opt(s.model.as_deref(), fg)),
         row("Effort", opt(s.effort.as_deref(), info)),
@@ -139,7 +142,7 @@ mod tests {
         let text: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
         for label in [
             "ID",
-            "Name",
+            "Title",
             "Mode",
             "CWD",
             "Home",

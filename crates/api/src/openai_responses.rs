@@ -288,14 +288,14 @@ impl Acc {
             self.reply.finish = st.into();
         }
         if let Some(u) = r.get("usage").filter(|u| u.is_object()) {
-            let cached = u
+            let cache_read = u
                 .get("input_tokens_details")
                 .and_then(|d| ju64(d, "cached_tokens"))
                 .unwrap_or(0);
             self.reply.usage = Some(Usage {
                 input: ju64(u, "input_tokens").unwrap_or(0),
                 output: ju64(u, "output_tokens").unwrap_or(0),
-                cached,
+                cache_read,
                 cache_write: 0,
             });
         }

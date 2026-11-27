@@ -99,4 +99,30 @@ fn docs_cover_the_config_keys_tokens_events_and_roles() {
             "docs(\"config\") misses `{color}`"
         );
     }
+    let all_docs = tuse_core::docs(None);
+    for retired in [
+        "settings.open",
+        "`surface`",
+        "tuse --json",
+        "list_max_height",
+        "input_max_height",
+        "pad_x",
+        "session.snapshot",
+        "session.info",
+        "session.stats",
+        "session.resume",
+        "model.get",
+        "session().name",
+        "configpath",
+        "usage.cached",
+    ] {
+        assert!(
+            !all_docs.contains(retired),
+            "docs still mention `{retired}`"
+        );
+    }
+    assert!(
+        !tuse_core::docs(Some("connect")).contains("recomputes"),
+        "docs/connect.md should not claim /reload recomputes cost"
+    );
 }

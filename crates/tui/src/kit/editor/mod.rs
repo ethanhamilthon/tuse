@@ -286,14 +286,29 @@ impl Editor {
         (start, self.buf[start..self.cursor].iter().collect())
     }
 
-    pub fn command_before_token(&self) -> Option<String> {
+    pub fn command_before_token(&self) -> Option<(usize, String)> {
         let (start, _) = self.token();
-        if start < 2 || self.buf[start - 1] != ' ' || self.buf[0] != '/' {
+        if start < 2 || self.buf[start - 1] != ' ' {
             return None;
         }
-        let name: String = self.buf[1..start - 1].iter().collect();
-        let plain = |c: char| !c.is_whitespace() && atom_index(c).is_none();
-        (!name.is_empty() && name.chars().all(plain)).then_some(name)
+        let cmd_end = start - 1;
+        let cmd_start = self.buf[..cmd_end]
+            .iter()
+            .rposition(|c| c.is_whitespace() || atom_index(*c).is_some())
+            .map_or(0, |i| i + 1);
+        if self.buf.get(cmd_start) != Some(&'/') {
+            return None;
+        }
+        let name: String = self.buf[cmd_start + 1..cmd_end].iter().collect();
+        let plain = |c: char| !c.is_whitespace() && atom_index(c).is_none() && c != '/';
+        (!name.is_empty() && name.chars().all(plain)).then_some((cmd_start, name))
+    }
+
+    pub fn cut_command_arg(&mut self) {
+        if let Some((cmd_start, _)) = self.command_before_token() {
+            let end = self.cursor;
+            self.replace(cmd_start, end, "");
+        }
     }
 
     pub fn replace_token(&mut self, with: &str) {

@@ -11,7 +11,11 @@ pub fn model_line(
     cost: Option<f64>,
 ) -> Line {
     let muted = Style::fg(p.muted);
-    let mut text = format!("{name}{LABEL_SEP}{effort}");
+    let mut text = if effort.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name}{LABEL_SEP}{effort}")
+    };
     let mut line = vec![];
     if let Some((used, window)) = context {
         text.push_str(LABEL_SEP);
@@ -66,10 +70,10 @@ impl App {
     pub(crate) fn tasks_idle(&self) -> Option<Line> {
         let text = self.tasks_text()?;
         let spin = SPINNER[self.tick % SPINNER.len()];
-        Some(vec![span(
-            format!("{spin} {text}"),
-            Style::fg(self.palette.icons),
-        )])
+        Some(vec![
+            span(format!("{spin} "), Style::fg(self.palette.icons)),
+            span(text, Style::fg(self.palette.accent)),
+        ])
     }
 
     pub(crate) fn busy_label(&self) -> Line {
@@ -127,7 +131,7 @@ mod tests {
         let mut app = crate::ui::app::test_app("task-indicator");
         std::fs::write(
             app.cwd.join("tuse.lua"),
-            "local t = require('tuse')\nreturn { commands = { bg = { run = function() t.spawn(function() t.sh('sleep 30') end, 'nap') end } } }",
+            "local t = require('tuse')\nreturn { test = { ui = { theme = { accent = '#112233', icons = '#445566' } }, commands = { bg = { run = function() t.spawn(function() t.sh('sleep 30') end, 'nap') end } } } }",
         )
         .unwrap();
         app.run_command("reload");
@@ -135,11 +139,15 @@ mod tests {
         app.run_command("bg");
         wait_for_tasks(&app, 1);
         let line = app.tasks_idle().unwrap();
-        assert!(line[0].text.ends_with(" 1 task") && line[0].text.starts_with(SPINNER[0]));
-        assert_eq!(line[0].style, Style::fg(app.palette.accent));
+        assert_eq!(line.len(), 2);
+        assert_eq!(line[0].text, format!("{} ", SPINNER[0]));
+        assert_eq!(line[0].style, Style::fg(app.palette.icons));
+        assert_eq!(line[1].text, "1 task");
+        assert_eq!(line[1].style, Style::fg(app.palette.accent));
+        assert_ne!(app.palette.icons, app.palette.accent);
         app.run_command("bg");
         wait_for_tasks(&app, 2);
-        assert!(app.tasks_idle().unwrap()[0].text.ends_with(" 2 tasks"));
+        assert_eq!(app.tasks_idle().unwrap()[1].text, "2 tasks");
         app.run_command("stop");
         wait_for_tasks(&app, 0);
         assert!(app.tasks_idle().is_none());
@@ -177,7 +185,7 @@ mod tests {
             start: Default::default(),
         })
         .unwrap();
-        session.set_model("workind/m", "default");
+        session.set_model("workind/m", "medium");
         let (wake, wake_rx) = sync_channel(1);
         let mut app = App::with_wake(session.clone(), Some(cfg), Some(wake));
         assert!(app.working().is_empty());
@@ -313,6 +321,11 @@ mod tests {
             [span("m · low · ", m), span("10", a), span("/?", m)]
         );
         assert_eq!(model_line(&p, "m", "low", None, None), [span("m · low", m)]);
+        assert_eq!(model_line(&p, "m", "", None, None), [span("m", m)]);
+        assert_eq!(
+            model_line(&p, "m", "", Some((10, 0)), Some(0.5)),
+            [span("m · ", m), span("10", a), span("/? · $0.50", m)]
+        );
     }
 
     #[test]

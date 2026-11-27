@@ -270,6 +270,7 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
         &cfg,
         format!(
             r#"return {{
+  test = {{
 {cfg_body}
   hooks = {{
     on_resume = {{
@@ -280,6 +281,7 @@ fn persisted_ui_history_resume_hook_ordering_ids_context_and_ui_only_quit() {
         t.ask("HOOK_PROMPT")
       end,
     }},
+  }},
   }},
 }}"#
         ),

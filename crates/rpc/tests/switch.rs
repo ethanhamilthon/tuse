@@ -21,13 +21,13 @@ fn failed_switch_keeps_the_session() {
     .unwrap();
     let id = session.id.clone();
     let (tx, out, server) = spawn(session);
-    call(&tx, &out, 1, "initialize", json!({"protocolVersion": 1}));
-    std::fs::write(&cfg, "return { typo_key = 1 }").unwrap();
+    call(&tx, &out, 1, "initialize", json!({"protocolVersion": 2}));
+    std::fs::write(&cfg, "return { bad = { typo_key = 1 } }").unwrap();
 
     let r = call(&tx, &out, 2, "session.new", json!({}));
     let err = r["error"]["message"].as_str().unwrap();
     assert!(err.contains("typo_key"), "{r}");
-    let r = call(&tx, &out, 3, "session.info", json!({}));
+    let r = call(&tx, &out, 3, "session.state", json!({}));
     assert_eq!(r["result"]["id"], id.as_str(), "{r}");
 
     call(&tx, &out, 4, "turn.submit", json!({"text": "hi"}));

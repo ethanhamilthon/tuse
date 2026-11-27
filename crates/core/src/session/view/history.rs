@@ -28,9 +28,9 @@ impl Record {
             Record::Show { .. } => "show",
             Record::Pick { .. } => "pick",
             Record::Ask { .. } => "ask",
-            Record::Task { .. } => "task",
-            Record::Command { .. } => "command",
-            Record::Open { .. } => "open",
+            Record::Task(_) => "task",
+            Record::Command(_) => "command",
+            Record::Open(_) => "open",
         }
     }
 
@@ -48,15 +48,18 @@ impl Record {
                 reasoning,
                 cancelled,
                 ..
-            } => [
-                text.as_str(),
-                reasoning.as_str(),
-                if *cancelled { "[cancelled]" } else { "" },
-            ]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n\n"),
+            } => {
+                let parts = [
+                    text.as_str(),
+                    reasoning.as_str(),
+                    if *cancelled { "[cancelled]" } else { "" },
+                ];
+                parts
+                    .into_iter()
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            }
             Record::Lua {
                 code,
                 output,
@@ -75,20 +78,27 @@ impl Record {
                 }
                 detail
             }
-            Record::Usage { model, usage, llm } => {
+            Record::Usage {
+                model,
+                input,
+                output,
+                cache_read,
+                cache_write,
+                llm,
+            } => {
                 let source = if *llm { " (llm)" } else { "" };
                 format!(
-                    "{model}{source}: input {} output {} cached {} cache_write {}",
-                    usage.input, usage.output, usage.cached, usage.cache_write
+                    "{model}{source}: input {input} output {output} cache_read {cache_read} cache_write {cache_write}"
                 )
             }
             Record::Meta {
                 title,
                 model,
                 effort,
-            } => [title.clone(), model.clone(), effort.clone()]
+            } => [title, model, effort]
                 .into_iter()
                 .flatten()
+                .cloned()
                 .collect::<Vec<_>>()
                 .join(" "),
             Record::TurnEnd {
@@ -114,29 +124,13 @@ impl Record {
             Record::Pick { prompt, value, .. } | Record::Ask { prompt, value, .. } => {
                 format!("{} → {value}\n\n{prompt}", first_line(prompt))
             }
-            Record::Task {
-                name,
-                code,
-                status,
-                ms,
-                error,
-            }
-            | Record::Command {
-                name,
-                code,
-                status,
-                ms,
-                error,
-            }
-            | Record::Open {
-                name,
-                code,
-                status,
-                ms,
-                error,
-            } => format!(
-                "{name} {status} ({ms} ms)\n\n{}\n\n{code}",
-                error.as_deref().unwrap_or("")
+            Record::Task(j) | Record::Command(j) | Record::Open(j) => format!(
+                "{} {} ({} ms)\n\n{}\n\n{}",
+                j.name,
+                j.status,
+                j.ms,
+                j.error.as_deref().unwrap_or(""),
+                j.code
             ),
         }
     }
@@ -151,11 +145,6 @@ impl From<&Record> for HistoryItem {
             .map(std::mem::take)
             .unwrap();
         fields.remove("role");
-        if let Record::Usage { .. } = r
-            && let Some(Value::Object(usage)) = fields.remove("usage")
-        {
-            fields.extend(usage);
-        }
         fields.retain(|_, v| !v.is_null());
         Self {
             role: r.role(),
@@ -190,7 +179,7 @@ fn with_images(text: String, count: usize) -> String {
     if count == 0 {
         text
     } else {
-        format!("{text}\n[{} image(s)]", count)
+        format!("{text}\n[{count} image(s)]")
     }
 }
 
@@ -231,13 +220,9 @@ pub(crate) fn decode(history: Vec<Map<String, Value>>) -> Result<Vec<Record>, St
             _ => {}
         }
         if let Record::Lua { images, .. } | Record::User { images, .. } = &record
-            && images.iter().any(|u| {
-                !u.split_once(',').is_some_and(|(meta, data)| {
-                    meta.strip_prefix("data:image/")
-                        .is_some_and(|s| !s.is_empty())
-                        && !data.is_empty()
-                })
-            })
+            && images
+                .iter()
+                .any(|u| !crate::convo::input::is_valid_image_data_url(u))
         {
             return Err(err("images must be image data URLs"));
         }
@@ -258,13 +243,6 @@ fn decode_record(mut f: Map<String, Value>) -> Result<Record, String> {
         }
         Some(Value::String(_)) => {}
         Some(_) => return Err("role must be a string".into()),
-    }
-    if f.get("role").and_then(Value::as_str) == Some("usage") {
-        let usage: Map<String, Value> = ["input", "output", "cached", "cache_write"]
-            .into_iter()
-            .filter_map(|k| Some((k.into(), f.remove(k)?)))
-            .collect();
-        f.insert("usage".into(), Value::Object(usage));
     }
     serde_json::from_value(Value::Object(f)).map_err(|e| e.to_string())
 }

@@ -25,12 +25,12 @@ fn session_snapshot_history_and_open_handlers() {
     let check_code = r#"
 local t = require("tuse")
 local s1 = t.session()
-s1.name = "mutated"
+s1.title = "mutated"
 local s2 = t.session()
-assert(s2.name ~= "mutated", "session() must return a fresh snapshot")
-assert(s2.mode == "json" and s2.id ~= nil and s2.cwd ~= nil and s2.home ~= nil and s2.configpath ~= nil)
-assert(s2.model == "p/m" and s2.provider == "p" and s2.effort == "default")
-assert(s2.ctx_size == 100000 and s2.model_info.display == "M" and s2.model_info.prices.input == 2)
+assert(s2.title ~= "mutated", "session() must return a fresh snapshot")
+assert(s2.mode == "json" and s2.id ~= nil and s2.cwd ~= nil and s2.home ~= nil and s2.config_path ~= nil)
+assert(s2.model == "p/m" and s2.provider == "p" and s2.effort == "medium")
+assert(s2.context_window == 100000 and s2.model_info.display == "M" and s2.model_info.prices.input == 2)
 assert(s2.usage.input >= 10 and s2.usage.output >= 3 and s2.usage.cost > 0)
 assert(s2.steps >= 1 and s2.turns >= 0)
 local dump = t.json.encode(s2)
@@ -65,6 +65,7 @@ return #s2.history
   end
 end
 return {{
+  test = {{
   models = {{{{ name = "p/m", display = "M", window = 100000,
     prices = {{ input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 }} }}}},
   open = {{
@@ -80,6 +81,7 @@ return {{
       events = {{"user_message"}},
       run = function() end,
     }},
+  }},
   }},
 }}"#,
             opened_log.display()

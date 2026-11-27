@@ -130,8 +130,8 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
     assert_eq!(
         (
             init["session"]["id"].clone(),
-            init["model"].clone(),
-            init["effort"].clone()
+            init["session"]["model"].clone(),
+            init["session"]["effort"].clone()
         ),
         (json!(id2), json!("p/m"), json!("low"))
     );

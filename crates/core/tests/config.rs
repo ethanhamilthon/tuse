@@ -1,10 +1,14 @@
 mod common;
 
 use std::fs;
+use std::sync::Mutex;
 use tuse_core::{Event, Mode, Options, Record, Session, Start, UserInput};
+
+static ENV: Mutex<()> = Mutex::new(());
 
 #[test]
 fn require_session_validation_and_reload_rollback() {
+    let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
     let addr = common::provider(vec![
         common::Reply::Call(
             "lua",
@@ -26,6 +30,7 @@ fn require_session_validation_and_reload_rollback() {
             "TUSE_CWD",
             "TUSE_MODEL",
             "TUSE_CURRENT_CONFIG",
+            "TUSE_GLOBAL_CONFIG",
         ] {
             std::env::remove_var(v);
         }
@@ -65,7 +70,7 @@ fn require_session_validation_and_reload_rollback() {
         local s = t.session()
         assert(s.id == nil and s.model == nil and s.history == nil, 'pre-session snapshot')
         assert(s.mode == 'tui' or s.mode == 'json')
-        assert(s.cwd ~= nil and s.home ~= nil and s.configpath ~= nil)
+        assert(s.cwd ~= nil and s.home ~= nil and s.config_path ~= nil)
         for name in pairs(t) do assert(_G[name] == nil, name) end
         local sh_out = t.sh('printf "%s|%s|%s" "${TUSE_MODE:-none}" "${TUSE_SESSION:-none}" "$CUSTOM_USER_VAR"').out
         assert(sh_out == 'none|none|kept_val', 'sh env: ' .. sh_out)
@@ -74,19 +79,23 @@ fn require_session_validation_and_reload_rollback() {
         local dir = os.getenv('THIS_PATH'):match('(.*)/[^/]+$')
         assert(require(dir .. '/lib') == 'lib.lua wins')
         assert(require(dir .. '/lib/file.lua') == 'lib file')
-        return {
-            systems = { 'first', s.mode },
-            ui = { space = { padding = 3 } },
-            prompts = { shared = 'kept', rex = rex.tag },
-            functions = {
-                from_global = function()
-                    assert(sh == nil and read == nil)
-                    assert(t.session().id ~= nil)
-                    return require('rex').tag
-                end,
-            },
-            commands = { ping = { run = function() require('tuse').show('p', require('rex').tag, false) end } },
-        }
+        return function()
+            return {
+                shared = {
+                    systems = { 'first', s.mode },
+                    ui = { space = { padding = 3 } },
+                    prompts = { shared = 'kept', rex = rex.tag },
+                    functions = {
+                        from_global = function()
+                            assert(sh == nil and read == nil)
+                            assert(t.session().id ~= nil)
+                            return require('rex').tag
+                        end,
+                    },
+                    commands = { ping = { run = function() require('tuse').show('p', require('rex').tag, false) end } },
+                },
+            }
+        end
     "#,
     )
     .unwrap();
@@ -97,16 +106,19 @@ fn require_session_validation_and_reload_rollback() {
         r#"
         assert(sh == nil and read == nil and _G.json == nil)
         assert(load("return sh")() == nil)
-        local g = require('global')
+        assert(type(require('global')) == 'function')
         assert(require('util').origin == 'project' and require('pkg') == 'pkg init')
-        g.providers = { project = {
-            base = 'http://127.0.0.1:1', key = 'local-secret',
-            headers = { ['X-Tenant'] = '$CUSTOM_USER_VAR' },
-        } }
-        g.systems[#g.systems + 1] = 'last'
-        g.ui.space.steps = 5
-        g.prompts.local_wins = 'from project'
-        return g
+        return {
+            project = {
+                providers = { project = {
+                    base = 'http://127.0.0.1:1', key = 'local-secret',
+                    headers = { ['X-Tenant'] = '$CUSTOM_USER_VAR' },
+                } },
+                systems = { 'last' },
+                ui = { space = { steps = 5 } },
+                prompts = { local_wins = 'from project' },
+            },
+        }
     "#,
     )
     .unwrap();
@@ -154,10 +166,10 @@ fn require_session_validation_and_reload_rollback() {
             s.reload().unwrap();
             assert_eq!(s.config().prompts["rex"].body, "rex-v2");
             let saved_root = fs::read_to_string(&root).unwrap();
-            fs::write(&root, "return { unknown_typo = 123 }").unwrap();
+            fs::write(&root, "return { bad = { unknown_typo = 123 } }").unwrap();
             let err = s.reload().unwrap_err();
             assert!(
-                err.contains("tuse.lua") && err.contains("unknown_typo: unknown key"),
+                err.contains("tuse.lua") && err.contains("bad.unknown_typo: unknown key"),
                 "{err}"
             );
             assert_eq!(s.config().prompts["rex"].body, "rex-v2");
@@ -172,12 +184,12 @@ fn require_session_validation_and_reload_rollback() {
             assert!(s.ui_snapshot().markdowns.iter().any(|m| m.text == "rex-v2"));
             fs::write(
                 &root,
-                "return { providers = { p = { base = 'http://127.0.0.1:1', key = 'k' } } }",
+                "return { local_p = { providers = { p = { base = 'http://127.0.0.1:1', key = 'k' } } } }",
             )
             .unwrap();
             assert!(s.reload().unwrap_err().contains("name is already saved"));
             assert!(s.model_available("project/m"));
-            fs::write(&root, "return { providers = {} }").unwrap();
+            fs::write(&root, "return { local_p = { providers = {} } }").unwrap();
             s.reload().unwrap();
             assert!(!s.model_available("project/m"));
             assert!(s.model_available("p/m"));
@@ -208,5 +220,156 @@ fn require_session_validation_and_reload_rollback() {
     assert_eq!(globals.len(), 2);
     assert!(globals[0].ends_with(".config/tuse.lua"));
     assert!(globals[1].ends_with(".config/tuse/init.lua"));
+    common::cleanup(&dir);
+}
+
+#[test]
+fn global_options_plugins_selectors_and_preload_reload() {
+    let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let addr = common::provider(vec![]);
+    let (dir, _) = common::setup("config-plugins", &addr, "");
+    let project = dir.join("project");
+    let shared = dir.join("home/.config/tuse");
+    let plugins = dir.join("home/.tuse/plugins");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(&shared).unwrap();
+    fs::create_dir_all(plugins.join("alpha")).unwrap();
+    fs::create_dir_all(plugins.join("beta")).unwrap();
+
+    fs::write(
+        plugins.join("alpha/tuse-plugin.json"),
+        r#"{"name":"alpha","version":"1.2.3"}"#,
+    )
+    .unwrap();
+    fs::write(
+        plugins.join("alpha/init.lua"),
+        r#"return function(opts)
+            local tag = (opts and opts.tag) or 'default'
+            return {
+                systems = { 'alpha:' .. tag },
+                prompts = { alpha = tag },
+                ui = { space = { padding = 1 } },
+            }
+        end"#,
+    )
+    .unwrap();
+    fs::write(
+        plugins.join("beta/tuse-plugin.json"),
+        r#"{"name":"beta","version":"0.1.0"}"#,
+    )
+    .unwrap();
+    fs::write(
+        plugins.join("beta/init.lua"),
+        r#"return { systems = { 'beta' }, prompts = { beta = 'b' } }"#,
+    )
+    .unwrap();
+
+    let custom_global = dir.join("custom-global");
+    fs::create_dir_all(&custom_global).unwrap();
+    let flag_file = dir.join("global-ran");
+    fs::write(
+        custom_global.join("init.lua"),
+        format!(
+            r#"return function(opts)
+                local f = assert(io.open({:?}, 'w'))
+                f:write('ran')
+                f:close()
+                return {{
+                    base = {{
+                        systems = {{ 'global:' .. ((opts and opts.env) or 'none') }},
+                        ui = {{ space = {{ padding = 2, steps = 4 }} }},
+                    }},
+                }}
+            end"#,
+            flag_file.to_string_lossy()
+        ),
+    )
+    .unwrap();
+
+    unsafe {
+        std::env::set_var("TUSE_GLOBAL_CONFIG", &custom_global);
+    }
+
+    let root = project.join("tuse.lua");
+    fs::write(
+        &root,
+        r#"
+        package.preload['cached_mod'] = function() return 'v1' end
+        assert(require('cached_mod') == 'v1')
+        return {
+            global = { env = 'prod' },
+            plugins = { without = { 'beta' }, opts = { alpha = { tag = 'custom' } } },
+            local_ns = {
+                systems = { 'local' },
+                ui = { space = { padding = 3 } },
+            },
+        }
+    "#,
+    )
+    .unwrap();
+
+    let open = || {
+        Session::open(Options {
+            cwd: project.clone(),
+            config: None,
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+        })
+    };
+
+    let s = open().unwrap();
+    let cfg = s.config();
+    assert_eq!(cfg.systems, ["global:prod", "alpha:custom", "local"]);
+    assert_eq!(cfg.prompts["alpha"].body, "custom");
+    assert!(!cfg.prompts.contains_key("beta"));
+    assert_eq!((cfg.ui.space.padding, cfg.ui.space.steps), (3, 4));
+    assert_eq!(cfg.plugins.len(), 1);
+    assert_eq!(cfg.plugins[0].name, "alpha");
+    assert_eq!(cfg.plugins[0].version, "1.2.3");
+    assert!(flag_file.exists());
+
+    fs::write(
+        &root,
+        r#"
+        assert(package.preload['cached_mod'] == nil)
+        return {
+            plugins = { only = { 'alpha' } },
+            dup = require('plugin:alpha')(),
+        }
+    "#,
+    )
+    .unwrap();
+    let err = s.reload().unwrap_err();
+    assert!(err.contains("duplicate"), "{err}");
+
+    fs::remove_file(&flag_file).unwrap();
+    fs::write(
+        &root,
+        r#"
+        local all = require('plugins')
+        assert(all.prompts.alpha == 'default' and all.prompts.beta == 'b')
+        return {
+            global = false,
+            plugins = { only = {} },
+            pick = { prompts = { beta = all.prompts.beta }, systems = { 'beta' } },
+        }
+    "#,
+    )
+    .unwrap();
+    s.reload().unwrap();
+    assert!(!flag_file.exists());
+    assert_eq!(s.config().systems, ["beta"]);
+    assert!(s.config().plugins.is_empty());
+    s.close();
+
+    fs::write(&root, "return {}").unwrap();
+    unsafe {
+        std::env::set_var("TUSE_GLOBAL_CONFIG", dir.join("missing.lua"));
+    }
+    assert!(open().is_err());
+    unsafe {
+        std::env::remove_var("TUSE_GLOBAL_CONFIG");
+    }
     common::cleanup(&dir);
 }

@@ -47,7 +47,11 @@ pub fn serve(
                 tuse_core::Event::Switch(switch) => {
                     let _ = switch_tx.send(switch);
                 }
-                e => out.send(&notify("event", events::to_json(&e))),
+                e => {
+                    if let Some(v) = events::to_json(&e) {
+                        out.send(&notify("event", v));
+                    }
+                }
             };
             while !done.load(Ordering::Relaxed) {
                 if let Ok((next, ack)) = swap_rx.try_recv() {
@@ -142,15 +146,11 @@ pub fn serve(
             _ if !ready.load(Ordering::Acquire) => {
                 Err(Fail(NOT_READY, "call `initialize` first".into()))
             }
-            "session.new" | "session.resume" | "session.fork" => {
+            "session.new" | "session.fork" => {
                 let switched = match req.method.as_str() {
                     "session.fork" => proto::index_param(&req.params, "index").and_then(|index| {
                         let (next, draft) = session.fork(index).map_err(Fail::session)?;
                         Ok((next, Some(draft)))
-                    }),
-                    "session.resume" => proto::str_param(&req.params, "id").and_then(|id| {
-                        let next = session.switch(Some(id)).map_err(Fail::session)?;
-                        Ok((next, None))
                     }),
                     _ => session
                         .switch(None)

@@ -164,6 +164,16 @@ impl Picker {
         self.selected = next.rem_euclid(n as isize) as usize;
         self.follow(height);
     }
+
+    pub fn page(&mut self, delta: isize, height: usize) {
+        let n = self.shown.len();
+        if n == 0 {
+            return;
+        }
+        let next = (self.selected as isize + delta).clamp(0, (n - 1) as isize);
+        self.selected = next as usize;
+        self.follow(height);
+    }
 }
 
 pub const COMMANDS: [(&str, &str); 11] = [

@@ -46,21 +46,26 @@ fn handshake_setters_and_model_refresh() {
     .unwrap();
     let (tx, out, server) = spawn(session);
 
-    let r = call(&tx, &out, 1, "initialize", json!({"protocolVersion": 2}));
+    let r = call(&tx, &out, 1, "initialize", json!({"protocolVersion": 1}));
     assert_eq!(r["error"]["code"], -32602, "{r}");
-    let r = call(&tx, &out, 2, "session.info", json!({}));
+    let r = call(&tx, &out, 2, "session.state", json!({}));
     assert_eq!(
         r["error"]["code"], -32002,
         "not ready after a rejected handshake"
     );
     let r = call(&tx, &out, 3, "initialize", json!({}));
-    assert_eq!(r["result"]["protocolVersion"], 1, "{r}");
+    assert_eq!(r["result"]["protocolVersion"], 2, "{r}");
 
     for (i, method) in [
         "config.set",
         "session.set",
         "session.records",
         "session.trace",
+        "session.info",
+        "session.stats",
+        "session.snapshot",
+        "session.resume",
+        "model.get",
     ]
     .into_iter()
     .enumerate()
@@ -76,18 +81,48 @@ fn handshake_setters_and_model_refresh() {
         json!({"model": "p/m", "effort": "high"}),
     );
     assert_eq!(r["result"], json!(null), "{r}");
-    let r = call(&tx, &out, 7, "model.get", json!({}));
-    assert_eq!(r["result"], json!({"model": "p/m", "effort": "high"}));
+    let r = call(&tx, &out, 7, "session.state", json!({}));
+    assert_eq!(
+        (r["result"]["model"].clone(), r["result"]["effort"].clone()),
+        (json!("p/m"), json!("high"))
+    );
     assert_eq!(tuse_core::Prefs::effort(), "high");
 
     let p = json!({"model": "p/cfg", "effort": "low", "persist": false});
     assert_eq!(call(&tx, &out, 8, "model.set", p)["result"], json!(null));
-    let r = call(&tx, &out, 9, "model.get", json!({}));
-    assert_eq!(r["result"], json!({"model": "p/cfg", "effort": "low"}));
+    let r = call(&tx, &out, 9, "session.state", json!({}));
+    assert_eq!(
+        (r["result"]["model"].clone(), r["result"]["effort"].clone()),
+        (json!("p/cfg"), json!("low"))
+    );
     assert_eq!(
         tuse_core::Prefs::model(),
         "p/m",
         "persist: false keeps the default"
+    );
+    assert_eq!(
+        call(
+            &tx,
+            &out,
+            40,
+            "tasks.get",
+            json!({"id": "t1", "lines": "bad"})
+        )["error"]["code"],
+        -32602
+    );
+    assert_eq!(
+        call(&tx, &out, 41, "session.list", json!({"cwd": 123}))["error"]["code"],
+        -32602
+    );
+    assert_eq!(
+        call(
+            &tx,
+            &out,
+            42,
+            "turn.submit",
+            json!({"text": "x", "images": ["data:image/png;base64,not!base"]})
+        )["error"]["code"],
+        -32000
     );
 
     let r = call(&tx, &out, 10, "model.list", json!({"cached": true}));

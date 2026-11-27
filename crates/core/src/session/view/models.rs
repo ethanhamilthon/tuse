@@ -107,14 +107,19 @@ impl Session {
         effort: &str,
         persist: bool,
     ) -> Result<(), String> {
-        if !tuse_config::EFFORTS.contains(&effort) {
-            return Err(format!(
-                "`effort` must be one of {}",
-                tuse_config::EFFORTS.join(", ")
-            ));
-        }
-        if !model.is_empty() && !self.model_available(model) {
-            return Err(format!("Model `{model}` is unavailable"));
+        let config = self.config();
+        if model.is_empty() {
+            if !effort.is_empty() && !tuse_config::DEFAULT_EFFORTS.contains(&effort) {
+                return Err(format!(
+                    "`effort` must be one of {}",
+                    tuse_config::DEFAULT_EFFORTS.join(", ")
+                ));
+            }
+        } else {
+            if !self.model_available(model) {
+                return Err(format!("Model `{model}` is unavailable"));
+            }
+            config.check_effort(model, effort)?;
         }
         self.update(
             crate::session::view::history::Update {

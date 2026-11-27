@@ -37,9 +37,11 @@ impl App {
             _ => 0,
         };
         if page_delta != 0 {
-            if !shift && let Some(picker) = self.picker.as_mut().filter(|p| p.title.is_some()) {
-                let rows = self.list_rows.max(1);
-                picker.moved(page_delta.signum() * rows as isize, rows);
+            if !shift && self.picker.is_some() {
+                let rows = self.picker_rows().max(1);
+                if let Some(picker) = self.picker.as_mut() {
+                    picker.page(page_delta.signum() * rows as isize, rows);
+                }
             } else if shift && let Some(panel) = self.visible_panel_mut() {
                 panel.scroll_by(page_delta);
                 self.clear_link_hover();
@@ -48,7 +50,7 @@ impl App {
             }
             return;
         }
-        if self.picker.is_some() && self.picker_key(k, ctrl, shift) {
+        if self.picker.is_some() && self.picker_key(k, ctrl, primary, shift) {
             return;
         }
         if self.question_key(k.code, shift || alt) {
@@ -60,7 +62,7 @@ impl App {
         let before = self.steering.map(|_| self.editor.snapshot());
         let cols = self.input_cols;
         let e = &mut self.editor;
-        if matches!(
+        let moves = matches!(
             k.code,
             KeyCode::Left
                 | KeyCode::Right
@@ -68,7 +70,8 @@ impl App {
                 | KeyCode::Down
                 | KeyCode::Home
                 | KeyCode::End
-        ) {
+        );
+        if moves {
             e.apply(if shift { Edit::Anchor } else { Edit::Deselect }, cols);
         } else if matches!(k.code, KeyCode::Esc)
             || (ctrl && k.code == KeyCode::Char('e'))
@@ -179,7 +182,13 @@ impl App {
 }
 
 impl App {
-    pub(crate) fn picker_key(&mut self, k: KeyEvent, ctrl: bool, shift: bool) -> bool {
+    pub(crate) fn picker_key(
+        &mut self,
+        k: KeyEvent,
+        ctrl: bool,
+        primary: bool,
+        shift: bool,
+    ) -> bool {
         let rows = self.picker_rows();
         let Some(p) = &mut self.picker else {
             return false;
@@ -191,6 +200,10 @@ impl App {
             KeyCode::Char('p') if ctrl => p.moved(-1, rows),
             KeyCode::Char('n') if ctrl => p.moved(1, rows),
             KeyCode::Enter if !shift && p.kind == Kind::File => self.pick_file(),
+            KeyCode::Enter if !shift && p.kind == Kind::Command && p.current().is_none() => {
+                self.picker = None;
+                return false;
+            }
             KeyCode::Enter if !shift => self.choose(),
             KeyCode::Tab if !shift && !matches!(p.kind, Kind::LuaPicker(_)) => self.choose(),
             KeyCode::Esc => {
@@ -210,7 +223,7 @@ impl App {
                     _ => self.restore_draft(),
                 }
             }
-            KeyCode::Char('x') if ctrl && p.kind == Kind::Task => {
+            KeyCode::Char('x') if primary && p.kind == Kind::Task => {
                 if let Some(it) = p.current() {
                     let id = it.value.clone();
                     let _ = self.session.stop_task(&id);
@@ -601,9 +614,9 @@ mod tests {
             start: Default::default(),
         })
         .unwrap();
-        session.set_model("switch/m", "default");
+        session.set_model("switch/m", "medium");
         let mut app = App::new(session.clone(), Some(cfg.clone()));
-        std::fs::write(&cfg, "return { typo_key = 1 }").unwrap();
+        std::fs::write(&cfg, "return { bad = { typo_key = 1 } }").unwrap();
         app.run_command("new");
         assert!(std::sync::Arc::ptr_eq(&app.session, &session) && session.is_open());
         app.pump(&mut std::time::Instant::now());

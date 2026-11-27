@@ -32,14 +32,14 @@ fn a_lua_fork_sends_session_switched() {
     .unwrap();
     let id = session.id.clone();
     let (tx, out, server) = spawn(session);
-    call(&tx, &out, 1, "initialize", json!({"protocolVersion": 1}));
+    call(&tx, &out, 1, "initialize", json!({"protocolVersion": 2}));
     call(&tx, &out, 2, "turn.submit", json!({"text": "hi"}));
     event(&out, "turn_end");
     call(&tx, &out, 3, "commands.run", json!({"name": "back"}));
     let switched = event(&out, "session_switched");
     assert_ne!(switched["session"]["id"], id.as_str(), "{switched}");
     assert_eq!(switched["draft"], "");
-    let info = call(&tx, &out, 4, "session.info", json!({}));
+    let info = call(&tx, &out, 4, "session.state", json!({}));
     assert_eq!(info["result"]["id"], switched["session"]["id"], "{info}");
     call(&tx, &out, 5, "shutdown", json!({}));
     server.join().unwrap();

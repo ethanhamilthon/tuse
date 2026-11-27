@@ -3,9 +3,14 @@ use std::path::PathBuf;
 pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
     let defs = tuse_core::configured_models(cwd, config)?;
     let model = tuse_core::Prefs::model();
-    let effort = tuse_core::Prefs::effort();
+    let cfg = tuse_config::Config {
+        models: defs.clone(),
+        ..Default::default()
+    };
+    let effort = tuse_core::Prefs::effort_for(&cfg, &model);
+    let shown_effort = if effort.is_empty() { "none" } else { &effort };
     println!(
-        "Default: {} (effort: {effort})",
+        "Default: {} (effort: {shown_effort})",
         if model.is_empty() { "(none)" } else { &model }
     );
     let defs: std::collections::BTreeMap<_, _> =
@@ -21,6 +26,13 @@ pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
         }
         if m.window > 0 {
             parts.push(format!("{} ctx", tuse_core::tokens(m.window)));
+        }
+        if let Some(effs) = m.efforts {
+            parts.push(if effs.is_empty() {
+                "efforts=none".into()
+            } else {
+                format!("efforts={}", effs.join(","))
+            });
         }
         if let Some(p) = m.prices {
             parts.push(format!(

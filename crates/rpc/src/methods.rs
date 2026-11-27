@@ -1,24 +1,20 @@
-use crate::proto::{Fail, Reply, str_list, str_param};
+use crate::proto::{Fail, Reply, opt_str, opt_u64, str_list, str_param};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tuse_core::{InputId, Session, UserInput};
 
-pub const PROTOCOL: u64 = 1;
+pub const PROTOCOL: u64 = 2;
 
 pub const METHODS: &[&str] = &[
     "initialize",
     "turn.submit",
     "turn.withdraw",
     "turn.cancel",
-    "session.info",
-    "session.snapshot",
+    "session.state",
     "session.history",
-    "session.stats",
     "session.list",
     "session.new",
-    "session.resume",
     "session.fork",
-    "model.get",
     "model.set",
     "model.list",
     "config.get",
@@ -34,22 +30,12 @@ pub const METHODS: &[&str] = &[
     "shutdown",
 ];
 
-fn info(s: &Session) -> Value {
-    let turn = s.turn_info().map(
-        |(elapsed, status)| json!({"elapsedMs": elapsed.as_millis() as u64, "status": status}),
-    );
-    json!({
-        "id": s.id,
-        "title": s.title(),
-        "cwd": s.cwd().display().to_string(),
-        "busy": s.busy(),
-        "turn": turn,
-    })
+fn state_json(s: &Session) -> Value {
+    serde_json::to_value(s.snapshot(false)).unwrap_or(Value::Null)
 }
 
 pub fn switched(s: &Session) -> Value {
-    let (model, effort) = s.model();
-    json!({"session": info(s), "model": model, "effort": effort})
+    json!({"session": state_json(s)})
 }
 
 pub fn initialize(s: &Session, p: &Value) -> Reply {
@@ -62,13 +48,10 @@ pub fn initialize(s: &Session, p: &Value) -> Reply {
             )));
         }
     }
-    let (model, effort) = s.model();
     Ok(json!({
         "protocolVersion": PROTOCOL,
         "tuse": env!("CARGO_PKG_VERSION"),
-        "session": info(s),
-        "model": model,
-        "effort": effort,
+        "session": state_json(s),
         "capabilities": {"methods": METHODS},
     }))
 }
@@ -81,6 +64,9 @@ fn submit(s: &Arc<Session>, p: &Value) -> Reply {
     let (urls, paths): (Vec<String>, Vec<String>) = str_list(p, "images")?
         .into_iter()
         .partition(|f| f.starts_with("data:"));
+    if urls.iter().any(|u| !tuse_core::is_valid_image_data_url(u)) {
+        return Err(Fail::session("images must be image data URLs"));
+    }
     let refs = tuse_core::Refs {
         prompts,
         images: (1..).zip(paths.into_iter().map(Into::into)).collect(),
@@ -94,74 +80,43 @@ fn submit(s: &Arc<Session>, p: &Value) -> Reply {
         return Err(Fail::session("no input"));
     }
     let (id, queued) = s.submit(input);
-    Ok(json!({"inputId": id.number(), "queued": queued}))
-}
-
-fn stats(s: &Session) -> Value {
-    let st = s.stats();
-    json!({
-        "input": st.totals.input,
-        "output": st.totals.output,
-        "cached": st.totals.cached,
-        "cacheWrite": st.totals.cache_write,
-        "cost": st.priced.then_some(st.cost),
-        "llmCost": st.priced.then_some(st.llm_cost),
-        "llmRequests": st.llm_requests,
-        "requests": st.requests,
-        "context": st.context,
-        "turns": st.turns,
-        "calls": st.calls,
-    })
-}
-
-fn set_model(s: &Arc<Session>, model: &str, effort: &str, persist: bool) -> Reply {
-    if !tuse_config::EFFORTS.contains(&effort) {
-        return Err(Fail::params(format!(
-            "`effort` must be one of {}",
-            tuse_config::EFFORTS.join(", ")
-        )));
-    }
-    s.select_model(model, effort, persist)
-        .map(|_| Value::Null)
-        .map_err(Fail::session)
+    Ok(json!({"input_id": id.number(), "queued": queued}))
 }
 
 pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
     match method {
         "turn.submit" => submit(s, p),
         "turn.withdraw" => {
-            let n = p["inputId"]
+            let n = p["input_id"]
                 .as_u64()
-                .ok_or_else(|| Fail::params("`inputId` must be a number"))?;
+                .ok_or_else(|| Fail::params("`input_id` must be a number"))?;
             Ok(json!(s.withdraw_input(InputId::from_number(n))))
         }
         "turn.cancel" => {
             s.cancel();
             Ok(Value::Null)
         }
-        "session.info" => Ok(info(s)),
-        "session.snapshot" => {
-            serde_json::to_value(s.snapshot(true)).map_err(|e| Fail::session(e.to_string()))
+        "session.state" => {
+            serde_json::to_value(s.snapshot(false)).map_err(|e| Fail::session(e.to_string()))
         }
         "session.history" => {
             serde_json::to_value(s.history()).map_err(|e| Fail::session(e.to_string()))
         }
-        "session.stats" => Ok(stats(s)),
         "session.list" => {
-            let cwd = p["cwd"]
-                .as_str()
-                .map_or_else(|| s.cwd().to_path_buf(), Into::into);
+            let cwd = opt_str(p, "cwd")?.map_or_else(|| s.cwd().to_path_buf(), Into::into);
             serde_json::to_value(tuse_core::Meta::list(&cwd))
                 .map_err(|e| Fail::session(e.to_string()))
-        }
-        "model.get" => {
-            let (model, effort) = s.model();
-            Ok(json!({"model": model, "effort": effort}))
         }
         "model.set" => {
             let model = str_param(p, "model")?;
             let effort = match &p["effort"] {
-                Value::Null => "default".to_string(),
+                Value::Null => {
+                    if model.is_empty() {
+                        "medium".to_string()
+                    } else {
+                        s.config().fallback_effort(&model)
+                    }
+                }
                 _ => str_param(p, "effort")?,
             };
             let persist = match &p["persist"] {
@@ -169,7 +124,9 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
                 Value::Bool(b) => *b,
                 _ => return Err(Fail::params("`persist` must be a boolean")),
             };
-            set_model(s, &model, &effort, persist)
+            s.select_model(&model, &effort, persist)
+                .map(|_| Value::Null)
+                .map_err(Fail::session)
         }
         "model.list" => {
             let cached = match &p["cached"] {
@@ -189,10 +146,10 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         "tasks.list" => serde_json::to_value(s.tasks()).map_err(|e| Fail::session(e.to_string())),
         "tasks.get" => {
             let id = str_param(p, "id")?;
+            let lines = opt_u64(p, "lines")?.map_or(50, |n| n.max(1) as usize);
             let t = s
                 .task(&id)
                 .ok_or_else(|| Fail::session(format!("no task {id}")))?;
-            let lines = p["lines"].as_u64().unwrap_or(50) as usize;
             let mut v = serde_json::to_value(&t).map_err(|e| Fail::session(e.to_string()))?;
             v["output"] = json!(tuse_core::Tasks::tail(&t.log, lines));
             Ok(v)

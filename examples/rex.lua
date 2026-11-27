@@ -1,27 +1,23 @@
--- Rex: renames the current block after the session and shows the agent state in its label.
--- Use: require("rex").apply(g)
+-- Rex: renames the current block with the session title and agent state.
+-- Use: return { rex = require("rex") }
 local t = require("tuse")
-
-local M = {}
 
 local function run(cmd, env)
   t.sh(cmd .. " >/dev/null 2>&1", { env = env })
 end
 
-function M.apply(g)
-  g.hooks = g.hooks or {}
-  g.hooks.rex = {
-    events = { "user_message", "agent_message" },
-    run = function(e)
-      run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"$N\"", { N = t.session().name or "Tuse" })
-      if e.event == "user_message" then
-        run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"tuse: $S\"", { S = "working" })
-      elseif e.event == "agent_message" and e.status ~= "working" then
-        run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"tuse: $S\"", { S = e.status })
-      end
-    end,
-  }
-  return g
-end
-
-return M
+return {
+  hooks = {
+    rex = {
+      events = { "user_message", "agent_message" },
+      run = function(e)
+        local title = t.session().title or "Tuse"
+        if e.event == "user_message" then
+          run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"$N: $S\"", { N = title, S = "working" })
+        elseif e.event == "agent_message" and e.status ~= "working" then
+          run("[ -n \"$REX_BLOCK\" ] && rex block rename \"$REX_BLOCK\" \"$N: $S\"", { N = title, S = e.status })
+        end
+      end,
+    },
+  },
+}

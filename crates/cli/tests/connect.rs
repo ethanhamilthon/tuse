@@ -150,7 +150,7 @@ fn connect_apis_providers_format_key_stdin_replace_and_probe() {
         "anthropic-messages",
         "google-gemini",
     ] {
-        assert!(js.contains(&format!(r#""api": "{a}""#)));
+        assert!(js.contains(&format!(r#""type": "{a}""#)), "{js}");
     }
 
     let (u1, s1) = mock(r#"{"data":[{"id":"m1"}]}"#);

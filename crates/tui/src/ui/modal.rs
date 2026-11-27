@@ -292,7 +292,7 @@ mod tests {
         let cfg = app.cwd.join("tuse.lua");
         std::fs::write(
             &cfg,
-            "return { commands = { hello_ui = { run = function() require('tuse').show('h', 'hi', false) end } } }",
+            "return { test = { commands = { hello_ui = { run = function() require('tuse').show('h', 'hi', false) end } } } }",
         )
         .unwrap();
         app.run_command("reload");
@@ -302,7 +302,7 @@ mod tests {
         app.editor.clear();
         std::fs::write(
             &cfg,
-            "return { commands = { fresh_cmd = { run = function() end } } }",
+            "return { test = { commands = { fresh_cmd = { run = function() end } } } }",
         )
         .unwrap();
         app.run_command("reload");
@@ -316,11 +316,11 @@ mod tests {
         let mut app = crate::ui::app::test_app("modal-cmd-args");
         std::fs::write(
             app.cwd.join("tuse.lua"),
-            r#"return { commands = {
+            r#"return { test = { commands = {
                 deploy = { desc = "ship it", args = { "staging", "prod" },
                     run = function(env) require("tuse").show("d", "ran:" .. tostring(env), false) end },
                 mv = { run = function(a, b) require("tuse").show("m", tostring(a) .. "|" .. tostring(b), false) end },
-            } }"#,
+            } } }"#,
         )
         .unwrap();
         app.run_command("reload");
@@ -379,8 +379,62 @@ mod tests {
 
         type_text(&mut app, "/deploy nope");
         press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert!(app.editor.is_empty());
+        assert_eq!(app.editor.text(), "/deploy nope");
         assert!(!shown(&app, "ran:nope"));
+        app.editor.clear();
+
+        type_text(&mut app, "prefix /dep");
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(app.editor.text(), "prefix /deploy ");
+        assert_eq!(
+            app.picker.as_ref().unwrap().kind,
+            Kind::CommandArg("deploy".into())
+        );
+        type_text(&mut app, "prod");
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(app.editor.text(), "prefix ");
+        assert!(shown(&app, "ran:prod"));
+        app.editor.clear();
+
+        type_text(&mut app, "/new ");
+        assert!(app.picker.is_none());
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(app.editor.text(), "/new ");
+        app.editor.clear();
+
+        type_text(&mut app, "/trace");
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(app.editor.text(), "/trace");
+        app.editor.clear();
+
+        type_text(&mut app, "/usr/bin/env");
+        assert!(app.picker.is_none());
+        app.editor.clear();
+
+        type_text(&mut app, "/");
+        assert!(app.picker.is_some());
+        let first = app
+            .picker
+            .as_ref()
+            .unwrap()
+            .current()
+            .unwrap()
+            .label
+            .clone();
+        press(&mut app, KeyCode::PageDown, KeyModifiers::NONE);
+        let after_down = app
+            .picker
+            .as_ref()
+            .unwrap()
+            .current()
+            .unwrap()
+            .label
+            .clone();
+        assert_ne!(after_down, first);
+        press(&mut app, KeyCode::PageUp, KeyModifiers::NONE);
+        assert_eq!(app.picker.as_ref().unwrap().current().unwrap().label, first);
+        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+        app.editor.clear();
         crate::ui::app::cleanup(app);
     }
 }

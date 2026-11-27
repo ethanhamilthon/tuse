@@ -40,7 +40,7 @@ pub fn run(args: &Args) -> Result<(), String> {
     let replace = args.has(&["--replace"]);
     if !replace && tuse_core::Providers::list()?.iter().any(|p| p.name == name) {
         return Err(format!(
-            "`{name}` already exists; `tuse disconnect {name}` removes it"
+            "`{name}` already exists; pass `--replace` to overwrite it or run `tuse disconnect {name}` to remove it"
         ));
     }
     let mut headers = std::collections::BTreeMap::new();

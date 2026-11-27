@@ -379,7 +379,7 @@ mod tests {
             std::fs::write(
                 &cfg,
                 format!(
-                    "return {{ ui = {{ lines = {{ diff = {n} }} }}, commands = {{ r = {{ run = function() require('tuse').reload() end }} }} }}"
+                    "return {{ test = {{ ui = {{ lines = {{ diff = {n} }} }}, commands = {{ r = {{ run = function() require('tuse').reload() end }} }} }} }}"
                 ),
             )
             .unwrap();
@@ -398,7 +398,7 @@ mod tests {
         write_cfg(12);
         app.run_command("reload");
         drain_until(&mut app, |e| matches!(e, Event::Reloaded));
-        app.session.set_model("difftest/m", "default");
+        app.session.set_model("difftest/m", "medium");
         app.session.submit(tuse_core::UserInput::text("write"));
         drain_until(&mut app, |e| matches!(e, Event::TurnEnd { .. }));
 

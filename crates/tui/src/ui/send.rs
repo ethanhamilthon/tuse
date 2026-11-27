@@ -67,21 +67,35 @@ impl App {
         if trimmed.is_empty() {
             return;
         }
-        if let Some(cmd) = trimmed.strip_prefix('/') {
-            let (name, tail) = cmd.split_once(char::is_whitespace).unwrap_or((cmd, ""));
-            if tail.is_empty() && crate::ui::picker::COMMANDS.iter().any(|(n, _)| *n == name) {
-                self.editor.clear();
-                self.run_command(cmd);
-                return;
-            }
-            if self.session.config().commands.contains_key(name) {
-                match tuse_config::command_words(tail) {
-                    Ok(words) => {
-                        self.editor.clear();
-                        self.run_custom(name, words);
+        if let Some(rest) = text.strip_prefix('/') {
+            let (name, after) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+            let has_ws = rest.len() > name.len();
+            if !name.is_empty() && !name.contains('/') {
+                if crate::ui::picker::COMMANDS.iter().any(|(n, _)| *n == name) {
+                    if has_ws {
+                        self.error(format!("/{name} takes no words"));
+                        return;
                     }
-                    Err(e) => self.error(format!("/{name}: {e}")),
+                    self.editor.clear();
+                    self.run_command(name);
+                    return;
                 }
+                if let Some(cmd) = self.session.config().commands.get(name).cloned() {
+                    if cmd.args.is_empty() && cmd.params == Some(0) && has_ws {
+                        self.error(format!("/{name} takes no words"));
+                        return;
+                    }
+                    match tuse_config::command_words(after) {
+                        Ok(words) => {
+                            if self.session.run_command(name, &words).is_ok() {
+                                self.editor.clear();
+                            }
+                        }
+                        Err(e) => self.error(format!("/{name}: {e}")),
+                    }
+                    return;
+                }
+                self.error(format!("Unknown command /{name}"));
                 return;
             }
         }

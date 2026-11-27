@@ -14,26 +14,44 @@ fn help_comes_first_and_unknown_input_is_rejected() {
     let dir = std::env::temp_dir().join(format!("tuse-cli-flags-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("tuse.lua"), "return { typo_key = 1 }").unwrap();
+    std::fs::write(dir.join("tuse.lua"), "return { bad = { typo_key = 1 } }").unwrap();
 
     let out = tuse(&dir, &["json", "--help"]);
     assert!(out.status.success());
     let text = String::from_utf8(out.stdout).unwrap();
     assert!(text.starts_with("tuse json [-c|--config PATH]"), "{text}");
 
+    let out = tuse(&dir, &["help", "json"]);
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8(out.stdout).unwrap(), text);
+
     let out = tuse(&dir, &["providers", "--bogus"]);
     assert!(!out.status.success());
     let err = String::from_utf8(out.stderr).unwrap();
     assert!(err.contains("unknown flag --bogus"), "{err}");
 
-    for args in [&["models", "extra"][..], &["init", "x"], &["disconnect"]] {
+    for args in [
+        &["models", "extra"][..],
+        &["init", "x"],
+        &["disconnect"],
+        &["help", "bogus"],
+        &["help", "json", "extra"],
+        &["version", "--version"],
+        &["--version", "extra"],
+        &["providers", "--json=1"],
+        &["-c", "--resume", "abc"],
+    ] {
         assert!(!tuse(&dir, args).status.success(), "{args:?}");
     }
     assert!(!dir.join(".tuse").exists(), "nothing ran");
 
+    let out = tuse(&dir, &["plugins", "list", "--json"]);
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8(out.stdout).unwrap().trim(), "[]");
+
     std::fs::write(
         dir.join("other.lua"),
-        "return { models = {{ name = 'x/y', window = 1000 }} }",
+        "return { test = { models = {{ name = 'x/y', window = 1000 }} } }",
     )
     .unwrap();
     let out = tuse(&dir, &["models", "-c", "other.lua"]);

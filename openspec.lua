@@ -18,7 +18,7 @@ local actions = {
 }
 
 return {
-  system = layout,
+  systems = { layout },
   prompts = {
     openspec = {
       args = { "explore", "propose", "apply", "verify", "archive" },

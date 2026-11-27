@@ -47,19 +47,14 @@ impl Session {
         self.stop_commands();
         self.stop_hook_runs();
         self.ui_cancel_all();
-        self.cancel_turn(false);
+        self.cancel_turn();
         self.tasks.stop_all();
         self.emit(Signal::Tasks);
     }
 
-    pub(crate) fn cancel_turn(self: &Arc<Self>, handoff: bool) {
-        let mut st = self.state.lock().unwrap();
+    pub(crate) fn cancel_turn(self: &Arc<Self>) {
+        let st = self.state.lock().unwrap();
         if !st.busy {
-            return;
-        }
-        if handoff && let Some(request) = &st.tool_handoff {
-            request.store(true, Ordering::Release);
-            st.cancel_pending = true;
             return;
         }
         self.finish_cancel(st);
@@ -67,7 +62,6 @@ impl Session {
 
     pub(crate) fn finish_cancel(self: &Arc<Self>, mut st: std::sync::MutexGuard<'_, super::State>) {
         st.tool_handoff = None;
-        st.cancel_pending = false;
         st.cancel.store(true, Ordering::Relaxed);
         st.generation += 1;
         st.busy = false;

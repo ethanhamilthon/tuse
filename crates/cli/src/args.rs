@@ -4,10 +4,14 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn parse(raw: &[String], valued: &[&str]) -> Result<Args, String> {
+    pub fn parse(raw: &[String], valued: &[&str], plain: &[&str]) -> Result<Args, String> {
         let mut a = Args {
             positional: vec![],
             flags: vec![],
+        };
+        let is_known_flag = |tok: &str| {
+            let name = tok.split_once('=').map_or(tok, |(n, _)| n);
+            matches!(name, "-h" | "--help") || valued.contains(&name) || plain.contains(&name)
         };
         let mut it = raw.iter();
         while let Some(s) = it.next() {
@@ -25,11 +29,16 @@ impl Args {
                         Some(v) => Some(v),
                         None => Some(
                             it.next()
-                                .filter(|v| !v.starts_with('-'))
+                                .filter(|v| !is_known_flag(v))
                                 .cloned()
                                 .ok_or(format!("{name} needs a value"))?,
                         ),
                     }
+                } else if plain.contains(&name.as_str()) {
+                    if inline.is_some() {
+                        return Err(format!("{name} does not take a value"));
+                    }
+                    None
                 } else {
                     inline
                 };
@@ -45,14 +54,23 @@ impl Args {
         &self.positional[i]
     }
 
+    pub fn opt_arg(&self, i: usize) -> Option<&str> {
+        self.positional.get(i).map(String::as_str)
+    }
+
     pub fn expect_args(&self, n: usize) -> Result<(), String> {
-        match self.positional.len() {
-            len if len == n => Ok(()),
-            _ => Err(match self.positional.get(n) {
-                Some(p) => format!("unexpected argument `{p}`"),
-                None => "missing argument".into(),
-            }),
+        self.expect_args_range(n, n)
+    }
+
+    pub fn expect_args_range(&self, min: usize, max: usize) -> Result<(), String> {
+        let len = self.positional.len();
+        if (min..=max).contains(&len) {
+            return Ok(());
         }
+        Err(match self.positional.get(max) {
+            Some(p) => format!("unexpected argument `{p}`"),
+            None => "missing argument".into(),
+        })
     }
 
     pub fn value(&self, names: &[&str]) -> Option<String> {

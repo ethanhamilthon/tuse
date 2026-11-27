@@ -8,7 +8,7 @@ fn models_lists_effective_lua_metadata_without_creating_a_session() {
     fs::create_dir_all(&global).unwrap();
     fs::write(
         global.join("init.lua"),
-        "return { models = require('models') }",
+        "return function() return { base = { models = require('models') } } end",
     )
     .unwrap();
     fs::write(
@@ -17,7 +17,7 @@ fn models_lists_effective_lua_metadata_without_creating_a_session() {
         prices = { input = 2, output = 10 } }}"#,
     )
     .unwrap();
-    fs::write(dir.join("tuse.lua"), "return require('global')").unwrap();
+    fs::write(dir.join("tuse.lua"), "return {}").unwrap();
     let run = |args: &[&str]| {
         Command::new(env!("CARGO_BIN_EXE_tuse"))
             .current_dir(&dir)

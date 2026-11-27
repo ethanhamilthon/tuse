@@ -159,10 +159,6 @@ impl Session {
                 diffs: out.diffs,
             }],
         );
-        if st.cancel_pending {
-            self.finish_cancel(st);
-            return None;
-        }
         if handed_off {
             let cache = self.cached(&mut st);
             for r in crate::convo::wire::missing_results(&cache.records) {

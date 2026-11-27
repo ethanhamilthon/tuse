@@ -146,7 +146,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
 
     std::fs::write(
         &cfg,
-        "return { commands = { updated_cmd = { run = function() require('tuse').ask('still open') end } } }",
+        "return { test = { commands = { updated_cmd = { run = function() require('tuse').ask('still open') end } } } }",
     )
     .unwrap();
     s.reload().unwrap();
@@ -160,7 +160,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
 
     std::fs::write(
         &cfg,
-        "return { commands = { reload = { run = function() end } } }",
+        "return { test = { commands = { reload = { run = function() end } } } }",
     )
     .unwrap();
     assert!(s.reload().unwrap_err().contains("cannot override built-in"));

@@ -121,7 +121,7 @@ fn replay_resume_provider_isolation_and_truncation() {
     s.submit(UserInput::text("s1"));
     wait_turn(&rx);
     assert!(s.stats().totals.input == 250 && ab.lock().unwrap()[1].to_string().contains("SIG1"));
-    assert!(s.records().iter().any(|r| matches!(r, Record::Lua { output, .. } if output.starts_with("false|") && output.contains("does not support effort `max`"))));
+    assert!(s.records().iter().any(|r| matches!(r, Record::Lua { output, .. } if output.starts_with("false|") && output.contains("thinkingBudget") && output.contains("max"))));
     s.close();
 
     let s = open(Some(sid));
@@ -132,7 +132,7 @@ fn replay_resume_provider_isolation_and_truncation() {
 
     std::fs::write(
         dir.join("tuse.lua"),
-        r#"return { commands = { rewrite = { run = function()
+        r#"return { test = { commands = { rewrite = { run = function()
       local t = require('tuse')
       local h = t.session().history
       t.set_session{ history = h }
@@ -140,7 +140,7 @@ fn replay_resume_provider_isolation_and_truncation() {
         if r.role == 'agent' and r.replay then r.text = 'edited'; break end
       end
       t.set_session{ history = h }
-    end } } }"#,
+    end } } } }"#,
     )
     .unwrap();
     s.reload().unwrap();
@@ -172,11 +172,9 @@ fn replay_resume_provider_isolation_and_truncation() {
 
     s.select_model("gem/gemini-2.5-pro", "max", false).unwrap();
     s.submit(UserInput::text("bad effort"));
-    assert!(
-        wait_turn(&rx)
-            .iter()
-            .any(|e| matches!(e, Event::Error(m) if m.contains("does not support effort `max`")))
-    );
+    assert!(wait_turn(&rx).iter().any(
+        |e| matches!(e, Event::Error(m) if m.contains("thinkingBudget") && m.contains("max"))
+    ));
     s.close();
     let _ = std::fs::remove_dir_all(&dir);
 }

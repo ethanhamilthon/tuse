@@ -116,26 +116,30 @@ fn prepare(mut opts: Options) -> Result<Prepared, String> {
         .resume
         .clone()
         .unwrap_or_else(crate::id::new_session_id);
-    let meta = if restored {
+    let (vm, weak, config) = if restored {
         let meta =
             crate::storage::store::Meta::read(&id)?.ok_or_else(|| format!("no session {id}"))?;
         let cwd = PathBuf::from(&meta.cwd);
         if cwd.is_dir() {
             opts.cwd = cwd;
         }
-        meta
+        crate::session::lua::config_lua::start_vm(&opts)?
     } else {
+        crate::session::lua::config_lua::start_vm(&opts)?
+    };
+    let meta = (!restored).then(|| {
+        let model = crate::storage::Prefs::model();
+        let effort = crate::storage::Prefs::effort_for(&config, &model);
         Meta {
             id: id.clone(),
             cwd: opts.cwd.display().to_string(),
             created: crate::id::now(),
-            model: crate::storage::Prefs::model(),
-            effort: crate::storage::Prefs::effort(),
+            model,
+            effort,
             ..Default::default()
         }
-    };
-    let (vm, weak, config) = crate::session::lua::config_lua::start_vm(&opts)?;
-    let dir = SessionDir::open(&id, (!restored).then_some(&meta))?;
+    });
+    let dir = SessionDir::open(&id, meta.as_ref())?;
     Ok(Prepared {
         opts,
         id,
@@ -177,7 +181,6 @@ impl Prepared {
             generation: 0,
             cancel: Arc::default(),
             tool_handoff: None,
-            cancel_pending: false,
             queue: vec![],
             next_input: 0,
             turn_start: Instant::now(),
@@ -244,11 +247,7 @@ mod tests {
                 replay: None,
                 cancelled: false,
             },
-            Record::Usage {
-                model: "m".into(),
-                usage: Usage::default(),
-                llm: false,
-            },
+            Record::usage("m".into(), Usage::default(), false),
             Record::Lua {
                 id: "c".into(),
                 code: String::new(),

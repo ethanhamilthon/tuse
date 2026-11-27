@@ -1,22 +1,5 @@
 use crate::types::Config;
 use serde_json::Value;
-use std::path::{Path, PathBuf};
-
-pub fn find(explicit: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
-    find_in(explicit, cwd, crate::modules::global_path())
-}
-
-pub(crate) fn find_in(
-    explicit: Option<&Path>,
-    cwd: &Path,
-    global: Option<PathBuf>,
-) -> Option<PathBuf> {
-    if let Some(p) = explicit {
-        return Some(p.to_path_buf());
-    }
-    let local = cwd.join("tuse.lua");
-    if local.is_file() { Some(local) } else { global }
-}
 
 pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
     if value.as_array().is_some_and(Vec::is_empty) || value.is_null() {
@@ -26,7 +9,7 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
         return Err(format!("{name}: the config must return a table"));
     }
     let config: Config = serde_path_to_error::deserialize(value).map_err(|e| {
-        let path = e
+        let mut path = e
             .path()
             .iter()
             .map(|s| match s {
@@ -34,10 +17,11 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
                 s => format!(".{s}"),
             })
             .collect::<String>();
-        let path = path.strip_prefix('.').unwrap_or(&path).to_string();
-        let path = if path.is_empty() { ".".into() } else { path };
-        let msg = e.inner().to_string();
-        let msg = msg.split(" at line ").next().unwrap_or(&msg);
+        if path.starts_with('.') {
+            path.remove(0);
+        }
+        let raw = e.inner().to_string();
+        let msg = raw.split(" at line ").next().unwrap_or(&raw);
         let msg = if msg.starts_with("unknown field `") {
             "unknown key"
         } else if path == "providers" || path.starts_with("providers.") {
@@ -45,7 +29,7 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
         } else {
             msg
         };
-        if path == "." {
+        if path.is_empty() {
             format!("{name}: {msg}")
         } else {
             format!("{name}: {path}: {msg}")
@@ -152,16 +136,61 @@ mod tests {
     }
 
     #[test]
-    fn find_order() {
-        let d = std::env::temp_dir().join(format!("tuse-find-{}", std::process::id()));
-        std::fs::create_dir_all(&d).unwrap();
-        let g = d.join("init.lua");
-        assert_eq!(find_in(None, &d, None), None);
-        assert_eq!(find_in(None, &d, Some(g.clone())), Some(g.clone()));
-        std::fs::write(d.join("tuse.lua"), "return {}").unwrap();
-        assert_eq!(find_in(None, &d, Some(g.clone())), Some(d.join("tuse.lua")));
-        let x = d.join("x.lua");
-        assert_eq!(find_in(Some(&x), &d, Some(g)), Some(x));
+    fn efforts_history_and_plugins() {
+        let cfg = |v| from_value(v, "test");
+        let c = cfg(json!({
+            "models": [
+                {"name": "p/a"},
+                {"name": "p/b", "efforts": []},
+                {"name": "p/c", "efforts": ["low", "high"]}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(c.model_efforts("p/a"), crate::DEFAULT_EFFORTS);
+        assert!(c.model_efforts("p/b").is_empty());
+        assert_eq!(c.model_efforts("p/c"), ["low", "high"]);
+        assert_eq!(c.fallback_effort("p/a"), "medium");
+        assert_eq!(c.fallback_effort("p/b"), "");
+        assert_eq!(c.fallback_effort("p/c"), "low");
+        for bad in [
+            json!({"models": [{"name": "p/a", "efforts": ["default"]}]}),
+            json!({"models": [{"name": "p/a", "efforts": ["bogus"]}]}),
+            json!({"models": [{"name": "p/a", "efforts": ["low", "low"]}]}),
+        ] {
+            let err = cfg(bad).unwrap_err();
+            assert!(err.contains("models[1].efforts["), "{err}");
+        }
+        let err = cfg(json!({"history": {"hide": ["user", "bogus"]}})).unwrap_err();
+        assert_eq!(err.matches("history.hide").count(), 1, "{err}");
+
+        let d = std::env::temp_dir().join(format!("tuse-plug-{}", std::process::id()));
+        std::fs::remove_dir_all(&d).ok();
+        std::fs::create_dir_all(d.join("alpha")).unwrap();
+        std::fs::write(
+            d.join("alpha/tuse-plugin.json"),
+            r#"{"name":"alpha","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        std::fs::write(d.join("alpha/init.lua"), "return {}").unwrap();
+        std::fs::create_dir_all(d.join("beta")).unwrap();
+        std::fs::write(
+            d.join("beta/tuse-plugin.json"),
+            r#"{"name":"beta","version":"0.1.0","entrypoint":"sub/main.lua"}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(d.join("beta/sub")).unwrap();
+        std::fs::write(d.join("beta/sub/main.lua"), "return {}").unwrap();
+        let found = crate::discover_plugins_in(&d).unwrap();
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].name, "alpha");
+        assert_eq!(found[1].name, "beta");
+        std::fs::create_dir_all(d.join("bad")).unwrap();
+        std::fs::write(
+            d.join("bad/tuse-plugin.json"),
+            r#"{"name":"bad","entrypoint":"../x.lua"}"#,
+        )
+        .unwrap();
+        assert!(crate::discover_plugins_in(&d).is_err());
         std::fs::remove_dir_all(d).ok();
     }
 }

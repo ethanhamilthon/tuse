@@ -2,19 +2,15 @@ use serde_json::Value;
 use std::path::Path;
 
 pub(crate) fn error_line(text: &str) -> String {
-    match text.find("\nstack traceback:") {
-        Some(i) => last_line(&text[..i]),
-        None => last_line(text),
-    }
+    let slice = match text.find("\nstack traceback:") {
+        Some(i) => &text[..i],
+        None => text,
+    };
+    last_line(slice).unwrap_or("failed").to_string()
 }
 
-pub(crate) fn last_line(text: &str) -> String {
-    text.lines()
-        .rev()
-        .map(str::trim)
-        .find(|l| !l.is_empty())
-        .unwrap_or("failed")
-        .to_string()
+pub(crate) fn last_line(text: &str) -> Option<&str> {
+    text.lines().rev().map(str::trim).find(|l| !l.is_empty())
 }
 
 pub(crate) fn compact(mut v: Value) -> Value {

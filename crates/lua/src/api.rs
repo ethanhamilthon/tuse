@@ -110,7 +110,13 @@ fn sh_start(lua: &Lua, (cmd, opts): (String, Option<Table>)) -> mlua::Result<u64
             deadline = Instant::now().checked_add(duration);
         }
         if let Some(c) = o.get::<Option<String>>("cwd")? {
-            cwd = cwd.join(c);
+            cwd = if let Some(rest) = c.strip_prefix("~/") {
+                std::env::home_dir().unwrap_or_default().join(rest)
+            } else if c == "~" {
+                std::env::home_dir().unwrap_or_default()
+            } else {
+                cwd.join(c)
+            };
         }
         if let Some(e) = o.get::<Option<Table>>("env")? {
             for pair in e.pairs::<String, String>() {

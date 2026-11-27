@@ -91,9 +91,14 @@ pub fn setup(name: &str, addr: &str, extra: &str) -> (PathBuf, PathBuf) {
     })
     .unwrap();
     tuse_core::Prefs::set("model", "p/m").unwrap();
-    tuse_core::Prefs::set("effort", "default").unwrap();
+    tuse_core::Prefs::set("effort", "medium").unwrap();
     let cfg = dir.join("tuse.lua");
-    std::fs::write(&cfg, format!("return {{\n{extra}\n}}\n")).unwrap();
+    let body = if extra.trim().is_empty() {
+        "return {}\n".to_string()
+    } else {
+        format!("return {{\n  test = {{\n{extra}\n  }},\n}}\n")
+    };
+    std::fs::write(&cfg, body).unwrap();
     (dir, cfg)
 }
 

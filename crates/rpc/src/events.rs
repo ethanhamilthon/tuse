@@ -1,11 +1,11 @@
 use serde_json::{Value, json};
 use tuse_core::Event;
 
-pub fn to_json(e: &Event) -> Value {
-    match e {
+pub fn to_json(e: &Event) -> Option<Value> {
+    Some(match e {
         Event::Notification(t) => json!({"type": "notification", "text": t}),
         Event::User { id, text, images } => {
-            json!({"type": "user", "inputId": id.number(), "text": text, "images": images})
+            json!({"type": "user", "input_id": id.number(), "text": text, "images": images})
         }
         Event::TurnStart => json!({"type": "turn_start"}),
         Event::Text(t) => json!({"type": "text", "text": t}),
@@ -46,7 +46,7 @@ pub fn to_json(e: &Event) -> Value {
             cancelled,
         } => json!({
             "type": "turn_end",
-            "elapsedMs": elapsed.as_millis() as u64,
+            "elapsed_ms": elapsed.as_millis() as u64,
             "calls": calls,
             "model": model,
             "effort": effort,
@@ -56,7 +56,7 @@ pub fn to_json(e: &Event) -> Value {
         Event::Usage => json!({"type": "usage"}),
         Event::Models => json!({"type": "models"}),
         Event::HistoryReplaced => json!({"type": "history_replaced"}),
-        Event::Switch(_) => json!({"type": "switch"}),
+        Event::Switch(_) => return None,
         Event::Reloaded => json!({"type": "reloaded"}),
         Event::UiMarkdown {
             name,
@@ -81,5 +81,5 @@ pub fn to_json(e: &Event) -> Value {
             }
             v
         }
-    }
+    })
 }

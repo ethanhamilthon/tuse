@@ -25,7 +25,9 @@ print("sh", r.ok, (r.out:gsub("\n", "")), seen)
 local long = spawn(function() sh("sleep 30") end, "long")
 task_stop(long)
 sh("sleep 0.1")
-print("stopped", task_get(long).status)
+print("stopped", task_get(long).status, type(task_get(long).log))
+spawn(function() end, "empty_ok")
+sh("sleep 0.05")
 print("big", #string.rep("x", 100000))
 return string.rep("y", 10000)
 "#;
@@ -87,7 +89,7 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         output.contains("sh\ttrue\tslept\t3"),
         "a task runs while sh waits: {head}"
     );
-    assert!(output.contains("stopped\tstopped"), "{head}");
+    assert!(output.contains("stopped\tstopped\tstring"), "{head}");
     assert!(
         output.contains("big\t100000") && output.ends_with(&"y".repeat(10000)),
         "{}",
@@ -130,11 +132,14 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         names,
         [
             ("bg".into(), "done".into()),
-            ("long".into(), "stopped".into())
+            ("long".into(), "stopped".into()),
+            ("empty_ok".into(), "done".into())
         ]
     );
     let told = |r: &Record| matches!(r, Record::Notification { text } if text.contains("Task t1 (bg) finished"));
     assert!(all.iter().any(told), "{all:?}");
+    let empty_ok = |r: &Record| matches!(r, Record::Notification { text } if text.contains("Task t3 (empty_ok) finished") && !text.contains("Last line:") && !text.contains("failed"));
+    assert!(all.iter().any(empty_ok), "{all:?}");
     s.close();
     std::fs::remove_dir_all(dir).ok();
 }
@@ -239,7 +244,7 @@ end)()
 #[test]
 fn tool_history_write_waits_for_the_tool_result() {
     let _home = HOME_LOCK.lock().unwrap();
-    let args = json!({"code": "set_session{history={{role='system', text='short'}}}; assert(session().history[1].text ~= 'short'); return 'tool finished'"}).to_string();
+    let args = json!({"code": "set_session{}; set_session{title='kept', history={{role='system', text='short'}}}; assert(session().history[1].text ~= 'short'); return 'tool finished'"}).to_string();
     let addr = common::provider(vec![Reply::Call("lua", args), Reply::Text("done")]);
     let (dir, cfg) = common::setup("pending-history", &addr, "");
     let session = Session::open(Options {
@@ -272,6 +277,7 @@ fn tool_history_write_waits_for_the_tool_result() {
     assert!(replaced);
     let snap = session.snapshot(true);
     assert_eq!(snap.history.unwrap()[0].fields["text"], "short");
+    assert_eq!(snap.title.as_deref(), Some("kept"));
     assert_eq!(snap.usage.unwrap().input, 20);
     assert_eq!(snap.started, Some(true));
     session.close();

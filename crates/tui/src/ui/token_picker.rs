@@ -32,13 +32,17 @@ impl App {
         });
         let command_arg = match arg_of {
             Some(_) => None,
-            None => self.editor.command_before_token().filter(|n| {
-                self.session
-                    .config()
-                    .commands
-                    .get(n)
-                    .is_some_and(|c| !c.args.is_empty())
-            }),
+            None => self
+                .editor
+                .command_before_token()
+                .map(|(_, n)| n)
+                .filter(|n| {
+                    self.session
+                        .config()
+                        .commands
+                        .get(n)
+                        .is_some_and(|c| !c.args.is_empty())
+                }),
         };
         let mut chars = token.chars();
         let first = if arg_of.is_some() {
@@ -52,7 +56,7 @@ impl App {
                 token.as_str(),
             ),
             Some(' ') => (Kind::PromptArg(arg_of.unwrap_or_default()), token.as_str()),
-            Some('/') => (Kind::Command, chars.as_str()),
+            Some('/') if !chars.as_str().contains('/') => (Kind::Command, chars.as_str()),
             Some('#') if !self.session.config().prompts.is_empty() => {
                 (Kind::Prompt, chars.as_str())
             }

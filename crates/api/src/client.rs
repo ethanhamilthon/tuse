@@ -148,16 +148,6 @@ impl Client {
         cancel: &AtomicBool,
         on_delta: &mut dyn FnMut(Delta),
     ) -> Result<Reply, Error> {
-        if let Some(effort) = req.effort.as_deref()
-            && !self.api.supports_effort(effort)
-        {
-            let sup = self.api.supported_efforts().join(", ");
-            return Err(Error::Unsupported(format!(
-                "provider `{}` ({}) does not support effort `{effort}` (supported: {sup})",
-                req.provider,
-                self.api.as_str(),
-            )));
-        }
         match self.api {
             ApiType::OpenAiChat => crate::openai_chat::complete(&self.conn, req, cancel, on_delta),
             ApiType::OpenAiResponses => {

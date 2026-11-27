@@ -13,7 +13,7 @@ fn config(keep: &str, drop: bool) -> String {
         f.push_str("drop = function() return 'drop' end,");
         f.push_str("gone = function() return 'gone' end,");
     }
-    format!("return {{ functions = {{ {f} }} }}")
+    format!("return {{ test = {{ functions = {{ {f} }} }} }}")
 }
 
 fn turn(s: &std::sync::Arc<Session>, rx: &std::sync::mpsc::Receiver<Event>) -> String {
@@ -52,7 +52,7 @@ fn reload_replaces_config_helpers_and_keeps_agent_globals() {
     let rx = s.subscribe();
     assert!(turn(&s, &rx).contains("v1drop"));
 
-    std::fs::write(&cfg, "return { typo_key = 1 }").unwrap();
+    std::fs::write(&cfg, "return { bad = { typo_key = 1 } }").unwrap();
     assert!(s.reload().is_err());
     assert_eq!(turn(&s, &rx).trim(), "function v1 42 agent mine false");
 

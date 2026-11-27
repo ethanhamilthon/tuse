@@ -66,7 +66,6 @@ pub(crate) struct State {
     pub generation: u64,
     pub cancel: Arc<AtomicBool>,
     pub tool_handoff: Option<Arc<AtomicBool>>,
-    pub cancel_pending: bool,
     pub queue: Vec<(InputId, UserInput)>,
     pub next_input: u64,
     pub turn_start: Instant,
@@ -120,7 +119,7 @@ impl Session {
         }
         self.ui_close();
         self.stop_commands();
-        self.cancel_turn(false);
+        self.cancel_turn();
         self.tasks.stop_all();
         self.finish_hooks(event);
         self.dir.lock().unwrap().take();
@@ -148,10 +147,11 @@ impl Session {
 
     fn reload_config(self: &Arc<Self>) -> Result<(), String> {
         let _one = self.reload_lock.lock().unwrap();
-        let path = tuse_config::find(self.config_arg.as_deref(), &self.cwd);
-        let c = self
-            .vm
-            .call(move |lua| crate::session::lua::config_lua::prepare(lua, path.as_deref()))?;
+        let explicit = self.config_arg.clone();
+        let cwd = self.cwd.clone();
+        let c = self.vm.call(move |lua| {
+            crate::session::lua::config_lua::prepare(lua, explicit.as_deref(), &cwd)
+        })?;
         self.finish_hooks(None);
         let c = Arc::new(c);
         let (s2, c2) = (self.clone(), c.clone());

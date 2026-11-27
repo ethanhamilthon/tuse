@@ -1,15 +1,14 @@
 # Examples
 
-Ready Lua configs for common setups: skills, MCP, themes, titles, notifications, multiplexers, and more. Copy a file next to your config and `require` it.
-
-Each example is a module. Most export `apply(g)`, which adds its keys to the config table `g` and returns it:
+Ready Lua config modules for common setups: skills, MCP, themes, titles, notifications, multiplexers, and more. Copy a file next to your config and place it under a namespace:
 
 ```lua
-local g = require("global")
-require("tmux").apply(g)
-require("notify").apply(g)
-g.ui = { theme = require("themes").gruvbox }
-return g
+return {
+  tmux = require("tmux"),
+  notify = require("notify"),
+  compaction = require("compaction")(0.8, 20),
+  colors = { ui = { theme = require("themes").gruvbox } },
+}
 ```
 
 The files live in the [`examples/`](https://github.com/ethanhamilthon/tuse/tree/main/examples) folder. Ask Tuse to adapt one for you.
@@ -36,7 +35,7 @@ A desktop notification when a turn finishes, on macOS and Linux. [`notify.lua`](
 
 ## tmux
 
-Puts the agent state and the session title in the tmux window name. [`tmux.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/tmux.lua)
+Puts the session title and agent state together in the tmux window name. [`tmux.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/tmux.lua)
 
 ## Zellij
 
@@ -52,11 +51,11 @@ Reports `working`/`idle` on the Herdr pane and renames it after the session. [`h
 
 ## Orca
 
-Posts progress as an Orca worktree comment and marks the workspace unread when done. [`orca.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/orca.lua)
+Posts the session title and progress as an Orca worktree comment and marks the workspace unread when done. [`orca.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/orca.lua)
 
 ## Rex
 
-Renames the current Rex block (`$REX_BLOCK`) with the agent state and title. [`rex.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/rex.lua)
+Renames the current Rex block (`$REX_BLOCK`) with the session title and agent state. [`rex.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/rex.lua)
 
 ## Web search
 
@@ -80,8 +79,8 @@ One `#openspec` prompt with args (`explore`, `propose`, `apply`, `verify`, `arch
 
 ## Project config
 
-A per-project `tuse.lua` on top of `require("global")`, with `history.hide` and a short `models` list. [`project.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/project.lua)
+A per-project namespaced `tuse.lua` with `history.hide` and a short `models` list. [`project.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/project.lua)
 
 ## Compaction
 
-`require("compaction").apply(g, 0.8, 20)` summarizes older conversation records after a finished reply when `ctx` reaches 80% of `ctx_size`. It uses `llm` for the summary and `set_session` to replace the older history, retaining the system prompt and recent records without splitting tool calls from their results. [`compaction.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/compaction.lua)
+`require("compaction")(0.8, 20)` summarizes older conversation records after a finished reply when `context` reaches 80% of `context_window`. It uses `llm` for the summary and `set_session` to replace the older history, retaining the system prompt and recent records without splitting tool calls from their results. [`compaction.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/compaction.lua)

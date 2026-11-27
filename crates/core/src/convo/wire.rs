@@ -19,37 +19,37 @@ pub fn system(records: &[Record]) -> String {
 }
 
 fn full(r: &Record, names: &std::collections::HashMap<&str, &str>) -> Option<Message> {
-    match r {
-        Record::Notification { text } => Some(Message::User {
+    Some(match r {
+        Record::Notification { text } => Message::User {
             text: text.clone(),
             images: vec![],
-        }),
+        },
         Record::User {
             text,
             context,
             images,
             ..
-        } => Some(Message::User {
+        } => Message::User {
             text: join_context(text, context),
             images: images.clone(),
-        }),
+        },
         Record::Agent {
             text,
             tool_calls,
             replay,
             ..
-        } => Some(Message::Assistant {
+        } => Message::Assistant {
             text: text.clone(),
             tool_calls: tool_calls.clone(),
             replay: replay.clone(),
-        }),
+        },
         Record::Lua {
             id,
             code,
             output,
             images,
             ..
-        } => Some(Message::ToolResult {
+        } => Message::ToolResult {
             id: id.clone(),
             name: names.get(id.as_str()).unwrap_or(&"lua").to_string(),
             output: output.clone(),
@@ -57,9 +57,9 @@ fn full(r: &Record, names: &std::collections::HashMap<&str, &str>) -> Option<Mes
                 label: code.clone(),
                 urls: images.clone(),
             }),
-        }),
-        _ => None,
-    }
+        },
+        _ => return None,
+    })
 }
 
 pub(crate) fn join_context(text: &str, context: &str) -> String {

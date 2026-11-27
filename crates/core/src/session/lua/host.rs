@@ -74,13 +74,14 @@ impl Host for SessionHost {
                     } else {
                         "failed"
                     };
-                    let record = crate::Record::Task {
-                        name: t.name,
-                        code: t.code,
-                        status: status.into(),
-                        ms: started.elapsed().as_millis() as u64,
-                        error: (!d.ok).then(|| crate::text::error_line(&d.text)),
-                    };
+                    let record = crate::Record::job(
+                        "task",
+                        t.name,
+                        t.code,
+                        status.into(),
+                        started.elapsed().as_millis() as u64,
+                        (!d.ok).then(|| crate::text::error_line(&d.text)),
+                    );
                     s.push(&mut s.state.lock().unwrap(), record);
                 }
             } else {
@@ -91,22 +92,21 @@ impl Host for SessionHost {
         s.emit(Signal::Tasks);
         if let Some(t) = ended {
             let last = if d.ok {
-                crate::text::last_line(&d.text)
+                crate::text::last_line(&d.text).map(str::to_string)
             } else {
-                crate::text::error_line(&d.text)
+                Some(crate::text::error_line(&d.text))
             };
             let what = if d.ok { "finished" } else { "failed" };
-            let msg = if s.config().is_disabled("task_get") {
-                format!(
-                    "<task>Task {} ({}) {what}. Last line: {last}.</task>",
-                    t.id, t.name
-                )
+            let tail = last.map_or_else(String::new, |l| format!(" Last line: {l}."));
+            let out_hint = if s.config().is_disabled("task_get") {
+                String::new()
             } else {
-                format!(
-                    "<task>Task {} ({}) {what}. Last line: {last}. Output: `task_get(\"{}\").output`.</task>",
-                    t.id, t.name, t.id
-                )
+                format!(" Output: `task_get(\"{}\").output`.", t.id)
             };
+            let msg = format!(
+                "<task>Task {} ({}) {what}.{tail}{out_hint}</task>",
+                t.id, t.name
+            );
             s.submit(crate::UserInput::notification(msg));
         }
     }
@@ -139,13 +139,41 @@ fn status(s: &Session, verb: &str, what: &str) {
 pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     lua.set_app_data(s);
     let g = lua.globals();
-    install_fs(lua)?;
+    g.set("read", lua.create_function(read)?)?;
+    g.set(
+        "write",
+        lua.create_function(|l, (p, c): (String, String)| {
+            mutate(l, "writing", &p, |f| tools::write(f, &c))
+        })?,
+    )?;
+    g.set(
+        "append",
+        lua.create_function(|l, (p, t): (String, String)| {
+            mutate(l, "appending", &p, |f| tools::append(f, &t))
+        })?,
+    )?;
+    g.set(
+        "delete",
+        lua.create_function(|l, p: String| mutate(l, "deleting", &p, tools::delete))?,
+    )?;
+    g.set(
+        "edit",
+        lua.create_function(
+            |l, (p, old, new, o): (String, String, String, Option<Table>)| {
+                let all = o
+                    .map(|t| t.get::<Option<bool>>("all"))
+                    .transpose()?
+                    .flatten()
+                    .unwrap_or(false);
+                mutate(l, "editing", &p, |f| tools::edit(f, &old, &new, all))
+            },
+        )?,
+    )?;
+    g.set("grep", lua.create_function(grep)?)?;
     g.set(
         "docs",
         lua.create_function(|lua, topic: Option<String>| {
-            let s = session(lua)?;
-            let cfg = s.config();
-            let disabled = cfg.disabled_builtins();
+            let disabled = session(lua)?.config().disabled_builtins();
             Ok(crate::docs::docs_for(topic.as_deref(), &disabled))
         })?,
     )?;
@@ -155,35 +183,42 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     g.set("resume", lua.create_function(resume)?)?;
     install_tasks(lua)?;
     install_ui(lua)?;
-    install_llm(lua)?;
-    let names = [
-        "read",
-        "write",
-        "append",
-        "delete",
-        "edit",
-        "grep",
-        "docs",
-        "set_session",
-        "session",
-        "fork",
-        "resume",
-        "task_get",
-        "task_stop",
-        "task_list",
-    ];
-    tuse_lua::wrap(lua, &g, &names)
+    let llm_start = lua.create_function(start)?;
+    g.set("llm", tuse_lua::yield_wait(lua, llm_start)?)?;
+    tuse_lua::wrap(
+        lua,
+        &g,
+        &[
+            "read",
+            "write",
+            "append",
+            "delete",
+            "edit",
+            "grep",
+            "docs",
+            "set_session",
+            "session",
+            "fork",
+            "resume",
+            "task_get",
+            "task_stop",
+            "task_list",
+        ],
+    )
 }
 
-fn install_fs(lua: &Lua) -> mlua::Result<()> {
-    let g = lua.globals();
-    g.set("read", lua.create_function(read)?)?;
-    g.set("write", lua.create_function(write)?)?;
-    g.set("append", lua.create_function(append)?)?;
-    g.set("delete", lua.create_function(delete)?)?;
-    g.set("edit", lua.create_function(edit)?)?;
-    g.set("grep", lua.create_function(grep)?)?;
-    Ok(())
+fn mutate(
+    lua: &Lua,
+    verb: &str,
+    path: &str,
+    op: impl FnOnce(&std::path::Path) -> Result<(String, String), String>,
+) -> mlua::Result<String> {
+    let s = session(lua)?;
+    action(lua, &s, verb, path);
+    let p = tuse_config::resolve_path(path, &s.cwd);
+    let (msg, diff) = op(&p).map_err(err)?;
+    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
+    Ok(msg)
 }
 
 fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
@@ -195,68 +230,30 @@ fn read(lua: &Lua, (path, o): (String, Option<Table>)) -> mlua::Result<String> {
         Err(_) => tuse_lua::host(lua).cwd(),
     };
     let p = tuse_config::resolve_path(&path, &cwd);
-    let lines = match &o {
-        Some(t) => t.get::<Option<bool>>("lines")?.unwrap_or(false),
-        None => false,
-    };
+    let lines = o
+        .as_ref()
+        .map(|t| t.get::<Option<bool>>("lines"))
+        .transpose()?
+        .flatten()
+        .unwrap_or(false);
     let opt = |k: &str| -> mlua::Result<Option<usize>> {
-        Ok(match &o {
-            Some(t) => t.get::<Option<i64>>(k)?.map(|n| n.max(1) as usize),
-            None => None,
-        })
+        Ok(o.as_ref()
+            .map(|t| t.get::<Option<i64>>(k))
+            .transpose()?
+            .flatten()
+            .map(|n| n.max(1) as usize))
     };
-    let (offset, limit) = (
+    let r = tools::read(
+        &p,
+        lines,
         opt("offset")?.unwrap_or(1),
         opt("limit")?.unwrap_or(tools::DEFAULT_LIMIT),
-    );
-    let r = tools::read(&p, lines, offset, limit).map_err(err)?;
+    )
+    .map_err(err)?;
     if let Some(url) = r.image {
         with_run(lua, |j| j.add_image(url));
     }
     Ok(r.text)
-}
-
-fn write(lua: &Lua, (path, content): (String, String)) -> mlua::Result<String> {
-    let s = session(lua)?;
-    action(lua, &s, "writing", &path);
-    let p = tuse_config::resolve_path(&path, &s.cwd);
-    let (msg, diff) = tools::write(&p, &content).map_err(err)?;
-    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
-    Ok(msg)
-}
-
-fn append(lua: &Lua, (path, text): (String, String)) -> mlua::Result<String> {
-    let s = session(lua)?;
-    action(lua, &s, "appending", &path);
-    let p = tuse_config::resolve_path(&path, &s.cwd);
-    let (msg, diff) = tools::append(&p, &text).map_err(err)?;
-    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
-    Ok(msg)
-}
-
-fn delete(lua: &Lua, path: String) -> mlua::Result<String> {
-    let s = session(lua)?;
-    action(lua, &s, "deleting", &path);
-    let p = tuse_config::resolve_path(&path, &s.cwd);
-    let (msg, diff) = tools::delete(&p).map_err(err)?;
-    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
-    Ok(msg)
-}
-
-fn edit(
-    lua: &Lua,
-    (path, old, new, o): (String, String, String, Option<Table>),
-) -> mlua::Result<String> {
-    let s = session(lua)?;
-    action(lua, &s, "editing", &path);
-    let p = tuse_config::resolve_path(&path, &s.cwd);
-    let all = match o {
-        Some(t) => t.get::<Option<bool>>("all")?.unwrap_or(false),
-        None => false,
-    };
-    let (msg, diff) = tools::edit(&p, &old, &new, all).map_err(err)?;
-    with_run(lua, |j| j.add_diff(p.display().to_string(), diff));
-    Ok(msg)
 }
 
 fn grep(lua: &Lua, (pattern, o): (String, Option<Table>)) -> mlua::Result<String> {
@@ -304,6 +301,7 @@ fn task(lua: &Lua, t: &TaskInfo, output: Option<String>) -> mlua::Result<Table> 
     r.set("status", t.status.as_str())?;
     r.set("started", t.started.as_str())?;
     r.set("ended", t.ended.as_str())?;
+    r.set("log", t.log.as_str())?;
     r.set("code", t.code.as_str())?;
     r.set("output", output)?;
     Ok(r)
@@ -426,28 +424,46 @@ fn enqueue(lua: &Lua, prompt: UiPrompt) -> mlua::Result<Value> {
     Ok(Value::Integer(key as i64))
 }
 
-fn install_llm(lua: &Lua) -> mlua::Result<()> {
-    let start = lua.create_function(start)?;
-    lua.globals().set("llm", tuse_lua::yield_wait(lua, start)?)
-}
-
 fn start(
     lua: &Lua,
     (prompt, model, effort): (String, Option<String>, Option<String>),
 ) -> mlua::Result<Value> {
     let s = session(lua)?;
+    let config = s.config();
     let (cur_model, cur_effort) = s.model();
-    let model = model.filter(|m| !m.is_empty()).unwrap_or(cur_model);
-    let effort = effort.filter(|e| !e.is_empty()).unwrap_or(cur_effort);
-    if !tuse_config::EFFORTS.contains(&effort.as_str()) {
-        return Err(err(format!(
-            "llm: effort must be one of {}",
-            tuse_config::EFFORTS.join(", ")
-        )));
-    }
+    let explicit_model = model.filter(|m| !m.is_empty());
+    let switched = explicit_model.as_deref().is_some_and(|m| m != cur_model);
+    let model = explicit_model.unwrap_or(cur_model);
     if model.is_empty() {
         return Err(err("llm: no model selected".into()));
     }
+    let effs = config.model_efforts(&model);
+    let effort = match effort.filter(|e| !e.is_empty()) {
+        Some(e) => {
+            config
+                .check_effort(&model, &e)
+                .map_err(|m| err(format!("llm: {m}")))?;
+            e
+        }
+        None if switched => {
+            if effs.is_empty() {
+                String::new()
+            } else if effs.iter().any(|e| e == "low") {
+                "low".into()
+            } else {
+                return Err(err(format!(
+                    "llm: model `{model}` does not support `low` effort (supported: {})",
+                    effs.join(", ")
+                )));
+            }
+        }
+        None => {
+            config
+                .check_effort(&model, &cur_effort)
+                .map_err(|m| err(format!("llm: {m}")))?;
+            cur_effort
+        }
+    };
     let (tx, rx) = std::sync::mpsc::channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let flag = cancel.clone();
@@ -469,40 +485,22 @@ fn start(
 }
 
 pub(crate) fn lua_session(lua: &Lua) -> mlua::Result<Value> {
-    let pre = lua
+    let loading = lua
         .app_data_ref::<crate::session::view::snapshot::LoadCtx>()
-        .and_then(|ctx| {
-            if ctx.loading {
-                Some(
-                    crate::session::view::snapshot::SessionSnapshot::pre_session(
-                        ctx.mode,
-                        ctx.configpath.clone(),
-                        &ctx.cwd,
-                        &tuse_config::tuse_home(),
-                    ),
-                )
-            } else {
-                None
-            }
-        });
-    if let Some(snap) = pre {
-        return snap.to_lua(lua);
-    }
-    if let Ok(s) = session(lua) {
+        .is_some_and(|c| c.loading);
+    if !loading && let Ok(s) = session(lua) {
         return s.snapshot(true).to_lua(lua);
     }
-    let snap = lua
+    let ctx = lua
         .app_data_ref::<crate::session::view::snapshot::LoadCtx>()
-        .map(|ctx| {
-            crate::session::view::snapshot::SessionSnapshot::pre_session(
-                ctx.mode,
-                ctx.configpath.clone(),
-                &ctx.cwd,
-                &tuse_config::tuse_home(),
-            )
-        })
         .ok_or_else(|| mlua::Error::runtime("session closed"))?;
-    snap.to_lua(lua)
+    crate::session::view::snapshot::SessionSnapshot::pre_session(
+        ctx.mode,
+        ctx.config_path.clone(),
+        &ctx.cwd,
+        &tuse_config::tuse_home(),
+    )
+    .to_lua(lua)
 }
 fn set_session(lua: &Lua, table: Table) -> mlua::Result<()> {
     let mut update = crate::session::view::history::Update::default();

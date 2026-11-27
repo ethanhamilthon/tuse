@@ -7,10 +7,12 @@ use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
 fn config(tag: &str) -> String {
     format!(
         r#"return {{
-  prompts = {{ tag = "{tag}" }},
-  commands = {{ again = {{ run = function() require("tuse").reload() end }} }},
-  hooks = {{
-    on_user = {{ events = {{ "user_message" }}, run = function() require("tuse").reload() end }},
+  test = {{
+    prompts = {{ tag = "{tag}" }},
+    commands = {{ again = {{ run = function() require("tuse").reload() end }} }},
+    hooks = {{
+      on_user = {{ events = {{ "user_message" }}, run = function() require("tuse").reload() end }},
+    }},
   }},
 }}"#
     )
@@ -30,7 +32,7 @@ fn wait_tag(s: &Session, tag: &str) {
 
 #[test]
 fn reload_from_the_agent_commands_and_hooks() {
-    let code = "local before = session().configpath; reload(); return 'reloaded'";
+    let code = "local before = session().config_path; reload(); return 'reloaded'";
     let addr = common::provider(vec![
         Reply::Call("lua", serde_json::json!({ "code": code }).to_string()),
         Reply::Text("ok"),
@@ -71,7 +73,7 @@ fn reload_from_the_agent_commands_and_hooks() {
     s.submit(UserInput::text("hook only"));
     wait_tag(&s, "v4");
 
-    std::fs::write(&cfg, "return { typo_key = 1 }").unwrap();
+    std::fs::write(&cfg, "return { bad = { typo_key = 1 } }").unwrap();
     s.run_command("again", &[]).unwrap();
     let end = Instant::now() + Duration::from_secs(5);
     loop {

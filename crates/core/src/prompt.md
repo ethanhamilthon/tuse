@@ -7,7 +7,7 @@ Blocks are fenced `text` sections under `### name`. Placeholders: `{{names:text}
 ### context-intro
 
 ```text
-This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order,. The prompt is stored as the first `system` history record and rebuilt on session creation, resume, and config load. Inside a session this section is rendered for that session's config.
+This is everything Tuse sends the model before the conversation, shown for the default config. Functions turned off with `functions = { name = false }` drop out of every line. Each string of `config.systems` follows the prompt, in order. The prompt is stored as the first `system` history record and rebuilt on session creation, resume, and config load. Inside a session this section is rendered for that session's config.
 ```
 
 ### prefix
@@ -70,17 +70,17 @@ The Lua code to run.
 - `delete(path)`: delete a single file and show its removal as a diff (does not delete directories).
 - `edit(path, old, new, {all=false})`: replace exact text in a file. `old` must be unique unless `all` is set; read the file first. A wrong `old` raises an error.
 - `grep(pattern, {path=".", glob=nil, ignore_case=false, literal=false, context=0, limit=100})`: search file contents with a regex (or plain text with `literal=true`); `path` can be a string or list of paths. Returns `path:line: text` per match and respects `.gitignore`.
-- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E "foo\\bar" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. A command is killed at its explicit timeout or the foreground Lua deadline, whichever comes first. Steering or cancelling the turn can move the whole Lua call to a background task, where the foreground deadline no longer applies.
+- `sh(cmd, {timeout=nil, cwd=nil, env={}})`: runs `bash -c cmd` in the working directory; returns a table with `.out` (stdout and stderr merged), `.code` (`nil` when killed), `.ok`, `.timed_out` and `:lines()`. Use Lua long strings like `sh([=[grep -E "foo\\bar" f]=])` for commands with quotes, backslashes, or regexes so Lua does not interpret shell escapes. Returned as a value it shows its output and exit code. Shell state does not carry over between calls. A command is killed at its explicit timeout or the foreground Lua deadline, whichever comes first. Steering the turn can move the whole Lua call to a background task, where the foreground deadline no longer applies.
 - `spawn(fn, name)`: runs `fn` in the background as a task in this same VM (it sees your globals); returns its ID. A task has no deadline; its `print` goes to its log, and you get a message when it ends.
-- `task_get(id, lines=50)`: return `{ id, name, status, started, ended, output }` with the log tail in `.output`.
-- `task_stop(id)`: stop a running background task and return its task info.
-- `task_list()`: list all tasks in the session with `.id`, `.name`, and `.status` (`running`, `done`, `failed`, `stopped`).
+- `task_get(id, lines=50)`: return `{ id, name, status, started, ended, log, code, output }` with the log tail in `.output`.
+- `task_stop(id)`: stop a running background task and return its task info (`{ id, name, status, started, ended, log, code }`).
+- `task_list()`: list all tasks in the session with `{ id, name, status, started, ended, log, code }` (`status`: `running`, `done`, `failed`, `stopped`).
 - `show(name, text, pin)`: render or update a UI-only Markdown block by name (`pin=true` keeps it at the end of the chat after new messages; `show(name, "", false)` removes it).
 - `pick(options, title)`: show a list of strings under an optional Markdown question and return the selected string, or `nil` on Esc or an empty list (pauses your timeout while waiting).
 - `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
-- `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text; `model` and `effort` default to the session's.
+- `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text. Omitting `model` inherits the session's model and effort; passing another model with `effort` omitted sends no reasoning when that model declares `efforts = {}` and otherwise uses `low` (raising if its declared `efforts` exclude `low`).
 - `reload()`: reload the config like `/reload`; raises if it is invalid.
-- `session()`: return a fresh snapshot of runtime session data (`mode`, `configpath`, `cwd`, `home`, `id`, `started`, `created`, `name`, `model`, `provider`, `effort`, `ctx`, `ctx_size`, `usage`, `model_info`, `steps`, `turns`, `history`).
+- `session()`: return a fresh snapshot of runtime session data (`mode`, `config_path`, `cwd`, `home`, `id`, `started`, `created`, `title`, `model`, `provider`, `effort`, `busy`, `turn`, `context`, `context_window`, `usage`, `model_info`, `requests`, `llm_requests`, `steps`, `turns`, `calls`, `history`).
 - `set_session({title, model, effort, history})`: update any of these fields; `history` replaces the stored list with structured records from `session().history`.
 - `fork(position)`: switch to a new session forked at the `user` or `agent` record at `position` (counting from 1) of `session().history`; a `user` record leaves its text in the input. The switch waits until the tool calls of the current step finish, then the turn ends. Raises on a bad position.
 - `resume(id)`: switch to another started session of this folder, after the tool calls of the current step finish. Raises on an unknown session.

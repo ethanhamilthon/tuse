@@ -44,7 +44,6 @@ pub struct Session {
     pub(crate) task_lua: Mutex<HashMap<String, (String, Instant)>>,
     pub(crate) jobs: Mutex<HashMap<String, (&'static str, String, String)>>,
     pub(crate) reload_lock: Mutex<()>,
-    pub(crate) reload_after_hook: AtomicBool,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]

@@ -685,7 +685,7 @@ Blank rows between consecutive tool calls and reasoning blocks SHALL equal `ui.s
 - **THEN** the user message and the next agent message have no blank row between them
 
 ### Requirement: Namespace parameter for JSON-RPC config reload
-In protocol version 2, `config.reload` SHALL accept optional `params.ns` as a non-empty string naming the active namespace to reload. Omitting `ns` or setting it to `null` SHALL perform a full reload. Other types and the empty string SHALL fail with `-32602`. Scoped reload SHALL use the existing response contract: `null` on success and `-32000` with the reason when reload fails. A successful scoped reload SHALL rebuild the session system prompt, trigger `config_load`, and emit the existing `reloaded` event. A failed reload SHALL NOT emit `reloaded`. TUI `/reload` and Lua `reload()` SHALL continue to perform full reloads.
+In protocol version 2, `config.reload` SHALL accept optional `params.ns` as a non-empty string naming the active namespace to reload. Omitting `ns` or setting it to `null` SHALL perform a full reload. Other types and the empty string SHALL fail with `-32602`. Scoped reload SHALL use the existing response contract: `null` on success and `-32000` with the reason when reload fails. A successful scoped reload SHALL rebuild the session system prompt, trigger `config_load`, and emit the existing `reloaded` event. A failed reload SHALL NOT emit `reloaded`. TUI `/reload` and Lua `reload()` without arguments SHALL continue to perform full reloads.
 
 #### Scenario: Reload one namespace over JSON-RPC
 - **WHEN** a client calls `config.reload` with `{"ns":"work"}` and the reload succeeds

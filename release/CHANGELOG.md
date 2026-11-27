@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.2
+
+- Lua `reload(ns)` refreshes one active config namespace in the current session. `reload()` still reloads the full config.
+
 ## 0.14.1
 
 - JSON-RPC `config.reload` accepts an optional `ns` to refresh one active config namespace without applying other pending config changes.

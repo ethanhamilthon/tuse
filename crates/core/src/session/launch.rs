@@ -215,7 +215,6 @@ impl Prepared {
                 task_lua: Mutex::default(),
                 jobs: Mutex::default(),
                 reload_lock: Mutex::default(),
-                reload_after_hook: AtomicBool::new(false),
             }
         });
         s.lifecycle(opts.start == Start::Launch, restored);

@@ -79,7 +79,7 @@ The Lua code to run.
 - `pick(options, title)`: show a list of strings under an optional Markdown question and return the selected string, or `nil` on Esc or an empty list (pauses your timeout while waiting).
 - `ask(text)`: show a Markdown question to the user and return their typed answer, or `nil` on Esc (pauses your timeout while waiting).
 - `llm(prompt, model, effort)`: send one prompt (no tools, no history) to a model and return its text. Omitting `model` inherits the session's model and effort; passing another model with `effort` omitted sends no reasoning when that model declares `efforts = {}` and otherwise uses `low` (raising if its declared `efforts` exclude `low`).
-- `reload()`: reload the config like `/reload`; raises if it is invalid.
+- `reload(ns)`: reload only the named active config namespace. `reload()` or `reload(nil)` reloads everything like `/reload`.
 - `session()`: return a fresh snapshot of runtime session data (`mode`, `config_path`, `cwd`, `home`, `id`, `started`, `created`, `title`, `model`, `provider`, `effort`, `busy`, `turn`, `context`, `context_window`, `usage`, `model_info`, `requests`, `llm_requests`, `steps`, `turns`, `calls`, `history`).
 - `set_session({title, model, effort, history})`: update any of these fields; `history` replaces the stored list with structured records from `session().history`.
 - `fork(position)`: switch to a new session forked at the `user` or `agent` record at `position` (counting from 1) of `session().history`; a `user` record leaves its text in the input. The switch waits until the tool calls of the current step finish, then the turn ends. Raises on a bad position.

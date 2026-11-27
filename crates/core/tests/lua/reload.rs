@@ -7,11 +7,12 @@ use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
 fn config(tag: &str) -> String {
     format!(
         r#"return {{
+  other = {{ prompts = {{ untouched = "{tag}" }} }},
   test = {{
     prompts = {{ tag = "{tag}" }},
     commands = {{ again = {{ run = function() require("tuse").reload() end }} }},
     hooks = {{
-      on_user = {{ events = {{ "user_message" }}, run = function() require("tuse").reload() end }},
+      on_user = {{ events = {{ "user_message" }}, run = function() require("tuse").reload("test") end }},
     }},
   }},
 }}"#
@@ -32,7 +33,7 @@ fn wait_tag(s: &Session, tag: &str) {
 
 #[test]
 fn reload_from_the_agent_commands_and_hooks() {
-    let code = "local before = session().config_path; reload(); return 'reloaded'";
+    let code = "assert(not pcall(reload, 123)); assert(not pcall(reload, '')); assert(not pcall(reload, 'missing')); reload('test'); return 'reloaded'";
     let addr = common::provider(vec![
         Reply::Call("lua", serde_json::json!({ "code": code }).to_string()),
         Reply::Text("ok"),
@@ -49,9 +50,10 @@ fn reload_from_the_agent_commands_and_hooks() {
     .unwrap();
     let rx = s.subscribe();
 
-    std::fs::write(&cfg, config("v2")).unwrap();
+    std::fs::write(&cfg, config("v2").replace("user_message", "process_start")).unwrap();
     s.run_command("again", &[]).unwrap();
     wait_tag(&s, "v2");
+    assert_eq!(s.config().prompts["untouched"].body, "v2");
 
     std::fs::write(&cfg, config("v3").replace("on_user", "on_user2")).unwrap();
     s.submit(UserInput::text("go"));
@@ -68,10 +70,12 @@ fn reload_from_the_agent_commands_and_hooks() {
     }
     assert!(output.contains("reloaded"), "{output}");
     wait_tag(&s, "v3");
+    assert_eq!(s.config().prompts["untouched"].body, "v2");
 
     std::fs::write(&cfg, config("v4")).unwrap();
     s.submit(UserInput::text("hook only"));
     wait_tag(&s, "v4");
+    assert_eq!(s.config().prompts["untouched"].body, "v2");
 
     std::fs::write(&cfg, "return { bad = { typo_key = 1 } }").unwrap();
     s.run_command("again", &[]).unwrap();

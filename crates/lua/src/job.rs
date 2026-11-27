@@ -145,6 +145,16 @@ impl Job {
         self.done = Some(Box::new(done));
     }
 
+    pub fn after_done(&mut self, f: impl FnOnce() + 'static) {
+        let done = self.done.take();
+        self.on_done(move |lua, result| {
+            if let Some(done) = done {
+                done(lua, result);
+            }
+            f();
+        });
+    }
+
     pub fn hooked(mut self, lua_hook: bool) -> Self {
         self.is_hook = true;
         self.is_lua_hook = lua_hook;

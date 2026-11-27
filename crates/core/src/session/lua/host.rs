@@ -4,7 +4,7 @@ use crate::session::bus::Signal;
 use crate::storage::tasks::{TaskInfo, Tasks};
 use crate::tools;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
 use tuse_lua::mlua::{self, Lua, LuaSerdeExt, Table, Value};
@@ -384,16 +384,24 @@ fn start_picker(lua: &Lua, (options, title): (Table, Option<String>)) -> mlua::R
 fn start_question(lua: &Lua, text: String) -> mlua::Result<Value> {
     enqueue(lua, UiPrompt::Question { text })
 }
-fn start_reload(lua: &Lua, (): ()) -> mlua::Result<Value> {
+fn start_reload(lua: &Lua, ns: Value) -> mlua::Result<Value> {
+    let ns = match ns {
+        Value::Nil => None,
+        Value::String(ns) if !ns.as_bytes().is_empty() => Some(ns.to_str()?.to_owned()),
+        _ => return Err(mlua::Error::runtime("ns must be a non-empty string")),
+    };
     let s = session(lua)?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let start = move || {
+        std::thread::spawn(move || {
+            let _ = tx.send(s.reload_namespace(ns).map(|_| serde_json::Value::Null));
+        });
+    };
     if tuse_lua::is_hook(lua) {
-        s.reload_after_hook.store(true, Ordering::Release);
+        with_run(lua, |job| job.after_done(start));
         return Ok(Value::Nil);
     }
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(s.reload().map(|_| serde_json::Value::Null));
-    });
+    start();
     let key = tuse_lua::add_wait(
         lua,
         ExtWait {

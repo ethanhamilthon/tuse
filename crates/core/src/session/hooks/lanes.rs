@@ -115,12 +115,6 @@ impl Session {
             );
         }
         self.next_hook(name.to_string());
-        if self.reload_after_hook.swap(false, Ordering::AcqRel) {
-            let s = self.clone();
-            std::thread::spawn(move || {
-                let _ = s.reload();
-            });
-        }
     }
 
     pub(crate) fn finish_hooks(self: &Arc<Self>, event: Option<&'static str>) {

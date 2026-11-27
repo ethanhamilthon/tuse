@@ -423,3 +423,21 @@ A scoped reload SHALL fail if the target name is not active, if any previously a
 #### Scenario: Selected namespace conflicts with an unchanged namespace
 - **WHEN** the new selected contribution defines a command already defined by another active namespace
 - **THEN** scoped reload fails and the previous config and callbacks remain active
+### Requirement: Reload a namespace from Lua
+The Lua host function `reload(ns)` SHALL accept an optional non-empty namespace name and use the same scoped reload as JSON-RPC. Omitting the argument or passing `nil` SHALL perform a full reload. Other argument types and an empty string SHALL raise an error without reloading. Within a hook, the requested reload SHALL run after that hook finishes, with reload failures reported to the session. Outside hooks, reload failures SHALL raise a Lua error.
+
+#### Scenario: Agent reloads one namespace
+- **WHEN** the agent calls `reload("work")` after changes to `work` and another active namespace
+- **THEN** only `work` is refreshed and the other namespace stays unchanged
+
+#### Scenario: Lua reload without a namespace
+- **WHEN** Lua calls `reload()` or `reload(nil)`
+- **THEN** it reloads the entire config as before
+
+#### Scenario: Hook requests a scoped reload
+- **WHEN** a hook calls `require("tuse").reload("work")`
+- **THEN** the reload runs after that hook finishes and applies only `work`
+
+#### Scenario: Invalid namespace input from Lua
+- **WHEN** Lua calls `reload(123)` or `reload("")`
+- **THEN** the call raises an error without reloading

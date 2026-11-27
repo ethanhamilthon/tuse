@@ -116,3 +116,10 @@ Documentation pages under `docs/` SHALL stay consistent with implemented v2 cont
 #### Scenario: Restored env var, model efforts, wire encoding, and v2 JSON-RPC documented
 - **WHEN** a reader inspects `docs("config")`, `docs("connect")`, `docs("usage")`, `docs("session")`, and `docs("json")`
 - **THEN** `TUSE_GLOBAL_CONFIG`, tri-state `models[].efforts` (`efforts = {}`), verbatim wire pass-through and `gemini-2.5-*` `thinkingBudget` handling, schema v4 flat `usage` (`cache_read`), `protocolVersion: 2`, `session.state`, `session.history`, `session.list`, `tuse json -r <id>` resume workflow, mid-draft slash commands, and `config.get.providers` (`name`, `type`, `base`) are documented consistently with code
+
+### Requirement: Document scoped config reload
+The `json` and `config` topics SHALL document the optional `config.reload` parameter `ns`, that it selects an active namespace across local and global layers, that the config still executes in one normal load pass, and that adding or removing a namespace requires a full reload. They SHALL distinguish scoped reload from the default full reload.
+
+#### Scenario: Discover namespace reload
+- **WHEN** a reader looks up `config.reload` in `docs("json")` or the reload section of `docs("config")`
+- **THEN** they can see how to reload one namespace and when a full reload is required

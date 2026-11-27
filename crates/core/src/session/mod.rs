@@ -138,27 +138,34 @@ impl Session {
     }
 
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
-        let result = self.reload_config();
+        self.reload_namespace(None)
+    }
+
+    pub fn reload_namespace(self: &Arc<Self>, namespace: Option<String>) -> Result<(), String> {
+        let result = self.reload_config(namespace);
         if let Err(e) = &result {
             self.error(format!("Reload failed: {e}"));
         }
         result
     }
 
-    fn reload_config(self: &Arc<Self>) -> Result<(), String> {
+    fn reload_config(self: &Arc<Self>, namespace: Option<String>) -> Result<(), String> {
         let _one = self.reload_lock.lock().unwrap();
         let explicit = self.config_arg.clone();
         let cwd = self.cwd.clone();
         let c = self.vm.call(move |lua| {
-            crate::session::lua::config_lua::prepare(lua, explicit.as_deref(), &cwd)
+            crate::session::lua::config_lua::prepare(
+                lua,
+                explicit.as_deref(),
+                &cwd,
+                namespace.as_deref(),
+            )
         })?;
         self.finish_hooks(None);
         let c = Arc::new(c);
         let (s2, c2) = (self.clone(), c.clone());
-        self.vm.call(move |lua| {
-            crate::session::lua::config_lua::commit(lua)?;
-            s2.swap_config(c2)
-        })?;
+        self.vm
+            .call(move |lua| crate::session::lua::config_lua::commit(lua, || s2.swap_config(c2)))?;
         self.ui_cancel_hooks(false);
         self.hooks_on.store(true, Ordering::Release);
         self.simple_hook("config_load");

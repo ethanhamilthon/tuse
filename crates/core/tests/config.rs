@@ -373,3 +373,102 @@ fn global_options_plugins_selectors_and_preload_reload() {
     }
     common::cleanup(&dir);
 }
+#[test]
+fn scoped_reload_merges_only_the_active_namespace_and_rolls_back() {
+    let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let (dir, root) = common::setup("scoped-reload", "localhost:1", "");
+    let global = dir.join("home/.config/tuse.lua");
+    fs::create_dir_all(global.parent().unwrap()).unwrap();
+    let write_global = |value| {
+        fs::write(
+            &global,
+            format!(
+                r#"
+            return function()
+                global_runs = (global_runs or 0) + 1
+                return {{work = {{systems = {{'{value}:' .. global_runs}}}}}}
+            end
+        "#
+            ),
+        )
+        .unwrap();
+    };
+    let write_local = |module, extra: &str, other: &str| {
+        fs::write(
+            &root,
+            format!(
+                r#"
+            local_runs = (local_runs or 0) + 1
+            package.preload.helper = function() return '{module}' end
+            local helper = require('helper')
+            local t = require('tuse')
+            return {{
+                other = {{systems = {{'{other}'}}, commands = {{ping = {{run = function() end}}}}}},
+                added = {{systems = {{'added'}}}},
+                work = {{
+                    systems = {{helper .. ':' .. local_runs}},
+                    commands = {{check = {{run = function()
+                        t.show('checked', helper .. ':' .. require('helper'), false)
+                    end}}, {extra}}},
+                }},
+            }}
+        "#
+            ),
+        )
+        .unwrap();
+    };
+    write_global("global-old");
+    write_local("old", "", "other-old");
+    let initial = fs::read_to_string(&root)
+        .unwrap()
+        .replace("added = {systems = {'added'}},", "");
+    fs::write(&root, initial).unwrap();
+    let session = Session::open(Options {
+        cwd: dir.clone(),
+        config: Some(root.clone()),
+        mode: Mode::Json,
+        resume: None,
+        start: Start::Launch,
+    })
+    .unwrap();
+    let reload = |name: &str| session.reload_namespace(Some(name.into()));
+    tuse_core::Providers::remove("p").unwrap();
+    write_global("global-new");
+    write_local("new", "", "other-new");
+    assert!(
+        reload("added")
+            .unwrap_err()
+            .contains("unknown active namespace")
+    );
+    reload("work").unwrap();
+    let expected = ["global-new:2", "other-old", "new:2"];
+    assert_eq!(session.config().systems, expected);
+    assert_eq!(session.config().connect[0].name, "p");
+    assert!(
+        session.history()[0].fields["text"]
+            .as_str()
+            .unwrap()
+            .contains("new:2")
+    );
+
+    write_local("broken", "ping = {run = function() end}", "other-new");
+    assert!(reload("work").unwrap_err().contains("duplicate"));
+    fs::write(&root, "return {}").unwrap();
+    assert!(reload("work").unwrap_err().contains("missing"));
+    assert_eq!(session.config().systems, expected);
+    session.run_command("check", &[]).unwrap();
+    for _ in 0..100 {
+        if session
+            .ui_snapshot()
+            .markdowns
+            .iter()
+            .any(|m| m.name == "checked")
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(session.ui_snapshot().markdowns[0].text, "new:new");
+    session.close();
+    common::cleanup(&dir);
+}

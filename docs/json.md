@@ -83,7 +83,7 @@ For `session.new` and `session.fork`, events left over from the old session are 
 ### Config
 
 - `config.get` → the resolved config: `providers` (`[{name, type, base}]` for all active saved and Lua providers — never keys or headers), `plugins` (`[{name, version}]`), `ui` (with raw `ui.theme` token links preserved), `history`, `open`, `models` (omitting `efforts` when unset and serializing `[]` when explicitly empty), `systems`, `prompts` (`{kind: "text" | "function", body, args}`), `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands` (`{desc, args, params}` per name), and `path` (`""` when defaults are used). Secrets and Lua function bodies are never exposed.
-- `config.reload` → `null`, or `-32000` with the reason. If the reload fails, the old config stays.
+- `config.reload` `{ns?}` → `null`, or `-32000` with the reason. Omit `ns` (or pass `null`) for a full reload. Pass an active namespace name, e.g. `{"ns":"work"}`, to evaluate the config once but apply only that namespace's local and global contributions. Adding or removing namespaces requires a full reload. An empty or non-string `ns` (other than `null`) returns `-32602`. If reload fails, the old config stays.
 
 ### Tasks and commands
 

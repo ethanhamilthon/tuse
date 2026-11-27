@@ -579,6 +579,7 @@ fn load_all_plugins_merged(lua: &Lua) -> Result<Table, String> {
         );
         let json = crate::scripting::validate::validate_contribution(&table, &src, None)?;
         contribs.push(crate::scripting::validate::Contribution {
+            namespace: None,
             source: src,
             layer: 0,
             table,

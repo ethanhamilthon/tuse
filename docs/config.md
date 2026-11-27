@@ -311,9 +311,11 @@ return {
 
 ## Reload and `/config`
 
-`/reload`, Lua `reload()`, and JSON-RPC `config.reload` re-evaluate the primary config, global config, and installed plugins in `~/.tuse/plugins/`, clearing cached trusted modules and `package.preload` results, and re-reading saved providers from SQLite:
+`/reload`, Lua `reload()`, and JSON-RPC `config.reload` without `ns` re-evaluate the primary config, global config, and installed plugins in `~/.tuse/plugins/`, clearing cached trusted modules and `package.preload` results, and re-reading saved providers from SQLite:
 
 1. If evaluation or validation fails, `Reload failed: …` is shown and the old config, hooks, functions, and cached modules are restored.
 2. If it succeeds, the new config takes over, the first `system` history record is rebuilt, and `config_load` hooks run.
+
+JSON-RPC `config.reload` with `{"ns":"work"}` runs the normal config loader once but only applies `work` to the current session. If both local and global config define `work`, both contributions are refreshed and merged as usual. Other namespaces, active plugins, and saved providers stay as they were. Lua code outside `work` can still run during evaluation. If `work` is not active or any of its active contributions is missing from the new config, reload fails; use a full reload to add or remove namespaces.
 
 `/config` and JSON-RPC `config.get` show every resolved config field, including active `providers` (`[{ name, type, base }]` for both saved and Lua providers — never keys or headers), active `plugins` (`[{ name, version }]`), `models` (including `efforts`), raw `ui.theme` links, `ui`, `history`, `open`, `systems`, `prompts`, `functions`, `hooks`, and `commands`.

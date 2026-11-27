@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.1
+
+- JSON-RPC `config.reload` accepts an optional `ns` to refresh one active config namespace without applying other pending config changes.
+
 ## 0.14.0
 
 - **Breaking: namespaced config layout.** Config files (`./tuse.lua`, `-c`/`--config PATH`, and global config) now return named namespace tables (`{ my_ns = { ui = ..., prompts = ..., functions = ... } }`) instead of flat top-level sections. Top-level `global` and `plugins` are reserved control keys. Duplicate keys across merged namespaces, global config, and plugins fail validation for `functions`, `commands`, `prompts`, `open`, `providers`, `hooks`, and `models[].name`; `ui` deep-merges by leaf (`local > global > plugins`), and `systems` / `history.hide` concatenate deterministically.

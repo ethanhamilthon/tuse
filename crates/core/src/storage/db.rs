@@ -169,23 +169,31 @@ impl Providers {
         serde_json::to_string_pretty(&rows).map_err(|e| e.to_string())
     }
 
-    pub(crate) fn apply(config: &mut tuse_config::Config) -> Result<(), String> {
-        let mut profiles = Self::list()?;
+    pub(crate) fn resolve(profile: &tuse_config::Connect) -> Result<tuse_config::Connect, String> {
+        profile
+            .resolve()
+            .map_err(|e| format!("providers.{}: {e}", profile.name))
+    }
+
+    pub(crate) fn apply(
+        config: &mut tuse_config::Config,
+        saved: &[tuse_config::Connect],
+        unchanged: &std::collections::BTreeMap<String, tuse_config::Connect>,
+    ) -> Result<(), String> {
+        let mut profiles = saved.to_vec();
         for (name, profile) in std::mem::take(&mut config.providers) {
-            if profiles.iter().any(|p| p.name == name) {
+            if saved.iter().any(|p| p.name == name) {
                 return Err(format!(
                     "providers.{name}: name is already saved by tuse connect"
                 ));
             }
-            profiles.push(profile.into_connect(name));
+            let resolved = match unchanged.get(&name) {
+                Some(p) => p.clone(),
+                None => Self::resolve(&profile.into_connect(name))?,
+            };
+            profiles.push(resolved);
         }
-        config.connect = profiles
-            .into_iter()
-            .map(|p| {
-                p.resolve()
-                    .map_err(|e| format!("providers.{}: {e}", p.name))
-            })
-            .collect::<Result<_, _>>()?;
+        config.connect = profiles;
         Ok(())
     }
 }

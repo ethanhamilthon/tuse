@@ -1,44 +1,91 @@
 use crate::mode::{Mode, Options, Start};
 use crate::scripting::registry::COMMIT_AGENT;
+use crate::scripting::require::{self, SavedModules};
 use crate::scripting::validate::{self, Contribution};
+use crate::session::view::snapshot::LoadCtx;
+use crate::storage::Providers;
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
-use tuse_config::{Config, PluginSummary};
+use tuse_config::{Config, Connect, PluginSummary};
 use tuse_lua::mlua::{self, Function, Lua, Table, Value};
 
-pub(crate) fn prepare(lua: &Lua, explicit: Option<&Path>, cwd: &Path) -> Result<Config, String> {
-    let saved = crate::scripting::require::forget(lua).map_err(|e| e.to_string())?;
+struct Prepared {
+    snapshot: Snapshot,
+    table: Table,
+    saved: SavedModules,
+}
+
+#[derive(Clone)]
+struct Snapshot {
+    contributions: Vec<Contribution>,
+    path: String,
+    plugins: Vec<PluginSummary>,
+    saved_providers: Vec<Connect>,
+    lua_providers: BTreeMap<String, Connect>,
+}
+
+pub(crate) fn prepare(
+    lua: &Lua,
+    explicit: Option<&Path>,
+    cwd: &Path,
+    namespace: Option<&str>,
+) -> Result<Config, String> {
+    let active = namespace
+        .map(|name| {
+            let active = lua.app_data_ref::<Snapshot>().expect("active config");
+            if !active
+                .contributions
+                .iter()
+                .any(|c| c.namespace.as_deref() == Some(name))
+            {
+                return Err(format!(
+                    "unknown active namespace `{name}`; use a full reload"
+                ));
+            }
+            Ok((name, (*active).clone()))
+        })
+        .transpose()?;
+    let saved = require::forget(lua).map_err(|e| e.to_string())?;
     let primary = tuse_config::find_primary(explicit, cwd);
     let init_path = primary
         .clone()
         .or_else(|| tuse_config::global_config_override(cwd))
         .or_else(|| tuse_config::global_target(cwd).ok().flatten())
         .map(|p| p.display().to_string());
-    let prev = lua
-        .app_data_mut::<crate::session::view::snapshot::LoadCtx>()
-        .map(|mut c| {
-            let old = (c.loading, c.config_path.clone());
-            (c.loading, c.config_path) = (true, init_path);
-            old
-        });
-    let res = prepare_inner(lua, primary.as_deref(), cwd);
-    if let (Some(mut ctx), Some((old_l, old_p))) = (
-        lua.app_data_mut::<crate::session::view::snapshot::LoadCtx>(),
-        prev,
-    ) {
+    let prev = lua.app_data_mut::<LoadCtx>().map(|mut c| {
+        let old = (c.loading, c.config_path.clone());
+        (c.loading, c.config_path) = (true, init_path);
+        old
+    });
+    let res = prepare_inner(lua, primary.as_deref(), cwd, active);
+    if let (Some(mut ctx), Some((old_l, old_p))) = (lua.app_data_mut::<LoadCtx>(), prev) {
         ctx.loading = old_l;
-        ctx.config_path = match &res {
-            Ok(cfg) => (!cfg.path.is_empty()).then(|| cfg.path.clone()),
-            Err(_) => old_p,
-        };
+        ctx.config_path = old_p;
     }
-    if res.is_err() {
-        let _ = crate::scripting::require::restore(lua, saved);
+    match res {
+        Ok((config, snapshot, table)) => {
+            lua.set_app_data(Prepared {
+                snapshot,
+                table,
+                saved,
+            });
+            Ok(config)
+        }
+        Err(e) => {
+            let _ = require::restore(lua, saved);
+            Err(e)
+        }
     }
-    res
 }
 
-fn prepare_inner(lua: &Lua, primary: Option<&Path>, cwd: &Path) -> Result<Config, String> {
+fn prepare_inner(
+    lua: &Lua,
+    primary: Option<&Path>,
+    cwd: &Path,
+    active: Option<(&str, Snapshot)>,
+) -> Result<(Config, Snapshot, Table), String> {
+    let only = active.as_ref().map(|(name, _)| *name);
     let (global_opt, local_plugins, local_ns, primary_src) = match primary {
         Some(path) => {
             let src = path.display().to_string();
@@ -49,7 +96,7 @@ fn prepare_inner(lua: &Lua, primary: Option<&Path>, cwd: &Path) -> Result<Config
                     .map_err(|e: mlua::Error| format!("{src}: {}", tuse_lua::message(&e)))?,
                 _ => return Err(format!("{src}: the config must return a table")),
             };
-            let (g, p, ns) = validate::extract_namespaces(&tbl, &src, true)?;
+            let (g, p, ns) = validate::extract_namespaces(&tbl, &src, true, only)?;
             (g, p.map(|t| (t, src.clone())), ns, Some(src))
         }
         None => (None, None, vec![], None),
@@ -72,7 +119,7 @@ fn prepare_inner(lua: &Lua, primary: Option<&Path>, cwd: &Path) -> Result<Config
                         "{gsrc}: global config function must return a table"
                     ));
                 };
-                let (_, p, ns) = validate::extract_namespaces(&gt, &gsrc, false)?;
+                let (_, p, ns) = validate::extract_namespaces(&gt, &gsrc, false, only)?;
                 (Some(gsrc.clone()), p.map(|t| (t, gsrc)), ns)
             }
             None => (None, None, vec![]),
@@ -93,6 +140,7 @@ fn prepare_inner(lua: &Lua, primary: Option<&Path>, cwd: &Path) -> Result<Config
                 let json = validate::validate_contribution(&table, pfx, Some(&ns))?;
                 contributions.push(Contribution {
                     source: format!("{pfx}: {ns}"),
+                    namespace: Some(ns),
                     layer,
                     table,
                     json,
@@ -109,8 +157,12 @@ fn prepare_inner(lua: &Lua, primary: Option<&Path>, cwd: &Path) -> Result<Config
             .and_then(|s| s.opts.get(&plugin.name).cloned())
             .unwrap_or(Value::Nil);
         let table = crate::scripting::require::eval_plugin(lua, plugin, opt)?;
+        if only.is_some() {
+            continue;
+        }
         let json = validate::validate_contribution(&table, &src, None)?;
         plug_contribs.push(Contribution {
+            namespace: None,
             source: src,
             layer: 0,
             table,
@@ -123,24 +175,102 @@ fn prepare_inner(lua: &Lua, primary: Option<&Path>, cwd: &Path) -> Result<Config
     }
     let split = contributions.iter().take_while(|c| c.layer == 1).count();
     contributions.splice(split..split, plug_contribs);
-    let config_path = primary_src.or(global_path).unwrap_or_default();
-    let merged_src = if config_path.is_empty() {
-        "config"
-    } else {
-        &config_path
+    let mut snapshot = match active {
+        Some((name, snapshot)) => snapshot.replace_namespace(name, contributions)?,
+        None => Snapshot {
+            contributions,
+            path: primary_src.or(global_path).unwrap_or_default(),
+            plugins: active_plugins,
+            saved_providers: Providers::list()?
+                .iter()
+                .map(Providers::resolve)
+                .collect::<Result<_, _>>()?,
+            lua_providers: BTreeMap::new(),
+        },
     };
-    let (mut config, merged_lua) = validate::merge_contributions(lua, &contributions, merged_src)?;
-    config.plugins = active_plugins;
-    config.path = config_path;
-    crate::storage::Providers::apply(&mut config)?;
-    lua.set_named_registry_value("tuse.next", merged_lua)
-        .map_err(|e| e.to_string())?;
-    Ok(config)
+    let (config, merged_lua) = snapshot.merge(lua)?;
+    Ok((config, snapshot, merged_lua))
 }
 
-pub(crate) fn commit(lua: &Lua) -> Result<(), String> {
+impl Snapshot {
+    fn replace_namespace(mut self, name: &str, fresh: Vec<Contribution>) -> Result<Self, String> {
+        let selected = |c: &Contribution| c.namespace.as_deref() == Some(name);
+        for old in self.contributions.iter().filter(|c| selected(c)) {
+            if !fresh.iter().any(|c| c.layer == old.layer) {
+                return Err(format!(
+                    "namespace `{name}` is missing from `{}`; use a full reload",
+                    old.source
+                ));
+            }
+        }
+        for c in &fresh {
+            if let Some(providers) = c.json.get("providers").and_then(|p| p.as_object()) {
+                for key in providers.keys() {
+                    self.lua_providers.remove(key);
+                }
+            }
+        }
+        self.contributions.retain(|c| !selected(c));
+        self.contributions.extend(fresh);
+        self.contributions.sort_by(|a, b| {
+            let order = |c: &Contribution| match c.layer {
+                1 => 0,
+                0 => 1,
+                _ => 2,
+            };
+            order(a)
+                .cmp(&order(b))
+                .then_with(|| a.namespace.cmp(&b.namespace))
+        });
+        Ok(self)
+    }
+
+    fn merge(&mut self, lua: &Lua) -> Result<(Config, Table), String> {
+        let src = if self.path.is_empty() {
+            "config"
+        } else {
+            &self.path
+        };
+        let (mut config, table) = validate::merge_contributions(lua, &self.contributions, src)?;
+        config.plugins = self.plugins.clone();
+        config.path = self.path.clone();
+        Providers::apply(&mut config, &self.saved_providers, &self.lua_providers)?;
+        self.lua_providers = config.connect[self.saved_providers.len()..]
+            .iter()
+            .map(|p| (p.name.clone(), p.clone()))
+            .collect();
+        Ok((config, table))
+    }
+}
+
+pub(crate) fn commit(
+    lua: &Lua,
+    publish: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let Prepared {
+        snapshot,
+        table,
+        saved,
+    } = lua.remove_app_data::<Prepared>().expect("prepared config");
+    let old: Option<Table> = lua
+        .named_registry_value("tuse.config")
+        .map_err(|e| e.to_string())?;
+    if let Err(e) = apply_lua(lua, table).and_then(|()| publish()) {
+        if let Some(old) = old {
+            let _ = apply_lua(lua, old);
+        }
+        let _ = require::restore(lua, saved);
+        return Err(e);
+    }
+    if let Some(mut ctx) = lua.app_data_mut::<LoadCtx>() {
+        ctx.config_path = (!snapshot.path.is_empty()).then(|| snapshot.path.clone());
+    }
+    lua.set_app_data(snapshot);
+    Ok(())
+}
+
+fn apply_lua(lua: &Lua, t: Table) -> Result<(), String> {
     let e = |x: mlua::Error| x.to_string();
-    let t: Table = lua.named_registry_value("tuse.next").map_err(e)?;
     lua.set_named_registry_value("tuse.config", &t).map_err(e)?;
     lua.named_registry_value::<Function>(COMMIT_AGENT)
         .map_err(e)?
@@ -179,15 +309,15 @@ pub(crate) fn start_vm(
     let s2 = slot.clone();
     let config = vm.call(move |lua| {
         crate::session::lua::host::install(lua, s2).map_err(|e| tuse_lua::message(&e))?;
-        lua.set_app_data(crate::session::view::snapshot::LoadCtx {
+        lua.set_app_data(LoadCtx {
             mode,
             cwd: cwd.clone(),
             config_path: None,
             loading: false,
         });
         crate::scripting::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
-        let config = prepare(lua, explicit.as_deref(), &cwd)?;
-        commit(lua)?;
+        let config = prepare(lua, explicit.as_deref(), &cwd, None)?;
+        commit(lua, || Ok(()))?;
         Ok::<_, String>(config)
     })?;
     Ok((vm, slot, config))

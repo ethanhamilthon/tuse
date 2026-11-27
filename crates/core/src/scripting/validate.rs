@@ -16,7 +16,9 @@ pub(crate) const FLAT_SECTIONS: [&str; 10] = [
     "commands",
 ];
 
+#[derive(Clone)]
 pub(crate) struct Contribution {
+    pub namespace: Option<String>,
     pub source: String,
     pub layer: u8,
     pub table: Table,
@@ -45,6 +47,7 @@ pub(crate) fn extract_namespaces(
     t: &Table,
     src: &str,
     allow_global: bool,
+    only: Option<&str>,
 ) -> Result<Extracted, String> {
     let (mut global, mut plugins, mut ns) = (None, None, vec![]);
     for (k, v) in str_entries(t, src, None)? {
@@ -68,7 +71,10 @@ pub(crate) fn extract_namespaces(
                 ));
             }
             "" => return Err(format!("{src}: namespace name must not be empty")),
-            _ => ns.push((k.clone(), as_table(&v, src, &k)?.clone())),
+            _ if only.is_none_or(|name| name == k) => {
+                ns.push((k.clone(), as_table(&v, src, &k)?.clone()));
+            }
+            _ => {}
         }
     }
     Ok((global, plugins, ns))

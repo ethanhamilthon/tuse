@@ -142,7 +142,15 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
         "config.get" => {
             serde_json::to_value(&*s.config()).map_err(|e| Fail::session(e.to_string()))
         }
-        "config.reload" => s.reload().map(|_| Value::Null).map_err(Fail::session),
+        "config.reload" => {
+            let ns = opt_str(p, "ns")?;
+            if ns.as_ref().is_some_and(String::is_empty) {
+                return Err(Fail::params("`ns` must not be empty"));
+            }
+            s.reload_namespace(ns)
+                .map(|_| Value::Null)
+                .map_err(Fail::session)
+        }
         "tasks.list" => serde_json::to_value(s.tasks()).map_err(|e| Fail::session(e.to_string())),
         "tasks.get" => {
             let id = str_param(p, "id")?;

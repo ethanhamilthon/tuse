@@ -1,14 +1,96 @@
-use crate::mode::{Mode, Options, Start};
+use crate::mode::{LoadFlags, Mode, Options, Start};
 use crate::scripting::registry::COMMIT_AGENT;
 use crate::scripting::require::{self, SavedModules};
-use crate::scripting::validate::{self, Contribution};
+use crate::scripting::validate::{self, Namespaces};
 use crate::session::view::snapshot::LoadCtx;
-use crate::storage::Providers;
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tuse_config::{Config, Connect, PluginSummary};
+use std::sync::atomic::{AtomicU64, Ordering};
+use tuse_config::{Config, InstalledPlugin, PluginSummary};
 use tuse_lua::mlua::{self, Function, Lua, Table, Value};
+
+static SNAP_SEQ: AtomicU64 = AtomicU64::new(0);
+
+struct PluginSnapshot {
+    dir: PathBuf,
+}
+
+impl Drop for PluginSnapshot {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn copy_plugin_tree(src: &Path, dst: &Path, canon_root: &Path, depth: u8) -> Result<(), String> {
+    if depth > 32 {
+        return Err(format!("{}: directory nesting too deep", src.display()));
+    }
+    std::fs::create_dir_all(dst).map_err(|e| format!("{}: {e}", dst.display()))?;
+    for entry in std::fs::read_dir(src).map_err(|e| format!("{}: {e}", src.display()))? {
+        let entry = entry.map_err(|e| format!("{}: {e}", src.display()))?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        let meta =
+            std::fs::symlink_metadata(&from).map_err(|e| format!("{}: {e}", from.display()))?;
+        let ft = meta.file_type();
+        if ft.is_file() {
+            std::fs::copy(&from, &to).map_err(|e| format!("{}: {e}", to.display()))?;
+        } else if ft.is_dir() {
+            copy_plugin_tree(&from, &to, canon_root, depth + 1)?;
+        } else if ft.is_symlink() {
+            let target = from
+                .canonicalize()
+                .map_err(|e| format!("{}: {e}", from.display()))?;
+            if !target.starts_with(canon_root) {
+                return Err(format!("{}: symlink escapes plugin root", from.display()));
+            }
+            if target.is_file() {
+                std::fs::copy(&target, &to).map_err(|e| format!("{}: {e}", to.display()))?;
+            } else if target.is_dir() {
+                copy_plugin_tree(&target, &to, canon_root, depth + 1)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn create_snapshot_dir() -> Result<PathBuf, String> {
+    let base = std::env::temp_dir();
+    std::fs::create_dir_all(&base).map_err(|e| format!("{}: {e}", base.display()))?;
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    loop {
+        let seq = SNAP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let dir = base.join(format!("tuse-plug-snap-{pid}-{nanos}-{seq}"));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("{}: {e}", dir.display())),
+        }
+    }
+}
+
+fn snapshot_plugins(
+    plugins: &[&InstalledPlugin],
+) -> Result<(PluginSnapshot, Vec<InstalledPlugin>), String> {
+    let snap = PluginSnapshot {
+        dir: create_snapshot_dir()?,
+    };
+    let mut out = Vec::with_capacity(plugins.len());
+    for p in plugins {
+        let canon_root = p
+            .dir
+            .canonicalize()
+            .map_err(|e| format!("{}: {e}", p.dir.display()))?;
+        let dst = snap.dir.join(&p.name);
+        copy_plugin_tree(&p.dir, &dst, &canon_root, 0)?;
+        out.push(tuse_config::load_plugin_dir(&p.name, &dst)?);
+    }
+    Ok((snap, out))
+}
 
 struct Prepared {
     snapshot: Snapshot,
@@ -16,49 +98,25 @@ struct Prepared {
     saved: SavedModules,
 }
 
-#[derive(Clone)]
 struct Snapshot {
-    contributions: Vec<Contribution>,
     path: String,
-    plugins: Vec<PluginSummary>,
-    saved_providers: Vec<Connect>,
-    lua_providers: BTreeMap<String, Connect>,
+    _plugin_snapshot: Option<Arc<PluginSnapshot>>,
 }
 
-pub(crate) fn prepare(
-    lua: &Lua,
-    explicit: Option<&Path>,
-    cwd: &Path,
-    namespace: Option<&str>,
-) -> Result<Config, String> {
-    let active = namespace
-        .map(|name| {
-            let active = lua.app_data_ref::<Snapshot>().expect("active config");
-            if !active
-                .contributions
-                .iter()
-                .any(|c| c.namespace.as_deref() == Some(name))
-            {
-                return Err(format!(
-                    "unknown active namespace `{name}`; use a full reload"
-                ));
-            }
-            Ok((name, (*active).clone()))
-        })
-        .transpose()?;
+pub(crate) fn prepare(lua: &Lua, cwd: &Path, flags: LoadFlags) -> Result<Config, String> {
+    let primary = if flags.no_global {
+        None
+    } else {
+        tuse_config::global_target(cwd)?
+    };
     let saved = require::forget(lua).map_err(|e| e.to_string())?;
-    let primary = tuse_config::find_primary(explicit, cwd);
-    let init_path = primary
-        .clone()
-        .or_else(|| tuse_config::global_config_override(cwd))
-        .or_else(|| tuse_config::global_target(cwd).ok().flatten())
-        .map(|p| p.display().to_string());
+    let init_path = primary.as_ref().map(|p| p.display().to_string());
     let prev = lua.app_data_mut::<LoadCtx>().map(|mut c| {
         let old = (c.loading, c.config_path.clone());
         (c.loading, c.config_path) = (true, init_path);
         old
     });
-    let res = prepare_inner(lua, primary.as_deref(), cwd, active);
+    let res = prepare_inner(lua, primary.as_deref(), flags);
     if let (Some(mut ctx), Some((old_l, old_p))) = (lua.app_data_mut::<LoadCtx>(), prev) {
         ctx.loading = old_l;
         ctx.config_path = old_p;
@@ -81,166 +139,59 @@ pub(crate) fn prepare(
 
 fn prepare_inner(
     lua: &Lua,
-    primary: Option<&Path>,
-    cwd: &Path,
-    active: Option<(&str, Snapshot)>,
+    global: Option<&Path>,
+    flags: LoadFlags,
 ) -> Result<(Config, Snapshot, Table), String> {
-    let only = active.as_ref().map(|(name, _)| *name);
-    let (global_opt, local_plugins, local_ns, primary_src) = match primary {
+    let mut owners = Namespaces::new();
+    let (mut config, open) = match global {
         Some(path) => {
-            let src = path.display().to_string();
-            let tbl = match crate::scripting::require::eval_file(lua, path)? {
-                Value::Table(t) => t,
-                Value::Nil => lua
-                    .create_table()
-                    .map_err(|e: mlua::Error| format!("{src}: {}", tuse_lua::message(&e)))?,
-                _ => return Err(format!("{src}: the config must return a table")),
-            };
-            let (g, p, ns) = validate::extract_namespaces(&tbl, &src, true, only)?;
-            (g, p.map(|t| (t, src.clone())), ns, Some(src))
+            let mut cfg = validate::global(
+                require::eval_file(lua, path)?,
+                &path.display().to_string(),
+                &mut owners,
+            )?;
+            cfg.0.path = path.display().to_string();
+            cfg
         }
-        None => (None, None, vec![], None),
+        None => (Config::default(), None),
     };
-    let (global_path, global_plugins, global_ns) = match global_opt {
-        Some(Value::Boolean(false)) => (None, None, vec![]),
-        other => match tuse_config::global_target(cwd)? {
-            Some(gp) => {
-                let gsrc = gp.display().to_string();
-                let Value::Function(func) = crate::scripting::require::eval_file(lua, &gp)? else {
-                    return Err(format!(
-                        "{gsrc}: global config must return a function(opts)"
-                    ));
-                };
-                let Value::Table(gt) = func
-                    .call::<Value>(other.unwrap_or(Value::Nil))
-                    .map_err(|e| format!("{gsrc}: {}", tuse_lua::message(&e)))?
-                else {
-                    return Err(format!(
-                        "{gsrc}: global config function must return a table"
-                    ));
-                };
-                let (_, p, ns) = validate::extract_namespaces(&gt, &gsrc, false, only)?;
-                (Some(gsrc.clone()), p.map(|t| (t, gsrc)), ns)
-            }
-            None => (None, None, vec![]),
-        },
-    };
-    let installed = tuse_config::discover_plugins()?;
-    let sel = match local_plugins.as_ref().or(global_plugins.as_ref()) {
-        Some((tbl, src)) => Some(validate::parse_plugin_selector(tbl, src, &installed)?),
-        None => None,
-    };
-    let mut contributions = vec![];
-    for (opt_pfx, layer, list) in [
-        (&global_path, 1u8, global_ns),
-        (&primary_src, 2u8, local_ns),
-    ] {
-        if let Some(pfx) = opt_pfx {
-            for (ns, table) in list {
-                let json = validate::validate_contribution(&table, pfx, Some(&ns))?;
-                contributions.push(Contribution {
-                    source: format!("{pfx}: {ns}"),
-                    namespace: Some(ns),
-                    layer,
-                    table,
-                    json,
-                });
-            }
-        }
-    }
-    let mut active_plugins = vec![];
-    let mut plug_contribs = vec![];
-    for plugin in validate::select_plugins(&installed, sel.as_ref()) {
-        let src = format!("plugin:{}", plugin.name);
-        let opt = sel
-            .as_ref()
-            .and_then(|s| s.opts.get(&plugin.name).cloned())
-            .unwrap_or(Value::Nil);
-        let table = crate::scripting::require::eval_plugin(lua, plugin, opt)?;
-        if only.is_some() {
-            continue;
-        }
-        let json = validate::validate_contribution(&table, &src, None)?;
-        plug_contribs.push(Contribution {
-            namespace: None,
-            source: src,
-            layer: 0,
-            table,
-            json,
-        });
-        active_plugins.push(PluginSummary {
-            name: plugin.name.clone(),
-            version: plugin.manifest.version.clone(),
-        });
-    }
-    let split = contributions.iter().take_while(|c| c.layer == 1).count();
-    contributions.splice(split..split, plug_contribs);
-    let mut snapshot = match active {
-        Some((name, snapshot)) => snapshot.replace_namespace(name, contributions)?,
-        None => Snapshot {
-            contributions,
-            path: primary_src.or(global_path).unwrap_or_default(),
-            plugins: active_plugins,
-            saved_providers: Providers::list()?
-                .iter()
-                .map(Providers::resolve)
-                .collect::<Result<_, _>>()?,
-            lua_providers: BTreeMap::new(),
-        },
-    };
-    let (config, merged_lua) = snapshot.merge(lua)?;
-    Ok((config, snapshot, merged_lua))
-}
-
-impl Snapshot {
-    fn replace_namespace(mut self, name: &str, fresh: Vec<Contribution>) -> Result<Self, String> {
-        let selected = |c: &Contribution| c.namespace.as_deref() == Some(name);
-        for old in self.contributions.iter().filter(|c| selected(c)) {
-            if !fresh.iter().any(|c| c.layer == old.layer) {
-                return Err(format!(
-                    "namespace `{name}` is missing from `{}`; use a full reload",
-                    old.source
-                ));
-            }
-        }
-        for c in &fresh {
-            if let Some(providers) = c.json.get("providers").and_then(|p| p.as_object()) {
-                for key in providers.keys() {
-                    self.lua_providers.remove(key);
+    let mut plugin_snapshot = None;
+    if !flags.no_plugins {
+        let root = tuse_config::plugins_dir();
+        let selected = {
+            let mut snapshot = None;
+            if let Some(_lock) = tuse_config::plugins_read_lock(&root)? {
+                let installed = tuse_config::discover_plugins_unlocked(&root)?;
+                let active: Vec<_> = installed.iter().filter(|p| !p.manifest.lazy).collect();
+                if !active.is_empty() {
+                    snapshot = Some(snapshot_plugins(&active)?);
                 }
             }
-        }
-        self.contributions.retain(|c| !selected(c));
-        self.contributions.extend(fresh);
-        self.contributions.sort_by(|a, b| {
-            let order = |c: &Contribution| match c.layer {
-                1 => 0,
-                0 => 1,
-                _ => 2,
-            };
-            order(a)
-                .cmp(&order(b))
-                .then_with(|| a.namespace.cmp(&b.namespace))
-        });
-        Ok(self)
-    }
-
-    fn merge(&mut self, lua: &Lua) -> Result<(Config, Table), String> {
-        let src = if self.path.is_empty() {
-            "config"
-        } else {
-            &self.path
+            snapshot
         };
-        let (mut config, table) = validate::merge_contributions(lua, &self.contributions, src)?;
-        config.plugins = self.plugins.clone();
-        config.path = self.path.clone();
-        Providers::apply(&mut config, &self.saved_providers, &self.lua_providers)?;
-        self.lua_providers = config.connect[self.saved_providers.len()..]
-            .iter()
-            .map(|p| (p.name.clone(), p.clone()))
-            .collect();
-        Ok((config, table))
+        if let Some((snapshot, installed)) = selected {
+            for plugin in installed {
+                let src = format!("plugin:{}", plugin.name);
+                let export = require::eval_file(lua, &plugin.entrypoint)?;
+                validate::insert(&mut owners, plugin.name.clone(), &src, export, true)?;
+                config.plugins.push(PluginSummary {
+                    name: plugin.name,
+                    version: plugin.manifest.version,
+                });
+            }
+            plugin_snapshot = Some(Arc::new(snapshot));
+        }
     }
+    let table = validate::register(lua, owners, &mut config, open)?;
+    let path = config.path.clone();
+    Ok((
+        config,
+        Snapshot {
+            path,
+            _plugin_snapshot: plugin_snapshot,
+        },
+        table,
+    ))
 }
 
 pub(crate) fn commit(
@@ -278,20 +229,15 @@ fn apply_lua(lua: &Lua, t: Table) -> Result<(), String> {
         .map_err(|e| tuse_lua::message(&e))
 }
 
-pub fn config_arg(cwd: &Path, path: Option<&str>) -> Option<std::path::PathBuf> {
-    path.map(|p| tuse_config::resolve_path(p, cwd))
-}
-
 pub fn configured_models(
     cwd: std::path::PathBuf,
-    config: Option<std::path::PathBuf>,
-) -> Result<Vec<tuse_config::ModelDef>, String> {
+) -> Result<std::collections::BTreeMap<String, tuse_config::ModelDef>, String> {
     let opts = Options {
         cwd,
-        config,
         mode: Mode::Tui,
         resume: None,
         start: Start::Launch,
+        flags: LoadFlags::default(),
     };
     Ok(start_vm(&opts)?.2.models)
 }
@@ -300,7 +246,7 @@ pub(crate) fn start_vm(
     opts: &Options,
 ) -> Result<(tuse_lua::Vm, crate::session::lua::host::Slot, Config), String> {
     let slot = crate::session::lua::host::Slot::default();
-    let (cwd, explicit, mode) = (opts.cwd.clone(), opts.config.clone(), opts.mode);
+    let (cwd, mode, flags) = (opts.cwd.clone(), opts.mode, opts.flags);
     let host = crate::session::lua::host::SessionHost {
         slot: slot.clone(),
         cwd: cwd.clone(),
@@ -316,7 +262,7 @@ pub(crate) fn start_vm(
             loading: false,
         });
         crate::scripting::require::install(lua, &cwd).map_err(|e| tuse_lua::message(&e))?;
-        let config = prepare(lua, explicit.as_deref(), &cwd, None)?;
+        let config = prepare(lua, &cwd, flags)?;
         commit(lua, || Ok(()))?;
         Ok::<_, String>(config)
     })?;

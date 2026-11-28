@@ -10,12 +10,11 @@ use crossterm::event::{
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor::SetCursorStyle, execute};
 use std::io::{BufWriter, Write, stdout};
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tuse_core::Session;
 
-pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Result<String> {
+pub fn run(session: Arc<Session>) -> std::io::Result<String> {
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     for sig in [
         signal_hook::consts::SIGINT,
@@ -32,7 +31,7 @@ pub fn run(session: Arc<Session>, config_arg: Option<PathBuf>) -> std::io::Resul
         prev(info);
     }));
     let dog = frame::watchdog::Watchdog::start(session.clone(), stop.clone());
-    main_loop(session, config_arg, &stop, &dog)
+    main_loop(session, &stop, &dog)
 }
 
 struct RestoreGuard;
@@ -130,13 +129,12 @@ impl Drop for TerminalInput {
 
 fn main_loop(
     session: Arc<Session>,
-    config_arg: Option<PathBuf>,
     stop: &std::sync::atomic::AtomicBool,
     dog: &frame::watchdog::Watchdog,
 ) -> std::io::Result<String> {
     let (wake, wake_rx) = std::sync::mpsc::sync_channel(1);
     let input = TerminalInput::start(wake.clone())?;
-    let mut app = ui::app::App::with_wake(session, config_arg, Some(wake));
+    let mut app = ui::app::App::with_wake(session, Some(wake));
     let mut out = BufWriter::with_capacity(1 << 16, stdout());
     let mut renderer = frame::draw::Renderer::default();
     let (mut w, mut h) = terminal::size()?;

@@ -8,25 +8,25 @@ use tuse_core::{Event, Options, Record, Session, UserInput};
 static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 const CODE: &str = r#"
-write("a.txt", "one\ntwo\n")
-edit("a.txt", "two", "2")
-append("a.txt", "3[lit]\n")
-write("b.txt", "drop me\n")
-delete("b.txt")
-print("raw", read("a.txt"))
-print(read("a.txt", {lines = true}))
-print(grep("3[lit]", {path = {"a.txt", "."}, literal = true}))
-local ok, e = pcall(edit, "a.txt", "missing", "x")
+fs.write("a.txt", "one\ntwo\n")
+fs.edit("a.txt", "two", "2")
+fs.append("a.txt", "3[lit]\n")
+fs.write("b.txt", "drop me\n")
+fs.delete("b.txt")
+print("raw", fs.read("a.txt"))
+print(fs.read("a.txt", {lines = true}))
+print(fs.grep("3[lit]", {path = {"a.txt", "."}, literal = true}))
+local ok, e = pcall(fs.edit, "a.txt", "missing", "x")
 print("caught", e)
 seen = 0
-local t = spawn(function() for i = 1, 3 do seen = seen + 1; sh("sleep 0.05") end print("bg done") end, "bg")
+local t = tasks.spawn(function() for i = 1, 3 do seen = seen + 1; sh("sleep 0.05") end print("bg done") end, "bg")
 local r = sh("sleep 0.3; echo slept")
 print("sh", r.ok, (r.out:gsub("\n", "")), seen)
-local long = spawn(function() sh("sleep 30") end, "long")
-task_stop(long)
+local long = tasks.spawn(function() sh("sleep 30") end, "long")
+tasks.stop(long)
 sh("sleep 0.1")
-print("stopped", task_get(long).status, type(task_get(long).log))
-spawn(function() end, "empty_ok")
+print("stopped", tasks.get(long).status, type(tasks.get(long).log))
+tasks.spawn(function() end, "empty_ok")
 sh("sleep 0.05")
 print("big", #string.rep("x", 100000))
 return string.rep("y", 10000)
@@ -42,12 +42,17 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
         Reply::Text("all done"),
     ]);
     let (dir, cfg) = common::setup("flow", &addr, "");
-    let s = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: tuse_core::Mode::Json,
-        resume: None,
-        start: Default::default(),
+    let s = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: tuse_core::Mode::Json,
+            resume: None,
+            start: Default::default(),
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let events = s.subscribe();
@@ -136,9 +141,15 @@ fn a_turn_runs_lua_tasks_and_records_everything() {
             ("empty_ok".into(), "done".into())
         ]
     );
-    let told = |r: &Record| matches!(r, Record::Notification { text } if text.contains("Task t1 (bg) finished"));
+    let told = |r: &Record| matches!(r, Record::TaskMessage(t) if t.text.contains("Task t1 (bg) finished"));
     assert!(all.iter().any(told), "{all:?}");
-    let empty_ok = |r: &Record| matches!(r, Record::Notification { text } if text.contains("Task t3 (empty_ok) finished") && !text.contains("Last line:") && !text.contains("failed"));
+    let empty_ok = |r: &Record| matches!(r, Record::TaskMessage(t) if t.text.contains("Task t3 (empty_ok) finished") && !t.text.contains("Last line:") && !t.text.contains("failed"));
+    assert_eq!(all.iter().filter(|r| matches!(r, Record::Task(t) if t.id.as_deref() == Some("t2") && t.status == "stopped")).count(), 1);
+    assert!(
+        !all.iter()
+            .any(|r| matches!(r, Record::TaskMessage(t) if t.id == "t2"))
+    );
+    assert!(all.iter().any(|r| matches!(r, Record::TaskMessage(t) if serde_json::to_value(t.delivery).unwrap() == "steer")));
     assert!(all.iter().any(empty_ok), "{all:?}");
     s.close();
     std::fs::remove_dir_all(dir).ok();
@@ -151,10 +162,10 @@ fn steer_hands_off_and_esc_stops_everything() {
 return coroutine.wrap(function()
 local saved = 41
 print('before')
-write('foreground', 'yes')
+fs.write('foreground', 'yes')
 local r = sh('echo run >> starts; while [ ! -f go ]; do sleep 0.02; done; printf ready', {timeout = 12})
 assert(r.ok, tostring(r))
-write('background', sh('printf next').out)
+fs.write('background', sh('printf next').out)
 return r.out .. ':' .. (saved + 1)
 end)()
 "#;
@@ -164,12 +175,17 @@ end)()
             Reply::Text("again"),
         ]);
         let (dir, cfg) = common::setup(if steer { "steer-handoff" } else { "esc-stop" }, &addr, "");
-        let s = Session::open(Options {
-            cwd: dir.clone(),
-            config: Some(cfg),
-            mode: tuse_core::Mode::Json,
-            resume: None,
-            start: Default::default(),
+        let s = Session::open({
+            unsafe {
+                std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+            }
+            Options {
+                cwd: dir.clone(),
+                mode: tuse_core::Mode::Json,
+                resume: None,
+                start: Default::default(),
+                flags: Default::default(),
+            }
         })
         .unwrap();
         let rx = s.subscribe();
@@ -219,7 +235,8 @@ end)()
             std::thread::sleep(Duration::from_millis(10));
         }
         loop {
-            if let Event::Notification(text) = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
+            if let Event::TaskMessage(message) = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
+                let text = message.text;
                 assert!(
                     text.starts_with("<task>Task t1 (lua-1) finished. Last line: ready:42."),
                     "{text}"
@@ -244,15 +261,20 @@ end)()
 #[test]
 fn tool_history_write_waits_for_the_tool_result() {
     let _home = HOME_LOCK.lock().unwrap();
-    let args = json!({"code": "set_session{}; set_session{title='kept', history={{role='system', text='short'}}}; assert(session().history[1].text ~= 'short'); return 'tool finished'"}).to_string();
+    let args = json!({"code": "session.set{}; session.set{title='kept', history={{role='system', text='short'}}}; assert(session.get().history[1].text ~= 'short'); return 'tool finished'"}).to_string();
     let addr = common::provider(vec![Reply::Call("lua", args), Reply::Text("done")]);
     let (dir, cfg) = common::setup("pending-history", &addr, "");
-    let session = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: tuse_core::Mode::Json,
-        resume: None,
-        start: Default::default(),
+    let session = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: tuse_core::Mode::Json,
+            resume: None,
+            start: Default::default(),
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let rx = session.subscribe();

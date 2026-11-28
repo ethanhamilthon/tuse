@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 
 pub fn tuse_home() -> PathBuf {
-    std::env::home_dir().unwrap_or_default().join(".tuse")
+    std::env::var_os("TUSE_HOME")
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::home_dir().unwrap_or_default().join(".tuse"))
 }
 pub fn plugins_dir() -> PathBuf {
     tuse_home().join("plugins")
@@ -23,12 +26,6 @@ pub fn resolve_path(p: &str, dir: &Path) -> PathBuf {
     } else {
         dir.join(path)
     }
-}
-pub fn find_primary(explicit: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
-    explicit.map(Path::to_path_buf).or_else(|| {
-        let local = cwd.join("tuse.lua");
-        local.is_file().then_some(local)
-    })
 }
 pub fn global_config_override(cwd: &Path) -> Option<PathBuf> {
     let raw = std::env::var("TUSE_GLOBAL_CONFIG").ok()?;
@@ -59,12 +56,6 @@ pub fn global_target(cwd: &Path) -> Result<Option<PathBuf>, String> {
         .find(|p| p.is_file()))
 }
 pub fn module_candidates(name: &str, base: &Path) -> Vec<PathBuf> {
-    if name == "global" {
-        return match global_config_override(base) {
-            Some(p) => vec![p],
-            None => default_global_candidates(),
-        };
-    }
     if name.ends_with(".lua") || name.starts_with("~/") || name.starts_with('/') {
         return lua_files(resolve_path(name, base));
     }

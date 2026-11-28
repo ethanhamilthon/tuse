@@ -3,6 +3,9 @@ use crate::kit::text::{Line, clip, line_width, span, width};
 use crate::ui::picker::Picker;
 
 pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Vec<Line> {
+    if pk.kind == crate::ui::picker::Kind::Prompt && !pk.shown.is_empty() {
+        return prompt_groups(pk, rows, w, p);
+    }
     pk.follow(rows);
     let inner = w.max(1);
     let mark = width(LIST_SELECTED_PREFIX);
@@ -53,8 +56,66 @@ pub(crate) fn options(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Ve
     }
     lines
 }
+fn prompt_groups(pk: &mut Picker, rows: usize, w: usize, p: &Palette) -> Vec<Line> {
+    let prompt = |n: usize| {
+        let item = &pk.items[pk.shown[n]];
+        item.value.split_once(':').unwrap_or(("", &item.value))
+    };
+    let start_group = |n: usize| {
+        let owner = prompt(n).0;
+        !owner.is_empty() && (n == 0 || prompt(n - 1).0 != owner)
+    };
+    let height =
+        |start: usize, end: usize| end - start + (start..end).filter(|&n| start_group(n)).count();
+    let selected = pk.selected.min(pk.shown.len() - 1);
+    let mut start = pk.scroll.min(selected);
+    while start < selected && height(start, selected + 1) > rows {
+        start += 1;
+    }
+    pk.scroll = start;
+    let mut out = Vec::with_capacity(rows);
+    for n in start..pk.shown.len() {
+        let (owner, name) = prompt(n);
+        if start_group(n) && out.len() + 1 < rows {
+            out.push(vec![span(clip(owner, w, MORE), Style::fg(p.muted))]);
+        }
+        if out.len() == rows {
+            break;
+        }
+        let (mark, color) = if n == selected {
+            (LIST_SELECTED_PREFIX, p.accent)
+        } else {
+            ("  ", p.muted)
+        };
+        let st = Style::fg(color);
+        out.push(vec![
+            span(mark, st),
+            span(clip(name, w.saturating_sub(width(mark)), MORE), st),
+        ]);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn prompt_headings_are_not_picker_items() {
+        use crate::ui::picker::{Kind, item};
+        let mut pk = Picker::new(
+            Kind::Prompt,
+            vec![
+                item("#demo:review", "", "demo:review"),
+                item("#work:review", "", "work:review"),
+            ],
+        );
+        let p = Palette::new(&Default::default());
+        let rows = options(&mut pk, 4, 40, &p);
+        assert_eq!(rows[0][0].text, "demo");
+        assert_eq!(rows[2][0].text, "work");
+        pk.moved(1, 4);
+        assert_eq!(pk.current().unwrap().value, "work:review");
+    }
+
     use super::*;
     use crate::ui::picker::{Kind, item};
     use tuse_config::Ui;

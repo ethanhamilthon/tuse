@@ -1,5 +1,6 @@
 mod common;
-use tuse_core::{HOST_FUNCTIONS, Mode, Options, Session, Start};
+use tuse_config::{HOST_FUNCTIONS, HOST_GROUPS};
+use tuse_core::{Mode, Options, Session, Start};
 
 #[test]
 fn docs_cover_the_host_functions_and_the_vm_exports_them() {
@@ -7,12 +8,14 @@ fn docs_cover_the_host_functions_and_the_vm_exports_them() {
     let config = tuse_core::docs(Some("config"));
     for name in HOST_FUNCTIONS {
         let documented = functions.contains(&format!("`{name}("))
+            || functions.contains(&format!("`{name}{{"))
             || functions.contains(&format!("`{name}."))
-            || functions.contains(&format!("and `{name}("));
+            || functions.contains(&format!("`{name}`"));
         assert!(documented, "docs(\"lua\") misses `{name}`");
+        let top = name.split('.').next().unwrap();
         assert!(
-            config.contains(&format!("`{name}`")) || name.starts_with("task_"),
-            "docs(\"config\") require(\"tuse\") row misses `{name}`"
+            config.contains(&format!("`{top}`")),
+            "docs(\"config\") require(\"tuse\") row misses `{top}` (from `{name}`)"
         );
     }
     let addr = common::provider(vec![common::Reply::Text("ok")]);
@@ -22,25 +25,39 @@ fn docs_cover_the_host_functions_and_the_vm_exports_them() {
         .map(|n| format!("'{n}'"))
         .collect::<Vec<_>>()
         .join(",");
+    let top_count = HOST_GROUPS.len() + 5;
     std::fs::write(
         &cfg,
         format!(
             "local t = require('tuse')
-for _, n in ipairs({{ {list} }}) do assert(t[n] ~= nil, n) end
+for _, path in ipairs({{ {list} }}) do
+  local g, k = path:match('^([^.]+)%.(.+)$')
+  if g then
+    assert(type(t[g]) == 'table' and t[g][k] ~= nil, path)
+  else
+    assert(t[path] ~= nil, path)
+  end
+end
+assert(t.inspect == nil and t.env == nil)
+assert(#t.docs.topics == 8 and type(t.docs.lua) == 'string')
 local n = 0
-for k in pairs(t) do n = n + 1 end
-assert(n == {}, 'require(\"tuse\") exports ' .. n)
-return {{}}",
-            HOST_FUNCTIONS.len()
+for _ in pairs(t) do n = n + 1 end
+assert(n == {top_count}, 'require(\"tuse\") exports ' .. n)
+return {{}}"
         ),
     )
     .unwrap();
-    let s = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let s = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     s.close();
@@ -67,7 +84,6 @@ fn docs_cover_the_config_keys_tokens_events_and_roles() {
     keys.extend(json_keys(&tuse_config::Ui::default()));
     keys.extend(json_keys(&tuse_config::Lines::default()));
     keys.extend(json_keys(&tuse_config::Space::default()));
-    keys.extend(json_keys(&tuse_config::History::default()));
     keys.extend(json_keys(&tuse_config::Theme::default()));
     keys.extend(tuse_config::CodeTheme::TOKENS.iter().map(|t| t.to_string()));
     keys.extend(
@@ -99,28 +115,44 @@ fn docs_cover_the_config_keys_tokens_events_and_roles() {
             "docs(\"config\") misses `{color}`"
         );
     }
-    let all_docs = tuse_core::docs(None);
-    for retired in [
-        "settings.open",
-        "`surface`",
-        "tuse --json",
-        "list_max_height",
-        "input_max_height",
-        "pad_x",
-        "session.snapshot",
-        "session.info",
-        "session.stats",
-        "session.resume",
-        "model.get",
-        "session().name",
-        "configpath",
-        "usage.cached",
+    for topic_name in [
+        "usage", "connect", "config", "lua", "session", "json", "examples",
     ] {
-        assert!(
-            !all_docs.contains(retired),
-            "docs still mention `{retired}`"
-        );
+        let page = tuse_core::docs(Some(topic_name));
+        for retired in [
+            "settings.open",
+            "`surface`",
+            "tuse --json",
+            "list_max_height",
+            "input_max_height",
+            "pad_x",
+            "session.snapshot",
+            "session.info",
+            "session.stats",
+            "model.get",
+            "session().name",
+            "configpath",
+            "usage.cached",
+            "require(\"global\")",
+            "require(\"plugins\")",
+            "require(\"plugin:",
+            "tuse connect",
+            "tuse disconnect",
+            "tuse plugins",
+            "`/connect`",
+            "`/disconnect`",
+        ] {
+            assert!(
+                !page.contains(retired),
+                "docs/{topic_name}.md still mentions `{retired}`"
+            );
+        }
     }
+    let json_doc = tuse_core::docs(Some("json"));
+    assert!(
+        !json_doc.contains("- `session.resume`"),
+        "docs/json.md must not list retired RPC method session.resume"
+    );
     assert!(
         !tuse_core::docs(Some("connect")).contains("recomputes"),
         "docs/connect.md should not claim /reload recomputes cost"

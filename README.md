@@ -2,11 +2,11 @@
 
 ![Tuse](docs/demo.gif)
 
-Tuse is a terminal coding agent you can shape with Lua. Run it as-is, adapt it to a project with `tuse.lua`, or share an entire setup without maintaining a fork. The core is written in Rust; the model uses one Lua tool to work with files, run shell commands, and compose operations.
+Tuse is a fast, minimal terminal coding agent built in Rust and shaped with Lua. Most coding agents are heavily opinionated, while building your own takes weeks and tens of thousands of lines of code. Tuse gives you a thin Rust core with one persistent Lua 5.4 tool so you can start working immediately with zero config, then customize every part of the workflow in Lua or with external plugins.
 
-- **Two interfaces:** a full-screen TUI and [JSON-RPC](https://ethanhamilthon.github.io/tuse/json.html) for your own front end, with shared sessions and history.
-- **Bring your own provider:** OpenAI Chat Completions and Responses, Anthropic Messages, Gemini, or a compatible gateway.
-- **Layered Lua configuration:** combine project config, personal defaults, and optional plugins. Add prompts, tools, commands, hooks, or themes, then reload without restarting.
+- **Two interfaces:** a full-screen TUI and [JSON-RPC v2](https://ethanhamilthon.github.io/tuse/json.html) for your own front end, sharing sessions, locks, and history.
+- **Bring your own provider:** OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, Google Gemini, or any compatible gateway—managed interactively inside Tuse.
+- **Lua configuration:** organize your global config into namespaces and extend it with separately installed plugins, then reload without restarting.
 
 ## Quickstart
 
@@ -14,59 +14,123 @@ Install on macOS or Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ethanhamilthon/tuse/main/release/install.sh | sh
+tuse
 ```
 
-The installer offers official plugins one at a time when run interactively. Each is optional. Without a terminal it installs only the binary.
+The installer verifies the release checksum and installs only the `tuse` binary.
 
-If you installed `login`, run `tuse` and use `/login` for subscriptions or `/connect-api` for an API key. You can also connect directly from the shell:
+Inside Tuse:
 
-```sh
-tuse connect --name openai --base https://api.openai.com/v1 --api openai-responses --key '$OPENAI_API_KEY'
-tuse connect --name anthropic --base https://api.anthropic.com/v1 --api anthropic-messages --key '$ANTHROPIC_API_KEY'
-```
+1. Run `/providers connect`, pick one of the four API types (`openai-chat`, `openai-responses`, `anthropic-messages`, `google-gemini`), enter your base URL, enter your API key (or `$ENV_VAR`) in the masked field, and give the profile a name.
+2. Run `/models` to select a discovered model and reasoning effort.
+3. Send your first message.
 
-Pick a model with `/models`, then send your first message. Use `tuse init` to create a project config. To update the binary, run `tuse update` and restart Tuse.
+## Configuration: make Tuse yours
 
-## Official plugins
-
-| Plugin | What it adds |
-| --- | --- |
-| [`login`](https://github.com/ethanhamilthon/tuse/tree/main/plugins/login) | `/login`, `/logout`, `/usage`, and `/connect-api`. Connect Codex, Claude, Antigravity, Kimi, or Grok via CLIProxyAPI, or OpenCode Go directly. `/usage` shows remaining 5-hour and 7-day quotas when the provider reports them. |
-| [`themes`](https://github.com/ethanhamilthon/tuse/tree/main/plugins/themes) | `/theme` with 31 palettes, including Lavender Mist. Use `/theme lavender-mist` to apply it directly, or `/theme reset` to return to your configured colors. |
-| [`status`](https://github.com/ethanhamilthon/tuse/tree/main/plugins/status) | Session titles and activity in Herdr, Herdr.app, Rex, and cmux, with an OSC 7501 fallback. |
-| [`rename`](https://github.com/ethanhamilthon/tuse/tree/main/plugins/rename) | An optional model-generated title from the first message, plus `/rename` for manual titles. |
-
-Install any plugin later by name, then reload the running session:
-
-```sh
-tuse plugins add ethanhamilthon/tuse/plugins/themes
-tuse plugins list
-tuse plugins update
-```
-
-Plugins are Lua code that you trust. They load automatically after installation; use the [plugin selector](https://ethanhamilthon.github.io/tuse/config.html#plugins) to exclude them or pass options per project. Installing `login` does not install CLIProxyAPI or sign you in; it offers setup when you choose a subscription that needs it. OpenCode Go uses `OPENCODE_GO_API_KEY`.
-
-## Make it yours
-
-Project config returns a table of named namespaces. You can start with a prompt:
+Tuse runs fine with no config at all. To customize it, create `~/.config/tuse/init.lua` (or point `TUSE_GLOBAL_CONFIG` at a different file). Settings such as `ui` and `systems` go at the top level. Prompts, functions, hooks, and commands live under a namespace. Tuse does not automatically execute a project's `tuse.lua`.
 
 ```lua
+local t = require("tuse")
+
 return {
-  project = {
-    prompts = {
-      showme = "Explain what changed in the last commit and why, with file paths.",
+  systems = { rules = "This is a Rust workspace. Run `cargo test` before finishing." },
+  ui = { input = "boxed", picker = "bottom", theme = { accent = "#FFB86C" } },
+  work = {
+    prompts = { review = "Review the current diff for bugs and missing tests." },
+    functions = {
+      status = function()
+        return t.sh("git status --short").out
+      end,
+    },
+    hook = {
+      agent_message = function(e)
+        if e.status == "finished" then
+          t.sh("printf '\\a'")
+        end
+      end,
+    },
+    commands = {
+      diff = function()
+        t.ui.show("diff", "```diff\n" .. t.sh("git diff --stat; git diff | head -200").out .. "\n```")
+      end,
     },
   },
 }
 ```
 
-Type `#showme` in the TUI. Your global `~/.config/tuse/init.lua` returns a function that supplies defaults; `TUSE_GLOBAL_CONFIG` can point to a different setup. Local settings take priority over global and plugin UI settings.
+Edit your config and run `/reload` (or ask Tuse to edit it and call `reload()`) to apply changes live.
 
-See [`examples/`](https://github.com/ethanhamilthon/tuse/tree/main/examples) for [skills](https://github.com/ethanhamilthon/tuse/blob/main/examples/skills.lua), [MCP](https://github.com/ethanhamilthon/tuse/blob/main/examples/mcp.lua), [themes](https://github.com/ethanhamilthon/tuse/blob/main/examples/themes.lua), [titles](https://github.com/ethanhamilthon/tuse/blob/main/examples/rename.lua), [notifications](https://github.com/ethanhamilthon/tuse/blob/main/examples/notify.lua), and integrations for [cmux](https://github.com/ethanhamilthon/tuse/blob/main/examples/cmux.lua), [Herdr](https://github.com/ethanhamilthon/tuse/blob/main/examples/herdr.lua), [Rex](https://github.com/ethanhamilthon/tuse/blob/main/examples/rex.lua), [Orca](https://github.com/ethanhamilthon/tuse/blob/main/examples/orca.lua), and [tmux](https://github.com/ethanhamilthon/tuse/blob/main/examples/tmux.lua).
+## System prompt and reusable prompts
+
+`systems` supports two forms:
+
+- **Replace everything** with a single string:
+
+```lua
+return {
+  systems = "You are Tuse, a coding agent.",
+}
+```
+
+Use full replacement with care: replacing the built-in section removes Tuse's instructions on using Lua, `fs.*`, `sh`, `tasks.*`, and `docs`.
+
+- **Extend or override selectively** with a named table:
+
+```lua
+return {
+  systems = { chat_rules = "Keep replies direct and concise." },
+}
+```
+
+Named entries append in sorted key order after Tuse's built-in prompt. Setting the reserved `lua` key inside a named `systems` table replaces only the built-in section while keeping all other named sections.
+
+For on-demand instructions, select `#work:review` in the composer. Prompts are literal strings and take no arguments.
+
+## Functions, hooks, commands, and management
+
+- **Functions (`functions`):** expose Lua callbacks in the agent VM under their namespace, such as `work.status()`.
+- **Hooks (`hook`):** subscribe directly by event name (`hook = { user_message = fn, agent_message = fn }`). Hooks run concurrently in the background without blocking turns.
+- **Commands (`commands`):** register zero-argument callbacks such as `/work:diff`, which can use `ui.show`, `ui.pick`, and `ui.ask`.
+- **Built-in management:** manage API profiles with `/providers list|connect|update|disconnect` and installed plugins with `/plugins list|get|add|delete|update` (or programmatically via Lua `providers.*` / `plugins.*` and JSON-RPC). Plugin changes update installed files immediately and take effect in the running session after an explicit `/reload`.
+
+## UI and themes
+
+Customize layout, line limits, overlay placement (`ui.picker = "bottom"` or `"top"`), input style (`boxed`, `lines`, `fill`, `bar`), spacing, and full color themes under `ui`:
+
+```lua
+return {
+  ui = {
+    input = "bar",
+    picker = "top",
+    lines = { output = 3, diff = 20, strings = 2 },
+    space = { padding = 1, steps = 0 },
+    theme = { accent = "#FFB86C", code = { keyword = "accent" } },
+  },
+}
+```
+
+## Examples and plugins
+
+See [Examples](https://ethanhamilthon.github.io/tuse/examples.html) for copyable Lua snippets. Plugins are separately distributed packages with a `tuse-plugin.json` manifest, installed into `$TUSE_HOME/plugins/` via `/plugins add <source>`. No plugins are bundled. Only load config modules or plugins you trust.
+
+## Best practices
+
+- Keep your global `~/.config/tuse/init.lua` thin; explicitly load only trusted project files.
+- Install only plugins you trust and need—every extra plugin adds surface area.
+- Split reusable pieces into sibling `.lua` modules with `require(...)`.
+- Group related prompts under one namespace, such as `#work:review` and `#work:test`.
+- Review your prompts, custom functions, and plugins carefully: they shape model output directly.
+
+## Beta status, security, and updates
+
+Tuse is currently in **Beta**. Patch releases preserve compatibility, while minor releases may change config or scripting contracts.
+
+- **Interactive updates and rollback:** run `tuse update` to compare your installed version with the latest release, optionally inspect all intervening changelog entries, verify the release SHA-256 checksum, back up the current binary to `$TUSE_HOME/backups/<version>-tuse-bin`, and replace the executable. If a release breaks your workflow, run `tuse rollback` to restore the binary from the last successful update without touching configs, plugins, or `tuse.db`.
+- **Security:** Tuse has no built-in permission prompts or OS sandbox. The agent runs Lua and shell commands with your user permissions. If you want isolation, run Tuse inside a container, VM, or dedicated machine,.
 
 ## Benchmark
 
-An earlier 50-case benchmark, included for reference. These are not measurements of the current release.
+An earlier 50-case benchmark on Tuse 0.11.5, included for reference (not a measurement of 0.15.0). Tuse's single-tool Lua runtime keeps context compact, typically using 2–3x fewer input tokens at comparable pass rates:
 
 | Agent | Full passes | Time* | Input* | Output* |
 | :-- | --: | --: | --: | --: |
@@ -75,6 +139,8 @@ An earlier 50-case benchmark, included for reference. These are not measurements
 | Claude Code | 47/50 | 69.0 s | 153.8k | 13.7k |
 | Pi | 46/50 | 55.3 s | **52.6k** | 11.2k |
 | Codex | 46/50 | **54.4 s** | 154.0k | **9.7k** |
+
+
 ## Docs and contributing
 
-Read the [documentation](https://ethanhamilthon.github.io/tuse/) or ask the agent to look it up through `docs()`. See the [changelog](https://github.com/ethanhamilthon/tuse/blob/main/release/CHANGELOG.md) for release history. Issues and pull requests are welcome. Tuse is [MIT licensed](LICENSE).
+Read the [documentation](https://ethanhamilthon.github.io/tuse/) or let the agent inspect `docs.topics` and `docs.lua`. See the [changelog](https://github.com/ethanhamilthon/tuse/blob/main/release/CHANGELOG.md) for release history. Discussions, issues, and pull requests are welcome. Tuse is [MIT licensed](https://github.com/ethanhamilthon/tuse/blob/main/LICENSE).

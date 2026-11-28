@@ -52,6 +52,9 @@ pub(crate) fn panel_from_snapshot(s: &SessionSnapshot, p: &Palette) -> Panel {
     let model_info_spans = match &s.model_info {
         Some(mi) => {
             let mut parts = vec![];
+            if !mi.available {
+                parts.push("unavailable".into());
+            }
             if let Some(d) = &mi.display {
                 parts.push(d.clone());
             }

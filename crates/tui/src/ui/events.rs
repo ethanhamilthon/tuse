@@ -282,7 +282,7 @@ impl App {
             Event::Status(_) => {}
             Event::Flash(t) => self.display_flash(t),
             Event::Notice(t) => self.chat.push(Entry::Notice(t)),
-            Event::Notification(_) => {}
+            Event::Notification(_) | Event::TaskMessage(_) => {}
             Event::Error(t) => {
                 self.turn_error = Some(t.clone());
                 self.drop_pending();

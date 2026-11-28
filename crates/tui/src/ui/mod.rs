@@ -3,6 +3,7 @@ pub(crate) mod chat;
 pub(crate) mod commands;
 pub(crate) mod events;
 pub(crate) mod keys;
+pub(crate) mod manage;
 pub(crate) mod modal;
 pub(crate) mod mouse;
 pub(crate) mod panel;

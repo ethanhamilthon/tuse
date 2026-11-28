@@ -3,59 +3,39 @@ use crate::ui::Ui;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(untagged)]
+pub enum Systems {
+    Replace(String),
+    Named(BTreeMap<String, String>),
+}
+
+impl Default for Systems {
+    fn default() -> Self {
+        Self::Named(BTreeMap::new())
+    }
+}
+
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    #[serde(
-        skip_deserializing,
-        rename = "providers",
-        serialize_with = "serialize_providers"
-    )]
-    pub connect: Vec<Connect>,
-    #[serde(skip_serializing)]
-    pub providers: BTreeMap<String, crate::ProviderConfig>,
     pub ui: Ui,
-    pub history: History,
-    #[serde(deserialize_with = "crate::names::open")]
-    pub open: Vec<String>,
-    #[serde(deserialize_with = "crate::de::list")]
-    pub models: Vec<ModelDef>,
-    #[serde(deserialize_with = "crate::de::list")]
-    pub systems: Vec<String>,
-    #[serde(deserialize_with = "crate::names::prompts")]
-    pub prompts: BTreeMap<String, Prompt>,
-    #[serde(deserialize_with = "crate::names::functions")]
+    pub open: bool,
+    #[serde(deserialize_with = "crate::names::model_map")]
+    pub models: BTreeMap<String, ModelDef>,
+    pub systems: Systems,
+    pub prompts: BTreeMap<String, String>,
     pub functions: BTreeMap<String, FunctionKind>,
-    pub hooks: BTreeMap<String, Hook>,
-    #[serde(deserialize_with = "crate::names::commands")]
-    pub commands: BTreeMap<String, Command>,
+    #[serde(deserialize_with = "crate::names::hook")]
+    pub hook: BTreeMap<String, Vec<String>>,
+    pub commands: std::collections::BTreeSet<String>,
     #[serde(skip_deserializing)]
     pub plugins: Vec<crate::PluginSummary>,
     #[serde(skip_deserializing)]
     pub path: String,
 }
 
-#[derive(serde::Serialize)]
-struct ProviderView<'a> {
-    name: &'a str,
-    #[serde(rename = "type")]
-    kind: &'a str,
-    base: &'a str,
-}
-
-fn serialize_providers<S: serde::Serializer>(connect: &[Connect], s: S) -> Result<S::Ok, S::Error> {
-    let views: Vec<ProviderView> = connect
-        .iter()
-        .map(|c| ProviderView {
-            name: &c.name,
-            kind: c.api_type(),
-            base: &c.base_url,
-        })
-        .collect();
-    serde::Serialize::serialize(&views, s)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Connect {
     pub name: String,
@@ -85,53 +65,6 @@ impl Connect {
             DEFAULT_API
         } else {
             &self.api
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct History {
-    #[serde(deserialize_with = "crate::names::history_roles")]
-    pub hide: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Prompt {
-    pub kind: PromptKind,
-    #[serde(default)]
-    pub body: String,
-    #[serde(default, deserialize_with = "crate::de::list")]
-    pub args: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Command {
-    pub desc: String,
-    #[serde(default, deserialize_with = "crate::de::list")]
-    pub args: Vec<String>,
-    pub params: Option<usize>,
-}
-
-impl Command {
-    pub fn check(&self, name: &str, words: &[String]) -> Result<(), String> {
-        if !self.args.is_empty() {
-            return match words {
-                [] => Ok(()),
-                [w] if self.args.contains(w) => Ok(()),
-                [w] => Err(format!("Unknown arg {w} for /{name}")),
-                _ => Err(format!("/{name} takes at most 1 word")),
-            };
-        }
-        match self.params {
-            Some(0) if !words.is_empty() => Err(format!("/{name} takes no words")),
-            Some(n) if words.len() > n => Err(format!(
-                "/{name} takes at most {n} word{}",
-                if n == 1 { "" } else { "s" }
-            )),
-            _ => Ok(()),
         }
     }
 }
@@ -175,19 +108,9 @@ pub fn command_words(text: &str) -> Result<Vec<String>, &'static str> {
     Ok(words)
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PromptKind {
-    #[default]
-    Text,
-    Function,
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelDef {
-    #[serde(deserialize_with = "crate::names::model_name")]
-    pub name: String,
     #[serde(default)]
     pub display: String,
     #[serde(default)]
@@ -215,13 +138,6 @@ pub struct Prices {
     pub cache_write: f64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Hook {
-    #[serde(deserialize_with = "crate::names::events")]
-    pub events: Vec<String>,
-}
-
 pub const DEFAULT_EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 
 const DEFAULT_API: &str = "openai-chat";
@@ -231,12 +147,8 @@ impl Config {
         serde_json::to_string_pretty(self).unwrap_or_default()
     }
 
-    pub fn connect(&self, name: &str) -> Option<&Connect> {
-        self.connect.iter().find(|c| c.name == name)
-    }
-
     pub fn model_def(&self, full: &str) -> Option<&ModelDef> {
-        self.models.iter().rev().find(|m| m.name == full)
+        self.models.get(full)
     }
 
     pub fn model_efforts(&self, full: &str) -> Vec<String> {
@@ -276,7 +188,17 @@ impl Config {
     }
 
     pub fn is_disabled(&self, name: &str) -> bool {
-        self.functions.get(name) == Some(&FunctionKind::Disabled)
+        if self.functions.get(name) == Some(&FunctionKind::Disabled) {
+            return true;
+        }
+        let mut cur = name;
+        while let Some((prefix, _)) = cur.rsplit_once('.') {
+            if self.functions.get(prefix) == Some(&FunctionKind::Disabled) {
+                return true;
+            }
+            cur = prefix;
+        }
+        false
     }
 
     pub fn disabled_builtins(&self) -> Vec<&'static str> {
@@ -323,41 +245,5 @@ mod tests {
         assert_eq!(words(r#""say \"hi\"" """#), [r#"say "hi""#, ""]);
         assert!(words("").is_empty());
         assert_eq!(command_words(r#"a "b"#), Err("unclosed quote"));
-    }
-
-    #[test]
-    fn commands_accept_words_by_args_or_parameter_count() {
-        let w = |s: &[&str]| s.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-        let free = Command {
-            params: Some(2),
-            ..Default::default()
-        };
-        assert!(free.check("mv", &w(&["a", "b"])).is_ok());
-        assert_eq!(
-            free.check("mv", &w(&["a", "b", "c"])),
-            Err("/mv takes at most 2 words".into())
-        );
-        let none = Command {
-            params: Some(0),
-            ..Default::default()
-        };
-        assert_eq!(
-            none.check("diff", &w(&["x"])),
-            Err("/diff takes no words".into())
-        );
-        let variadic = Command::default();
-        assert!(variadic.check("run", &w(&["a", "b", "c"])).is_ok());
-        let listed = Command {
-            args: w(&["staging", "prod"]),
-            params: Some(1),
-            ..Default::default()
-        };
-        assert!(listed.check("deploy", &w(&["prod"])).is_ok());
-        assert!(listed.check("deploy", &[]).is_ok());
-        assert_eq!(
-            listed.check("deploy", &w(&["nope"])),
-            Err("Unknown arg nope for /deploy".into())
-        );
-        assert!(listed.check("deploy", &w(&["staging", "prod"])).is_err());
     }
 }

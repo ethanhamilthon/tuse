@@ -14,7 +14,11 @@ impl App {
     }
 
     pub(crate) fn answering(&self) -> bool {
-        self.question.is_some()
+        self.question.is_some() || self.form.is_some()
+    }
+
+    pub(crate) fn secret_input(&self) -> bool {
+        self.form.as_ref().is_some_and(|f| f.secret)
     }
 
     pub(crate) fn visible_panel_mut(&mut self) -> Option<&mut Panel> {
@@ -24,11 +28,13 @@ impl App {
         self.question
             .as_mut()
             .map(|q| &mut q.panel)
+            .or_else(|| self.form.as_mut().map(|f| &mut f.panel))
             .or(self.panel.as_mut())
     }
 
     pub(crate) fn open_modal(&mut self, mut p: Picker) -> &mut Picker {
         let same = self.picker.as_ref().is_some_and(|q| q.kind == p.kind);
+        self.form = None;
         if self.saved_editor.is_none() {
             self.saved_editor = Some(std::mem::take(&mut self.editor));
         } else if !same {
@@ -42,6 +48,7 @@ impl App {
 
     pub(crate) fn open_lua_picker(&mut self, id: u64, options: Vec<String>, title: Option<String>) {
         self.question = None;
+        self.form = None;
         self.panel = None;
         self.history_back = None;
         self.history_items.clear();
@@ -56,6 +63,7 @@ impl App {
 
     pub(crate) fn open_question(&mut self, id: u64, text: String) {
         self.picker = None;
+        self.form = None;
         self.panel = None;
         self.history_back = None;
         self.history_items.clear();
@@ -143,10 +151,59 @@ mod tests {
 
     #[test]
     fn model_to_effort_keeps_the_draft_and_a_refresh_keeps_the_search() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for mut s in l.incoming().flatten() {
+                let mut r = BufReader::new(s.try_clone().unwrap());
+                let mut line = String::new();
+                while r.read_line(&mut line).unwrap_or(0) > 0 && !line.trim().is_empty() {
+                    line.clear();
+                }
+                let body = r#"{"data":[{"id":"matched"},{"id":"disc_only"},{"id":"plain"}]}"#;
+                let _ = write!(
+                    s,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
         let mut app = crate::ui::app::test_app("modal-models");
+        tuse_core::Providers::add(&tuse_config::Connect {
+            name: "mm".into(),
+            base_url: url,
+            api_key: "k".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        std::fs::write(
+            app.cwd.join("tuse.lua"),
+            r#"return { models = {
+                ["mm/matched"] = { display = "Matched", window = 100000 },
+                ["mm/meta_only"] = { display = "Hidden" },
+                ["mm/plain"] = { efforts = {} },
+            } }"#,
+        )
+        .unwrap();
+        app.run_command("reload");
+        app.session.fetch_models();
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while app.session.available_models().is_empty() && std::time::Instant::now() < end {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
         app.paste("draft");
         app.open_models();
-        let (current, _) = app.session.model();
+        let vals: Vec<_> = app
+            .picker
+            .as_ref()
+            .unwrap()
+            .items
+            .iter()
+            .map(|i| i.value.clone())
+            .collect();
+        assert_eq!(vals, ["mm/disc_only", "mm/matched", "mm/plain"]);
         type_text(&mut app, "zzz-none");
         assert!(app.picker.as_ref().unwrap().shown.is_empty());
         app.handle_event(tuse_core::Event::Models);
@@ -154,20 +211,26 @@ mod tests {
         assert!(app.picker.as_ref().unwrap().shown.is_empty());
 
         press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
-        app.paste(&current);
+        app.paste("mm/plain");
+        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.picker.is_none());
+        assert_eq!(app.session.model(), ("mm/plain".into(), "".into()));
+        assert_eq!(app.editor.text(), "draft");
+
+        app.open_models();
+        app.paste("mm/matched");
         app.handle_event(tuse_core::Event::Models);
-        assert_eq!(app.editor.text(), current);
         assert_eq!(
             app.picker.as_ref().unwrap().current().unwrap().value,
-            current
+            "mm/matched"
         );
-
         press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
         assert!(matches!(app.picker.as_ref().unwrap().kind, Kind::Effort(_)));
         assert!(app.editor.is_empty());
         press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
         assert!(app.picker.is_none());
         assert_eq!(app.editor.text(), "draft");
+        let _ = tuse_core::Providers::remove("mm");
         crate::ui::app::cleanup(app);
     }
 
@@ -292,149 +355,26 @@ mod tests {
         let cfg = app.cwd.join("tuse.lua");
         std::fs::write(
             &cfg,
-            "return { test = { commands = { hello_ui = { run = function() require('tuse').show('h', 'hi', false) end } } } }",
+            "return { test = { commands = { hello_ui = function() require('tuse').ui.show('h', 'hi', false) end } } }",
         )
         .unwrap();
         app.run_command("reload");
-        type_text(&mut app, "/hello");
-        assert_eq!(labels(&app), ["/hello_ui"]);
+        type_text(&mut app, "/test:hello");
+        assert_eq!(labels(&app), ["/test:hello_ui"]);
         press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
         app.editor.clear();
         std::fs::write(
             &cfg,
-            "return { test = { commands = { fresh_cmd = { run = function() end } } } }",
+            "return { test = { commands = { fresh_cmd = function() end } } }",
         )
         .unwrap();
         app.run_command("reload");
         type_text(&mut app, "/");
         let all = labels(&app);
-        assert!(all.contains(&"/fresh_cmd".to_string()) && !all.contains(&"/hello_ui".to_string()));
-        crate::ui::app::cleanup(app);
-    }
-    #[test]
-    fn commands_show_desc_open_the_arg_picker_and_run_with_words() {
-        let mut app = crate::ui::app::test_app("modal-cmd-args");
-        std::fs::write(
-            app.cwd.join("tuse.lua"),
-            r#"return { test = { commands = {
-                deploy = { desc = "ship it", args = { "staging", "prod" },
-                    run = function(env) require("tuse").show("d", "ran:" .. tostring(env), false) end },
-                mv = { run = function(a, b) require("tuse").show("m", tostring(a) .. "|" .. tostring(b), false) end },
-            } } }"#,
-        )
-        .unwrap();
-        app.run_command("reload");
-        let shown = |app: &crate::ui::app::App, text: &str| {
-            let end = std::time::Instant::now() + std::time::Duration::from_secs(3);
-            while std::time::Instant::now() < end {
-                if app
-                    .session()
-                    .ui_snapshot()
-                    .markdowns
-                    .iter()
-                    .any(|m| m.text == text)
-                {
-                    return true;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(20));
-            }
-            false
-        };
-
-        type_text(&mut app, "/dep");
-        let current = app.picker.as_ref().unwrap().current().unwrap();
-        assert_eq!(
-            (current.label.as_str(), current.detail.as_str()),
-            ("/deploy", "ship it")
+        assert!(
+            all.contains(&"/test:fresh_cmd".to_string())
+                && !all.contains(&"/test:hello_ui".to_string())
         );
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert_eq!(
-            app.picker.as_ref().unwrap().kind,
-            Kind::CommandArg("deploy".into())
-        );
-        assert_eq!(app.editor.text(), "/deploy ");
-        assert_eq!(labels(&app), ["staging", "prod"]);
-        type_text(&mut app, "pr");
-        assert_eq!(labels(&app), ["prod"]);
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert!(app.editor.is_empty());
-        assert!(shown(&app, "ran:prod"));
-
-        type_text(&mut app, "/mv a.txt 'b c'");
-        assert!(app.picker.is_none());
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert!(app.editor.is_empty());
-        assert!(shown(&app, "a.txt|b c"));
-
-        type_text(&mut app, "/deploy ");
-        assert_eq!(
-            app.picker.as_ref().unwrap().kind,
-            Kind::CommandArg("deploy".into())
-        );
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
-        assert_eq!(app.editor.text(), "/deploy ");
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert!(app.editor.is_empty());
-        assert!(shown(&app, "ran:nil"));
-
-        type_text(&mut app, "/deploy nope");
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert_eq!(app.editor.text(), "/deploy nope");
-        assert!(!shown(&app, "ran:nope"));
-        app.editor.clear();
-
-        type_text(&mut app, "prefix /dep");
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert_eq!(app.editor.text(), "prefix /deploy ");
-        assert_eq!(
-            app.picker.as_ref().unwrap().kind,
-            Kind::CommandArg("deploy".into())
-        );
-        type_text(&mut app, "prod");
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert_eq!(app.editor.text(), "prefix ");
-        assert!(shown(&app, "ran:prod"));
-        app.editor.clear();
-
-        type_text(&mut app, "/new ");
-        assert!(app.picker.is_none());
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert_eq!(app.editor.text(), "/new ");
-        app.editor.clear();
-
-        type_text(&mut app, "/trace");
-        press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
-        assert_eq!(app.editor.text(), "/trace");
-        app.editor.clear();
-
-        type_text(&mut app, "/usr/bin/env");
-        assert!(app.picker.is_none());
-        app.editor.clear();
-
-        type_text(&mut app, "/");
-        assert!(app.picker.is_some());
-        let first = app
-            .picker
-            .as_ref()
-            .unwrap()
-            .current()
-            .unwrap()
-            .label
-            .clone();
-        press(&mut app, KeyCode::PageDown, KeyModifiers::NONE);
-        let after_down = app
-            .picker
-            .as_ref()
-            .unwrap()
-            .current()
-            .unwrap()
-            .label
-            .clone();
-        assert_ne!(after_down, first);
-        press(&mut app, KeyCode::PageUp, KeyModifiers::NONE);
-        assert_eq!(app.picker.as_ref().unwrap().current().unwrap().label, first);
-        press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
-        app.editor.clear();
         crate::ui::app::cleanup(app);
     }
 }

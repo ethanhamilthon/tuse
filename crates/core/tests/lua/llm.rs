@@ -13,17 +13,19 @@ fn llm_answers_without_tools_and_is_priced_apart() {
         Reply::Text("plain"),
         Reply::Text("done"),
     ]);
-    let (dir, cfg) = common::setup(
-        "lua-llm",
-        &addr,
-        "models = { { name = 'p/m', prices = { input = 1, output = 1 } }, { name = 'p/cheap', prices = { input = 100000, output = 100000 } }, { name = 'p/noreason', efforts = {} }, { name = 'p/highonly', efforts = { 'high' } } }",
-    );
-    let s = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let (dir, cfg) = common::setup("lua-llm", &addr, "");
+    std::fs::write(&cfg, "return { models = { ['p/m'] = {prices={input=1,output=1}}, ['p/cheap'] = {prices={input=100000,output=100000}}, ['p/noreason'] = {efforts={}}, ['p/highonly'] = {efforts={'high'}} } }").unwrap();
+    let s = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let rx = s.subscribe();

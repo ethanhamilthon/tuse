@@ -41,6 +41,14 @@ const STD_TABLES: &[&str] = &[
     "string",
     "table",
     "utf8",
+    "fs",
+    "tasks",
+    "session",
+    "ui",
+    "plugins",
+    "providers",
+    "docs",
+    "json",
 ];
 
 const GLOBALS: &[&str] = &[
@@ -508,12 +516,13 @@ mod tests {
         );
         assert_eq!(
             pick(
-                "x = read('a.txt'):upper() .. y",
+                "x = fs.read('a.txt'):upper() .. y",
                 &[Variable, Operator, Builtin, Method]
             ),
             of(&[
                 (Variable, "x"),
                 (Operator, "="),
+                (Builtin, "fs"),
                 (Builtin, "read"),
                 (Method, "upper"),
                 (Operator, ".."),

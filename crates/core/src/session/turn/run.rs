@@ -4,6 +4,7 @@ use crate::event::Event;
 use crate::prompt;
 use crate::session::Session;
 use crate::session::bus::Signal;
+use crate::session::control::QueuedInput;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tuse_api::{ApiType, Client, Request};
@@ -22,10 +23,12 @@ impl Session {
                 return;
             };
             let auto_title = if self.cached(&mut st).meta.title.is_empty() {
-                st.queue
-                    .iter()
-                    .find(|(_, i)| !i.notification)
-                    .map(|(_, i)| i.text.lines().next().unwrap_or("").to_string())
+                st.queue.iter().find_map(|i| match i {
+                    QueuedInput::User(_, i) => {
+                        Some(i.text.lines().next().unwrap_or("").to_string())
+                    }
+                    _ => None,
+                })
             } else {
                 None
             };
@@ -85,16 +88,20 @@ impl Session {
         st.partial.clear();
         st.reasoning.clear();
         let inputs = std::mem::take(&mut st.queue);
-        for (id, input) in inputs {
-            if input.notification {
-                let event = Event::Notification(input.text.clone());
-                self.record(
-                    &mut st,
-                    &[Record::Notification { text: input.text }],
-                    [event],
-                );
-                continue;
-            }
+        for queued in inputs {
+            let (id, input) = match queued {
+                QueuedInput::User(id, input) => (id, input),
+                QueuedInput::Task(task) => {
+                    let record = Record::TaskMessage(task.clone());
+                    if self.record(&mut st, &[record], [Event::TaskMessage(task.clone())]) {
+                        let mut payload =
+                            serde_json::to_value(task).expect("task message is serializable");
+                        payload["event"] = "task_message".into();
+                        self.hook("task_message", payload);
+                    }
+                    continue;
+                }
+            };
             let event = Event::User {
                 id,
                 text: input.text.clone(),
@@ -111,10 +118,10 @@ impl Session {
         }
         let config = self.config();
         let cache = self.cached(&mut st);
+        drop(st);
         let model = cache.meta.model.clone();
         let effort = cache.meta.effort.clone();
         if let Err(e) = config.check_effort(&model, &effort) {
-            drop(st);
             return self.fail(generation, e);
         }
         let (provider, raw_model) = split_model(&model);
@@ -126,12 +133,19 @@ impl Session {
             tools: prompt::tools(&config),
             effort: (!effort.is_empty()).then_some(effort),
         };
-        drop(st);
-        let Some(conn) = config.connect(provider) else {
-            return self.fail(
-                generation,
-                format!("no `connect` entry named `{provider}` for model `{model}`"),
-            );
+        drop(cache);
+        if cancel.load(std::sync::atomic::Ordering::Acquire) {
+            return Step::Stale;
+        }
+        let conn = match crate::storage::Providers::resolve_by_name(provider) {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return self.fail(
+                    generation,
+                    format!("provider `{provider}` for model `{model}` is not connected"),
+                );
+            }
+            Err(e) => return self.fail(generation, e),
         };
         let client = Client::with_agent(
             self.http.clone(),

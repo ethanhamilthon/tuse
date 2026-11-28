@@ -4,7 +4,7 @@ use tuse_lua::mlua::{
     UserDataMethods, Value,
 };
 
-use tuse_config::HOST_FUNCTIONS as HOST;
+use tuse_config::{HOST_FUNCTIONS as HOST, HOST_GROUPS};
 
 const TRUSTED_FILES: &str = "tuse.modules";
 const TRUSTED_LOADING: &str = "tuse.loading";
@@ -24,90 +24,158 @@ function env.dofile(p) local c, e = rf(p, nil, env); if not c then error(e, 2) e
 "#;
 
 const AGENT_CAPS: &str = r#"
-local orig, host_names, agent_env, json_proxy = ...
-local type, error, pairs, ipairs, rawget, rawset = type, error, pairs, ipairs, rawget, rawset
-local builtins, custom, builtin_proxies, custom_proxies, prev_custom = {}, {}, {}, {}, {}
-local function mk_json(k) return function(...) local j = builtins.json; if not j then error("json is disabled", 2) end; return j[k](...) end end
-local json_enc, json_dec = mk_json("encode"), mk_json("decode")
-for _, name in ipairs(host_names) do
-    builtins[name] = orig[name]
-    builtin_proxies[name] = name == "json" and json_proxy or function(...)
-        local f = builtins[name]; if not f then error(name .. " is disabled", 2) end; return f(...)
+local orig, host_paths, host_groups, agent_env, json_proxy, docs_proxy = ...
+local type, error, pairs, ipairs, rawget, rawset, setmetatable =
+  type, error, pairs, ipairs, rawget, rawset, setmetatable
+local sort, next = table.sort, next
+local function readonly(name, values)
+  return setmetatable({}, {
+    __index = values,
+    __newindex = function() error(name .. " is read-only", 2) end,
+    __pairs = function()
+      local key
+      return function() local value; key, value = next(values, key); return key, value end
+    end,
+    __metatable = name,
+  })
+end
+local host = {}
+for _, g in ipairs(host_groups) do host[g] = readonly(g, orig[g]) end
+local builtins = {}
+for _, path in ipairs(host_paths) do
+  local g, k = path:match("^([^.]+)%.(.+)$")
+  builtins[path] = g and orig[g][k] or orig[path]
+  if not g then host[path] = builtins[path] end
+end
+host.json, host.docs = json_proxy, docs_proxy
+local keys = {}
+for k, v in pairs(host) do
+  keys[#keys + 1] = k
+  rawset(agent_env, k, v)
+end
+sort(keys)
+local active, roots = {}, {}
+local function commit(funcs)
+  for name, previous in pairs(roots) do
+    if rawget(agent_env, name) == previous then rawset(agent_env, name, nil) end
+  end
+  active, roots = funcs, {}
+  local groups = {}
+  for path in pairs(funcs) do
+    local owner, name = path:match("^([^.]+)%.(.+)$")
+    local members = groups[owner] or {}
+    groups[owner] = members
+    members[name] = function(...)
+      local f = active[path]
+      if not f then error(path .. " is unavailable", 2) end
+      return f(...)
     end
-    rawset(agent_env, name, builtin_proxies[name])
+  end
+  for name, members in pairs(groups) do
+    local group = readonly(name, members)
+    roots[name] = group
+    rawset(agent_env, name, group)
+  end
 end
 local function tuse_pairs()
-    local i = 0
-    return function()
-        while true do
-            i = i + 1; local k = host_names[i]; if not k then return end
-            if builtins[k] then return k, builtin_proxies[k] end
-        end
-    end
+  local i = 0
+  return function() i = i + 1; local k = keys[i]; if k then return k, host[k] end end
 end
 local function json_pairs()
-    if not builtins.json then return function() end end
-    local keys, i = { "encode", "decode" }, 0
-    return function() i = i + 1; local k = keys[i]; if k then return k, k == "encode" and json_enc or json_dec end end
+  local i = 0
+  return function()
+    i = i + 1
+    if i == 1 then return "encode", orig.json.encode end
+    if i == 2 then return "decode", orig.json.decode end
+  end
 end
-local function get_custom_proxy(name)
-    local p = custom_proxies[name]
-    if not p then
-        p = function(...)
-            local f = custom[name]
-            if f == false then error(name .. " is disabled", 2) end
-            if not f then error(name .. " is unavailable", 2) end
-            return f(...)
-        end
-        custom_proxies[name] = p
-    end
-    return p
-end
-local function commit(funcs)
-    funcs = funcs or {}
-    for _, name in ipairs(host_names) do
-        local was = builtins[name] == false or builtins[name] ~= orig[name]
-        local v, proxy = funcs[name], builtin_proxies[name]
-        if v == false then
-            builtins[name] = false; if rawget(agent_env, name) == proxy then rawset(agent_env, name, nil) end
-        elseif type(v) == "function" then
-            builtins[name] = v; rawset(agent_env, name, proxy)
-        else
-            builtins[name] = orig[name]; if was and rawget(agent_env, name) == nil then rawset(agent_env, name, proxy) end
-        end
-    end
-    for name in pairs(prev_custom) do
-        if funcs[name] == nil then
-            custom[name] = nil; if rawget(agent_env, name) == custom_proxies[name] then rawset(agent_env, name, nil) end
-        end
-    end
-    prev_custom = {}
-    for name, v in pairs(funcs) do
-        if orig[name] == nil then
-            prev_custom[name] = true
-            if v == false then
-                custom[name] = false
-                if custom_proxies[name] and rawget(agent_env, name) == custom_proxies[name] then rawset(agent_env, name, nil) end
-            elseif type(v) == "function" then
-                custom[name] = v; rawset(agent_env, name, get_custom_proxy(name))
-            end
-        end
-    end
-end
-return builtins, builtin_proxies, json_enc, json_dec, tuse_pairs, json_pairs, commit
+return builtins, function(k) return host[k] end, orig.json.encode, orig.json.decode, tuse_pairs, json_pairs, commit
 "#;
+
+pub(crate) struct DocsObject {
+    pub agent: bool,
+}
+
+fn docs_disabled(lua: &Lua, agent: bool) -> mlua::Result<bool> {
+    if !agent {
+        return Ok(false);
+    }
+    let b: Table = lua.named_registry_value(AGENT_BUILTINS)?;
+    Ok(!is_truthy(&b.raw_get::<Value>("docs")?))
+}
+
+fn current_disabled(lua: &Lua) -> Vec<&'static str> {
+    crate::session::lua::host::session(lua)
+        .map(|s| s.config().disabled_builtins())
+        .unwrap_or_default()
+}
+
+fn topics_table(lua: &Lua) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    for (i, name) in crate::docs::TOPIC_NAMES.iter().enumerate() {
+        t.raw_set(i + 1, *name)?;
+    }
+    Ok(t)
+}
+
+impl UserData for DocsObject {
+    fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        m.add_meta_method(MetaMethod::Index, |lua, this, key: Value| {
+            if docs_disabled(lua, this.agent)? {
+                return Ok(Value::Nil);
+            }
+            let Value::String(s) = key else {
+                return Ok(Value::Nil);
+            };
+            let Ok(name) = s.to_str() else {
+                return Ok(Value::Nil);
+            };
+            if name == "topics" {
+                return Ok(Value::Table(topics_table(lua)?));
+            }
+            let disabled = current_disabled(lua);
+            match crate::docs::topic(&name, &disabled) {
+                Some(text) => Ok(Value::String(lua.create_string(text)?)),
+                None => Ok(Value::Nil),
+            }
+        });
+        m.add_meta_method(
+            MetaMethod::NewIndex,
+            |_, _, (_k, _v): (Value, Value)| -> mlua::Result<()> {
+                Err(mlua::Error::runtime("docs is read-only"))
+            },
+        );
+        m.add_meta_method(MetaMethod::Pairs, |lua, this, ()| {
+            let disabled_obj = docs_disabled(lua, this.agent)?;
+            let mut entries: Vec<(String, Value)> = vec![];
+            if !disabled_obj {
+                entries.push(("topics".into(), Value::Table(topics_table(lua)?)));
+                let disabled = current_disabled(lua);
+                for name in crate::docs::TOPIC_NAMES {
+                    if let Some(text) = crate::docs::topic(name, &disabled) {
+                        entries.push((name.into(), Value::String(lua.create_string(text)?)));
+                    }
+                }
+            }
+            let idx = std::sync::atomic::AtomicUsize::new(0);
+            let iter = lua.create_function(move |lua, ()| {
+                let i = idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                match entries.get(i) {
+                    Some((k, v)) => (k.as_str(), v.clone()).into_lua_multi(lua),
+                    None => Value::Nil.into_lua_multi(lua),
+                }
+            })?;
+            Ok((iter, Value::Nil, Value::Nil))
+        });
+    }
+}
 
 struct AgentTuse;
 impl UserData for AgentTuse {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_meta_method(MetaMethod::Index, |lua, _, key: Value| {
-            let b: Table = lua.named_registry_value(AGENT_BUILTINS)?;
-            if is_truthy(&b.raw_get::<Value>(key.clone())?) {
-                return lua
-                    .named_registry_value::<Table>("tuse.agent_proxies")?
-                    .raw_get(key);
-            }
-            Ok(Value::Nil)
+            lua.named_registry_value::<Function>("tuse.agent_tuse_get")?
+                .call::<Value>(key)
         });
         m.add_meta_method(
             MetaMethod::NewIndex,
@@ -186,15 +254,24 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
     lua.set_named_registry_value(crate::scripting::registry::FILE_ENV, trusted_env.clone())?;
     install_require(lua, &trusted_env, cwd, true)?;
 
-    let (agent_orig, agent_env, names_tbl) =
-        (tuse_module(lua)?, base_env(lua)?, lua.create_table()?);
+    let (agent_orig, agent_env) = (tuse_module(lua)?, base_env(lua)?);
+    // Loading an installed entrypoint runs it in the trusted environment.
+    agent_orig
+        .get::<Table>("plugins")?
+        .raw_set("load", Value::Nil)?;
+    let paths_tbl = lua.create_table()?;
     for (i, n) in HOST.iter().enumerate() {
-        names_tbl.set(i + 1, *n)?;
+        paths_tbl.set(i + 1, *n)?;
+    }
+    let groups_tbl = lua.create_table()?;
+    for (i, g) in HOST_GROUPS.iter().enumerate() {
+        groups_tbl.set(i + 1, *g)?;
     }
     let json_proxy: AnyUserData = lua.create_userdata(AgentJson)?;
+    let docs_proxy: AnyUserData = lua.create_userdata(DocsObject { agent: true })?;
     let caps: (
         Table,
-        Table,
+        Function,
         Function,
         Function,
         Function,
@@ -202,12 +279,14 @@ pub(crate) fn install(lua: &Lua, cwd: &Path) -> mlua::Result<()> {
         Function,
     ) = lua.load(AGENT_CAPS).set_name("=tuse.env").call((
         agent_orig,
-        names_tbl,
+        paths_tbl,
+        groups_tbl,
         agent_env.clone(),
         json_proxy,
+        docs_proxy,
     ))?;
     lua.set_named_registry_value(AGENT_BUILTINS, caps.0)?;
-    lua.set_named_registry_value("tuse.agent_proxies", caps.1)?;
+    lua.set_named_registry_value("tuse.agent_tuse_get", caps.1)?;
     lua.set_named_registry_value("tuse.agent_json_enc", caps.2)?;
     lua.set_named_registry_value("tuse.agent_json_dec", caps.3)?;
     lua.set_named_registry_value("tuse.agent_tuse_pairs", caps.4)?;
@@ -321,10 +400,14 @@ pub(crate) fn restore(lua: &Lua, saved: SavedModules) -> mlua::Result<()> {
 }
 
 fn tuse_module(lua: &Lua) -> mlua::Result<Table> {
-    let g = lua.globals();
+    let raw: Table = lua.named_registry_value("tuse.host_raw")?;
     let t = lua.create_table()?;
-    for name in HOST {
-        t.set(*name, g.raw_get::<Value>(*name)?)?;
+    for name in ["sh", "reload", "llm", "docs"] {
+        t.raw_set(name, raw.raw_get::<Value>(name)?)?;
+    }
+    for group in HOST_GROUPS.iter().chain(&["json"]) {
+        let sub: Table = raw.raw_get(*group)?;
+        t.raw_set(*group, clone_table(lua, &sub)?)?;
     }
     Ok(t)
 }
@@ -406,22 +489,7 @@ fn require_module(lua: &Lua, name: String, cwd: &Path, trusted: bool) -> mlua::R
         }
         return (stored, ":preload:").into_lua_multi(lua);
     }
-    if trusted && let Some(pname) = name.strip_prefix("plugin:") {
-        let val = load_plugin_by_name(lua, pname).map_err(mlua::Error::runtime)?;
-        return (val, name).into_lua_multi(lua);
-    }
-    if trusted && name == "plugins" {
-        let tbl = load_all_plugins_merged(lua).map_err(mlua::Error::runtime)?;
-        let stored = store_loaded(&loaded, "plugins", Value::Table(tbl))?;
-        lua.named_registry_value::<Table>(TRUSTED_FILES)?
-            .set("plugins", true)?;
-        return (stored, "plugins").into_lua_multi(lua);
-    }
-    let base = if name == "global" {
-        cwd.to_path_buf()
-    } else {
-        caller_dir(lua, cwd)
-    };
+    let base = caller_dir(lua, cwd);
     let tried = tuse_config::module_candidates(&name, &base);
     let Some(file) = tried.iter().find(|p| p.is_file()) else {
         let list: String = tried
@@ -483,49 +551,6 @@ pub(crate) fn eval_file(lua: &Lua, path: &Path) -> Result<Value, String> {
     .map_err(|e| format!("{}: {}", path.display(), tuse_lua::message(&e)))
 }
 
-pub(crate) fn load_plugin_raw(
-    lua: &Lua,
-    plugin: &tuse_config::InstalledPlugin,
-) -> Result<Value, String> {
-    let cache_key = format!("plugin:{}", plugin.name);
-    let loaded: Table = lua
-        .named_registry_value::<Table>(TRUSTED_PKG)
-        .and_then(|p| p.get("loaded"))
-        .map_err(|e| e.to_string())?;
-    let existing: Value = loaded.get(cache_key.as_str()).map_err(|e| e.to_string())?;
-    if is_truthy(&existing) {
-        return Ok(existing);
-    }
-    let stored = load_file_module(lua, &cache_key, &plugin.entrypoint, true)
-        .map_err(|e| tuse_lua::message(&e))?
-        .0;
-    let _ = store_loaded(&loaded, &cache_key, stored.clone());
-    if let Ok(tf) = lua.named_registry_value::<Table>(TRUSTED_FILES) {
-        let _ = tf.set(cache_key.as_str(), true);
-    }
-    Ok(stored)
-}
-
-pub(crate) fn eval_plugin(
-    lua: &Lua,
-    plugin: &tuse_config::InstalledPlugin,
-    opt: Value,
-) -> Result<Table, String> {
-    let src = format!("plugin:{}", plugin.name);
-    let val = match load_plugin_raw(lua, plugin)? {
-        Value::Function(f) => f
-            .call::<Value>(opt)
-            .map_err(|e| format!("{src}: {}", tuse_lua::message(&e)))?,
-        other => other,
-    };
-    match val {
-        Value::Table(t) => Ok(t),
-        _ => Err(format!(
-            "{src}: plugin must return a table or function returning a table"
-        )),
-    }
-}
-
 fn load_file_module(
     lua: &Lua,
     name: &str,
@@ -559,32 +584,4 @@ fn load_file_module(
             .set(key.as_str(), true)?;
     }
     Ok((stored, key))
-}
-
-fn load_plugin_by_name(lua: &Lua, name: &str) -> Result<Value, String> {
-    tuse_config::validate_plugin_name(name)?;
-    let dir = tuse_config::plugins_dir().join(name);
-    if !dir.is_dir() || !dir.join("tuse-plugin.json").is_file() {
-        return Err(format!("plugin '{name}' not found"));
-    }
-    load_plugin_raw(lua, &tuse_config::load_plugin_dir(name, &dir)?)
-}
-fn load_all_plugins_merged(lua: &Lua) -> Result<Table, String> {
-    let installed = tuse_config::discover_plugins()?;
-    let mut contribs = Vec::with_capacity(installed.len());
-    for p in &installed {
-        let (src, table) = (
-            format!("plugin:{}", p.name),
-            eval_plugin(lua, p, Value::Nil)?,
-        );
-        let json = crate::scripting::validate::validate_contribution(&table, &src, None)?;
-        contribs.push(crate::scripting::validate::Contribution {
-            namespace: None,
-            source: src,
-            layer: 0,
-            table,
-            json,
-        });
-    }
-    crate::scripting::validate::merge_plugins_lua(lua, &contribs)
 }

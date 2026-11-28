@@ -10,14 +10,19 @@ use support::{call, event, spawn};
 #[test]
 fn startup_errors_arrive_after_the_initialize_answer() {
     let addr = common::provider(vec![]);
-    let extra = "  hooks = { broken = { events = {'process_start'}, run = function() error('boom') end } },";
+    let extra = "  hook = { process_start = function() error('boom') end },";
     let (dir, cfg) = common::setup("rpc-early", &addr, extra);
-    let session = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let session = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let (tx, out, server) = spawn(session);

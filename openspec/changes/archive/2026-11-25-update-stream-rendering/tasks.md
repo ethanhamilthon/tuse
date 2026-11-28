@@ -1,5 +1,0 @@
-- [x] 1. Render Markdown images as links
-- [x] 2. Cache path probes
-- [x] 3. Stream lists, fenced code, reasoning, and tool code incrementally
-- [x] 4. Settle streamed entries with a full render when the reply ends
-- [x] 5. Update the tui spec and docs

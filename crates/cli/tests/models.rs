@@ -8,12 +8,12 @@ fn models_lists_effective_lua_metadata_without_creating_a_session() {
     fs::create_dir_all(&global).unwrap();
     fs::write(
         global.join("init.lua"),
-        "return function() return { base = { models = require('models') } } end",
+        "return { models = require('models') }",
     )
     .unwrap();
     fs::write(
         global.join("models.lua"),
-        r#"return {{ name = "p/m", window = 200000,
+        r#"return { ["p/m"] = {window = 200000,
         prices = { input = 2, output = 10 } }}"#,
     )
     .unwrap();
@@ -22,6 +22,8 @@ fn models_lists_effective_lua_metadata_without_creating_a_session() {
         Command::new(env!("CARGO_BIN_EXE_tuse"))
             .current_dir(&dir)
             .env("HOME", &dir)
+            .env_remove("TUSE_HOME")
+            .env_remove("TUSE_GLOBAL_CONFIG")
             .arg("models")
             .args(args)
             .output()
@@ -43,5 +45,40 @@ fn models_lists_effective_lua_metadata_without_creating_a_session() {
             .flatten()
             .all(|e| e.path().is_file())
     );
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn tusedev_uses_separate_storage_and_global_config() {
+    let dir = std::env::temp_dir().join(format!("tuse-cli-dev-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let config = dir.join(".config/tusedev");
+    fs::create_dir_all(&config).unwrap();
+    fs::write(
+        config.join("init.lua"),
+        "return { models = { ['dev/model'] = {} } }",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_tuse"), dir.join(".tusedev-bin")).unwrap();
+    let launcher = dir.join("tusedev");
+    fs::write(&launcher, include_str!("../../../release/tusedev.sh")).unwrap();
+    let out = Command::new("sh")
+        .arg(launcher)
+        .arg("models")
+        .current_dir(&dir)
+        .env("HOME", &dir)
+        .env("TUSE_HOME", dir.join(".tuse"))
+        .env("TUSE_GLOBAL_CONFIG", dir.join("not-a-dev-config.lua"))
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stdout).contains("dev/model"));
+    assert!(dir.join(".tusedev/tuse.db").is_file());
+    assert!(!dir.join(".tuse").exists());
     fs::remove_dir_all(dir).unwrap();
 }

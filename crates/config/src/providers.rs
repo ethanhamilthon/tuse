@@ -1,34 +1,5 @@
 use crate::{Connect, env_value};
-use serde::Deserialize;
-use std::collections::BTreeMap;
 use tuse_api::ApiType;
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProviderConfig {
-    base: String,
-    key: String,
-    #[serde(default = "default_api")]
-    api: String,
-    #[serde(default)]
-    headers: BTreeMap<String, String>,
-}
-
-fn default_api() -> String {
-    ApiType::default().as_str().into()
-}
-
-impl ProviderConfig {
-    pub fn into_connect(self, name: String) -> Connect {
-        Connect {
-            name,
-            base_url: self.base,
-            api_key: self.key,
-            api: self.api,
-            headers: self.headers,
-        }
-    }
-}
 
 impl Connect {
     pub fn resolve(&self) -> Result<Self, String> {

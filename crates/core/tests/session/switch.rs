@@ -7,12 +7,17 @@ use tuse_core::{Event, Mode, Options, Record, Session, Start, Switch, UserInput}
 fn open(name: &str, replies: Vec<Reply>) -> (std::sync::Arc<Session>, std::path::PathBuf) {
     let addr = common::provider(replies);
     let (dir, cfg) = common::setup(name, &addr, "");
-    let s = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let s = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     (s, dir)
@@ -32,7 +37,7 @@ fn fork_waits_for_the_result_and_stops_the_turn() {
     let (s, dir) = open(
         "switch-fork",
         vec![
-            call("fork(#session().history); return 'asked'"),
+            call("session.fork(#session.get().history); return 'asked'"),
             Reply::Text("late"),
         ],
     );
@@ -64,12 +69,12 @@ fn fork_waits_for_the_result_and_stops_the_turn() {
 
 fn bad_arguments_raise_and_a_second_switch_is_refused() {
     let code = "local out = {}
-for _, f in ipairs({ function() fork(1) end, function() fork(99) end, function() resume('nope') end }) do
+for _, f in ipairs({ function() session.fork(1) end, function() session.fork(99) end, function() session.resume('nope') end }) do
   local _, e = pcall(f)
   out[#out + 1] = tostring(e)
 end
-fork(#session().history)
-local _, e = pcall(resume, 'other')
+session.fork(#session.get().history)
+local _, e = pcall(session.resume, 'other')
 out[#out + 1] = tostring(e)
 return table.concat(out, '|')";
     let (s, dir) = open("switch-bad", vec![call(code), Reply::Text("ok")]);

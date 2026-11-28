@@ -1,15 +1,17 @@
 use crate::session::Session;
 use crate::session::bus::Signal;
+use crate::storage::{ConnectInput, ProviderPatch, ProviderResult, Providers};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use tuse_api::{ApiType, Client};
 use tuse_config::ModelDef;
 
-pub fn model_available(config: &tuse_config::Config, full: &str) -> bool {
+pub fn model_available(full: &str) -> bool {
     let (provider, name) = tuse_config::split_model(full);
     !provider.is_empty()
         && !name.is_empty()
         && !full.chars().any(char::is_whitespace)
-        && config.connect(provider).is_some()
+        && Providers::has(provider)
 }
 
 impl Session {
@@ -22,79 +24,155 @@ impl Session {
     }
 
     pub fn model_available(&self, full: &str) -> bool {
-        model_available(&self.config(), full)
+        model_available(full)
+    }
+
+    pub fn cached_model_available(&self, full: &str) -> bool {
+        let (provider, name) = tuse_config::split_model(full);
+        !provider.is_empty()
+            && !name.is_empty()
+            && !full.chars().any(char::is_whitespace)
+            && self.state.lock().unwrap().provider_names.contains(provider)
     }
 
     pub fn remote_models(&self) -> Vec<String> {
-        let config = self.config();
-        self.state
-            .lock()
-            .unwrap()
-            .remote
+        let st = self.state.lock().unwrap();
+        st.remote
             .iter()
-            .filter(|m| model_available(&config, m))
+            .filter(|m| {
+                let (provider, name) = tuse_config::split_model(m);
+                !provider.is_empty()
+                    && !name.is_empty()
+                    && !m.chars().any(char::is_whitespace)
+                    && st.provider_names.contains(provider)
+            })
             .cloned()
             .collect()
     }
 
     pub fn available_models(&self) -> Vec<String> {
-        let config = self.config();
-        let mut names: Vec<String> = config
-            .models
-            .iter()
-            .map(|m| m.name.clone())
-            .filter(|m| model_available(&config, m))
-            .collect();
-        for m in self.remote_models() {
-            if !names.contains(&m) {
-                names.push(m);
-            }
-        }
+        let mut names = self.remote_models();
         names.sort();
         names.dedup();
         names
     }
 
+    pub fn connect_provider(&self, input: ConnectInput) -> Result<ProviderResult, String> {
+        let res = Providers::connect(input)?;
+        self.update_provider_catalog(&res.name, Some(&res.model_ids));
+        Ok(res)
+    }
+
+    pub fn update_provider(
+        &self,
+        name: &str,
+        patch: ProviderPatch,
+    ) -> Result<ProviderResult, String> {
+        let res = Providers::update(name, patch)?;
+        self.update_provider_catalog(&res.name, Some(&res.model_ids));
+        Ok(res)
+    }
+
+    pub fn disconnect_provider(&self, name: &str) -> Result<String, String> {
+        let removed = Providers::disconnect(name)?;
+        self.update_provider_catalog(&removed, None);
+        Ok(removed)
+    }
+
+    fn update_provider_catalog(&self, name: &str, models: Option<&[String]>) {
+        let prefix = format!("{name}/");
+        let mut st = self.state.lock().unwrap();
+        st.discovery.remove(name);
+        st.remote.retain(|m| !m.starts_with(&prefix));
+        if let Some(ids) = models {
+            st.provider_names.insert(name.into());
+            st.remote
+                .extend(ids.iter().map(|id| format!("{prefix}{id}")));
+        } else {
+            st.provider_names.remove(name);
+        }
+        drop(st);
+        self.emit(Signal::Models);
+    }
+
     pub(crate) fn swap_config(&self, c: Arc<tuse_config::Config>) -> Result<(), String> {
         let mut st = self.state.lock().unwrap();
         self.rebuild_system(&mut st, &c)?;
-        let mut cfg = self.config.write().unwrap();
-        cfg.0 += 1;
-        cfg.1 = c;
-        st.remote.clear();
+        self.config.write().unwrap().1 = c;
         Ok(())
     }
 
     pub fn fetch_models(self: &Arc<Self>) {
-        let (config_gen, connect) = {
-            let cfg = self.config.read().unwrap();
-            (cfg.0, cfg.1.connect.clone())
+        let saved = match Providers::list() {
+            Ok(list) => list,
+            Err(e) => {
+                self.error(format!("can't list providers: {e}"));
+                return;
+            }
         };
-        for c in connect {
+        let mut st = self.state.lock().unwrap();
+        st.provider_names = saved.iter().map(|p| p.name.clone()).collect();
+        st.remote.retain(|m| {
+            saved
+                .iter()
+                .any(|p| p.name == tuse_config::split_model(m).0)
+        });
+        st.discovery
+            .retain(|name, _| saved.iter().any(|p| &p.name == name));
+        let started: Vec<_> = saved
+            .into_iter()
+            .filter_map(|p| {
+                let mut hash = DefaultHasher::new();
+                p.hash(&mut hash);
+                let revision = hash.finish();
+                if st
+                    .discovery
+                    .get(&p.name)
+                    .is_some_and(|&(key, _)| key == revision)
+                {
+                    return None;
+                }
+                let id = self
+                    .next_lua
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let job = (revision, id);
+                st.discovery.insert(p.name.clone(), job);
+                Some((p, job))
+            })
+            .collect();
+        drop(st);
+        for (raw, generation) in started {
             let s = self.clone();
             std::thread::spawn(move || {
-                match Client::new(&c.base_url, &c.api_key, ApiType::from_stored(c.api_type()))
-                    .with_headers(c.headers)
-                    .models()
-                {
+                let result = raw.resolve().and_then(|c| {
+                    Client::new(&c.base_url, &c.api_key, ApiType::from_stored(c.api_type()))
+                        .with_headers(c.headers.clone())
+                        .models()
+                        .map_err(|e| {
+                            crate::storage::providers::redact_secrets(&e.to_string(), &raw, &c)
+                        })
+                });
+                let current = Providers::get(&raw.name).ok().flatten();
+                let mut st = s.state.lock().unwrap();
+                if st.discovery.get(&raw.name) != Some(&generation) {
+                    return;
+                }
+                st.discovery.remove(&raw.name);
+                if current.as_ref() != Some(&raw) {
+                    return;
+                }
+                match result {
                     Ok(ids) => {
-                        let mut st = s.state.lock().unwrap();
-                        let cfg = s.config.read().unwrap();
-                        if cfg.0 != config_gen {
-                            return;
-                        }
-                        let prefix = format!("{}/", c.name);
+                        let prefix = format!("{}/", raw.name);
                         st.remote.retain(|m| !m.starts_with(&prefix));
                         st.remote
                             .extend(ids.into_iter().map(|id| format!("{prefix}{id}")));
-                        drop((st, cfg));
+                        drop(st);
                         s.emit(Signal::Models);
                     }
                     Err(e) => {
-                        let current = s.config.read().unwrap().0 == config_gen;
-                        if current {
-                            s.error(format!("{}: can't fetch models: {e}", c.name));
-                        }
+                        drop(st);
+                        s.error(format!("{}: can't fetch models: {e}", raw.name));
                     }
                 }
             });

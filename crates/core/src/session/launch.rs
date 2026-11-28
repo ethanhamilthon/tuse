@@ -34,10 +34,10 @@ pub fn switch(session: &Arc<Session>, resume: Option<String>) -> Result<Arc<Sess
     };
     let next = prepare(Options {
         cwd: session.cwd.clone(),
-        config: session.config_arg.clone(),
         mode: session.mode,
         resume,
         start,
+        flags: session.flags,
     })?;
     session.close_for(Some("session_close"));
     next.start()
@@ -190,6 +190,8 @@ impl Prepared {
             reasoning: String::new(),
             streaming: false,
             remote: vec![],
+            provider_names: crate::storage::Providers::names().unwrap_or_default(),
+            discovery: Default::default(),
         };
         let config = Arc::new(config);
         let path = dir.path();
@@ -202,7 +204,7 @@ impl Prepared {
                 tasks: Tasks::new(path.join("tasks")),
                 dir: Mutex::new(Some(dir)),
                 config: RwLock::new((0, config)),
-                config_arg: opts.config,
+                flags: opts.flags,
                 state: Mutex::new(st),
                 subs: Mutex::default(),
                 vm,
@@ -212,8 +214,6 @@ impl Prepared {
                 cmd_runs: Mutex::default(),
                 http: tuse_api::default_agent(),
                 next_lua: AtomicU64::new(0),
-                task_lua: Mutex::default(),
-                jobs: Mutex::default(),
                 reload_lock: Mutex::default(),
             }
         });

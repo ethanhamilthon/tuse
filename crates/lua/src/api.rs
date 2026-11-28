@@ -1,6 +1,6 @@
 use crate::Host;
 use crate::job::{Done, Job, Out, Stop};
-use crate::sched::{add_proc, is_lua_hook, should_yield, start, stopped, take_proc, with_run};
+use crate::sched::{add_proc, should_yield, start, stopped, take_proc, with_run};
 use crate::sh::Proc;
 use crate::value::{sh_value, to_lua};
 use mlua::{Function, HookTriggers, Lua, LuaSerdeExt, MultiValue, Table, Value, VmState};
@@ -140,9 +140,7 @@ fn spawn(lua: &Lua, (f, name): (Function, Option<String>)) -> mlua::Result<Strin
     let name = name.unwrap_or_default();
     let chunk = with_run(lua, |j| j.code()).flatten();
     let code = source_of(&f, chunk.as_deref());
-    let t = h
-        .task_start(&name, &code, is_lua_hook(lua))
-        .map_err(mlua::Error::runtime)?;
+    let t = h.task_start(&name, &code).map_err(mlua::Error::runtime)?;
     let id = t.id.clone();
     let job = Job::new(
         lua,

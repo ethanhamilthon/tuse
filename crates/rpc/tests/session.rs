@@ -17,15 +17,20 @@ fn a_client_drives_a_session() {
     let (dir, cfg) = common::setup("rpc", &addr, "");
     std::fs::write(
         &cfg,
-        "return { test = { models = {{ name = 'p/m', display = 'M', window = 50000 }} } }",
+        "return { models = { ['p/m'] = { display = 'M', window = 50000 } } }",
     )
     .unwrap();
-    let session = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let session = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let (req_tx, out, server) = spawn(session);
@@ -84,10 +89,12 @@ fn a_client_drives_a_session() {
     assert!(snap.get("history").is_none());
     assert_eq!(snap["context_window"], 50000);
     let config = call(62, "config.get", json!({}))["result"].clone();
-    assert_eq!(config["models"][0]["display"], "M");
+    assert_eq!(config["models"]["p/m"]["display"], "M");
     assert_eq!(config["plugins"], json!([]));
+    assert!(config.get("providers").is_none());
+    let providers = call(63, "providers.list", json!({}))["result"].clone();
     assert!(
-        config["providers"]
+        providers
             .as_array()
             .unwrap()
             .iter()

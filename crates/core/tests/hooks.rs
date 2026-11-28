@@ -1,21 +1,8 @@
 mod common;
-#[path = "hooks/running.rs"]
-mod running;
 use common::Reply;
-use serde_json::json;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-fn wait_turn(rx: &std::sync::mpsc::Receiver<Event>) {
-    loop {
-        if matches!(
-            rx.recv_timeout(Duration::from_secs(10)).unwrap(),
-            Event::TurnEnd { .. }
-        ) {
-            return;
-        }
-    }
-}
 use tuse_core::{Event, Mode, Options, Session, Start, UserInput};
 
 static ENV: Mutex<()> = Mutex::new(());
@@ -28,12 +15,10 @@ fn lifecycle_order_and_stopped_reply() {
         "hooks",
         &addr,
         r#"
-        hooks = { lifecycle = {
-            events = {"config_load", "process_start", "session_created", "session_resumed",
-                "session_close", "process_end", "user_message", "turn_stopped", "agent_message"},
-            run = function(e)
+        hook = (function()
+            local function run(e)
                 local t = require('tuse')
-                local s = t.session()
+                local s = t.session.get()
                 assert(s.history[1].role == 'system')
                 local n = 0
                 for _ in pairs(e) do n = n + 1 end
@@ -42,16 +27,26 @@ fn lifecycle_order_and_stopped_reply() {
                 if e.event == 'session_resumed' then assert(marker == nil) end
                 local f = assert(io.open(s.cwd .. '/events', 'a'))
                 f:write(e.event, '\n'); f:close()
-            end,
-        } },
+            end
+            return {
+                config_load = run, process_start = run, session_created = run,
+                session_resumed = run, session_close = run, process_end = run,
+                user_message = run, turn_stopped = run, agent_message = run,
+            }
+        end)(),
     "#,
     );
-    let s = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg.clone()),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let s = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg.clone());
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let fresh = s.switch(None).unwrap();

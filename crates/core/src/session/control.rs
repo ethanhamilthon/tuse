@@ -7,19 +7,41 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Instant;
 
+use crate::convo::record::{TaskDelivery, TaskMessage};
+
+pub(crate) enum QueuedInput {
+    User(InputId, UserInput),
+    Task(TaskMessage),
+}
+
 impl Session {
     pub fn submit(self: &Arc<Self>, input: UserInput) -> (InputId, bool) {
         let mut st = self.state.lock().unwrap();
         st.next_input += 1;
         let id = InputId(st.next_input);
-        if !input.notification
-            && let Some(request) = &st.tool_handoff
-        {
+        if let Some(request) = &st.tool_handoff {
             request.store(true, Ordering::Release);
         }
-        st.queue.push((id, input));
+        st.queue.push(QueuedInput::User(id, input));
+        let queued = st.busy;
+        self.start_turn(st);
+        (id, queued)
+    }
+
+    pub(crate) fn submit_task(self: &Arc<Self>, mut message: TaskMessage) {
+        let mut st = self.state.lock().unwrap();
+        message.delivery = if st.busy {
+            TaskDelivery::Steer
+        } else {
+            TaskDelivery::Wake
+        };
+        st.queue.push(QueuedInput::Task(message));
+        self.start_turn(st);
+    }
+
+    fn start_turn(self: &Arc<Self>, mut st: std::sync::MutexGuard<'_, super::State>) {
         if st.busy || self.dir.lock().unwrap().is_none() {
-            return (id, st.busy);
+            return;
         }
         st.busy = true;
         st.generation += 1;
@@ -31,12 +53,15 @@ impl Session {
         drop(st);
         let s = self.clone();
         std::thread::spawn(move || s.turn(generation, cancel));
-        (id, false)
     }
 
     pub fn withdraw_input(&self, id: InputId) -> bool {
         let mut st = self.state.lock().unwrap();
-        let Some(i) = st.queue.iter().position(|(queued, _)| *queued == id) else {
+        let Some(i) = st
+            .queue
+            .iter()
+            .position(|input| matches!(input, QueuedInput::User(queued, _) if *queued == id))
+        else {
             return false;
         };
         st.queue.remove(i);
@@ -47,8 +72,8 @@ impl Session {
         self.stop_commands();
         self.stop_hook_runs();
         self.ui_cancel_all();
+        self.stop_all_tasks();
         self.cancel_turn();
-        self.tasks.stop_all();
         self.emit(Signal::Tasks);
     }
 

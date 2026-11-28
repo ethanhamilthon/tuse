@@ -43,7 +43,6 @@ pub struct App {
     pub events: Receiver<Event>,
     wake: Option<std::sync::mpsc::SyncSender<()>>,
     pub cwd: PathBuf,
-    pub config_arg: Option<PathBuf>,
     pub palette: Palette,
     pub palette_gen: u64,
     pub chat: Chat,
@@ -59,6 +58,8 @@ pub struct App {
     pub picker: Option<Picker>,
     pub panel: Option<Panel>,
     pub question: Option<QuestionPrompt>,
+    pub form: Option<crate::ui::manage::FormPrompt>,
+    pub management_busy: Arc<std::sync::atomic::AtomicBool>,
     pub history_items: Vec<tuse_core::HistoryItem>,
     pub history_back: Option<(Picker, Editor)>,
     pub list_rows: usize,
@@ -89,15 +90,11 @@ pub struct App {
 
 impl App {
     #[cfg(test)]
-    pub fn new(session: Arc<Session>, config_arg: Option<PathBuf>) -> App {
-        Self::with_wake(session, config_arg, None)
+    pub fn new(session: Arc<Session>) -> App {
+        Self::with_wake(session, None)
     }
 
-    pub fn with_wake(
-        session: Arc<Session>,
-        config_arg: Option<PathBuf>,
-        wake: Option<std::sync::mpsc::SyncSender<()>>,
-    ) -> App {
+    pub fn with_wake(session: Arc<Session>, wake: Option<std::sync::mpsc::SyncSender<()>>) -> App {
         let cwd = session.cwd().to_path_buf();
         let palette = Palette::for_session(&session.config(), &cwd);
         let events = match &wake {
@@ -110,7 +107,6 @@ impl App {
             events,
             wake,
             cwd,
-            config_arg,
             palette,
             palette_gen: 0,
             chat,
@@ -126,6 +122,8 @@ impl App {
             picker: None,
             panel: None,
             question: None,
+            form: None,
+            management_busy: Arc::default(),
             history_items: vec![],
             history_back: None,
             list_rows: 8,
@@ -213,7 +211,7 @@ impl App {
     pub fn fork(&mut self, index: usize) {
         match self.session.fork(index) {
             Ok((s, draft)) => {
-                *self = App::with_wake(s, self.config_arg.clone(), self.wake.clone());
+                *self = App::with_wake(s, self.wake.clone());
                 self.editor.insert(&draft);
             }
             Err(e) => self.error(e),
@@ -222,7 +220,7 @@ impl App {
 
     pub fn switch(&mut self, resume: Option<String>) {
         match self.session.switch(resume) {
-            Ok(s) => *self = App::with_wake(s, self.config_arg.clone(), self.wake.clone()),
+            Ok(s) => *self = App::with_wake(s, self.wake.clone()),
             Err(e) => self.error(e),
         }
     }
@@ -236,6 +234,8 @@ pub fn test_home() {
         std::fs::create_dir_all(&home).unwrap();
         unsafe {
             std::env::set_var("HOME", &home);
+            std::env::set_var("TUSE_HOME", home.join(".tuse"));
+            std::env::set_var("TUSE_GLOBAL_CONFIG", "tuse.lua");
         }
     });
 }
@@ -245,15 +245,16 @@ pub fn test_app(name: &str) -> App {
     test_home();
     let cwd = std::env::temp_dir().join(format!("tuse-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(cwd.join("tuse.lua"), "return {}").unwrap();
     let s = Session::open(tuse_core::Options {
         cwd: cwd.clone(),
         mode: tuse_core::Mode::Tui,
         start: Default::default(),
-        config: None,
         resume: None,
+        flags: Default::default(),
     })
     .unwrap();
-    App::new(s, None)
+    App::new(s)
 }
 #[cfg(test)]
 pub fn cleanup(app: App) {

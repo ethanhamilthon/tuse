@@ -18,47 +18,59 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     let addr = common::provider(vec![
         common::Reply::Call(
             "lua",
-            serde_json::json!({"code": "ran = 0; spawn(function() sh('sleep 0.05'); ran = 1 end, 'bg'); local p = pick({'yes'}); return tostring(p) .. ':' .. tostring(ran)"}).to_string(),
+            serde_json::json!({"code": "ran = 0; tasks.spawn(function() sh('sleep 0.05'); ran = 1 end, 'bg'); local p = ui.pick({'yes'}); return tostring(p) .. ':' .. tostring(ran)"}).to_string(),
         ),
         common::Reply::Text("ok"),
     ]);
     let extra = r###"
   commands = {
-    ask_flow = { run = function()
+    ask_flow = function()
       local t = require("tuse")
-      t.show("note", "## First", false)
-      t.show("note", "## Updated", false)
-      t.show("pin1", "Pinned A", true)
-      t.show("gone", "Temp", false)
-      t.show("gone", "", false)
-      assert(t.pick({}, "No choices") == nil)
-      local pick = t.pick({"alpha", "beta"}, "**Choose one**")
-      local ans = t.ask("**Name?**")
-      local skip = t.pick({"x", "y"}, "Cancel this?")
-      t.show("summary", tostring(pick) .. "|" .. tostring(ans) .. "|" .. tostring(skip), true)
-    end },
-    second = { run = function()
+      t.ui.show("note", "## First", false)
+      t.ui.show("note", "## Updated", false)
+      t.ui.show("pin1", "Pinned A", true)
+      t.ui.show("gone", "Temp", false)
+      t.ui.show("gone", "", false)
+      assert(t.ui.pick({}, "No choices") == nil)
+      local pick = t.ui.pick({"alpha", "beta"}, "**Choose one**")
+      local ans = t.ui.ask("**Name?**")
+      local skip = t.ui.pick({"x", "y"}, "Cancel this?")
+      t.ui.show("summary", tostring(pick) .. "|" .. tostring(ans) .. "|" .. tostring(skip), true)
+    end,
+    second = function()
       local t = require("tuse")
-      local v = t.ask("Queued?")
-      t.show("q2", tostring(v), false)
-    end },
+      local v = t.ui.ask("Queued?")
+      t.ui.show("q2", tostring(v), false)
+    end,
   },
-  hooks = {
-    interactive = {
-      events = {"process_start", "process_end"},
-      run = function(e)
-        require("tuse").ask("hook " .. e.event)
-      end,
-    },
+  hook = {
+    ui_prompt = function(e)
+      assert(e.event == "ui_prompt" and type(e.active) == "boolean")
+      local s = require("tuse").session.get()
+      local f = assert(io.open(s.cwd .. "/prompt-events", "a"))
+      f:write(tostring(e.active), "\n")
+      f:close()
+    end,
+    process_start = function(e)
+      require("tuse").ui.ask("hook " .. e.event)
+    end,
+    process_end = function(e)
+      require("tuse").ui.ask("hook " .. e.event)
+    end,
   },
 "###;
     let (dir, cfg) = common::setup("lua-ui", &addr, extra);
-    let s = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg.clone()),
-        mode: Mode::Tui,
-        resume: None,
-        start: Start::Launch,
+    let s = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg.clone());
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Tui,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let rx = s.subscribe();
@@ -68,7 +80,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
     s.reload().unwrap();
     assert!(t0.elapsed() < Duration::from_secs(3), "reload deadlocked");
 
-    s.run_command("ask_flow", &[]).unwrap();
+    s.run_command("test:ask_flow", &[]).unwrap();
     let r1 = next_req(&rx);
     assert_eq!(
         r1.prompt,
@@ -77,7 +89,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
             title: Some("**Choose one**".into()),
         }
     );
-    s.run_command("second", &[]).unwrap();
+    s.run_command("test:second", &[]).unwrap();
     std::thread::sleep(Duration::from_millis(50));
     assert_eq!(s.ui_snapshot().active.as_ref().map(|r| r.id), Some(r1.id));
 
@@ -146,13 +158,22 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
 
     std::fs::write(
         &cfg,
-        "return { test = { commands = { updated_cmd = { run = function() require('tuse').ask('still open') end } } } }",
+        "return { test = { commands = { updated_cmd = function() require('tuse').ui.ask('still open') end } } }",
     )
     .unwrap();
     s.reload().unwrap();
+    let prompt_events = std::fs::read_to_string(dir.join("prompt-events")).unwrap();
+    // The first command can queue its next question before or after the
+    // second command is answered, but the already queued picker handoff
+    // must not emit a false/true pair.
+    assert!(
+        prompt_events == "true\nfalse\ntrue\nfalse\ntrue\nfalse\n"
+            || prompt_events == "true\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\nfalse\n",
+        "{prompt_events:?}"
+    );
     assert_eq!(
-        s.config().commands.keys().collect::<Vec<_>>(),
-        ["updated_cmd"]
+        s.config().commands.iter().collect::<Vec<_>>(),
+        ["test:updated_cmd"]
     );
     let after_reload = s.ui_snapshot();
     assert_eq!(after_reload.markdowns, snap.markdowns);
@@ -163,7 +184,7 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
         "return { test = { commands = { reload = { run = function() end } } } }",
     )
     .unwrap();
-    assert!(s.reload().unwrap_err().contains("cannot override built-in"));
+    assert!(s.reload().unwrap_err().contains("expected a function"));
 
     s.submit(UserInput::text("persist me"));
     let treq = next_req(&rx);
@@ -179,23 +200,42 @@ fn lua_ui_queue_reload_close_and_custom_commands() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(answered());
-    s.run_command("updated_cmd", &[]).unwrap();
+    s.run_command("test:updated_cmd", &[]).unwrap();
     let pending = next_req(&rx);
     assert_eq!(
         s.ui_snapshot().active.as_ref().map(|r| r.id),
         Some(pending.id)
     );
+    std::fs::write(
+        &cfg,
+        r#"return { test = { hook = { ui_prompt = function(e)
+            local s = require('tuse').session.get()
+            local f = assert(io.open(s.cwd .. '/replayed-prompt', 'a'))
+            f:write(tostring(e.active), '\n'); f:close()
+        end } } }"#,
+    )
+    .unwrap();
+    s.reload().unwrap();
     let id = s.id.clone();
     s.close();
     assert!(s.ui_snapshot().active.is_none());
+    assert_eq!(
+        std::fs::read_to_string(dir.join("replayed-prompt")).unwrap(),
+        "true\nfalse\n"
+    );
 
     std::fs::write(&cfg, "return {}").unwrap();
-    let resumed = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Tui,
-        resume: Some(id),
-        start: Start::Resume,
+    let resumed = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Tui,
+            resume: Some(id),
+            start: Start::Resume,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let rsnap = resumed.ui_snapshot();

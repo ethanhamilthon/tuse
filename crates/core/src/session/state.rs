@@ -104,10 +104,24 @@ impl Session {
         config: &tuse_config::Config,
     ) -> Result<(), String> {
         let dir = self.dir.lock().unwrap();
-        dir.as_ref()
-            .ok_or("session closed")?
-            .write(meta, replacement, records, config)?;
-        st.cache = None;
+        let (meta, seq) =
+            dir.as_ref()
+                .ok_or("session closed")?
+                .write(meta, replacement, records, config)?;
+        if let Some(cache) = &mut st.cache {
+            let cache = Arc::make_mut(cache);
+            cache.tag = (seq, meta.revision);
+            cache.meta = meta;
+            if let Some(history) = replacement {
+                cache.records.clear();
+                cache.records.extend_from_slice(history);
+                cache.stats = Stats::of(&cache.meta, history);
+            } else {
+                cache.stats.update_meta(&cache.meta);
+            }
+            cache.records.extend_from_slice(records);
+            cache.stats.add_records(records);
+        }
         Ok(())
     }
 
@@ -139,13 +153,125 @@ impl Session {
         config: &tuse_config::Config,
     ) -> Result<(), String> {
         let text = crate::prompt::system_prompt(config);
-        self.dir
+        let record = Record::System { text };
+        let (meta, seq) = self
+            .dir
             .lock()
             .unwrap()
             .as_ref()
             .ok_or("session closed")?
-            .system(&Record::System { text })?;
-        st.cache = None;
+            .system(&record)?;
+        if let Some(cache) = &mut st.cache {
+            let cache = Arc::make_mut(cache);
+            if matches!(cache.records.first(), Some(Record::System { .. })) {
+                cache.records[0] = record;
+            } else {
+                cache.records.insert(0, record);
+            }
+            cache.tag = (seq, meta.revision);
+            cache.meta = meta;
+        }
         Ok(())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{LoadFlags, Mode, Options};
+
+    #[test]
+    fn warm_history_matches_sqlite_after_commits_and_rollback() {
+        let _env = crate::storage::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let root = std::env::temp_dir().join(format!("tuse-cache-{}", std::process::id()));
+        let old = std::env::var_os("TUSE_HOME");
+        unsafe { std::env::set_var("TUSE_HOME", &root) };
+        let s = Session::open(Options {
+            cwd: root.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Default::default(),
+            flags: LoadFlags {
+                no_global: true,
+                no_plugins: true,
+            },
+        })
+        .unwrap();
+        let cfg = s.config();
+        let mut st = s.state.lock().unwrap();
+        drop(s.cached(&mut st));
+        let before = Arc::as_ptr(st.cache.as_ref().unwrap());
+        let history = vec![
+            Record::System {
+                text: "base".into()
+            };
+            512
+        ];
+        s.write_history(&mut st, None, Some(&history), &[], &cfg)
+            .unwrap();
+        for _ in 0..8 {
+            s.write_history(
+                &mut st,
+                None,
+                None,
+                &[Record::message(crate::Level::Notice, "append")],
+                &cfg,
+            )
+            .unwrap();
+            assert_eq!(Arc::as_ptr(st.cache.as_ref().unwrap()), before);
+        }
+        let good = s.cached(&mut st);
+        let bad = Record::Usage {
+            model: "p/m".into(),
+            input: u64::MAX,
+            output: 0,
+            cache_read: 0,
+            cache_write: 0,
+            llm: false,
+        };
+        assert!(s.write_history(&mut st, None, None, &[bad], &cfg).is_err());
+        assert!(Arc::ptr_eq(&good, st.cache.as_ref().unwrap()));
+        drop(good);
+        s.rebuild_system(&mut st, &cfg).unwrap();
+        let cached = s.cached(&mut st);
+        let stored = SessionDir::read(&s.id).unwrap();
+        assert_eq!(cached.tag, stored.tag);
+        assert_eq!(
+            serde_json::to_value(&cached.records).unwrap(),
+            serde_json::to_value(&stored.records).unwrap()
+        );
+        st.busy = true;
+        drop(st);
+        let task = s.tasks.create("queued", "").unwrap();
+        let (info, elapsed) = s.tasks.end(&task.id, true).unwrap();
+        assert!(s.record_task(&info, elapsed, None));
+        s.submit_task(crate::convo::record::TaskMessage {
+            id: task.id.clone(),
+            name: info.name,
+            status: info.status,
+            delivery: crate::convo::record::TaskDelivery::Wake,
+            text: "queued".into(),
+        });
+        s.cancel_turn();
+        let records = s.records();
+        assert!(
+            records
+                .iter()
+                .any(|r| matches!(r, Record::Task(job) if job.id.as_ref() == Some(&task.id)))
+        );
+        assert!(!records.iter().any(|r| matches!(r, Record::TaskMessage(_))));
+        let log_dir = std::path::Path::new(&info.log).parent().unwrap();
+        let tasks = crate::storage::tasks::Tasks::new(log_dir.to_path_buf());
+        assert_ne!(tasks.create("after resume", "").unwrap().id, task.id);
+        s.close();
+        unsafe {
+            if let Some(old) = old {
+                std::env::set_var("TUSE_HOME", old)
+            } else {
+                std::env::remove_var("TUSE_HOME")
+            }
+        };
+        let _ = std::fs::remove_dir_all(root);
     }
 }

@@ -28,13 +28,31 @@ pub(super) fn with<R>(f: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Res
         std::fs::create_dir_all(&home).map_err(|e| format!("{}: {e}", home.display()))?;
         let mut c = Connection::open(home.join("tuse.db")).map_err(|e| e.to_string())?;
         c.busy_timeout(std::time::Duration::from_secs(5))
-            .and_then(|_| c.pragma_update(None, "journal_mode", "WAL"))
+            .and_then(|_| enable_wal(&c))
             .and_then(|_| initialize_schema(&mut c))
             .map_err(|e| e.to_string())?;
         all.push((home.clone(), c));
     }
     let c = &all.iter().find(|(h, _)| *h == home).unwrap().1;
     f(c).map_err(|e| e.to_string())
+}
+
+fn enable_wal(c: &Connection) -> rusqlite::Result<()> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match c.pragma_update(None, "journal_mode", "WAL") {
+            Ok(()) => return Ok(()),
+            Err(rusqlite::Error::SqliteFailure(err, _))
+                if matches!(
+                    err.code,
+                    rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+                ) && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 fn initialize_schema(c: &mut Connection) -> rusqlite::Result<()> {
@@ -125,19 +143,39 @@ impl Providers {
             let mut q = c.prepare(
                 "SELECT name, base_url, api_key, api, headers FROM providers ORDER BY rowid",
             )?;
-            q.query_map([], |r| {
-                let mut conn = tuse_config::Connect {
-                    name: r.get(0)?,
-                    base_url: r.get(1)?,
-                    api_key: r.get(2)?,
-                    api: r.get(3)?,
-                    headers: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or_default(),
-                };
-                conn.api = conn.api_type().to_string();
-                Ok(conn)
-            })?
-            .collect()
+            q.query_map([], Self::decode)?.collect()
         })
+    }
+
+    pub(crate) fn names() -> Result<std::collections::BTreeSet<String>, String> {
+        with(|c| {
+            c.prepare("SELECT name FROM providers")?
+                .query_map([], |r| r.get(0))?
+                .collect()
+        })
+    }
+
+    pub fn get(name: &str) -> Result<Option<tuse_config::Connect>, String> {
+        with(|c| {
+            c.query_row(
+                "SELECT name, base_url, api_key, api, headers FROM providers WHERE name = ?1",
+                [name],
+                Self::decode,
+            )
+            .optional()
+        })
+    }
+
+    fn decode(r: &rusqlite::Row<'_>) -> rusqlite::Result<tuse_config::Connect> {
+        let mut conn = tuse_config::Connect {
+            name: r.get(0)?,
+            base_url: r.get(1)?,
+            api_key: r.get(2)?,
+            api: r.get(3)?,
+            headers: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or_default(),
+        };
+        conn.api = conn.api_type().to_string();
+        Ok(conn)
     }
 
     pub fn add(p: &tuse_config::Connect) -> Result<(), String> {
@@ -173,28 +211,6 @@ impl Providers {
         profile
             .resolve()
             .map_err(|e| format!("providers.{}: {e}", profile.name))
-    }
-
-    pub(crate) fn apply(
-        config: &mut tuse_config::Config,
-        saved: &[tuse_config::Connect],
-        unchanged: &std::collections::BTreeMap<String, tuse_config::Connect>,
-    ) -> Result<(), String> {
-        let mut profiles = saved.to_vec();
-        for (name, profile) in std::mem::take(&mut config.providers) {
-            if saved.iter().any(|p| p.name == name) {
-                return Err(format!(
-                    "providers.{name}: name is already saved by tuse connect"
-                ));
-            }
-            let resolved = match unchanged.get(&name) {
-                Some(p) => p.clone(),
-                None => Self::resolve(&profile.into_connect(name))?,
-            };
-            profiles.push(resolved);
-        }
-        config.connect = profiles;
-        Ok(())
     }
 }
 

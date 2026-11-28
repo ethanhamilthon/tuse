@@ -15,12 +15,18 @@ impl Mode {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LoadFlags {
+    pub no_global: bool,
+    pub no_plugins: bool,
+}
+
 pub struct Options {
     pub cwd: PathBuf,
-    pub config: Option<PathBuf>,
     pub mode: Mode,
     pub resume: Option<String>,
     pub start: Start,
+    pub flags: LoadFlags,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

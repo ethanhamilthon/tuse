@@ -1,67 +1,42 @@
 # Connect
 
-How to connect API providers, pick models and reasoning effort, describe model metadata, and read usage and cost.
+How to manage API providers, pick discovered models and reasoning effort, describe model metadata, and read usage and cost.
 
 ## Providers
 
-A provider is a named API endpoint plus a key. `tuse connect` saves a provider in `~/.tuse/tuse.db`:
+A provider is a named API endpoint plus credentials stored in `$TUSE_HOME/tuse.db` (default `~/.tuse/tuse.db`). Providers are managed inside a session through the shared provider service:
 
-```sh
-tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai
-tuse connect --base https://api.openai.com/v1 --key '$OPENAI_API_KEY' --name openai-resp --api openai-responses
-tuse connect --base https://api.anthropic.com/v1 --key '$ANTHROPIC_API_KEY' --name anthropic --api anthropic-messages
-tuse connect --base https://generativelanguage.googleapis.com/v1beta --key '$GEMINI_API_KEY' --name gemini --api google-gemini
-tuse providers
-tuse disconnect openai
-```
+- **TUI:** `/providers list`, `/providers connect`, `/providers update [NAME]`, `/providers disconnect [NAME]`.
+- **Lua:** `providers.list()`, `providers.connect(opts)`, `providers.update(name, patch)`, `providers.disconnect(name)` (callable from config callbacks, commands, hooks, and the agent without confirmation).
+- **JSON-RPC:** `providers.list`, `providers.connect`, `providers.update`, `providers.disconnect` ([JSON mode](json.md#providers-and-plugins)).
+- **CLI (read-only):** `tuse providers` prints `NAME<TAB>BASE_URL`, and `tuse providers --json` prints `[{ name, type, base }]`.
 
-- `--base` must start with `http://` or `https://`. You always pass it, because there are no built-in hosts.
-- `--name` can't contain `/` or whitespace and must be new. Pass `--replace` to update an existing provider in place, or `tuse disconnect <name>` to remove it. The old entry is only replaced if the new one checks out.
-- `--key '$VAR'` (or `'${VAR}'`) stores the reference, not the secret. It is read from the environment every time a session starts or reloads. Keep the single quotes so your shell does not expand it. `--key-stdin` reads a literal key from stdin so it never shows up in argv. If you pass a literal `--key`, it is stored as given.
-- `--header 'Name: value'` adds a header to model discovery and generation. Repeat it for multiple headers. Quote `--header 'X-Gateway-Token: $TOKEN'` to store an environment reference instead of a literal value. Header names are case-insensitive; duplicates and overrides of built-in auth, protocol, or HTTP framing headers are rejected.
-- `--api` picks the wire protocol: `openai-chat` (the default, any OpenAI-compatible Chat Completions API), `openai-responses`, `anthropic-messages`, or `google-gemini`. To use two protocols on one host, connect it twice under different names.
+Provider fields and rules:
 
-Before saving, `tuse connect` lists models from `GET <base>/models`. If that fails, nothing is saved and it prints `can't fetch models from <base>: <error>`. If it works, it prints ``Received <N> models. Saved `<NAME>`.`` This only checks that model listing works, not generation.
+- `api` (returned as `type`): wire protocol — `openai-chat` (default, any OpenAI-compatible Chat Completions API), `openai-responses`, `anthropic-messages`, or `google-gemini`. To use two protocols on one host, save it under two names.
+- `base`: endpoint base URL starting with `http://` or `https://`.
+- `key`: literal API key or whole-value environment reference (`$ENV_VAR` or `${ENV_VAR}`). Environment references are stored as references and resolved at probe and request time. In the TUI connect and update wizards, key input is masked, cannot be copied, and is never written to chat history, `ui_result`, logs, or errors.
+- `name`: non-empty identifier without `/` or whitespace.
+- `headers` (optional via Lua/RPC): custom request headers (`Name -> value`, supporting `$ENV_VAR` references). Header names are case-insensitive; duplicates and overrides of built-in auth, protocol, or HTTP framing headers are rejected.
 
-A running session uses the providers it loaded at start. After `tuse connect` or `tuse disconnect` in another terminal, run `/reload` to pick up the change. Keys and header values are never shown in `/config`, `/session`, `session()`, `tuse providers`, or JSON-RPC (`config.get.providers` and `tuse providers --json` expose only `name`, `type`, and `base`).
+Before saving or updating, Tuse probes `GET <base>/models`. If the probe fails, nothing is modified and the error message redacts credentials and header values. Disconnecting the provider backing the currently selected model keeps the session's `model`, `provider`, and `effort` unchanged (no silent switch), marks `model_info.available = false`, prunes that provider's cached discovered models, allows any already in-flight request to finish, and fails subsequent requests cleanly until another model is selected or the provider is reconnected.
 
-### Providers in Lua config
-
-Use `providers` inside a namespace for a project or personal connection that should not be saved in the database:
-
-```lua
-return {
-  corp = {
-    providers = {
-      gateway = {
-        base = "https://gateway.example/v1",
-        key = "$GATEWAY_API_KEY",
-        api = "openai-chat",
-        headers = { ["X-Tenant"] = "my-team", ["X-Gateway-Token"] = "$GATEWAY_TOKEN" },
-      },
-    },
-  },
-}
-```
-
-The table key is the provider name. `base` and `key` are required; `api` defaults to `openai-chat`, and `headers` is optional. Whole-value environment references in keys and headers are resolved on startup and reload. Missing or empty required values fail validation. A name already saved by `tuse connect` cannot also be used in Lua. `tuse providers` and `tuse disconnect` only operate on saved profiles.
-
-Config loading does not wait for a network probe. Model discovery can still query `/models`; if the gateway does not implement it, declare a `gateway/<model-id>` entry in `models`.
+Keys and header values are never shown in `/providers list`, `/session`, `session.get()`, `tuse providers`, or JSON-RPC (`providers.list` and `tuse providers --json` expose only `name`, `type`, and `base`).
 
 ## Models
 
 A model is named `<provider>/<model id>`, split at the first `/`. Everything after it is sent as the model id, so `openrouter/anthropic/claude-sonnet-4` works.
 
-When `models` is configured in Lua, `/models` lists only those configured models; when `models` is empty or omitted, `/models` lists every model id returned by connected providers. JSON-RPC `model.list` ignores that scoping and returns all configured plus discovered models. Picking a model (and effort, unless `efforts = {}`) applies to the current session and saves the default for new sessions. Every session keeps its own model and effort, including when resumed. A model whose provider is not connected is marked `unavailable`. A turn on it fails with ``no `connect` entry named `<provider>` for model `<model>` ``.
+Both TUI `/models` and JSON-RPC `model.list` list **discovered models only**—IDs returned by connected providers' `/models` endpoints. Entries declared only in `config.models` do not appear in `/models` or `model.list`; when a discovered model matches an entry in `config.models`, Tuse annotates it with that entry's display name, context window, prices, and allowed efforts. Picking a model (and effort, unless `efforts = {}`) applies to the current session and saves the default for new sessions. Every session keeps its own model and effort, including when resumed. A selected model whose provider is disconnected is marked `unavailable`.
 
 ## Reasoning effort
 
-The shared default effort list for all models and providers is `low`, `medium`, `high`, `xhigh`, and `max`. Every selection entrypoint (`/models`, JSON-RPC `model.set`, Lua `set_session`, Lua `llm`, saved defaults, and turn validation) uses the same model-scoped effort resolver:
+The shared default effort list for all models and providers is `low`, `medium`, `high`, `xhigh`, and `max`. Tuse validates effort against each model’s allowed list:
 
 - **Omitted `efforts`** (or a model not listed in `models`): uses the shared default list `low`, `medium`, `high`, `xhigh`, `max`.
 - **Explicitly empty `efforts = {}`**: marks a non-reasoning model; `/models` skips the effort picker, `effort` is empty (`""`), and Tuse omits reasoning/thinking parameters completely on the wire.
 - **Explicitly non-empty `efforts = { ... }`**: dense list of unique names from `low`, `medium`, `high`, `xhigh`, `max`, acting as the sole source of truth for that model.
-- **Fallback effort:** when effort is unset or omitted (or recovering an invalid saved effort), Tuse picks `medium` if available for that model, otherwise the first declared effort in `efforts`, or `""` (no reasoning parameter) when `efforts = {}`.
+- **Fallback effort:** when JSON-RPC `model.set` omits effort or a saved effort is invalid, Tuse picks `medium` if available, otherwise the first declared effort, or `""` when `efforts = {}`. Lua `session.set` keeps the current effort when valid for the new model; Lua `llm` defaults to `low` on another reasoning model. See [Lua](lua.md#utilities-llm-reload-docs-json).
 
 Wire encoding per API when an effort is active (no reasoning fields are sent when `efforts = {}`):
 
@@ -77,37 +52,32 @@ Tuse does not enforce a hardcoded provider-API effort matrix; if an upstream end
 
 ## Model metadata
 
-Context window, display name, efforts, and prices come from `models` inside any namespace:
+Context window, display name, efforts, and prices come from the top-level `models` map (metadata only—does not populate `/models` or `model.list`):
 
 ```lua
 return {
-  models_cfg = {
-    models = {
-      {
-        name = "openai/gpt-5",
+  models = {
+    ["openai/gpt-5"] = {
         display = "GPT-5",
         window = 400000,
         efforts = { "low", "medium", "high", "xhigh" },
         prices = { input = 1.25, output = 10, cache_read = 0.125, cache_write = 0 },
       },
-      {
-        name = "openai/gpt-4o",
+    ["openai/gpt-4o"] = {
         efforts = {},
       },
-    },
   },
 }
 ```
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `name` | required | `provider/model`. Duplicate model names fail validation. |
 | `display` | `name` | Label in the status bar, `/models`, and turn summaries. |
 | `window` | `0` (unknown) | Context window in tokens. |
 | `efforts` | omitted (all 5) | Optional list of allowed efforts (`{}` disables reasoning parameters). |
 | `prices` | unset | USD per 1M tokens: `input`, `output`, `cache_read`, `cache_write` (each defaults to `0`). |
 
-`tuse models` prints this metadata. Changes take effect on `/reload` for subsequent requests (previously recorded session cost totals stay as stored).
+`tuse models` prints this metadata and the saved default. Changes take effect on `/reload` for subsequent requests while previously stored session cost totals stay as recorded.
 
 ## Usage and cost
 
@@ -120,11 +90,11 @@ Each step records the provider's usage: `input` (all prompt tokens, including ca
  + output * output_price) / 1,000,000
 ```
 
-`llm()` calls are counted the same way, and their cost is also tracked on its own. You can see the totals in the status bar, in `/session` (`$total ($main + $llm llm)`), in `session().usage`, and in JSON-RPC `session.state`. Cost stays unknown until some usage matches a model that has `prices`. Not every API reports cache writes: `openai-responses` and `google-gemini` report `0`.
+`llm()` calls are counted the same way, and their cost is also tracked on its own. You can see the totals in the status bar, in `/session` (`$total ($main + $llm llm)`), in `session.get().usage`, and in JSON-RPC `session.state`. Cost stays unknown until some usage matches a model that has `prices`. Not every API reports cache writes: `openai-responses` and `google-gemini` report `0`.
 
 ## Requests, retries, errors
 
-- Timeouts are 30 s to connect and 600 s to read. Redirects are never followed, so keys don't leak to other hosts.
+- Timeouts are 30 s to connect and 600 s to read. Redirects are never followed, so keys do not leak to other hosts.
 - HTTP `429`, `5xx`, and network errors are retried up to 5 times, after 2, 5, 10, 20, and 30 s. The TUI flashes `Retry N/5 in Ds: <error>`. Other errors stop the step and show up as `HTTP <code>: <body>`, `network: …`, or `bad response: …`.
 - You can switch models and APIs in the middle of a session. History is converted for each request, and provider-specific reasoning data is only sent back to the same provider, API, and model.
-- Images (pasted, attached, or read by `read()`) are sent to all four APIs.
+- Images (pasted, attached, or read by `fs.read()`) are sent to all four APIs.

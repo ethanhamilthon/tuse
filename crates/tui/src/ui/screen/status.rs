@@ -104,13 +104,18 @@ impl App {
         let window = def.as_ref().map_or(0, |d| d.window);
         let context = (window > 0 || stats.context > 0).then_some((stats.context, window));
         let cost = stats.priced.then_some(stats.cost);
-        model_line(
+        let mut line = model_line(
             &self.palette,
             &tuse_config::display_name(def.as_ref(), &model),
             &effort,
             context,
             cost,
-        )
+        );
+        if !model.is_empty() && !self.session.cached_model_available(&model) {
+            line.push(span(LABEL_SEP, Style::fg(self.palette.muted)));
+            line.push(span("unavailable", Style::fg(self.palette.error)));
+        }
+        line
     }
 }
 
@@ -131,12 +136,12 @@ mod tests {
         let mut app = crate::ui::app::test_app("task-indicator");
         std::fs::write(
             app.cwd.join("tuse.lua"),
-            "local t = require('tuse')\nreturn { test = { ui = { theme = { accent = '#112233', icons = '#445566' } }, commands = { bg = { run = function() t.spawn(function() t.sh('sleep 30') end, 'nap') end } } } }",
+            "local t = require('tuse')\nreturn { ui = { theme = { accent = '#112233', icons = '#445566' } }, test = { commands = { bg = function() t.tasks.spawn(function() t.sh('sleep 30') end, 'nap') end } } }",
         )
         .unwrap();
         app.run_command("reload");
         assert!(app.tasks_idle().is_none());
-        app.run_command("bg");
+        app.run_command("test:bg");
         wait_for_tasks(&app, 1);
         let line = app.tasks_idle().unwrap();
         assert_eq!(line.len(), 2);
@@ -145,7 +150,7 @@ mod tests {
         assert_eq!(line[1].text, "1 task");
         assert_eq!(line[1].style, Style::fg(app.palette.accent));
         assert_ne!(app.palette.icons, app.palette.accent);
-        app.run_command("bg");
+        app.run_command("test:bg");
         wait_for_tasks(&app, 2);
         assert_eq!(app.tasks_idle().unwrap()[1].text, "2 tasks");
         app.run_command("stop");
@@ -179,15 +184,15 @@ mod tests {
         std::fs::write(&cfg, "return {}").unwrap();
         let session = Session::open(Options {
             cwd: dir.clone(),
-            config: Some(cfg.clone()),
             mode: tuse_core::Mode::Tui,
             resume: None,
             start: Default::default(),
+            flags: Default::default(),
         })
         .unwrap();
         session.set_model("workind/m", "medium");
         let (wake, wake_rx) = sync_channel(1);
-        let mut app = App::with_wake(session.clone(), Some(cfg), Some(wake));
+        let mut app = App::with_wake(session.clone(), Some(wake));
         assert!(app.working().is_empty());
 
         let (send_delta, await_delta) = channel();
@@ -334,5 +339,23 @@ mod tests {
         assert_eq!(tuse_core::tokens(1_000_000), "1m");
         assert_eq!(tuse_core::tokens(200_000), "200k");
         assert_eq!(tuse_core::tokens(999), "999");
+    }
+
+    #[test]
+    fn model_label_indicates_unavailable_selected_model() {
+        let app = crate::ui::app::test_app("status-unavail");
+        app.session.set_model("missing_prov/gpt-x", "medium");
+        let line = app.model_label();
+        let text: String = line.iter().map(|s| s.text.as_str()).collect();
+        assert!(text.contains("missing_prov/gpt-x"), "{text}");
+        assert!(text.contains("unavailable"), "{text}");
+        assert!(
+            line.iter()
+                .any(|s| s.text == "unavailable" && s.style == Style::fg(app.palette.error))
+        );
+        app.session.set_model("", "");
+        let empty: String = app.model_label().iter().map(|s| s.text.as_str()).collect();
+        assert!(!empty.contains("unavailable"), "{empty}");
+        crate::ui::app::cleanup(app);
     }
 }

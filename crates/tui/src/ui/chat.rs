@@ -277,11 +277,12 @@ impl Chat {
         scroll: usize,
         height: usize,
     ) -> (Vec<ChatRow>, usize) {
-        let need = scroll + height;
-        let mut rev: Vec<ChatRow> = Vec::with_capacity(need);
+        let need = scroll.saturating_add(height);
+        let mut rev = Vec::with_capacity(height);
+        let mut seen = 0;
         let mut below: Option<bool> = None;
         for i in (0..self.pinned.len()).rev() {
-            if rev.len() >= need {
+            if seen >= need {
                 break;
             }
             let (_, text, cache, id) = &mut self.pinned[i];
@@ -290,28 +291,30 @@ impl Chat {
             }
             let lines = &cache.as_ref().unwrap().1;
             let gap = below.map_or(0, |b| gap_between(p, b, false));
-            push_rev(&mut rev, lines, *id, need, gap);
+            push_rev(&mut rev, &mut seen, scroll, height, lines, *id, gap);
             if !lines.is_empty() {
                 below = Some(false);
             }
         }
         for i in (0..self.entries.len()).rev() {
-            if rev.len() >= need {
+            if seen >= need {
                 break;
             }
             let id = self.entries[i].2;
             let message = is_message(&self.entries[i].0);
             let rows = self.rows(i, width, p);
             let gap = below.map_or(0, |b| gap_between(p, b, message));
-            push_rev(&mut rev, rows, id, need, gap);
+            push_rev(&mut rev, &mut seen, scroll, height, rows, id, gap);
             if !rows.is_empty() {
                 below = Some(message);
             }
         }
-        let clamped = scroll.min(rev.len().saturating_sub(height));
-        let end = rev.len().min(clamped + height);
-        let out = rev.drain(clamped..end).rev().collect();
-        (out, clamped)
+        let clamped = scroll.min(seen.saturating_sub(height));
+        if clamped < scroll && height > 0 {
+            return self.viewport(width, p, clamped, height);
+        }
+        rev.reverse();
+        (rev, clamped)
     }
 
     #[cfg(test)]
@@ -343,24 +346,35 @@ fn decorations(lines: Vec<Line>) -> Vec<MessageRow> {
     lines.into_iter().map(MessageRow::decoration).collect()
 }
 
-fn push_rev(rev: &mut Vec<ChatRow>, lines: &[MessageRow], id: u64, need: usize, gap: usize) {
+fn push_rev(
+    out: &mut Vec<ChatRow>,
+    seen: &mut usize,
+    scroll: usize,
+    height: usize,
+    lines: &[MessageRow],
+    id: u64,
+    gap: usize,
+) {
     if lines.is_empty() {
         return;
     }
-    if !rev.is_empty() {
-        rev.resize_with(rev.len() + gap.min(need - rev.len()), ChatRow::default);
-    }
-    rev.extend(
-        lines
-            .iter()
-            .enumerate()
-            .rev()
-            .take(need - rev.len())
-            .map(|(index, row)| ChatRow {
+    let gap = if *seen == 0 { 0 } else { gap };
+    let end = (*seen + gap + lines.len()).min(scroll.saturating_add(height));
+    let start = (*seen).max(scroll);
+    for at in start..end {
+        let row = at - *seen;
+        out.push(if row < gap {
+            ChatRow::default()
+        } else {
+            let index = lines.len() - 1 - (row - gap);
+            let row = &lines[index];
+            ChatRow {
                 line: row.line.clone(),
                 hit: row.copy.clone().map(|copy| HitRow { id, index, copy }),
-            }),
-    );
+            }
+        });
+    }
+    *seen = end;
 }
 
 impl Chat {

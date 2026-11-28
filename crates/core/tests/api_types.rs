@@ -63,7 +63,10 @@ fn replay_resume_provider_isolation_and_truncation() {
     let _ = std::fs::remove_dir_all(&dir);
     let home = dir.join("home");
     std::fs::create_dir_all(home.join(".tuse")).unwrap();
-    unsafe { std::env::set_var("HOME", &home) };
+    unsafe {
+        std::env::set_var("HOME", &home);
+        std::env::set_var("TUSE_HOME", home.join(".tuse"));
+    }
 
     let (au, ab) = mock(vec![
         j(
@@ -78,7 +81,7 @@ fn replay_resume_provider_isolation_and_truncation() {
         r#"{"stop_reason":"end_turn","content":[{"type":"text","text":"a2"}]}"#,
     )]);
     let (ru, rb) = mock(vec![
-        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"id\":\"fc_bad\",\"type\":\"function_call\",\"call_id\":\"bad\",\"name\":\"lua\",\"arguments\":\"{\\\"code\\\":\\\"write('bad.txt','nope')\\\"}\"}}\n\n".into(),
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"id\":\"fc_bad\",\"type\":\"function_call\",\"call_id\":\"bad\",\"name\":\"lua\",\"arguments\":\"{\\\"code\\\":\\\"fs.write('bad.txt','nope')\\\"}\"}}\n\n".into(),
         j(r#"{"status":"completed","output":[{"id":"rs_1","type":"reasoning","summary":[{"text":"r"}],"encrypted_content":"ENC1"},{"id":"m_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"resp ok"}]}]}"#),
     ]);
     for (n, u, a) in [
@@ -107,12 +110,17 @@ fn replay_resume_provider_isolation_and_truncation() {
         } else {
             Start::Launch
         };
-        Session::open(Options {
-            cwd: dir.clone(),
-            config: Some(cfg.clone()),
-            mode: Mode::Json,
-            resume,
-            start,
+        Session::open({
+            unsafe {
+                std::env::set_var("TUSE_GLOBAL_CONFIG", cfg.clone());
+            }
+            Options {
+                cwd: dir.clone(),
+                mode: Mode::Json,
+                resume,
+                start,
+                flags: Default::default(),
+            }
         })
         .unwrap()
     };
@@ -132,19 +140,19 @@ fn replay_resume_provider_isolation_and_truncation() {
 
     std::fs::write(
         dir.join("tuse.lua"),
-        r#"return { test = { commands = { rewrite = { run = function()
+        r#"return { test = { commands = { rewrite = function()
       local t = require('tuse')
-      local h = t.session().history
-      t.set_session{ history = h }
+      local h = t.session.get().history
+      t.session.set{ history = h }
       for _, r in ipairs(h) do
         if r.role == 'agent' and r.replay then r.text = 'edited'; break end
       end
-      t.set_session{ history = h }
-    end } } } }"#,
+      t.session.set{ history = h }
+    end } } }"#,
     )
     .unwrap();
     s.reload().unwrap();
-    s.run_command("rewrite", &[]).unwrap();
+    s.run_command("test:rewrite", &[]).unwrap();
     loop {
         match rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap() {
             Event::HistoryReplaced => break,

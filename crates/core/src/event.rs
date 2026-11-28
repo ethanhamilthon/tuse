@@ -52,6 +52,7 @@ pub enum Switch {
 #[derive(Debug, Clone)]
 pub enum Event {
     Notification(String),
+    TaskMessage(crate::convo::record::TaskMessage),
     User {
         id: InputId,
         text: String,

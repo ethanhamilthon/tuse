@@ -1,4 +1,0 @@
-- [x] 1. Add `theme.user` and `theme.lua` with linked-color validation; expose both in `/config` and `config.get`.
-- [x] 2. Replace the Lua word-list highlighter with a stateful parser and map the 15 token kinds to the palette.
-- [x] 3. Use `theme.user` for user messages and the input text.
-- [x] 4. Test token classification, scopes across lines, color links, and config validation; document the tokens in `docs/config.md`.

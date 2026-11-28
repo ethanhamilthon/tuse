@@ -9,13 +9,25 @@ use std::time::Duration;
 type Cmd = Box<dyn FnOnce(&Lua) + Send>;
 
 pub struct Vm {
-    tx: Sender<Cmd>,
+    tx: Option<Sender<Cmd>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for Vm {
+    fn drop(&mut self) {
+        drop(self.tx.take());
+        if let Some(thread) = self.thread.take()
+            && thread.thread().id() != std::thread::current().id()
+        {
+            let _ = thread.join();
+        }
+    }
 }
 
 impl Vm {
     pub fn new(host: Arc<dyn Host>, setup: impl FnOnce(&Lua) + Send + 'static) -> Self {
         let (tx, rx) = mpsc::channel::<Cmd>();
-        std::thread::Builder::new()
+        let thread = std::thread::Builder::new()
             .name("tuse-lua".into())
             .spawn(move || {
                 let lua = Lua::new();
@@ -28,20 +40,29 @@ impl Vm {
                 run(&lua, &rx);
             })
             .expect("spawn the lua thread");
-        Self { tx }
+        Self {
+            tx: Some(tx),
+            thread: Some(thread),
+        }
     }
 
     pub fn call<R: Send + 'static>(&self, f: impl FnOnce(&Lua) -> R + Send + 'static) -> R {
         let (tx, rx) = mpsc::channel();
-        let sent = self.tx.send(Box::new(move |lua: &Lua| {
-            let _ = tx.send(f(lua));
-        }));
+        let sent = self
+            .tx
+            .as_ref()
+            .expect("the lua thread is gone")
+            .send(Box::new(move |lua: &Lua| {
+                let _ = tx.send(f(lua));
+            }));
         assert!(sent.is_ok(), "the lua thread is gone");
         rx.recv().expect("the lua thread is gone")
     }
 
     pub fn post(&self, f: impl FnOnce(&Lua) + Send + 'static) {
-        let _ = self.tx.send(Box::new(f));
+        if let Some(tx) = &self.tx {
+            let _ = tx.send(Box::new(f));
+        }
     }
 
     pub fn run(&self, code: &str, name: &str, stop: Stop) -> Done {

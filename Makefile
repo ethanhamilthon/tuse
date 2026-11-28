@@ -1,4 +1,4 @@
-.PHONY: check fmt lint test install site
+.PHONY: check fmt lint test install install-dev site
 
 BIN_DIR ?= $(HOME)/.local/bin
 
@@ -7,6 +7,8 @@ check: fmt lint test
 fmt:
 	cargo fmt --all --check
 	sh -n release/install.sh
+	sh -n release/install-dev.sh
+	sh -n release/tusedev.sh
 
 lint:
 	cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -21,6 +23,9 @@ install:
 	install -m 755 target/release/tuse "$(BIN_DIR)/tuse"
 	@echo "Installed $$("$(BIN_DIR)/tuse" version) to $(BIN_DIR)/tuse"
 	@case ":$$PATH:" in *":$(BIN_DIR):"*) ;; *) echo "Add $(BIN_DIR) to your PATH." ;; esac
+
+install-dev:
+	BIN_DIR="$(BIN_DIR)" sh release/install-dev.sh $(if $(and $(findstring command line,$(origin CLEAN)),$(filter 1,$(CLEAN))),--clean)
 
 DOCS = usage connect config lua session json examples
 

@@ -37,6 +37,7 @@ pub struct Meta {
     pub(crate) revision: i64,
 }
 
+#[derive(Clone)]
 pub(crate) struct ReadCache {
     pub meta: Meta,
     pub records: Vec<Record>,
@@ -115,7 +116,7 @@ impl SessionDir {
     }
 
     pub(crate) fn append(&self, records: &[Record], config: &Config) -> Result<(), String> {
-        self.write(None, None, records, config)
+        self.write(None, None, records, config).map(|_| ())
     }
 
     pub(crate) fn write(
@@ -124,7 +125,7 @@ impl SessionDir {
         replacement: Option<&[Record]>,
         records: &[Record],
         config: &Config,
-    ) -> Result<(), String> {
+    ) -> Result<(Meta, i64), String> {
         let id = &self.id;
         db::transaction(|tx| {
             if let Some(m) = meta {
@@ -181,7 +182,7 @@ impl SessionDir {
                 "UPDATE sessions SET updated=?2 WHERE id=?1",
                 params![id, crate::id::now()],
             )?;
-            Ok(())
+            snapshot_meta(tx, id)
         })
     }
 
@@ -196,7 +197,7 @@ impl SessionDir {
         })
     }
 
-    pub(crate) fn system(&self, record: &Record) -> Result<(), String> {
+    pub(crate) fn system(&self, record: &Record) -> Result<(Meta, i64), String> {
         db::transaction(|tx| {
             let body = encode(record)?;
             let first: Option<(i64, String)> = tx
@@ -226,9 +227,23 @@ impl SessionDir {
                 "UPDATE sessions SET revision=revision+1 WHERE id=?1",
                 [&self.id],
             )?;
-            Ok(())
+            snapshot_meta(tx, &self.id)
         })
     }
+}
+
+fn snapshot_meta(tx: &Transaction<'_>, id: &str) -> rusqlite::Result<(Meta, i64)> {
+    let meta = tx.query_row(
+        &format!("SELECT {COLS} FROM sessions WHERE id = ?1"),
+        [id],
+        Meta::decode,
+    )?;
+    let seq = tx.query_row(
+        "SELECT COALESCE(MAX(seq), 0) FROM history WHERE session = ?1",
+        [id],
+        |r| r.get(0),
+    )?;
+    Ok((meta, seq))
 }
 
 fn encode(record: &Record) -> rusqlite::Result<String> {

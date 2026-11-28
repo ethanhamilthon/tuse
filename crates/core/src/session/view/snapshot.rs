@@ -74,6 +74,7 @@ pub struct UsageSnapshot {
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelInfoSnapshot {
     pub name: String,
+    pub available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -135,6 +136,7 @@ impl Session {
         let context_window = def.filter(|d| d.window > 0).map(|d| d.window);
         let model_info = (!model_full.is_empty()).then(|| ModelInfoSnapshot {
             name: model_full.clone(),
+            available: self.model_available(&model_full),
             display: def
                 .filter(|d| !d.display.is_empty())
                 .map(|d| d.display.clone()),

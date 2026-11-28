@@ -58,13 +58,6 @@ impl Session {
                 Some(Instant::now() + Duration::from_secs(TIMEOUT_SECS)),
             )
             .transferable(exec_id.clone(), request);
-            let started = Instant::now();
-            self.lua_start_hook(
-                exec_id.clone(),
-                "tool",
-                Some(code.to_string()),
-                Some(call.name.clone()),
-            );
             let s = self.clone();
             let running = self.clone();
             let (owned_call, owned_input) = (call.clone(), input.clone());
@@ -85,7 +78,6 @@ impl Session {
                         if let Some(mut st) = s.lock_live(generation) {
                             s.set_activity(&mut st, crate::Activity::Idle);
                         }
-                        s.lua_end_done(&exec_id, "tool", started.elapsed(), &d);
                         let handed_off = d.handed_off;
                         s.tool_done(
                             generation,
@@ -116,9 +108,9 @@ impl Session {
             Outcome::err("missing argument `code` (a string)")
         } else {
             let cfg = self.config();
-            let hint = match (!cfg.is_disabled("read"), !cfg.is_disabled("sh")) {
-                (true, true) => "call functions such as `read` or `sh` inside its `code`",
-                (true, false) => "call functions such as `read` inside its `code`",
+            let hint = match (!cfg.is_disabled("fs.read"), !cfg.is_disabled("sh")) {
+                (true, true) => "call functions such as `fs.read` or `sh` inside its `code`",
+                (true, false) => "call functions such as `fs.read` inside its `code`",
                 (false, true) => "call functions such as `sh` inside its `code`",
                 (false, false) => "call functions inside its `code`",
             };

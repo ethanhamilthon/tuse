@@ -13,35 +13,40 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     let extra = r#"
   prompts = { review = "Check edge cases." },
   commands = {
-    deploy = { desc = "ship it", args = { "staging", "prod" }, run = function(env) end },
-    rewrite = { run = function()
+    deploy = function() end,
+    rewrite = function()
       local t = require("tuse")
-      local s = t.session()
-      assert(not pcall(t.set_session, {title = "invalid", history = {{role = "agent", text = "x", tool_calls = {{id = "1", name = "lua", arguments = "{}"}}}}}))
-      assert(t.session().title == s.title)
-      t.set_session{history = s.history}
+      local s = t.session.get()
+      assert(not pcall(t.session.set, {title = "invalid", history = {{role = "agent", text = "x", tool_calls = {{id = "1", name = "lua", arguments = "{}"}}}}}))
+      assert(t.session.get().title == s.title)
+      t.session.set{history = s.history}
       s.history[1].text = "custom system"
-      t.set_session{history = s.history}
-    end },
-    ui_demo = { run = function()
+      t.session.set{history = s.history}
+    end,
+    ui_demo = function()
       local t = require("tuse")
-      t.show("m1", "Hello", true)
-      t.show("drop", "Temp", false)
-      t.show("drop", "", false)
-      local p = t.pick({"a", "b"}, "  **Pick one**  ")
-      local q = t.ask("Why?")
-      local c = t.pick({"x"}, "  ")
-      t.show("done", tostring(p) .. ":" .. tostring(q) .. ":" .. tostring(c), false)
-    end },
+      t.ui.show("m1", "Hello", true)
+      t.ui.show("drop", "Temp", false)
+      t.ui.show("drop", "", false)
+      local p = t.ui.pick({"a", "b"}, "  **Pick one**  ")
+      local q = t.ui.ask("Why?")
+      local c = t.ui.pick({"x"}, "  ")
+      t.ui.show("done", tostring(p) .. ":" .. tostring(q) .. ":" .. tostring(c), false)
+    end,
   },
 "#;
     let (dir, cfg) = common::setup("rpc-parity", &addr, extra);
-    let s1 = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg.clone()),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let s1 = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg.clone());
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let s1_id = s1.id.clone();
@@ -52,11 +57,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     );
     assert_eq!(
         call(&tx, &out, 2, "commands.list", json!({}))["result"],
-        json!([
-            {"name": "deploy", "desc": "ship it", "args": ["staging", "prod"], "params": 1},
-            {"name": "rewrite", "desc": "", "args": [], "params": 0},
-            {"name": "ui_demo", "desc": "", "args": [], "params": 0},
-        ])
+        json!([{"name":"test:deploy"},{"name":"test:rewrite"},{"name":"test:ui_demo"}])
     );
     assert!(
         call(
@@ -64,7 +65,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
             &out,
             901,
             "commands.run",
-            json!({"name": "deploy", "argv": ["prod"]})
+            json!({"name": "test:deploy"})
         )["error"]
             .is_null()
     );
@@ -74,12 +75,21 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
             &out,
             902,
             "commands.run",
-            json!({"name": "deploy", "argv": ["nope"]})
+            json!({"name": "test:deploy", "argv": ["nope"]})
         )["error"]["code"],
-        -32000
+        -32602
     );
 
-    assert!(call(&tx, &out, 3, "commands.run", json!({"name": "ui_demo"}))["error"].is_null());
+    assert!(
+        call(
+            &tx,
+            &out,
+            3,
+            "commands.run",
+            json!({"name": "test:ui_demo"})
+        )["error"]
+            .is_null()
+    );
     let r1 = event(&out, "ui_request");
     assert_eq!(r1["kind"], "picker");
     assert_eq!(r1["title"], "  **Pick one**  ");
@@ -197,7 +207,7 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
             &out,
             12,
             "turn.submit",
-            json!({"text": "check", "prompts": ["review"]})
+            json!({"text": "check", "prompts": ["test:review"]})
         )["error"]
             .is_null()
     );
@@ -208,11 +218,20 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
             && t["context"]
                 .as_str()
                 .unwrap()
-                .contains("<prompt name=\"review\">Check edge cases.</prompt>")
+                .contains("<prompt name=\"test:review\">Check edge cases.</prompt>")
     }));
 
     let usage = call(&tx, &out, 130, "session.state", json!({}))["result"]["usage"].clone();
-    assert!(call(&tx, &out, 131, "commands.run", json!({"name": "rewrite"}))["error"].is_null());
+    assert!(
+        call(
+            &tx,
+            &out,
+            131,
+            "commands.run",
+            json!({"name": "test:rewrite"})
+        )["error"]
+            .is_null()
+    );
     event(&out, "history_replaced");
     let snap = call(&tx, &out, 132, "session.state", json!({}))["result"].clone();
     let hist_after = call(&tx, &out, 133, "session.history", json!({}))["result"].clone();
@@ -248,12 +267,17 @@ fn rpc_ui_commands_prompts_model_and_session_switching() {
     call(&tx, &out, 19, "shutdown", json!({}));
     server.join().unwrap();
 
-    let s1_resumed = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Json,
-        resume: Some(s1_id.clone()),
-        start: Start::Resume,
+    let s1_resumed = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: Some(s1_id.clone()),
+            start: Start::Resume,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let (tx, out, server) = spawn(s1_resumed);

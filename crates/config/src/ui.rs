@@ -22,12 +22,30 @@ impl InputStyle {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PickerPlacement {
+    #[default]
+    Bottom,
+    Top,
+}
+
+impl PickerPlacement {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Bottom => "bottom",
+            Self::Top => "top",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Ui {
     pub lines: Lines,
     pub input: InputStyle,
     pub space: Space,
+    pub picker: PickerPlacement,
     pub theme: Theme,
 }
 

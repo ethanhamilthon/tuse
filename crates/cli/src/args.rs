@@ -50,10 +50,6 @@ impl Args {
         Ok(a)
     }
 
-    pub fn arg(&self, i: usize) -> &str {
-        &self.positional[i]
-    }
-
     pub fn opt_arg(&self, i: usize) -> Option<&str> {
         self.positional.get(i).map(String::as_str)
     }
@@ -79,12 +75,6 @@ impl Args {
             .rev()
             .find(|(n, _)| names.contains(&n.as_str()))
             .and_then(|(_, v)| v.clone())
-    }
-
-    pub fn values<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a str> {
-        self.flags
-            .iter()
-            .filter_map(move |(n, v)| (n == name).then_some(v.as_deref()).flatten())
     }
 
     pub fn has(&self, names: &[&str]) -> bool {

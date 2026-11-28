@@ -22,11 +22,17 @@ pub(crate) fn command_of(lua: &Lua, name: &str) -> Option<Function> {
     code_of(lua, "commands", name)
 }
 
-pub(crate) fn open_of(lua: &Lua, ext: &str) -> Option<Function> {
+pub(crate) fn open_of(lua: &Lua) -> Option<Function> {
     let t: Table = lua.named_registry_value("tuse.config").ok()?;
-    t.get::<Table>("open").ok()?.get(ext).ok()
+    t.raw_get("open").ok()
 }
 
-pub(crate) fn prompt_of(lua: &Lua, name: &str) -> Option<Function> {
-    code_of(lua, "prompts", name)
+pub(crate) fn hook_of(lua: &Lua, event: &str, index: usize) -> Option<Function> {
+    let t: Table = lua.named_registry_value("tuse.config").ok()?;
+    t.get::<Table>("hook")
+        .ok()?
+        .get::<Table>(event)
+        .ok()?
+        .get(index)
+        .ok()
 }

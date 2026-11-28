@@ -1,29 +1,5 @@
 use serde::de::{Deserialize, Deserializer, Error};
 
-pub fn list<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Vec<T>, D::Error> {
-    struct V<T>(std::marker::PhantomData<T>);
-    impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for V<T> {
-        type Value = Vec<T>;
-        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("a list")
-        }
-        fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<T>, A::Error> {
-            let mut out = vec![];
-            while let Some(x) = seq.next_element()? {
-                out.push(x);
-            }
-            Ok(out)
-        }
-        fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Vec<T>, A::Error> {
-            match map.next_key::<String>()? {
-                None => Ok(vec![]),
-                Some(k) => Err(A::Error::custom(format!("expected a list, got key `{k}`"))),
-            }
-        }
-    }
-    d.deserialize_any(V(std::marker::PhantomData))
-}
-
 pub fn int<'de, D, T, const MIN: i64, const MAX: i64>(d: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,

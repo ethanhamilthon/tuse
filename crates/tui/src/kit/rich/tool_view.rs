@@ -357,7 +357,7 @@ mod tests {
                 r.read_exact(&mut vec![0; len]).unwrap();
                 step += 1;
                 let body = if step == 1 {
-                    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"lua","arguments":"{\"code\":\"local t={} for i=0,19 do t[#t+1]='row'..i end write('long.rs', table.concat(t, string.char(10)))\"}"}}]}}]}"#
+                    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"lua","arguments":"{\"code\":\"local t={} for i=0,19 do t[#t+1]='row'..i end fs.write('long.rs', table.concat(t, string.char(10)))\"}"}}]}}]}"#
                 } else {
                     r#"{"choices":[{"delta":{"content":"done"}}]}"#
                 };
@@ -379,7 +379,7 @@ mod tests {
             std::fs::write(
                 &cfg,
                 format!(
-                    "return {{ test = {{ ui = {{ lines = {{ diff = {n} }} }}, commands = {{ r = {{ run = function() require('tuse').reload() end }} }} }} }}"
+                    "return {{ ui = {{ lines = {{ diff = {n} }} }}, test = {{ commands = {{ r = function() require('tuse').reload() end }} }} }}"
                 ),
             )
             .unwrap();
@@ -405,12 +405,12 @@ mod tests {
         let view = |app: &mut App| render_text(&app.chat.window(60, &app.palette, 0, 60).0);
         assert!(view(&mut app).contains("8 more lines"));
         write_cfg(0);
-        app.run_command("r");
+        app.run_command("test:r");
         drain_until(&mut app, |e| matches!(e, Event::Reloaded));
         let v0 = view(&mut app);
         assert!(!v0.contains("row0") && !v0.contains("more lines"));
         write_cfg(12);
-        app.run_command("r");
+        app.run_command("test:r");
         drain_until(&mut app, |e| matches!(e, Event::Reloaded));
         let v12 = view(&mut app);
         assert!(v12.contains("row0") && v12.contains("8 more lines") && !v12.contains("row19"));
@@ -426,13 +426,13 @@ mod tests {
         app.session.close();
         let resumed = Session::open(Options {
             cwd,
-            config: Some(cfg),
             mode: tuse_core::Mode::Tui,
             resume: Some(sid),
             start: Default::default(),
+            flags: Default::default(),
         })
         .unwrap();
-        let mut app2 = App::new(resumed, None);
+        let mut app2 = App::new(resumed);
         assert!(!view(&mut app2).contains("row0"));
         let mut stored = false;
         app2.session.with_records(|recs| {

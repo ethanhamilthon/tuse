@@ -35,13 +35,18 @@ fn models_server(hits: Arc<AtomicUsize>) -> String {
 fn handshake_setters_and_model_refresh() {
     let hits = Arc::new(AtomicUsize::new(0));
     let addr = models_server(hits.clone());
-    let (dir, cfg) = common::setup("rpc-protocol", &addr, "models = {{ name = 'p/cfg' }}");
-    let session = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let (dir, cfg) = common::setup("rpc-protocol", &addr, "");
+    let session = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let (tx, out, server) = spawn(session);
@@ -126,17 +131,13 @@ fn handshake_setters_and_model_refresh() {
     );
 
     let r = call(&tx, &out, 10, "model.list", json!({"cached": true}));
-    assert_eq!(r["result"], json!(["p/cfg"]));
+    assert_eq!(r["result"], json!([]));
     assert_eq!(hits.load(Ordering::SeqCst), 0, "cached reads never fetch");
     let r = call(&tx, &out, 11, "model.list", json!({}));
-    assert_eq!(
-        r["result"],
-        json!(["p/cfg"]),
-        "a snapshot, not the finished fetch"
-    );
+    assert_eq!(r["result"], json!([]), "a snapshot, not the finished fetch");
     event(&out, "models");
     let r = call(&tx, &out, 12, "model.list", json!({"cached": true}));
-    assert_eq!(r["result"], json!(["p/cfg", "p/remote"]));
+    assert_eq!(r["result"], json!(["p/remote"]));
     std::thread::sleep(std::time::Duration::from_millis(100));
     assert_eq!(
         hits.load(Ordering::SeqCst),

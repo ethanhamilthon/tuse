@@ -4,6 +4,11 @@ use tuse_core::Event;
 pub fn to_json(e: &Event) -> Option<Value> {
     Some(match e {
         Event::Notification(t) => json!({"type": "notification", "text": t}),
+        Event::TaskMessage(task) => {
+            let mut v = serde_json::to_value(task).expect("task message is serializable");
+            v["type"] = "task_message".into();
+            v
+        }
         Event::User { id, text, images } => {
             json!({"type": "user", "input_id": id.number(), "text": text, "images": images})
         }

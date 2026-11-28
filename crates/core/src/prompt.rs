@@ -32,7 +32,7 @@ fn parse(text: &'static str) -> Page {
         let Some(name) = line.strip_prefix("### ") else {
             if in_functions && line.starts_with("- `") {
                 let id = line[3..].split('`').next().unwrap_or("");
-                let id = id.split(['(', '.']).next().unwrap_or(id);
+                let id = id.split(['(', ':']).next().unwrap_or(id).trim();
                 functions.push((id, line));
             }
             continue;
@@ -180,9 +180,29 @@ fn base_prompt(disabled: &[&str]) -> String {
 }
 
 pub fn system_prompt(config: &Config) -> String {
-    let mut parts = vec![base_prompt(&config.disabled_builtins())];
-    parts.extend(config.systems.iter().map(|s| s.trim_end().to_string()));
-    parts.join("\n\n")
+    match &config.systems {
+        tuse_config::Systems::Replace(text) => text.clone(),
+        tuse_config::Systems::Named(map) => {
+            let mut parts = vec![];
+            let base = match map.get("lua") {
+                Some(custom) => custom.trim_end().to_string(),
+                None => base_prompt(&config.disabled_builtins()),
+            };
+            if !base.is_empty() {
+                parts.push(base);
+            }
+            for (k, v) in map {
+                if k == "lua" {
+                    continue;
+                }
+                let trimmed = v.trim_end();
+                if !trimmed.is_empty() {
+                    parts.push(trimmed.to_string());
+                }
+            }
+            parts.join("\n\n")
+        }
+    }
 }
 
 pub(crate) const AGENT_CONTEXT: &str = "## What the agent sees";
@@ -220,47 +240,75 @@ pub fn tools(config: &Config) -> Vec<ToolDef> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuse_config::FunctionKind;
+    use tuse_config::{FunctionKind, Systems};
 
     #[test]
     fn custom_functions_are_undiscoverable_and_disabled_builtins_are_omitted() {
+        let default_sys = system_prompt(&Config::default());
+        assert!(default_sys.contains("docs.topics") && default_sys.contains("docs.lua"));
+        for omitted in [
+            "session.",
+            "ui.",
+            "plugins.",
+            "providers.",
+            "reload(",
+            "llm(",
+            "inspect(",
+        ] {
+            assert!(!default_sys.contains(omitted), "{omitted} in {default_sys}");
+        }
+
         let mut config = Config::default();
         config
             .functions
-            .insert("secret".into(), FunctionKind::Custom);
+            .insert("web.secret".into(), FunctionKind::Custom);
         config.functions.insert("sh".into(), FunctionKind::Disabled);
         config
             .functions
-            .insert("delete".into(), FunctionKind::Disabled);
+            .insert("fs.delete".into(), FunctionKind::Disabled);
         config
             .functions
             .insert("docs".into(), FunctionKind::Disabled);
         config
             .functions
-            .insert("task_get".into(), FunctionKind::Disabled);
+            .insert("tasks.get".into(), FunctionKind::Disabled);
         let sys = system_prompt(&config);
         assert!(!sys.contains("secret"), "{sys}");
         assert!(!sys.contains("`sh`") && !sys.contains("`sh("), "{sys}");
         assert!(
-            !sys.contains("`delete`") && !sys.contains("`delete("),
+            !sys.contains("`fs.delete`") && !sys.contains("`fs.delete("),
             "{sys}"
         );
         assert!(
-            !sys.contains("`docs(") && !sys.contains("Tuse itself"),
+            !sys.contains("docs.topics") && !sys.contains("docs.lua"),
             "{sys}"
         );
-        assert!(system_prompt(&Config::default()).contains("Tuse itself"));
-        assert!(!sys.contains("`task_get("), "{sys}");
-        assert!(sys.contains("`read(") && sys.contains("`write("));
+        assert!(!sys.contains("`tasks.get("), "{sys}");
+        assert!(sys.contains("`fs.read(") && sys.contains("`fs.write("));
 
         let desc = tools(&config)[0].description.clone();
         assert!(
-            !desc.contains("sh(") && !desc.contains("delete()"),
+            !desc.contains("sh(") && !desc.contains("fs.delete()"),
             "{desc}"
         );
         assert!(
-            desc.contains("read()") && desc.contains("write()"),
+            desc.contains("fs.read()") && desc.contains("fs.write()"),
             "{desc}"
         );
+
+        let mut named = Config::default();
+        let mut map = BTreeMap::new();
+        map.insert("lua".into(), "CUSTOM BASE".into());
+        map.insert("b".into(), "B".into());
+        map.insert("a".into(), "A".into());
+        named.systems = Systems::Named(map);
+        assert_eq!(system_prompt(&named), "CUSTOM BASE\n\nA\n\nB");
+
+        let abs = Config {
+            systems: Systems::Replace(String::new()),
+            ..Default::default()
+        };
+        assert_eq!(system_prompt(&abs), "");
+        assert_eq!(tools(&abs)[0].name, "lua");
     }
 }

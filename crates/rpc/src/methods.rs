@@ -1,7 +1,7 @@
-use crate::proto::{Fail, Reply, opt_str, opt_u64, str_list, str_param};
+use crate::proto::{Fail, Reply, only_keys, opt_bool, opt_str, opt_u64, str_list, str_param};
 use serde_json::{Value, json};
 use std::sync::Arc;
-use tuse_core::{InputId, Session, UserInput};
+use tuse_core::{ConnectInput, InputId, Plugins, ProviderPatch, Providers, Session, UserInput};
 
 pub const PROTOCOL: u64 = 2;
 
@@ -17,6 +17,15 @@ pub const METHODS: &[&str] = &[
     "session.fork",
     "model.set",
     "model.list",
+    "providers.list",
+    "providers.connect",
+    "providers.update",
+    "providers.disconnect",
+    "plugins.list",
+    "plugins.get",
+    "plugins.add",
+    "plugins.delete",
+    "plugins.update",
     "config.get",
     "config.reload",
     "tasks.list",
@@ -83,6 +92,18 @@ fn submit(s: &Arc<Session>, p: &Value) -> Reply {
     Ok(json!({"input_id": id.number(), "queued": queued}))
 }
 
+macro_rules! reply {
+    ($v:expr) => {
+        serde_json::to_value($v).map_err(|e| Fail::session(e.to_string()))
+    };
+}
+
+macro_rules! reply_res {
+    ($r:expr) => {
+        reply!($r.map_err(Fail::session)?)
+    };
+}
+
 pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
     match method {
         "turn.submit" => submit(s, p),
@@ -96,98 +117,114 @@ pub fn call(s: &Arc<Session>, method: &str, p: &Value) -> Reply {
             s.cancel();
             Ok(Value::Null)
         }
-        "session.state" => {
-            serde_json::to_value(s.snapshot(false)).map_err(|e| Fail::session(e.to_string()))
-        }
-        "session.history" => {
-            serde_json::to_value(s.history()).map_err(|e| Fail::session(e.to_string()))
-        }
+        "session.state" => reply!(s.snapshot(false)),
+        "session.history" => reply!(s.history()),
         "session.list" => {
             let cwd = opt_str(p, "cwd")?.map_or_else(|| s.cwd().to_path_buf(), Into::into);
-            serde_json::to_value(tuse_core::Meta::list(&cwd))
-                .map_err(|e| Fail::session(e.to_string()))
+            reply!(tuse_core::Meta::list(&cwd))
         }
         "model.set" => {
             let model = str_param(p, "model")?;
             let effort = match &p["effort"] {
-                Value::Null => {
-                    if model.is_empty() {
-                        "medium".to_string()
-                    } else {
-                        s.config().fallback_effort(&model)
-                    }
-                }
+                Value::Null if model.is_empty() => "medium".to_string(),
+                Value::Null => s.config().fallback_effort(&model),
                 _ => str_param(p, "effort")?,
             };
-            let persist = match &p["persist"] {
-                Value::Null => true,
-                Value::Bool(b) => *b,
-                _ => return Err(Fail::params("`persist` must be a boolean")),
-            };
+            let persist = opt_bool(p, "persist")?.unwrap_or(true);
             s.select_model(&model, &effort, persist)
                 .map(|_| Value::Null)
                 .map_err(Fail::session)
         }
         "model.list" => {
-            let cached = match &p["cached"] {
-                Value::Null => false,
-                Value::Bool(b) => *b,
-                _ => return Err(Fail::params("`cached` must be a boolean")),
-            };
-            if !cached {
+            if !opt_bool(p, "cached")?.unwrap_or(false) {
                 s.fetch_models();
             }
             Ok(json!(s.available_models()))
         }
-        "config.get" => {
-            serde_json::to_value(&*s.config()).map_err(|e| Fail::session(e.to_string()))
+        "providers.list" => {
+            only_keys(p, &[])?;
+            reply_res!(Providers::views())
         }
+        "providers.connect" => {
+            let input = serde_json::from_value::<ConnectInput>(p.clone())
+                .map_err(|_| Fail::params("invalid provider options"))?;
+            reply_res!(s.connect_provider(input))
+        }
+        "providers.update" => {
+            let name = str_param(p, "name")?;
+            let mut fields = p
+                .as_object()
+                .cloned()
+                .ok_or_else(|| Fail::params("expected provider options"))?;
+            fields.remove("name");
+            let patch = serde_json::from_value::<ProviderPatch>(fields.into())
+                .map_err(|_| Fail::params("invalid provider patch"))?;
+            reply_res!(s.update_provider(&name, patch))
+        }
+        "providers.disconnect" => {
+            only_keys(p, &["name"])?;
+            let name = str_param(p, "name")?;
+            Ok(json!({ "name": s.disconnect_provider(&name).map_err(Fail::session)? }))
+        }
+        "plugins.list" => {
+            only_keys(p, &[])?;
+            reply_res!(Plugins::list())
+        }
+        "plugins.get" => {
+            only_keys(p, &["target"])?;
+            reply_res!(Plugins::get(&str_param(p, "target")?))
+        }
+        "plugins.add" => {
+            only_keys(p, &["source", "replace"])?;
+            let (source, replace) = (
+                str_param(p, "source")?,
+                opt_bool(p, "replace")?.unwrap_or(false),
+            );
+            reply_res!(Plugins::add(&source, replace))
+        }
+        "plugins.delete" => {
+            only_keys(p, &["target"])?;
+            let name = Plugins::delete(&str_param(p, "target")?).map_err(Fail::session)?;
+            Ok(json!({ "name": name }))
+        }
+        "plugins.update" => {
+            only_keys(p, &["target"])?;
+            let target = opt_str(p, "target")?;
+            let updated = Plugins::update(target.as_deref()).map_err(Fail::session)?;
+            Ok(json!({ "updated": updated }))
+        }
+        "config.get" => reply!(&*s.config()),
         "config.reload" => {
-            let ns = opt_str(p, "ns")?;
-            if ns.as_ref().is_some_and(String::is_empty) {
-                return Err(Fail::params("`ns` must not be empty"));
-            }
-            s.reload_namespace(ns)
-                .map(|_| Value::Null)
-                .map_err(Fail::session)
+            only_keys(p, &[])?;
+            s.reload().map(|_| Value::Null).map_err(Fail::session)
         }
-        "tasks.list" => serde_json::to_value(s.tasks()).map_err(|e| Fail::session(e.to_string())),
+        "tasks.list" => reply!(s.tasks()),
         "tasks.get" => {
             let id = str_param(p, "id")?;
             let lines = opt_u64(p, "lines")?.map_or(50, |n| n.max(1) as usize);
             let t = s
                 .task(&id)
                 .ok_or_else(|| Fail::session(format!("no task {id}")))?;
-            let mut v = serde_json::to_value(&t).map_err(|e| Fail::session(e.to_string()))?;
+            let mut v = reply!(&t)?;
             v["output"] = json!(tuse_core::Tasks::tail(&t.log, lines));
             Ok(v)
         }
-        "tasks.stop" => {
-            let id = str_param(p, "id")?;
-            let t = s.stop_task(&id).map_err(Fail::session)?;
-            serde_json::to_value(t).map_err(|e| Fail::session(e.to_string()))
-        }
-        "commands.list" => Ok(json!(
+        "tasks.stop" => reply_res!(s.stop_task(&str_param(p, "id")?)),
+        "commands.list" => reply!(
             s.config()
                 .commands
                 .iter()
-                .map(|(name, c)| json!({
-                    "name": name,
-                    "desc": c.desc,
-                    "args": c.args,
-                    "params": c.params,
-                }))
+                .map(|name| json!({ "name": name }))
                 .collect::<Vec<_>>()
-        )),
+        ),
         "commands.run" => {
+            only_keys(p, &["name"])?;
             let name = str_param(p, "name")?;
-            s.run_command(&name, &str_list(p, "argv")?)
+            s.run_command(&name, &[])
                 .map(|_| Value::Null)
                 .map_err(Fail::session)
         }
-        "ui.state" => {
-            serde_json::to_value(s.ui_snapshot()).map_err(|e| Fail::session(e.to_string()))
-        }
+        "ui.state" => reply!(s.ui_snapshot()),
         "ui.reply" => {
             let id = p["id"]
                 .as_u64()

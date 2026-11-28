@@ -20,7 +20,8 @@ pub fn system(records: &[Record]) -> String {
 
 fn full(r: &Record, names: &std::collections::HashMap<&str, &str>) -> Option<Message> {
     Some(match r {
-        Record::Notification { text } => Message::User {
+        Record::Notification { text }
+        | Record::TaskMessage(crate::convo::record::TaskMessage { text, .. }) => Message::User {
             text: text.clone(),
             images: vec![],
         },

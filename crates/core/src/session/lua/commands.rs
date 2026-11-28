@@ -5,78 +5,79 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tuse_api::{ApiType, Client, Message, Request};
 use tuse_config::split_model;
-use tuse_lua::mlua::{self, Lua, MultiValue};
+use tuse_lua::mlua::{Lua, MultiValue};
 use tuse_lua::{Done, Job, Out, Stop};
 
 impl Session {
     pub fn run_command(self: &Arc<Self>, name: &str, argv: &[String]) -> Result<(), String> {
-        let checked = match self.config().commands.get(name) {
-            Some(command) => command.check(name, argv),
-            None => Err(format!("unknown command /{name}")),
+        let checked = if !self.config().commands.contains(name) {
+            Err(format!("unknown command /{name}"))
+        } else if !argv.is_empty() {
+            Err(format!("/{name} takes no words"))
+        } else {
+            Ok(())
         };
         if let Err(error) = checked {
             self.error(error.clone());
             return Err(error);
         }
-        let argv = argv.to_vec();
         let cancel = Arc::new(AtomicBool::new(false));
         {
             let mut list = self.cmd_runs.lock().unwrap();
             list.retain(|c| !c.load(Ordering::Relaxed));
             list.push(cancel.clone());
         }
-        let stop = Stop::new(cancel.clone(), None);
         let weak = Arc::downgrade(self);
         let cmd = name.to_string();
-        let exec_id = self.next_lua_id();
-        let started = Instant::now();
         self.vm.post(move |lua| {
-            if let Some(s) = weak.upgrade() {
-                let code = crate::scripting::registry::command_of(lua, &cmd)
-                    .map(|f| tuse_lua::source_of(&f, None));
-                s.lua_start_hook(exec_id.clone(), "command", code, Some(cmd.clone()));
-            }
-            let (s2, c2, flag, id2) = (weak.clone(), cmd.clone(), cancel.clone(), exec_id.clone());
+            let Some(s) = weak.upgrade() else { return };
+            let Some(f) = crate::scripting::registry::command_of(lua, &cmd) else {
+                cancel.store(true, Ordering::Relaxed);
+                s.error(format!("/{cmd}: command is gone"));
+                return;
+            };
+            let code = tuse_lua::source_of(&f, None);
+            let started = Instant::now();
+            let stop = Stop::new(cancel.clone(), None);
+            let flag = cancel.clone();
+            let name = cmd.clone();
             let done = move |_: &Lua, d: Done| {
                 flag.store(true, Ordering::Relaxed);
-                if let Some(s) = s2.upgrade() {
-                    s.lua_end_done(&id2, "command", started.elapsed(), &d);
-                    if !d.ok && d.stop != Some("cancelled") {
-                        s.error(format!("/{c2}: {}", crate::text::error_line(&d.text)));
+                if let Some(s) = weak.upgrade() {
+                    let status = if d.ok {
+                        "success"
+                    } else if d.stop == Some("cancelled") {
+                        "cancelled"
+                    } else {
+                        "error"
+                    };
+                    let error = (status == "error").then(|| crate::text::error_line(&d.text));
+                    let record = Record::job(
+                        "command",
+                        name.clone(),
+                        code,
+                        status.into(),
+                        started.elapsed().as_millis() as u64,
+                        error.clone(),
+                    );
+                    s.push(&mut s.state.lock().unwrap(), record);
+                    if let Some(error) = error {
+                        s.error(format!("/{name}: {error}"));
                     }
                 }
             };
-            let start = || -> mlua::Result<()> {
-                let f = crate::scripting::registry::command_of(lua, &cmd)
-                    .ok_or_else(|| mlua::Error::runtime("command is gone"))?;
-                let args = argv
-                    .iter()
-                    .map(|a| lua.create_string(a).map(mlua::Value::String))
-                    .collect::<mlua::Result<Vec<_>>>()?;
-                let job = Job::new(
-                    lua,
-                    f,
-                    MultiValue::from_iter(args),
-                    stop,
-                    Out::Buf(String::new()),
-                    done,
-                )?;
-                tuse_lua::start(lua, job);
-                Ok(())
-            };
-            if let Err(e) = start() {
-                cancel.store(true, Ordering::Relaxed);
-                let msg = tuse_lua::message(&e);
-                if let Some(s) = weak.upgrade() {
-                    s.lua_end_hook(
-                        exec_id,
-                        "command",
-                        "error",
-                        started.elapsed(),
-                        None,
-                        Some(msg.clone()),
-                    );
-                    s.error(format!("/{cmd}: {msg}"));
+            match Job::new(
+                lua,
+                f,
+                MultiValue::new(),
+                stop,
+                Out::Buf(String::new()),
+                done,
+            ) {
+                Ok(job) => tuse_lua::start(lua, job),
+                Err(e) => {
+                    cancel.store(true, Ordering::Relaxed);
+                    s.error(format!("/{cmd}: {}", tuse_lua::message(&e)));
                 }
             }
         });
@@ -85,42 +86,6 @@ impl Session {
 }
 
 impl Session {
-    pub(crate) fn prompt_body(&self, name: &str, arg: Option<&str>) -> Result<String, String> {
-        let cancel = Arc::new(AtomicBool::new(false));
-        self.cmd_runs.lock().unwrap().push(cancel.clone());
-        let deadline = Instant::now() + std::time::Duration::from_secs(30);
-        let stop = Stop::new(cancel, Some(deadline));
-        let (tx, rx) = std::sync::mpsc::channel();
-        let (name, arg) = (name.to_string(), arg.map(str::to_string));
-        self.vm.post(move |lua| {
-            let start = || -> mlua::Result<()> {
-                let f = crate::scripting::registry::prompt_of(lua, &name)
-                    .ok_or_else(|| mlua::Error::runtime("prompt is gone"))?;
-                let args = match &arg {
-                    Some(a) => MultiValue::from_iter([mlua::Value::String(lua.create_string(a)?)]),
-                    None => MultiValue::new(),
-                };
-                let tx2 = tx.clone();
-                let job = Job::new(lua, f, args, stop, Out::Buf(String::new()), move |_, d| {
-                    let _ = tx2.send(d);
-                })?
-                .returning();
-                tuse_lua::start(lua, job);
-                Ok(())
-            };
-            if let Err(e) = start() {
-                let _ = tx.send(Done::failed(tuse_lua::message(&e)));
-            }
-        });
-        let d = rx
-            .recv()
-            .map_err(|_| "the lua thread is gone".to_string())?;
-        if !d.ok {
-            return Err(format!("prompt: {}", crate::text::error_line(&d.text)));
-        }
-        Ok(d.text)
-    }
-
     pub(crate) fn llm(
         &self,
         prompt: &str,
@@ -128,11 +93,12 @@ impl Session {
         effort: &str,
         cancel: &AtomicBool,
     ) -> Result<String, String> {
-        let config = self.config();
         let (provider, name) = split_model(model);
-        let conn = config
-            .connect(provider)
-            .ok_or_else(|| format!("llm: no provider `{provider}` for model `{model}`"))?;
+        let conn = crate::storage::Providers::resolve_by_name(provider)
+            .map_err(|e| format!("llm: {e}"))?
+            .ok_or_else(|| {
+                format!("llm: provider `{provider}` for model `{model}` is not connected")
+            })?;
         let req = Request {
             provider: provider.to_string(),
             model: name.to_string(),

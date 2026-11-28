@@ -13,12 +13,7 @@ impl Host for H {
     fn cwd(&self) -> PathBuf {
         std::env::temp_dir()
     }
-    fn task_start(
-        &self,
-        name: &str,
-        _code: &str,
-        _from_lua_hook: bool,
-    ) -> Result<TaskStart, String> {
+    fn task_start(&self, name: &str, _code: &str) -> Result<TaskStart, String> {
         let log = std::env::temp_dir().join(format!("tuse-lua-{}-{name}.log", std::process::id()));
         let log = std::fs::File::create(log).map_err(|e| e.to_string())?;
         Ok(TaskStart {

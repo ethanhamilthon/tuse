@@ -21,16 +21,7 @@ impl Session {
             self.error(format!("cannot open URL `{url}`"));
             return;
         }
-        let key = self
-            .config()
-            .open
-            .iter()
-            .find(|k| k.as_str() == tuse_config::OPEN_URL)
-            .cloned();
-        match key {
-            Some(key) => self.run_open_callback(key, url.to_string()),
-            None => self.spawn_os_open(url.to_string()),
-        }
+        self.run_open_callback(url.to_string(), "url");
     }
 
     pub fn open_path(self: &Arc<Self>, path: &Path) {
@@ -42,69 +33,79 @@ impl Session {
             ));
             return;
         }
-        let key =
-            tuse_config::pick_open_key(&self.config().open, &resolved, resolved.is_dir()).cloned();
-        match key {
-            Some(key) => self.run_open_callback(key, resolved.display().to_string()),
-            None => self.spawn_os_open(resolved.display().to_string()),
-        }
+        let kind = if resolved.is_dir() { "dir" } else { "file" };
+        self.run_open_callback(resolved.display().to_string(), kind);
     }
 
-    fn run_open_callback(self: &Arc<Self>, ext: String, path_str: String) {
-        let cancel = Arc::new(AtomicBool::new(false));
-        {
-            let mut list = self.cmd_runs.lock().unwrap();
-            list.retain(|c| !c.load(Ordering::Relaxed));
-            list.push(cancel.clone());
-        }
-        let stop = Stop::new(cancel.clone(), None);
+    fn run_open_callback(self: &Arc<Self>, target: String, kind: &'static str) {
         let weak = Arc::downgrade(self);
-        let exec_id = self.next_lua_id();
-        let started = Instant::now();
         self.vm.post(move |lua| {
-            if let Some(s) = weak.upgrade() {
-                let code = crate::scripting::registry::open_of(lua, &ext)
-                    .map(|f| tuse_lua::source_of(&f, None));
-                s.lua_start_hook(exec_id.clone(), "open", code, Some(ext.clone()));
+            let Some(s) = weak.upgrade() else { return };
+            let Some(f) = crate::scripting::registry::open_of(lua) else {
+                s.spawn_os_open(target);
+                return;
+            };
+            let cancel = Arc::new(AtomicBool::new(false));
+            {
+                let mut runs = s.cmd_runs.lock().unwrap();
+                runs.retain(|c| !c.load(Ordering::Relaxed));
+                runs.push(cancel.clone());
             }
-            let (s2, e2, flag, id2) = (weak.clone(), ext.clone(), cancel.clone(), exec_id.clone());
+            let code = tuse_lua::source_of(&f, None);
+            let done_target = target.clone();
+            let started = Instant::now();
+            let stop = Stop::new(cancel.clone(), None);
+            let done_cancel = cancel.clone();
             let done = move |_: &Lua, d: Done| {
-                flag.store(true, Ordering::Relaxed);
-                if let Some(s) = s2.upgrade() {
-                    s.lua_end_done(&id2, "open", started.elapsed(), &d);
-                    if !d.ok && d.stop != Some("cancelled") {
-                        s.error(format!("open.{e2}: {}", crate::text::error_line(&d.text)));
+                done_cancel.store(true, Ordering::Relaxed);
+                if let Some(s) = weak.upgrade() {
+                    let outcome = if d.ok {
+                        "success"
+                    } else if d.stop == Some("cancelled") {
+                        "cancelled"
+                    } else {
+                        "error"
+                    };
+                    let error = (!d.ok && d.stop != Some("cancelled"))
+                        .then(|| crate::text::error_line(&d.text));
+                    let record = crate::Record::job(
+                        "open",
+                        done_target.clone(),
+                        code,
+                        outcome.into(),
+                        started.elapsed().as_millis() as u64,
+                        error.clone(),
+                    );
+                    s.push(&mut s.state.lock().unwrap(), record);
+                    if d.ok && d.text == "fallback" {
+                        s.spawn_os_open(done_target);
+                    } else if let Some(error) = error {
+                        s.error(format!("open: {error}"));
                     }
                 }
             };
-            let start = || -> mlua::Result<()> {
-                let f = crate::scripting::registry::open_of(lua, &ext)
-                    .ok_or_else(|| mlua::Error::runtime("open handler is gone"))?;
-                let arg = Value::String(lua.create_string(&path_str)?);
-                let job = Job::new(
-                    lua,
-                    f,
-                    MultiValue::from_vec(vec![arg]),
-                    stop,
-                    Out::Buf(String::new()),
-                    done,
-                )?;
-                tuse_lua::start(lua, job);
-                Ok(())
-            };
-            if let Err(e) = start() {
-                cancel.store(true, Ordering::Relaxed);
-                let msg = tuse_lua::message(&e);
-                if let Some(s) = weak.upgrade() {
-                    s.lua_end_hook(
-                        exec_id,
-                        "open",
-                        "error",
-                        started.elapsed(),
-                        None,
-                        Some(msg.clone()),
-                    );
-                    s.error(format!("open.{ext}: {msg}"));
+            let job = (|| -> mlua::Result<_> {
+                let wrapped = lua
+                    .load(
+                        r#"local f = ...; return function(target, kind)
+                    local handled = f(target, kind)
+                    if handled == true then return 'handled' end
+                    if handled == false or handled == nil then return 'fallback' end
+                    error('open must return true, false, or nil')
+                end"#,
+                    )
+                    .call::<mlua::Function>(f)?;
+                let args = MultiValue::from_vec(vec![
+                    Value::String(lua.create_string(&target)?),
+                    Value::String(lua.create_string(kind)?),
+                ]);
+                Ok(Job::new(lua, wrapped, args, stop, Out::Buf(String::new()), done)?.returning())
+            })();
+            match job {
+                Ok(job) => tuse_lua::start(lua, job),
+                Err(e) => {
+                    cancel.store(true, Ordering::Relaxed);
+                    s.error(format!("open: {}", tuse_lua::message(&e)));
                 }
             }
         });

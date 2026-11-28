@@ -12,22 +12,27 @@ fn a_lua_fork_sends_session_switched() {
     let addr = common::provider(vec![Reply::Text("an answer")]);
     let extra = r#"
   commands = {
-    back = { run = function()
+    back = function()
       local t = require("tuse")
-      local h = t.session().history
+      local h = t.session.get().history
       for i = #h, 1, -1 do
-        if h[i].role == "agent" then t.fork(i) return end
+        if h[i].role == "agent" then t.session.fork(i) return end
       end
-    end },
+    end,
   },
 "#;
     let (dir, cfg) = common::setup("rpc-lua-switch", &addr, extra);
-    let session = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let session = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let id = session.id.clone();
@@ -35,7 +40,7 @@ fn a_lua_fork_sends_session_switched() {
     call(&tx, &out, 1, "initialize", json!({"protocolVersion": 2}));
     call(&tx, &out, 2, "turn.submit", json!({"text": "hi"}));
     event(&out, "turn_end");
-    call(&tx, &out, 3, "commands.run", json!({"name": "back"}));
+    call(&tx, &out, 3, "commands.run", json!({"name": "test:back"}));
     let switched = event(&out, "session_switched");
     assert_ne!(switched["session"]["id"], id.as_str(), "{switched}");
     assert_eq!(switched["draft"], "");

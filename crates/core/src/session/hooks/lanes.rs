@@ -13,33 +13,26 @@ pub use tuse_config::HOOK_EVENTS as EVENTS;
 #[derive(Default)]
 pub(crate) struct Lane {
     busy: bool,
-    queue: Vec<Value>,
+    queue: Vec<(String, usize, Value)>,
     cancel: Arc<AtomicBool>,
 }
 
 pub(crate) type Runs = Arc<Mutex<HashMap<String, Lane>>>;
-
-fn listens(hook: &tuse_config::Hook, event: &str) -> bool {
-    hook.events.iter().any(|e| e == event)
-}
 
 impl Session {
     pub(crate) fn hook(self: &Arc<Self>, event: &str, payload: Value) {
         if !self.hooks_on.load(Ordering::Acquire) {
             return;
         }
-        let names: Vec<String> = self
-            .config()
-            .hooks
-            .iter()
-            .filter(|(_, h)| listens(h, event))
-            .map(|(n, _)| n.clone())
-            .collect();
+        let Some(listeners) = self.config().hook.get(event).cloned() else {
+            return;
+        };
         let payload = crate::text::compact(payload);
-        for name in names {
+        for (idx, name) in listeners.into_iter().enumerate() {
             let mut runs = self.hook_runs.lock().unwrap();
             let lane = runs.entry(name.clone()).or_default();
-            lane.queue.push(payload.clone());
+            lane.queue
+                .push((event.to_string(), idx + 1, payload.clone()));
             if !lane.busy {
                 lane.busy = true;
                 drop(runs);
@@ -49,7 +42,7 @@ impl Session {
     }
 
     fn next_hook(self: &Arc<Self>, name: String) {
-        let (vars, cancel) = {
+        let (event, index, vars, cancel) = {
             let mut runs = self.hook_runs.lock().unwrap();
             let Some(lane) = runs.get_mut(&name) else {
                 return;
@@ -59,9 +52,9 @@ impl Session {
                 return;
             }
             lane.cancel = Arc::default();
-            (lane.queue.remove(0), lane.cancel.clone())
+            let (event, index, vars) = lane.queue.remove(0);
+            (event, index, vars, lane.cancel.clone())
         };
-        let is_lua_hook = matches!(vars["event"].as_str(), Some("lua_start" | "lua_end"));
         let stop = Stop::new(cancel, None);
         let weak = Arc::downgrade(self);
         self.vm.post(move |lua| {
@@ -73,7 +66,7 @@ impl Session {
                 }
             };
             let start = || -> tuse_lua::mlua::Result<()> {
-                let f: Function = crate::scripting::registry::code_of(lua, "hooks", &name)
+                let f: Function = crate::scripting::registry::hook_of(lua, &event, index)
                     .ok_or_else(|| tuse_lua::mlua::Error::runtime("run is gone"))?;
                 let arg = tuse_lua::to_lua(lua, &vars)?;
                 let job = Job::new(
@@ -84,7 +77,7 @@ impl Session {
                     Out::Buf(String::new()),
                     done,
                 )?
-                .hooked(is_lua_hook);
+                .hooked();
                 tuse_lua::start(lua, job);
                 Ok(())
             };

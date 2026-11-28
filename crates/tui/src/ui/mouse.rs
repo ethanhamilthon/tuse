@@ -29,7 +29,10 @@ impl App {
                 }
                 self.pressed_link = self.link_at(point).map(|id| (point, id));
                 self.click(point.1, point.0);
-                if self.input_area.is_some_and(|a| a.contains(point)) && !self.input_disabled() {
+                if self.input_area.is_some_and(|a| a.contains(point))
+                    && !self.input_disabled()
+                    && !self.secret_input()
+                {
                     self.selection.gesture = Some(Gesture::Input(self.editor.cursor()));
                 } else if let Some(hit) = self.chat_hits.get(point.0).and_then(Option::as_ref)
                     && let Some(col) = point.1.checked_sub(self.chat_pad)
@@ -175,9 +178,10 @@ mod tests {
             app.cwd.join("other.txt"),
             app.cwd.join("opened.txt"),
         );
+        let _ = std::fs::remove_file(&marker);
         std::fs::write(&note, "hi").unwrap();
         std::fs::write(&other, "hi2").unwrap();
-        std::fs::write(&cfg, "local t=require('tuse')\nreturn { test = { open={ txt=function(p) t.write('opened.txt', p) end } } }").unwrap();
+        std::fs::write(&cfg, "local t=require('tuse')\nreturn { open=function(p) t.fs.write('opened.txt', p) return true end }").unwrap();
         app.run_command("reload");
 
         let mut r = crate::frame::draw::Renderer::default();
@@ -232,7 +236,13 @@ mod tests {
         ));
         assert!(draw(&mut r, &mut app, 60, 12).contains("\x1b[38;2;189;222;171m"));
         let end = std::time::Instant::now() + std::time::Duration::from_secs(3);
-        while !marker.exists() && std::time::Instant::now() < end {
+        while !app
+            .session
+            .records()
+            .iter()
+            .any(|r| matches!(r, tuse_core::Record::Open(_)))
+            && std::time::Instant::now() < end
+        {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         assert!(marker.exists());
@@ -273,8 +283,7 @@ mod tests {
             la.start as u16,
             la.row as u16,
         ));
-        std::thread::sleep(std::time::Duration::from_millis(60));
-        assert!(!marker.exists());
+        assert!(app.pressed_link.is_none());
 
         if let Some(crate::kit::entry::Entry::Assistant(s)) = app.chat.get_mut(app.chat.len() - 1) {
             *s = "a note.txt\n\nshifted b note.txt".into();
@@ -293,7 +302,7 @@ mod tests {
 
         std::fs::write(
             &cfg,
-            "return { test = { ui = { theme = { accent = 'none', fg = '#445566' } } } }",
+            "return { ui = { theme = { accent = 'none', fg = '#445566' } } }",
         )
         .unwrap();
         app.session.reload().unwrap();
@@ -313,7 +322,7 @@ mod tests {
         for cmd in ["config", "session"] {
             std::fs::write(
                 &cfg,
-                "return { test = { ui = { theme = { accent = '#112233', fg = '#445566' } } } }",
+                "return { ui = { theme = { accent = '#112233', fg = '#445566' } } }",
             )
             .unwrap();
             app.run_command("reload");
@@ -321,7 +330,7 @@ mod tests {
             assert!(draw(&mut r, &mut app, 80, 20).contains("\x1b[38;2;17;34;51m"));
             std::fs::write(
                 &cfg,
-                "return { test = { ui = { theme = { accent = '#778899', fg = '#445566' } } } }",
+                "return { ui = { theme = { accent = '#778899', fg = '#445566' } } }",
             )
             .unwrap();
             app.session.reload().unwrap();

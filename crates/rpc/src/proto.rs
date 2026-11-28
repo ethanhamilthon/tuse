@@ -93,6 +93,25 @@ pub fn index_param(p: &Value, name: &str) -> Result<usize, Fail> {
         .ok_or_else(|| Fail::params(format!("`{name}` must be a non-negative integer")))
 }
 
+pub fn opt_bool(p: &Value, name: &str) -> Result<Option<bool>, Fail> {
+    match &p[name] {
+        Value::Null => Ok(None),
+        Value::Bool(b) => Ok(Some(*b)),
+        _ => Err(Fail::params(format!("`{name}` must be a boolean"))),
+    }
+}
+
+pub fn only_keys(p: &Value, allowed: &[&str]) -> Result<(), Fail> {
+    if let Some(obj) = p.as_object() {
+        for k in obj.keys() {
+            if !allowed.contains(&k.as_str()) {
+                return Err(Fail::params(format!("unknown parameter `{k}`")));
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn str_list(p: &Value, name: &str) -> Result<Vec<String>, Fail> {
     match &p[name] {
         Value::Null => Ok(vec![]),

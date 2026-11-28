@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.0
+
+- **Breaking: in-session provider and plugin management.** Removed CLI write subcommands (`tuse connect`, `tuse disconnect`, `tuse plugins`) and Lua config `providers`. Added shared provider and plugin services exposed via TUI `/providers list|connect|update|disconnect` and `/plugins list|get|add|delete|update` (with masked, non-recording secret input), Lua `providers.*` and `plugins.*`, and direct JSON-RPC v2 methods (`providers.list/connect/update/disconnect`, `plugins.list/get/add/delete/update`). Read-only `tuse providers [--json]` and `tuse models` stay in the CLI. Plugin mutations take effect in a running session only after an explicit reload.
+- **Breaking: grouped Lua host APIs and `docs.<topic>`.** Replaced flat Lua built-ins with grouped `fs.*`, `tasks.*`, `session.*`, `ui.*`, `plugins.*`, `providers.*`, plus flat `sh`, `reload`, `llm`, `json.encode`/`json.decode`, and the read-only `docs` object (`docs.topics`, `docs.<topic>`). Removed the `inspect` Lua export while keeping readable Lua result formatting. The default agent context advertises only Lua and `fs`, `sh`, `tasks`, `docs`, `json`.
+- **Breaking: global-only Lua configuration.** Removed automatic project config, `tuse init`, `--no-local`, and legacy plugin selectors. The global file returns a table with top-level `ui`, `systems`, `models`, and `open`. Namespaces hold `functions`, literal `prompts`, zero-argument `commands`, and per-event `hook` callbacks. Custom functions are exposed as `namespace.name`; built-ins can no longer be overridden or disabled via config. `systems` accepts a full-replacement string or a named table with an optional `lua` base override. Reload always refreshes the entire config. `--no-global` and `--no-plugins` can be combined.
+- **Discovery-only model lists.** Both `/models` and JSON-RPC `model.list` list discovered provider models only; `config.models` acts strictly as metadata annotations (display name, window, prices, tri-state `efforts`). Disconnecting the active model's provider keeps the selection marked unavailable rather than silently switching.
+- **TUI overlay placement and spacing.** Added `ui.picker = "bottom" | "top"` (default `"bottom"`), leaving exactly one blank row below the input in bottom placement across all input styles.
+- **Distribution and safe updates.** Removed bundled plugins and installer plugin prompts. Added a separate `make install-dev` target with isolated state and config. Made `tuse update` interactive with version comparison, intervening changelog preview, confirmation, SHA-256 verification, and `$TUSE_HOME/backups/<version>-tuse-bin` backups, and added confirmed binary-only `tuse rollback`.
+
 ## 0.14.3
 
 - Added four official, separately installable Lua plugins: `login`, `themes`, `status`, and `rename`. The interactive installer offers each one individually and skips existing plugins.

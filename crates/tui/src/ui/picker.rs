@@ -1,8 +1,20 @@
 #[derive(Debug, Clone, PartialEq)]
+pub enum ManagePick {
+    ProviderSub,
+    PluginSub,
+    ConnectApi,
+    ProviderUpdate,
+    UpdateApi { name: String, current_base: String },
+    ProviderDisconnect,
+    PluginGet,
+    PluginDelete,
+    PluginUpdate,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Command,
     Prompt,
-    PromptArg(String),
     CommandArg(String),
     File,
     Resume,
@@ -12,13 +24,14 @@ pub enum Kind {
     Task,
     History,
     LuaPicker(u64),
+    Manage(ManagePick),
 }
 
 impl Kind {
     pub fn is_token(&self) -> bool {
         matches!(
             self,
-            Kind::Command | Kind::CommandArg(_) | Kind::Prompt | Kind::PromptArg(_) | Kind::File
+            Kind::Command | Kind::CommandArg(_) | Kind::Prompt | Kind::File
         )
     }
 
@@ -176,12 +189,29 @@ impl Picker {
     }
 }
 
-pub const COMMANDS: [(&str, &str); 11] = [
+pub const PROVIDERS_ARGS: [(&str, &str); 4] = [
+    ("list", "list saved providers"),
+    ("connect", "connect a provider"),
+    ("update", "edit a saved provider"),
+    ("disconnect", "remove a saved provider"),
+];
+
+pub const PLUGINS_ARGS: [(&str, &str); 5] = [
+    ("list", "list installed plugins"),
+    ("get", "inspect an installed plugin"),
+    ("add", "install a plugin from source"),
+    ("delete", "remove an installed plugin"),
+    ("update", "update installed plugins"),
+];
+
+pub const COMMANDS: [(&str, &str); 13] = [
     ("config", "show the resolved config"),
     ("new", "start a new session"),
     ("resume", "open a session from this folder"),
     ("fork", "branch the session at a message"),
     ("models", "switch model and effort"),
+    ("providers", "manage provider profiles"),
+    ("plugins", "manage installed plugins"),
     ("tasks", "background tasks"),
     ("session", "session info, usage and model"),
     ("history", "everything in this session"),
@@ -218,17 +248,12 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["resume", "reload"]
         );
-        for kind in [
-            Kind::PromptArg("openspec".into()),
-            Kind::CommandArg("custom".into()),
-        ] {
-            let mut args = Picker::new(
-                kind,
-                ["propose", "repro", "apply"].map(|a| item(a, "", a)).into(),
-            );
-            args.filter("PR");
-            assert_eq!(args.shown, [0]);
-        }
+        let mut args = Picker::new(
+            Kind::CommandArg("plugins".into()),
+            ["list", "get", "add"].map(|a| item(a, "", a)).into(),
+        );
+        args.filter("GE");
+        assert_eq!(args.shown, [1]);
     }
 
     #[test]

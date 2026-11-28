@@ -21,6 +21,7 @@ impl Record {
             Record::Agent { .. } => "agent",
             Record::Lua { .. } => "lua",
             Record::Notification { .. } => "notification",
+            Record::TaskMessage(_) => "task_message",
             Record::Message { .. } => "message",
             Record::Usage { .. } => "usage",
             Record::Meta { .. } => "meta",
@@ -37,6 +38,7 @@ impl Record {
     fn detail(&self) -> String {
         match self {
             Record::System { text } | Record::Notification { text } => text.clone(),
+            Record::TaskMessage(t) => t.text.clone(),
             Record::Message { text, .. } => text.clone(),
             Record::User {
                 text,
@@ -159,12 +161,6 @@ impl HistoryItem {
     pub fn is_empty_agent(&self) -> bool {
         self.role == "agent" && self.detail.is_empty()
     }
-
-    pub fn hidden_by(&self, hide: &[String]) -> bool {
-        let level = self.fields.get("level").and_then(Value::as_str);
-        hide.iter()
-            .any(|h| h == self.role || (self.role == "message" && level == Some(h.as_str())))
-    }
 }
 
 fn first_line(text: &str) -> String {
@@ -204,7 +200,12 @@ pub(crate) fn decode(history: Vec<Map<String, Value>>) -> Result<Vec<Record>, St
         let record = decode_record(fields).map_err(|e| err(&e))?;
         match &record {
             Record::System { .. } if i != 0 => return Err(err("system must be first")),
-            Record::User { .. } | Record::Agent { .. } if !pending.is_empty() => {
+            Record::User { .. }
+            | Record::Agent { .. }
+            | Record::TaskMessage(_)
+            | Record::Notification { .. }
+                if !pending.is_empty() =>
+            {
                 return Err(err("missing tool result before user or agent"));
             }
             Record::Agent { tool_calls, .. } => {

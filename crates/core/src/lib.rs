@@ -13,12 +13,12 @@ mod tools;
 pub use convo::input::{FILE_LIMIT, Refs, build as build_input, is_valid_image_data_url};
 pub use convo::record::{FileDiff, Level, Record, UserInput};
 pub use convo::usage::Stats;
-pub use docs::docs;
+pub use docs::{TOPIC_NAMES, docs, topic as doc_topic};
 pub use event::{Event, InputId, Switch, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 pub use id::elapsed_since;
-pub use mode::{Mode, Options, Start};
+pub use mode::{LoadFlags, Mode, Options, Start};
 pub use session::hooks::lanes::EVENTS;
-pub use session::lua::config_lua::{config_arg, configured_models};
+pub use session::lua::config_lua::configured_models;
 pub use session::lua::open::openable_url;
 pub use session::view::history::HistoryItem;
 pub use session::view::models::model_available;
@@ -28,7 +28,9 @@ pub use session::view::snapshot::{
 pub use session::{Activity, Session};
 pub use storage::store::Meta;
 pub use storage::tasks::{TaskInfo, Tasks};
-pub use storage::{Prefs, Providers};
+pub use storage::{
+    ConnectInput, PluginAddResult, PluginDetail, PluginInfo, Plugins, Prefs, ProviderPatch,
+    ProviderResult, ProviderView, Providers,
+};
 pub use text::tokens;
-pub use tuse_config::HOST_FUNCTIONS;
-pub use tuse_config::tuse_home;
+pub use tuse_config::{HOST_FUNCTIONS, HOST_GROUPS, tuse_home};

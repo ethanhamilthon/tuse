@@ -103,7 +103,6 @@ pub struct Job {
     diffs: Vec<(String, String)>,
     images: Vec<String>,
     is_hook: bool,
-    is_lua_hook: bool,
     thread: Thread,
     args: MultiValue,
     done: Option<OnDone>,
@@ -129,7 +128,6 @@ impl Job {
             diffs: vec![],
             images: vec![],
             is_hook: false,
-            is_lua_hook: false,
             thread: lua.create_thread(f)?,
             args,
             done: Some(Box::new(done)),
@@ -155,9 +153,8 @@ impl Job {
         });
     }
 
-    pub fn hooked(mut self, lua_hook: bool) -> Self {
+    pub fn hooked(mut self) -> Self {
         self.is_hook = true;
-        self.is_lua_hook = lua_hook;
         self
     }
 
@@ -193,10 +190,6 @@ impl Job {
 
     pub fn is_hook(&self) -> bool {
         self.is_hook
-    }
-
-    pub fn is_lua_hook(&self) -> bool {
-        self.is_lua_hook
     }
 
     pub fn background(&self) -> bool {
@@ -242,7 +235,7 @@ impl Job {
         self.stop.handoff = None;
         let host = crate::host(lua);
         let code = self.code.as_deref().unwrap_or_default().to_string();
-        let Ok(t) = host.task_start(&name, &code, true) else {
+        let Ok(t) = host.task_start(&name, &code) else {
             return false;
         };
         let mut out = Out::File(t.log);
@@ -263,7 +256,6 @@ impl Job {
         if let Some(on_done) = self.done.take() {
             on_done(lua, done);
         }
-        host.task_track(&t.id, &name);
         self.done = Some(Box::new(move |_, done| host.task_end(&t.id, done)));
         true
     }

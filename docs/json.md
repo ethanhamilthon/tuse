@@ -5,7 +5,7 @@ How to drive Tuse from another program with `tuse json`: JSON-RPC 2.0 over stdin
 ## Running it
 
 ```sh
-tuse json [-c|--config PATH] [-r|--resume ID]
+tuse json [-r|--resume ID] [--no-global] [--no-plugins]
 ```
 
 - Stdout carries only JSON-RPC frames, and diagnostics go to stderr. Lua that writes straight to `io.stdout` would break this, so don't.
@@ -15,7 +15,7 @@ tuse json [-c|--config PATH] [-r|--resume ID]
 
 ```text
 > {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":2}}
-< {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":2,"tuse":"0.14.0","session":{"mode":"json","cwd":"/work","home":"/home/me/.tuse","id":"…","started":false,"model":"openai/gpt-5","provider":"openai","effort":"medium","busy":false,"context":0,"usage":{"input":0,"output":0,"cache_read":0,"cache_write":0},"requests":0,"llm_requests":0,"steps":0,"turns":0,"calls":0},"capabilities":{"methods":["initialize","…"]}}}
+< {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":2,"tuse":"0.15.0","session":{"mode":"json","cwd":"/work","home":"/home/me/.tuse","id":"…","started":false,"model":"openai/gpt-5","provider":"openai","effort":"medium","busy":false,"context":0,"usage":{"input":0,"output":0,"cache_read":0,"cache_write":0},"requests":0,"llm_requests":0,"steps":0,"turns":0,"calls":0},"capabilities":{"methods":["initialize","…"]}}}
 > {"jsonrpc":"2.0","id":2,"method":"turn.submit","params":{"text":"fix the test"}}
 < {"jsonrpc":"2.0","id":2,"result":{"input_id":1,"queued":false}}
 < {"jsonrpc":"2.0","method":"event","params":{"type":"text","text":"Let me"}}
@@ -29,17 +29,17 @@ tuse json [-c|--config PATH] [-r|--resume ID]
 | `-32700` | Malformed JSON (`id` is `null`). |
 | `-32600` | Not a valid request: `jsonrpc` isn't `"2.0"`, `method` isn't a string, or `params` isn't an object. |
 | `-32601` | Unknown or retired method. |
-| `-32602` | Bad params, such as a wrong type on required or optional fields, or an unsupported `protocolVersion`. |
-| `-32000` | The session refused: a missing file or prompt, invalid image data URL, empty input, disallowed effort, an unknown task or command, an invalid config, a locked session, or a stale UI id. |
+| `-32602` | Bad params, such as a wrong type on required or optional fields, unknown keys on management methods, or an unsupported `protocolVersion`. |
+| `-32000` | The session refused: a missing file or prompt, invalid image data URL, empty input, disallowed effort, failed provider probe, duplicate/missing provider or plugin, an unknown task or command, an invalid config, a locked session, or a stale UI id. |
 | `-32002` | Called before `initialize`. |
 
 ## Handshake
 
-Send `initialize` first. Only `shutdown` is accepted before it. `protocolVersion` is `2` (omitted means `2`). Any other version (including `1`) fails with `-32602`, and you can try again. Events start flowing after the `initialize` reply. Events and replies are independent streams, so match replies by `id`.
+Send `initialize` first. Only `shutdown` is accepted before it. `protocolVersion` is `2` (omitted means `2`). Any other version (including `1`) fails with `-32602`, and you can try again. Events start flowing after the `initialize` reply. Events and replies are independent streams, so match replies by `id`. `initialize.result.capabilities.methods` advertises every supported method.
 
 ## Methods
 
-All Tuse domain fields use `snake_case`. `SessionState` is `{mode, config_path?, cwd, home, id, started, created, title?, model?, provider?, effort, busy, turn?: {elapsed_ms, status}, context, context_window?, usage: {input, output, cache_read, cache_write, cost?, llm_cost?}, model_info?: {name, display?, window?, efforts, prices?}, requests, llm_requests, steps, turns, calls}` (lightweight—never includes `history`).
+All Tuse domain fields use `snake_case`. `SessionState` is `{mode, config_path?, cwd, home, id, started, created, title?, model?, provider?, effort, busy, turn?: {elapsed_ms, status}, context, context_window?, usage: {input, output, cache_read, cache_write, cost?, llm_cost?}, model_info?: {name, display?, window?, efforts, available, prices?}, requests, llm_requests, steps, turns, calls}` (lightweight—never includes `history`).
 
 ### Lifecycle
 
@@ -49,7 +49,7 @@ All Tuse domain fields use `snake_case`. `SessionState` is `{mode, config_path?,
 ### Turns
 
 - `turn.submit` `{text, prompts?, images?, files?}` → `{input_id, queued}`.
-  - `prompts` are names from config `prompts`, or `"name arg"` for a prompt with `args`. An unknown arg or a failing `run` fails with `-32000`.
+  - `prompts` is a list of qualified literal prompt names such as `work:review`. An unknown name returns `-32000`.
   - `images` are valid `data:image/<mime>,<data>` URLs or file paths (`~/` expands). Invalid `data:` URLs fail with `-32000`.
   - `files` are files or folders (`~/` expands), attached like `@` in the TUI ([Usage](usage.md#typing-a-message)).
   - Unknown or missing references fail with `-32000`, and so does empty input.
@@ -60,14 +60,14 @@ All Tuse domain fields use `snake_case`. `SessionState` is `{mode, config_path?,
 ### Sessions
 
 - `session.state` → `SessionState` (lightweight state without `history`).
-- `session.history` → the structured records from `session().history` ([History](session.md#history-and-session-data)).
+- `session.history` → the structured records from `session.get().history` ([History](session.md#history-and-session-data)).
 - `session.list` `{cwd?}` → started sessions in that folder, newest first: `[{id, cwd, title, model, effort, started, created, updated}]`. A non-string non-null `cwd` fails with `-32602`.
 - `session.new` → `{session: SessionState}`.
 - `session.fork` `{index}` → `{session: SessionState, draft}`. `index` counts from 0 in the `session.history` list and must point at a `user` or `agent` record. The new session holds the history through an agent record, or up to a user record without it. `draft` is the text of that user record, and empty for an agent record.
 
-External clients discover saved session IDs via `session.list` and resume a chosen session by launching `tuse json -r <id>` (or via a configured Lua command/hook calling `resume(id)`, which emits `session_switched`).
+External clients discover saved session IDs via `session.list` and resume a chosen session by launching `tuse json -r <id>` (or via a configured Lua command/hook calling Lua `session.resume(id)`, which emits `session_switched`; there is no RPC `session.resume` method, and retired v1 getters return `-32601`).
 
-For `session.new` and `session.fork`, events left over from the old session are sent before the reply, and events of the new session after it. If the switch fails, the current session stays.
+For `session.new` and `session.fork`, events left over from the old session are sent before the reply, and events of the new session after it. If the switch fails, the current session stays. Launch exclusion flags persist across session switches.
 
 ### Models
 
@@ -78,24 +78,40 @@ For `session.new` and `session.fork`, events left over from the old session are 
   - Disallowed efforts (or any non-empty effort on an `efforts = {}` model) fail with `-32000`.
   - `persist` (default `true`) also saves the choice as the default for new sessions.
   - A model whose provider isn't connected fails with `-32000`.
-- `model.list` `{cached?}` → sorted `"provider/model"` names. Unless `cached: true`, it also starts fetching from providers. Each provider that answers sends a `models` event, after which `model.list {cached: true}` returns the fuller list.
+- `model.list` `{cached?}` → sorted `"provider/model"` names discovered from connected providers (never config-only entries). Unless `cached: true`, it also starts fetching from providers. Each provider that answers sends a `models` event, after which `model.list {cached: true}` returns the fuller list.
+
+### Providers and plugins
+
+All provider and plugin methods use the same shared services and validation as TUI and Lua. Parameter schema/type errors or unknown keys fail with `-32602`; validation, probe, collision, missing-target, and storage errors fail with `-32000`. Credentials and header values are never returned in results or errors.
+
+- `providers.list` `{}` → `[{name, type, base}]`.
+- `providers.connect` `{name, api?, base, key, headers?, replace?}` → `{name, type, base, models}`. Validates, probes `GET <base>/models`, and saves in one non-interactive request without emitting `ui_request`.
+- `providers.update` `{name, api?, base?, key?, headers?}` → `{name, type, base, models}`. Preserves omitted fields and probes before commit.
+- `providers.disconnect` `{name}` → `{name}`. Deletes the saved profile and prunes its cached discovered models. If it backed the selected model, the selection stays unchanged with `model_info.available: false`, any already in-flight request completes, and subsequent turns fail cleanly.
+- `plugins.list` `{}` → `[{name, version, entrypoint, path, source}]`.
+- `plugins.get` `{target}` → `{name, version, entrypoint, path, source, manifest}`.
+- `plugins.add` `{source, replace?}` → `{name, version, entrypoint, path, source, replaced}`.
+- `plugins.delete` `{target}` → `{name}`.
+- `plugins.update` `{target?}` → `{updated: [{name, version, entrypoint, path, source}]}`.
+
+Plugin mutations update files under `$TUSE_HOME/plugins/` and `plugins.list` / `plugins.get` immediately (even when launched with `--no-plugins`), while active session contributions change only after an explicit `config.reload` (or in a new session).
 
 ### Config
 
-- `config.get` → the resolved config: `providers` (`[{name, type, base}]` for all active saved and Lua providers — never keys or headers), `plugins` (`[{name, version}]`), `ui` (with raw `ui.theme` token links preserved), `history`, `open`, `models` (omitting `efforts` when unset and serializing `[]` when explicitly empty), `systems`, `prompts` (`{kind: "text" | "function", body, args}`), `functions` (`custom`, `override`, or `disabled`), `hooks` (`{events}`), `commands` (`{desc, args, params}` per name), and `path` (`""` when defaults are used). Secrets and Lua function bodies are never exposed.
-- `config.reload` `{ns?}` → `null`, or `-32000` with the reason. Omit `ns` (or pass `null`) for a full reload. Pass an active namespace name, e.g. `{"ns":"work"}`, to evaluate the config once but apply only that namespace's local and global contributions. Adding or removing namespaces requires a full reload. An empty or non-string `ns` (other than `null`) returns `-32602`. If reload fails, the old config stays.
+- `config.get` → resolved `ui`, `open` (boolean), model metadata keyed by `provider/model`, `systems`, qualified literal `prompts`, qualified `functions`, `hook` listeners, qualified `commands`, active `plugins`, and `path`. Secrets and Lua function bodies are never exposed.
+- `config.reload` `{}` → `null`, or `-32000` with the reason. Reloads the entire configuration. Named parameters return `-32602`. On failure the old configuration stays.
 
 ### Tasks and commands
 
 - `tasks.list` → `[{id, name, status, started, ended, log, code}]`.
 - `tasks.get` `{id, lines?}` → the same fields plus `output`, the last `lines` lines of the log (default 50; `0` clamps to `1`; wrong types fail with `-32602`).
 - `tasks.stop` `{id}` → the task.
-- `commands.list` → `[{name, desc, args, params}]` for the custom commands. `params` is the number of parameters `run` declares, or `null` when it takes `...`.
-- `commands.run` `{name, argv?}` → `null`. Starts the command with the words in `argv`. Words the command does not accept fail with `-32000`.
+- `commands.list` → `[{name}]`, with qualified names such as `work:review`.
+- `commands.run` `{name}` → `null`. Starts the named callback with no arguments. `argv` is not supported.
 
 ### Interactive UI
 
-`show`, `pick`, and `ask` become events, and the client answers them:
+`ui.show`, `ui.pick`, and `ui.ask` become events, and the client answers them:
 
 - `ui.state` → `{markdowns: [{name, text, pin}], active: UiRequest | null, entries: [{id, kind, prompt, value}]}`. Call it to resync at any time.
 - An active picker has `id`, `kind: "picker"`, and `options`. A titled picker also has `title`, the original Markdown question; untitled pickers omit it in both `ui.state.active` and `ui_request`.
@@ -110,7 +126,7 @@ Events come as `{"jsonrpc":"2.0","method":"event","params":{"type": …}}`:
 | --- | --- | --- |
 | `turn_start` | | A turn began. |
 | `user` | `input_id`, `text`, `images` | A message was taken into the turn. |
-| `notification` | `text` | A task message was taken into the turn. |
+| `task_message` | `id`, `name`, `status`, `delivery`, `text` | A completed task was delivered to the agent (`wake` when idle, `steer` in an active turn). |
 | `text` | `text` | Assistant text delta. |
 | `reasoning` | `text` | Reasoning delta. |
 | `stream_reset` | | A retry: drop the deltas of the failed attempt. |
@@ -128,8 +144,8 @@ Events come as `{"jsonrpc":"2.0","method":"event","params":{"type": …}}`:
 | `models` | | A provider listed its models: read `model.list {cached: true}`. |
 | `reloaded` | | The config was reloaded. |
 | `history_replaced` | | Lua replaced the stored history; call `session.history` to refresh. |
-| `session_switched` | `session`, `draft` | Lua called `fork` or `resume` and the switch happened. It follows the last event of the old session and comes before the first event of the new one. `draft` is the text of the user record a fork stopped before, or empty. |
-| `ui_markdown` | `name`, `text`, `pin`, `removed` | A `show()` block changed. |
+| `session_switched` | `session`, `draft` | Lua called `session.fork` or `session.resume` and the switch happened. It follows the last event of the old session and comes before the first event of the new one. `draft` is the text of the user record a fork stopped before, or empty. |
+| `ui_markdown` | `name`, `text`, `pin`, `removed` | A `ui.show()` block changed. |
 | `ui_request` | `id`, `kind`, plus `options` and optional `title` (`picker`) or `text` (`question`) | A prompt became active. |
 | `ui_clear` | `id` | Tuse withdrew the active prompt. |
 | `ui_result` | `id`, `kind`, `prompt`, `value` | A prompt was answered. |

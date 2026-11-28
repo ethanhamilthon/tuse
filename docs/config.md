@@ -1,91 +1,42 @@
 # Config
 
-How Tuse finds, composes, and runs its namespaced Lua configs, global config, plugins, every key it accepts, and how reload works. Tuse runs fine without any config. Defaults and the system prompt are built into the binary.
+How Tuse finds, composes, and runs its namespaced Lua configs, global config, and installed plugins, every key it accepts, and how reload works. Tuse runs fine without any config. Defaults and the system prompt are built into the binary.
 
-## Where the config comes from
+## Global configuration
 
-Tuse composes three layers: **primary local config**, **global config**, and **installed plugins**.
+Tuse reads one Lua file: nonblank `$TUSE_GLOBAL_CONFIG`, then `~/.config/tuse.lua`, then `~/.config/tuse/init.lua`. An override expands `~/`, resolves relative paths against the session directory, and uses `init.lua` when it names a directory. An invalid explicit path fails rather than falling back. With no file, defaults apply. `--no-global` skips the lookup entirely. A project `./tuse.lua` is never auto-discovered.
 
-1. **Primary local config** (evaluated first): `-c PATH` / `--config PATH` (relative to the current folder, `~/` expands; missing/unreadable fails), else `./tuse.lua` in the session folder.
-2. **Global config**: resolved from `$TUSE_GLOBAL_CONFIG` (when set and non-empty after trimming whitespace; `~/` expands, relative paths resolve against the session working directory, and a directory loads `<dir>/init.lua`; a missing or unreadable target fails fast without falling back), else `~/.config/tuse.lua`, else `~/.config/tuse/init.lua`. Unset, empty, or whitespace-only `TUSE_GLOBAL_CONFIG` falls through to `~/.config/tuse.lua` / `~/.config/tuse/init.lua`.
-3. **Installed plugins**: discovered under `~/.tuse/plugins/` (any immediate subdirectory whose root contains `tuse-plugin.json`).
-
-Overall lookup precedence is `-c` > `./tuse.lua` > `$TUSE_GLOBAL_CONFIG` > `~/.config/tuse.lua` > `~/.config/tuse/init.lua` > built-in defaults. `session().config_path` points to the primary local config file, else the global config file, else `nil`.
-
-### Namespaced layout
-
-Primary configs (`./tuse.lua` or `-c PATH`) return a table of **named namespaces**, plus optional reserved top-level control keys `global` and `plugins`. Flat top-level config tables are rejected without backward compatibility:
+The global file returns a table. Set `ui`, `systems`, `models`, and the optional `open` callback at the top level. Other entries are namespaces containing `functions`, `prompts`, `commands`, or `hook`:
 
 ```lua
-local t = require("tuse")
-
 return {
-  global = { profile = "work" },
-  plugins = { without = { "noise" } },
-  project = {
-    systems = { "Run `make check` before you finish." },
-    prompts = { review = require("prompts/review") },
-    open = { md = function(path) t.sh('open -a Typora "$P"', { env = { P = path } }) end },
+  ui = { input = "bar" },
+  systems = { rules = "Run the tests before finishing." },
+  models = { ["provider/model"] = { window = 128000 } },
+  work = {
+    prompts = { review = "Review the diff." },
+    commands = { hello = function() print("hello") end },
+    functions = { ping = function() return "pong" end },
   },
 }
 ```
 
-`tuse init` creates a minimal starter namespaced `./tuse.lua` that automatically composes with your global config and installed plugins.
+To reuse a trusted Lua file, load it explicitly, for example `return assert(loadfile("./tuse.lua"))()`. Unlike `require`, a relative `loadfile` path starts from the process working directory. Use `require("tuse").session.get().cwd` to build a path for the session directory when needed. Do not automatically execute an untrusted repository's file.
 
-### Global config function
+## Installed plugins
 
-The global config file (`$TUSE_GLOBAL_CONFIG`, `~/.config/tuse.lua`, or `~/.config/tuse/init.lua`) MUST return a function `function(opts) ... return { <namespaces> } end`:
+An installed plugin is a directory under `$TUSE_HOME/plugins/` (default `~/.tuse/plugins/`) with a `tuse-plugin.json` manifest. The manifest has required `version`, optional `name`, and `entrypoint` defaulting to `init.lua`. The relative entrypoint must stay within the plugin root. The entrypoint returns a flat table of `functions`, `prompts`, `commands`, and/or `hook`. Tuse uses the plugin name as its namespace: `demo.ping()`, `#demo:review`, `/demo:hello`. A collision with a user namespace fails validation; the tables are never merged.
+
+Management is through `/plugins`, Lua `plugins.*`, and JSON-RPC `plugins.*`. Non-lazy installed plugins activate on startup or a successful full reload, unless `--no-plugins` is set. Installation and updates alone do not change the running config.
+
+Set `"lazy": true` in `tuse-plugin.json` to skip automatic activation. `plugins.get` returns metadata without executing the entrypoint. To load a trusted lazy plugin manually and register its exports under `tools`:
 
 ```lua
-return function(opts)
-  opts = opts or {}
-  return {
-    base = {
-      ui = { input = "bar", theme = { accent = opts.accent or "#FFB86C" } },
-      history = { hide = { "usage", "flash" } },
-    },
-  }
-end
+local plugins = require("tuse").plugins
+return { tools = plugins.load("demo") }
 ```
 
-- Because the primary local config evaluates first, setting `global = false` skips loading and executing the global config file entirely.
-- Setting `global = <opts>` calls the global function with `<opts>`.
-- Omitting `global` (or running with no primary local config) calls the global function with `nil`.
-- Returning a non-function from the global config file fails validation.
-
-### Plugins and `tuse-plugin.json`
-
-Installed plugins live in `~/.tuse/plugins/<name>/` and are managed with `tuse plugins` ([Usage](usage.md#command-line)). A directory under `~/.tuse/plugins/` is recognized as an installed plugin if and only if its root contains `tuse-plugin.json`:
-
-```json
-{
-  "name": "demo",
-  "version": "1.0.0",
-  "entrypoint": "init.lua"
-}
-```
-
-- `version` (non-empty string) is required.
-- `entrypoint` (string, default `"init.lua"`) must stay inside the plugin root directory (no absolute paths, `..`, or symlink escapes).
-- `name` is optional; when installing, `<name>` defaults to the repository or subdirectory basename.
-- A plugin entrypoint returns either a flat contribution table (`{ functions = ..., commands = ..., ... }`) or `function(opts) -> table`.
-
-Control automatic plugin loading with top-level `plugins`:
-
-- Omitting `plugins` or setting `plugins = {}` (or running with no config file) auto-loads all installed plugins.
-- `plugins = { only = {} }` disables automatic plugin loading while keeping explicit `require("plugin:<name>")` and `require("plugins")` working. `plugins = false` is rejected.
-- `plugins = { only = { "a", "b" }, opts = { a = { flag = true } } }` allowlists plugins and passes per-plugin `opts`.
-- `plugins = { without = { "b" } }` excludes named plugins from auto-loading.
-- Setting both `only` and `without`, or naming an uninstalled plugin in `only`, `without`, or `opts`, fails validation.
-- If both global and local configs set `plugins`, the local `plugins` selector wins. Excluded plugins are never executed unless explicitly required.
-
-### Merging and duplicate rules
-
-Contributions from `global`, auto-loaded `plugins`, and `local` namespaces merge deterministically:
-
-- **Duplicate error:** duplicate keys in `functions` (including `false` vs a function override), `commands`, `prompts`, `open`, `providers`, `hooks`, and duplicate `models[].name` fail validation with an error naming both sources. This includes re-exporting a function from `require("plugin:<name>")` while that plugin is still auto-loaded; exclude it with `plugins = { without = { "<name>" } }` or `plugins = { only = {} }`.
-- **`ui`:** deep-merged by leaf field with layer priority `local > global > plugins`. Conflicting leaves within the same layer fail validation.
-- **`systems` and `history.hide`:** concatenated in deterministic order: `global` -> `plugins` (sorted by name) -> `local` (sorted by namespace name).
+`plugins.load` executes the entrypoint even with `--no-plugins`, which only disables automatic activation. The call itself does not register anything; returning the export under `tools` registers that namespace. There are no plugin config selectors or entrypoint `opts`.
 
 ## Modules and `require`
 
@@ -93,53 +44,23 @@ Contributions from `global`, auto-loaded `plugins`, and `local` namespaces merge
 
 | Call | Loads |
 | --- | --- |
-| `require("tuse")` | The host functions: `session`, `sh`, `spawn`, `read`, `write`, `append`, `delete`, `edit`, `grep`, `docs`, `set_session`, `fork`, `resume`, `task_get`, `task_list`, `task_stop`, `show`, `pick`, `ask`, `reload`, `llm`, `json`, `inspect`. |
-| `require("global")` | `$TUSE_GLOBAL_CONFIG` when set and non-empty (failing fast if missing), else `~/.config/tuse.lua` then `~/.config/tuse/init.lua`, returning its raw global function. |
-| `require("plugin:<name>")` | Trusted config only. Loads only the installed plugin `<name>` from `~/.tuse/plugins` and returns its raw entrypoint export without invoking functions. |
-| `require("plugins")` | Trusted config only. Loads all installed plugins (invoking function entrypoints with `nil`), validates duplicates, and returns a merged flat table (`.functions`, `.commands`, `.prompts`, etc.) independent of any returned `plugins` selector or `opts`. |
+| `require("tuse")` | The host API: grouped `fs` (`read`, `write`, `append`, `delete`, `edit`, `grep`), `tasks` (`spawn`, `get`, `stop`, `list`), `session` (`get`, `set`, `fork`, `resume`), `ui` (`show`, `pick`, `ask`), `plugins` (`list`, `get`, `add`, `delete`, `update`, `load`), `providers` (`list`, `connect`, `update`, `disconnect`), `json` (`encode`, `decode`), object `docs` (`topics`, `<topic>`), and flat `sh`, `reload`, `llm`. |
 | `require("name")`, `require("a.b")` | `name.lua` or `name/init.lua` (`a/b.lua`, …) next to the calling file. |
 | `require("./x")`, `require("../x")` | The same, relative to the calling file. |
 | `require("~/x")`, `require("/abs/x")` | `x.lua` or `x/init.lua` at that path. |
 | `require("dir/file.lua")` | That exact file. |
 
-Modules are cached by their real path. A cycle raises `cyclic require: '<path>'`, and a missing module lists every path that was tried. `package.preload` works as in normal Lua, and `/reload` clears cached preloaded, global, and plugin modules (restoring them if reload fails).
+Modules are cached by their real path. A cycle raises `cyclic require: '<path>'`, and a missing module lists every path that was tried. `package.preload` works as in normal Lua, and `/reload` clears the trusted environment’s preloads and cached modules (restoring them if reload fails).
 
-In config code the host functions are **not** globals: get them from `local t = require("tuse")`. While the config itself is being evaluated, `t.session()` only has `mode` (`"tui"` or `"json"`), `config_path`, `cwd`, and `home`. At this point only `read`, `sh`, `json`, and `inspect` are safe to call. Put everything else into callbacks (hooks, commands, functions). `os.getenv("THIS_PATH")` gives the path of the current Lua file. `os.exit` and `debug` are not available.
+In config code the host functions are **not** globals: get them from `local t = require("tuse")`. While the config itself is being evaluated, `t.session.get()` only has `mode` (`"tui"` or `"json"`), `config_path`, `cwd`, and `home`. At this point only `fs.read`, `sh`, `docs`, and `json` are safe to call. Put everything else into callbacks (hooks, commands, functions). `os.getenv("THIS_PATH")` gives the path of the current Lua file. `os.exit` and `debug` are not available.
 
-## Namespace keys
+## Global settings and namespace keys
 
-Every namespace contribution table accepts these optional keys. Unknown keys, stray functions/userdata/threads outside known callback slots (`hooks.*.run`, `commands.*.run`, `prompts.*.run`, `functions.*`, `open.*`), wrong types, and out-of-range values fail with a path. Validation errors under `providers.*` stay generic so secrets are never echoed. On startup that stops Tuse; on reload the old config stays.
-
-| Key | Type | Meaning |
-| --- | --- | --- |
-| `ui` | table | `lines`, `input`, `space`, and `theme` (below). |
-| `history` | table | `hide` (below). |
-| `open` | `key -> function(path)` | Click handlers for files and links (below). |
-| `providers` | `name -> { base, key, api?, headers? }` | Session-only API connections ([Connect](connect.md#providers-in-lua-config)). |
-| `models` | list | Model metadata including optional tri-state `efforts` ([Connect](connect.md#model-metadata)). |
-| `systems` | list of strings | Text appended to the system prompt, in order ([Lua](lua.md#what-the-agent-sees)). |
-| `prompts` | `name -> string \| { args?, run }` | Prompts for the `#` picker and JSON-RPC `turn.submit` (below). |
-| `functions` | `name -> function \| false` | Extra agent functions, overrides, and disabled built-ins (below). |
-| `hooks` | `name -> { events, run }` | Lifecycle hooks ([Lua](lua.md#hooks)). `events` needs at least one known event, and `run` is required. |
-| `commands` | `name -> { args?, desc?, run }` | Custom slash commands (below). |
+Global settings are `ui`, `models`, `systems`, and `open`. Namespaces accept only `functions` (named callbacks), `prompts` (named literal strings), `commands` (named zero-argument callbacks), and `hook` (event-to-callback table). Unknown keys and wrong types fail with a source path.
 
 ### Theme and UI
 
-`ui` controls the TUI and holds the theme. `history` holds `hide`. Set only the keys you want to change inside a namespace:
-
-```lua
-return {
-  look = {
-    ui = {
-      lines = { output = 3, diff = 20, strings = 2 },
-      input = "bar",
-      space = { padding = 1, steps = 0 },
-      theme = { accent = "#FFB86C", code = { keyword = "accent" } },
-    },
-    history = { hide = { "usage", "flash" } },
-  },
-}
-```
+`ui` controls the TUI and holds the theme. Its keys are `lines`, `input`, `picker`, `space`, and `theme`. Set it at the top level of the global config. Omitted settings use defaults.
 
 #### `ui.lines`
 
@@ -155,9 +76,10 @@ return {
 | `input` | `10` | Max visible input rows (`-1` or `>= 1`). |
 | `list` | `16` | Max rows for pickers and panels (`>= 1`). |
 
-#### `ui.input`
+#### `ui.input` and `ui.picker`
 
-`boxed` (the default) draws a border around the growing input and status row, with one blank column inside each side border. `lines` puts a rule above and below the input. `fill` draws the input on an `input_bg` background with the status line below it. `bar` puts an `icons`-colored `▌` before each input row, then a blank row and the status line. `boxed`, `fill`, and `bar` fall back to `lines` if the terminal is too small. Every style leaves one empty row above the input. Pickers, questions, and panels open below the input: under the box or rules with `lines` and `boxed`, and between the input and the status line, closed by a rule, with `fill` and `bar`.
+- `ui.input`: `boxed` (the default) draws a border around the growing input and status row, with one blank column inside each side border. `lines` puts a rule above and below the input. `fill` draws the input on an `input_bg` background with the status line below it. `bar` puts an `icons`-colored `▌` before each input row, then a blank row and the status line. `boxed`, `fill`, and `bar` fall back to `lines` if the terminal is too small. Every style leaves one empty row above the input.
+- `ui.picker`: `bottom` (default) or `top`. Positions all pickers, questions, forms, and panels below or above the composer across every input style. `bottom` always leaves exactly one blank row between the input and the overlay below it (with `fill` and `bar`, the overlay sits between that blank row and the closing rule above the status line).
 
 #### `ui.space`
 
@@ -205,7 +127,7 @@ Every token can also name a color token (`bg`, `accent`, `fg`, `user`, `user_bg`
 | `escape` | `#97BEDC` | Escapes inside strings: `\n`, `\x41`, `\u{20}`. |
 | `comment` | `"muted"` | Comments. |
 | `function` | `#97BEDC` | Function names at definitions and calls. |
-| `builtin` | `#97BEDC` | Standard and Tuse functions and libraries: `print`, `read`, `string.format`. |
+| `builtin` | `#97BEDC` | Standard and Tuse functions and libraries: `print`, `fs.read`, `string.format`. |
 | `method` | `#97BEDC` | Names after `:`. |
 | `field` | `"none"` | Names after `.` and table keys. |
 | `parameter` | `#BDBDBD` | Function parameters and their uses in the body. |
@@ -223,99 +145,15 @@ Every token can also name a color token (`bg`, `accent`, `fg`, `user`, `user_bg`
 | `quote` | `"muted"` | Block quotes. |
 | `list` | `"muted"` | List markers. |
 
-#### `history`
+### `open`
 
-`history.hide` is a list of history roles left out of `/history`, such as `{ "usage", "turn_end" }` ([Session](session.md#history-and-session-data)). It also takes the message levels `flash`, `notice`, and `error`, which hide only `message` entries of that level. Unknown names fail with `history.hide[N]`.
-
-When `models` is set, `/models` lists only those models. JSON-RPC `model.list` ignores that restriction.
-
-### `prompts`
-
-A prompt is a string, or a table with an optional `args` dense list (including empty `{}`) and a `run` function:
-
-```lua
-return {
-  my = {
-    prompts = {
-      review = "Check the change for bugs.",
-      today = { run = function() return "Today is " .. os.date("%F") end },
-      openspec = {
-        args = { "explore", "propose", "apply" },
-        run = function(arg) return "OpenSpec " .. (arg or "explore") .. ": …" end,
-      },
-    },
-  },
-}
-```
-
-- A prompt name is not empty and has no whitespace.
-- `args` is a dense list of unique strings without spaces. Non-dense tables (holes or extra string keys) fail validation.
-- When the message is sent, `run(arg)` runs (`arg` is `nil` if none was picked) and must return a string. The model only sees that string, as `<prompt name="openspec" arg="propose">…</prompt>`, never the function.
-- If `run` fails or does not return a string, the message is not sent and the error is shown.
-
-### `functions`
-
-Gives the agent extra functions, replaces built-ins, or removes them:
-
-```lua
-local t = require("tuse")
-return {
-  web = {
-    systems = { "You also have `websearch(query)`, which returns result text." },
-    functions = {
-      websearch = function(q)
-        return t.sh('curl -fsS "https://example.com/?q=$Q"', { env = { Q = q } }).out
-      end,
-      sh = function(cmd, opts)
-        opts = opts or {}
-        opts.timeout = opts.timeout or 30
-        return t.sh(cmd, opts)
-      end,
-      delete = false,
-    },
-  },
-}
-```
-
-- Keys are Lua identifiers. Lua keywords and standard globals (`print`, `string`, …) are rejected.
-- A function value becomes a global, and an override of the same name on `require("tuse")`, only in the agent's `lua` tool. Config code, hooks, commands, and other functions never see these functions. Use `t.<name>` to call the original.
-- `false` removes a built-in from the agent. It disappears from the globals, from `require("tuse")`, from the system prompt, and from `docs()`. `false` on an unknown name is an error. `json = false` works, but `json = function` does not.
-- Custom functions are not announced to the agent. Describe them in `systems` or `prompts`.
-
-### `commands` and `open`
-
-- A command is a table `{ args?, desc?, run }`. A bare function fails loading. It adds `/name` to the TUI and JSON-RPC `commands.run`:
-
-```lua
-return {
-  tools = {
-    commands = {
-      diff = { run = function() ... end },
-      mv = { run = function(from, to) ... end },
-      deploy = {
-        desc = "ship it",
-        args = { "staging", "prod" },
-        run = function(env) ... end,
-      },
-    },
-  },
-}
-```
-
-- `desc` is shown next to `/name` in the `/` picker.
-- Without `args`, words typed after the name (`/mv a.txt b.txt`) are passed to `run` in order, up to the parameter count `run` declares (any number if variadic). Missing words are `nil`. A zero-arg command fails on trailing words or whitespace with `/diff takes no words`. Words in `"…"` or `'…'` keep spaces, `\"`/`\'` escape quotes, and an unclosed quote is an error.
-- With `args`, only one word is accepted, it must be in `args`, and `run` gets it as its first parameter. `args` must be a dense list (including empty `{}`) of unique strings without whitespace.
-- Commands run as Lua jobs with no deadline. Host functions are not globals here; use `require("tuse")`. Esc cancels them. The return value is ignored.
-- A command name is not empty, does not start with `/`, has no whitespace or control characters, and is not a built-in name (`config`, `new`, `resume`, `fork`, `models`, `tasks`, `session`, `history`, `reload`, `stop`, `quit`).
-- `open = { md = function(path) ... end }` handles clicks on local files and links in the TUI. A key is an extension without a dot (`md`, case-insensitive), a mask with `*` or `?` (`*.test.lua`, `.env*`, case-insensitive), `*`, `@dir`, or `@url` (`http://`, `https://`, `mailto:`). A file uses its extension handler, then the mask with the most literal characters (ties alphabetically), then `*`. A folder uses `@dir`, then `*`. Without a handler, the OS opener is used.
+Optional `open(target, kind)` receives a resolved path or supported URL with kind `file`, `dir`, or `url`. Return `true` if handled; `false` or `nil` delegates to the OS opener. Unsupported targets never reach the callback.
 
 ## Reload and `/config`
 
-`/reload`, Lua `reload()`, and JSON-RPC `config.reload` without `ns` re-evaluate the primary config, global config, and installed plugins in `~/.tuse/plugins/`, clearing cached trusted modules and `package.preload` results, and re-reading saved providers from SQLite:
+`/reload`, Lua `reload()`, and JSON-RPC `config.reload` re-evaluate the global config and eligible installed plugins in `$TUSE_HOME/plugins/` (honoring any launch exclusion flags), clearing cached trusted modules and `package.preload` results:
 
 1. If evaluation or validation fails, `Reload failed: …` is shown and the old config, hooks, functions, and cached modules are restored.
 2. If it succeeds, the new config takes over, the first `system` history record is rebuilt, and `config_load` hooks run.
 
-Lua `reload("work")` or JSON-RPC `config.reload` with `{"ns":"work"}` runs the normal config loader once but only applies `work` to the current session. If both local and global config define `work`, both contributions are refreshed and merged as usual. Other namespaces, active plugins, and saved providers stay as they were. Lua code outside `work` can still run during evaluation. If `work` is not active or any of its active contributions is missing from the new config, reload fails; use a full reload to add or remove namespaces.
-
-`/config` and JSON-RPC `config.get` show every resolved config field, including active `providers` (`[{ name, type, base }]` for both saved and Lua providers — never keys or headers), active `plugins` (`[{ name, version }]`), `models` (including `efforts`), raw `ui.theme` links, `ui`, `history`, `open`, `systems`, `prompts`, `functions`, `hooks`, and `commands`.
+`/config` and JSON-RPC `config.get` show every resolved config field: active `plugins` (`[{ name, version }]`), `models` (including `efforts`), raw `ui.theme` links, `ui` (including `picker`), `open`, `systems`, `prompts`, `functions`, `hook`, and `commands`. Saved providers are inspected separately via `providers.list` (`[{ name, type, base }]`), `/providers list`, or `tuse providers --json`. Secrets and Lua function bodies are never exposed.

@@ -206,10 +206,6 @@ pub fn is_hook(lua: &Lua) -> bool {
     with_run(lua, |j| j.is_hook()).unwrap_or(false)
 }
 
-pub fn is_lua_hook(lua: &Lua) -> bool {
-    with_run(lua, |j| j.is_lua_hook()).unwrap_or(false)
-}
-
 pub fn add_wait(lua: &Lua, w: ExtWait) -> mlua::Result<u64> {
     let mut s = lua
         .app_data_mut::<Sched>()

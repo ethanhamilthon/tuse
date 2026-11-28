@@ -1,5 +1,0 @@
-- [x] 1. Build each frame in a buffer and write it once
-- [x] 2. Turn line wrap off on entry and on again on exit and panic
-- [x] 3. Repaint every row every five seconds
-- [x] 4. Add tests for the single write, the periodic repaint, and the wrap modes
-- [x] 5. Update the tui spec

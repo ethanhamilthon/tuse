@@ -24,10 +24,10 @@ fn session_snapshot_history_and_open_handlers() {
     let long_arg = "x".repeat(400);
     let check_code = r#"
 local t = require("tuse")
-local s1 = t.session()
+local s1 = t.session.get()
 s1.title = "mutated"
-local s2 = t.session()
-assert(s2.title ~= "mutated", "session() must return a fresh snapshot")
+local s2 = t.session.get()
+assert(s2.title ~= "mutated", "session.get() must return a fresh snapshot")
 assert(s2.mode == "json" and s2.id ~= nil and s2.cwd ~= nil and s2.home ~= nil and s2.config_path ~= nil)
 assert(s2.model == "p/m" and s2.provider == "p" and s2.effort == "medium")
 assert(s2.context_window == 100000 and s2.model_info.display == "M" and s2.model_info.prices.input == 2)
@@ -65,36 +65,35 @@ return #s2.history
   end
 end
 return {{
-  test = {{
-  models = {{{{ name = "p/m", display = "M", window = 100000,
-    prices = {{ input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 }} }}}},
-  open = {{
-    md = rec("md"),
-    ["*.note"] = rec("mask"),
-    ["*"] = rec("any"),
-    ["@dir"] = rec("dir"),
-    ["@url"] = rec("url"),
-    bad = function() error("opener crashed") end,
-  }},
-  hooks = {{
-    keep = {{
-      events = {{"user_message"}},
-      run = function() end,
-    }},
-  }},
-  }},
+  models = {{ ["p/m"] = {{ display = "M", window = 100000,
+    prices = {{ input = 2, output = 10, cache_read = 0.2, cache_write = 2.5 }} }} }},
+  open = function(path, kind)
+    local tag = kind
+    if kind == "file" then
+      local ext = path:lower():match("%.(%w+)$")
+      if ext == "bad" then error("opener crashed") end
+      tag = ext == "md" and "md" or ext == "note" and "mask" or "any"
+    end
+    rec(tag)(path)
+    return true
+  end,
 }}"#,
             opened_log.display()
         ),
     )
     .unwrap();
 
-    let s1 = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg.clone()),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let s1 = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg.clone());
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let rx1 = s1.subscribe();
@@ -103,12 +102,17 @@ return {{
     let id = s1.id.clone();
     s1.close();
 
-    let s2 = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg.clone()),
-        mode: Mode::Json,
-        resume: Some(id),
-        start: Start::Resume,
+    let s2 = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg.clone());
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: Some(id),
+            start: Start::Resume,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let rx2 = s2.subscribe();
@@ -193,7 +197,7 @@ return {{
     );
     assert!(
         errs.iter()
-            .any(|e| e.contains("open.bad") && e.contains("opener crashed")),
+            .any(|e| e.contains("open:") && e.contains("opener crashed")),
         "{errs:?}"
     );
     assert!(

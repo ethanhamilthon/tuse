@@ -8,15 +8,21 @@ use support::{call, event, spawn};
 use tuse_core::{Mode, Options, Session, Start};
 
 #[test]
-fn config_reload_accepts_an_optional_namespace() {
+fn config_reload_rejects_namespace_and_applies_all_changes() {
     let (dir, config) = common::setup("rpc-reload", "localhost:1", "");
-    fs::write(&config, "return {global = false, work = {}, other = {}}").unwrap();
-    let session = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(config.clone()),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    fs::write(&config, "return {work = {}, other = {}}").unwrap();
+    unsafe { std::env::set_var("TUSE_GLOBAL_CONFIG", &config) };
+    let session = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", config.clone());
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let (tx, out, server) = spawn(session);
@@ -25,37 +31,31 @@ fn config_reload_accepts_an_optional_namespace() {
     fs::write(
         &config,
         r#"
-        return {global = false,
+        return {
             work = {prompts = {selected = 'new'}},
             other = {prompts = {unselected = 'new'}},
         }
     "#,
     )
     .unwrap();
-    for (id, ns, code) in [
-        (2, json!(42), -32602),
-        (3, json!(""), -32602),
-        (4, json!("nope"), -32000),
-    ] {
+    for (id, ns) in [json!(42), json!(null), json!("work")]
+        .into_iter()
+        .enumerate()
+    {
         assert_eq!(
-            call(id, "config.reload", json!({"ns": ns}))["error"]["code"],
-            code
+            call(2 + id as u64, "config.reload", json!({"ns": ns}))["error"]["code"],
+            -32602,
         );
     }
-    assert!(call(5, "config.get", json!({}))["result"]["prompts"]["selected"].is_null());
+    assert!(call(5, "config.get", json!({}))["result"]["prompts"]["work:selected"].is_null());
     assert_eq!(
-        call(6, "config.reload", json!({"ns": "work"})).get("result"),
+        call(6, "config.reload", json!({})).get("result"),
         Some(&json!(null))
     );
     event(&out, "reloaded");
-    let scoped = call(7, "config.get", json!({}));
-    assert!(!scoped["result"]["prompts"]["selected"].is_null());
-    assert!(scoped["result"]["prompts"]["unselected"].is_null());
-    assert_eq!(
-        call(8, "config.reload", json!({})).get("result"),
-        Some(&json!(null))
-    );
-    assert!(!call(9, "config.get", json!({}))["result"]["prompts"]["unselected"].is_null());
+    let config = call(7, "config.get", json!({}));
+    assert!(!config["result"]["prompts"]["work:selected"].is_null());
+    assert!(!config["result"]["prompts"]["other:unselected"].is_null());
     call(10, "shutdown", json!({}));
     drop(tx);
     server.join().unwrap();

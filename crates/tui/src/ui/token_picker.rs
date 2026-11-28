@@ -23,39 +23,18 @@ impl App {
             return;
         }
         self.dismissed = None;
-        let arg_of = self.editor.prompt_before_token().filter(|n| {
-            self.session
-                .config()
-                .prompts
-                .get(n)
-                .is_some_and(|p| !p.args.is_empty())
-        });
-        let command_arg = match arg_of {
-            Some(_) => None,
-            None => self
-                .editor
-                .command_before_token()
-                .map(|(_, n)| n)
-                .filter(|n| {
-                    self.session
-                        .config()
-                        .commands
-                        .get(n)
-                        .is_some_and(|c| !c.args.is_empty())
-                }),
-        };
+        let command_arg = self
+            .editor
+            .command_before_token()
+            .map(|(_, n)| n)
+            .filter(|n| matches!(n.as_str(), "providers" | "plugins"));
         let mut chars = token.chars();
-        let first = if arg_of.is_some() {
-            Some(' ')
-        } else {
-            chars.next()
-        };
+        let first = chars.next();
         let (kind, query) = match first {
             _ if command_arg.is_some() => (
                 Kind::CommandArg(command_arg.unwrap_or_default()),
                 token.as_str(),
             ),
-            Some(' ') => (Kind::PromptArg(arg_of.unwrap_or_default()), token.as_str()),
             Some('/') if !chars.as_str().contains('/') => (Kind::Command, chars.as_str()),
             Some('#') if !self.session.config().prompts.is_empty() => {
                 (Kind::Prompt, chars.as_str())
@@ -90,8 +69,8 @@ impl App {
                     .iter()
                     .map(|(n, d)| item(format!("/{n}"), *d, *n))
                     .collect();
-                for (name, c) in &self.session.config().commands {
-                    items.push(item(format!("/{name}"), c.desc.as_str(), name.clone()));
+                for name in self.session.config().commands.iter() {
+                    items.push(item(format!("/{name}"), "", name.clone()));
                 }
                 items
             }
@@ -101,29 +80,19 @@ impl App {
                     .prompts
                     .iter()
                     .map(|(k, v)| {
-                        let detail = if v.args.is_empty() {
-                            v.body.lines().next().unwrap_or("").to_string()
-                        } else {
-                            v.args.join(" | ")
-                        };
+                        let detail = v.lines().next().unwrap_or("");
                         item(format!("#{k}"), detail, k.clone())
                     })
                     .collect()
             }
-            Kind::CommandArg(name) => self
-                .session
-                .config()
-                .commands
-                .get(name)
-                .map(|c| c.args.iter().map(|a| item(a, "", a)).collect())
-                .unwrap_or_default(),
-            Kind::PromptArg(name) => self
-                .session
-                .config()
-                .prompts
-                .get(name)
-                .map(|p| p.args.iter().map(|a| item(a, "", a)).collect())
-                .unwrap_or_default(),
+            Kind::CommandArg(name) if name == "providers" => crate::ui::picker::PROVIDERS_ARGS
+                .iter()
+                .map(|(n, d)| item(*n, *d, *n))
+                .collect(),
+            Kind::CommandArg(name) if name == "plugins" => crate::ui::picker::PLUGINS_ARGS
+                .iter()
+                .map(|(n, d)| item(*n, *d, *n))
+                .collect(),
             _ => {
                 let max = crate::kit::style::FILE_PICKER_MAX;
                 crate::kit::files::list(&self.cwd, &self.file_dir, max)

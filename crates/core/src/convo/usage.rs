@@ -26,27 +26,33 @@ pub struct Stats {
 
 impl Stats {
     pub(crate) fn of(m: &crate::storage::store::Meta, records: &[crate::Record]) -> Self {
-        use crate::convo::record::Record;
-        let mut s = Self {
-            totals: m.usage,
-            cost: m.cost,
-            llm_cost: m.llm_cost,
-            priced: m.priced,
-            context: m.ctx,
-            ..Self::default()
-        };
+        let mut s = Self::default();
+        s.update_meta(m);
+        s.add_records(records);
+        s
+    }
+
+    pub(crate) fn update_meta(&mut self, m: &crate::storage::store::Meta) {
+        self.totals = m.usage;
+        self.cost = m.cost;
+        self.llm_cost = m.llm_cost;
+        self.priced = m.priced;
+        self.context = m.ctx;
+    }
+
+    pub(crate) fn add_records(&mut self, records: &[crate::Record]) {
+        use crate::Record;
         for r in records {
             match r {
-                Record::Usage { llm: true, .. } => s.llm_requests += 1,
-                Record::Usage { .. } => s.requests += 1,
-                Record::Agent { .. } => s.steps += 1,
+                Record::Usage { llm: true, .. } => self.llm_requests += 1,
+                Record::Usage { .. } => self.requests += 1,
+                Record::Agent { .. } => self.steps += 1,
                 Record::TurnEnd { calls, .. } => {
-                    s.turns += 1;
-                    s.calls += calls;
+                    self.turns += 1;
+                    self.calls += calls;
                 }
                 _ => {}
             }
         }
-        s
     }
 }

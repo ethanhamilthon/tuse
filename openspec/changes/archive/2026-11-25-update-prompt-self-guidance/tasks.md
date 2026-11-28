@@ -1,4 +1,0 @@
-- [x] 1. Add the three guidance bullets, guarded by `docs`, to the `prefix` block in `crates/core/src/prompt.md`
-- [x] 2. Update the `What the agent sees` section of `docs/lua.md` to match
-- [x] 3. Extend the prompt test with the enabled and `docs = false` cases
-- [x] 4. Update the docs spec

@@ -3,7 +3,7 @@ use crate::event::{Event, UiEntry, UiMarkdown, UiPrompt, UiRequest, UiSnapshot};
 use crate::session::Session;
 use crate::session::bus::Signal;
 use std::collections::VecDeque;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 
 pub type UiReply = Result<serde_json::Value, String>;
 
@@ -108,8 +108,23 @@ impl Session {
         );
     }
 
+    // Called under the UI lock to enqueue transitions in the same order as queue changes.
+    fn ui_prompt_hook(self: &Arc<Self>, active: bool) {
+        self.hook(
+            "ui_prompt",
+            serde_json::json!({"event": "ui_prompt", "active": active}),
+        );
+    }
+
+    pub(crate) fn replay_ui_prompt(self: &Arc<Self>) {
+        let ui = self.ui.lock().unwrap();
+        if !ui.queue.is_empty() {
+            self.ui_prompt_hook(true);
+        }
+    }
+
     pub(crate) fn ui_enqueue(
-        &self,
+        self: &Arc<Self>,
         prompt: UiPrompt,
         is_hook: bool,
     ) -> Result<(u64, mpsc::Receiver<UiReply>), String> {
@@ -142,6 +157,9 @@ impl Session {
                 is_hook,
                 tx,
             });
+            if active {
+                self.ui_prompt_hook(true);
+            }
             (req, rx, active)
         };
         let id = req.id;
@@ -151,7 +169,7 @@ impl Session {
         Ok((id, rx))
     }
 
-    pub fn ui_reply(&self, id: u64, value: Option<String>) -> Result<(), String> {
+    pub fn ui_reply(self: &Arc<Self>, id: u64, value: Option<String>) -> Result<(), String> {
         let next = {
             let mut ui = self.ui.lock().unwrap();
             let Some(front) = ui.queue.front() else {
@@ -194,6 +212,9 @@ impl Session {
                 };
                 self.message(rec, Event::UiResult(e));
             }
+            if ui.queue.is_empty() {
+                self.ui_prompt_hook(false);
+            }
             let reply = value.map_or(serde_json::Value::Null, serde_json::Value::String);
             let _ = pending.tx.send(Ok(reply));
             ui.queue.front().map(|p| p.req.clone())
@@ -204,7 +225,7 @@ impl Session {
         Ok(())
     }
 
-    pub(crate) fn ui_cancel_request(&self, id: u64) {
+    pub(crate) fn ui_cancel_request(self: &Arc<Self>, id: u64) {
         let (cleared, next) = {
             let mut ui = self.ui.lock().unwrap();
             let Some(pos) = ui.queue.iter().position(|p| p.req.id == id) else {
@@ -214,6 +235,9 @@ impl Session {
             let next = (pos == 0)
                 .then(|| ui.queue.front().map(|p| p.req.clone()))
                 .flatten();
+            if pos == 0 && next.is_none() {
+                self.ui_prompt_hook(false);
+            }
             (pos == 0, next)
         };
         if cleared {
@@ -224,7 +248,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn ui_cancel_hooks(&self, deny: bool) {
+    pub(crate) fn ui_cancel_hooks(self: &Arc<Self>, deny: bool) {
         let (cleared, next) = {
             let mut ui = self.ui.lock().unwrap();
             ui.deny_hooks = deny;
@@ -241,6 +265,9 @@ impl Session {
                 }
             }
             ui.queue = keep;
+            if old.is_some() && ui.queue.is_empty() {
+                self.ui_prompt_hook(false);
+            }
             (
                 old,
                 old.and_then(|_| ui.queue.front().map(|p| p.req.clone())),
@@ -254,7 +281,7 @@ impl Session {
         }
     }
 
-    fn ui_drain(&self, close: bool, msg: &str) {
+    fn ui_drain(self: &Arc<Self>, close: bool, msg: &str) {
         let active = {
             let mut ui = self.ui.lock().unwrap();
             if close {
@@ -262,6 +289,9 @@ impl Session {
                 ui.deny_hooks = true;
             }
             let active = ui.queue.front().map(|p| p.req.id);
+            if active.is_some() {
+                self.ui_prompt_hook(false);
+            }
             for p in ui.queue.drain(..) {
                 let _ = p.tx.send(Err(msg.into()));
             }
@@ -272,11 +302,11 @@ impl Session {
         }
     }
 
-    pub(crate) fn ui_cancel_all(&self) {
+    pub(crate) fn ui_cancel_all(self: &Arc<Self>) {
         self.ui_drain(false, "cancelled");
     }
 
-    pub(crate) fn ui_close(&self) {
+    pub(crate) fn ui_close(self: &Arc<Self>) {
         self.ui_drain(true, "session closed");
     }
 }

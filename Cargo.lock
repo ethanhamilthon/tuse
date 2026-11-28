@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "tuse"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "flate2",
  "serde",
@@ -1312,7 +1312,6 @@ dependencies = [
  "sha2",
  "signal-hook",
  "tar",
- "tuse-api",
  "tuse-config",
  "tuse-core",
  "tuse-rpc",
@@ -1322,7 +1321,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-api"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1331,7 +1330,7 @@ dependencies = [
 
 [[package]]
 name = "tuse-config"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1341,24 +1340,27 @@ dependencies = [
 
 [[package]]
 name = "tuse-core"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "base64",
+ "flate2",
  "getrandom 0.3.4",
  "ignore",
  "regex",
  "rusqlite",
  "serde",
  "serde_json",
+ "tar",
  "time",
  "tuse-api",
  "tuse-config",
  "tuse-lua",
+ "ureq",
 ]
 
 [[package]]
 name = "tuse-lua"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "libc",
  "mlua",
@@ -1367,24 +1369,28 @@ dependencies = [
 
 [[package]]
 name = "tuse-rpc"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
+ "flate2",
  "serde_json",
+ "tar",
  "tuse-config",
  "tuse-core",
 ]
 
 [[package]]
 name = "tuse-tui"
-version = "0.14.3"
+version = "0.15.0"
 dependencies = [
  "arboard",
  "base64",
  "crossterm",
+ "flate2",
  "png",
  "pulldown-cmark",
  "serde_json",
  "signal-hook",
+ "tar",
  "tuse-config",
  "tuse-core",
  "unicode-width",

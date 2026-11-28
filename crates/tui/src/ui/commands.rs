@@ -30,6 +30,9 @@ impl App {
         if let Some(q) = &mut self.question {
             q.panel.invalidate();
         }
+        if let Some(f) = &mut self.form {
+            f.panel.invalidate();
+        }
     }
     pub fn run_command(&mut self, name: &str) {
         match name {
@@ -48,6 +51,12 @@ impl App {
             "models" => {
                 self.open_models();
                 self.session.fetch_models();
+            }
+            "providers" => {
+                self.run_providers(&[]);
+            }
+            "plugins" => {
+                self.run_plugins(&[]);
             }
             "tasks" => self.open_tasks(),
             "session" => {
@@ -70,7 +79,7 @@ impl App {
                     self.flash("Config reloaded.");
                 }
             }
-            other if self.session.config().commands.contains_key(other) => {
+            other if self.session.config().commands.contains(other) => {
                 self.run_custom(other, vec![]);
             }
             other => self.error(format!("Unknown command /{other}")),
@@ -112,14 +121,19 @@ impl App {
     }
 
     fn open_history(&mut self) {
-        let hide = self.session.config().history.hide.clone();
-        let mut items = self.session.history();
-        items.retain(|it| !it.is_empty_agent() && !it.hidden_by(&hide));
-        let rows: Vec<_> = items
-            .iter()
+        let (rows, items) = self
+            .session
+            .history()
+            .into_iter()
             .enumerate()
-            .map(|(i, it)| history_row(i, it))
-            .collect();
+            .filter(|(_, it)| !it.is_empty_agent() && !matches!(it.role, "meta" | "usage"))
+            .enumerate()
+            .map(|(visible, (i, it))| {
+                let mut row = history_row(i, &it);
+                row.value = visible.to_string();
+                (row, it)
+            })
+            .unzip();
         self.history_items = items;
         self.history_back = None;
         self.open_modal(Picker::new(Kind::History, rows));
@@ -134,7 +148,7 @@ impl App {
             .collect();
         if items.is_empty() {
             self.close_modal();
-            self.flash("No tasks. The agent starts them with `spawn()`.");
+            self.flash("No tasks. The agent starts them with `tasks.spawn()`.");
             return;
         }
         let selected = self
@@ -157,14 +171,7 @@ impl App {
         }
         let value = p.current().map(|i| i.value.clone());
         match (&p.kind, value) {
-            (Kind::Command, Some(v))
-                if self
-                    .session
-                    .config()
-                    .commands
-                    .get(&v)
-                    .is_some_and(|c| !c.args.is_empty()) =>
-            {
+            (Kind::Command, Some(v)) if matches!(v.as_str(), "providers" | "plugins") => {
                 self.replace_token(&format!("/{v} "));
                 self.dismissed = None;
                 self.update_token_picker();
@@ -173,28 +180,32 @@ impl App {
                 self.cut_token();
                 self.run_command(&v);
             }
-            (Kind::CommandArg(name), Some(v)) => {
-                if self.session.run_command(name, &[v]).is_ok() {
-                    self.editor.cut_command_arg();
-                }
+            (Kind::CommandArg(name), Some(v)) if name == "providers" => {
+                self.editor.cut_command_arg();
+                self.run_providers(&[v]);
+            }
+            (Kind::CommandArg(name), Some(v)) if name == "plugins" => {
+                self.editor.cut_command_arg();
+                self.run_plugins(&[v]);
             }
             (Kind::CommandArg(name), None) => {
                 let typed = self.editor.token().1;
-                if self.session.run_command(name, &[typed]).is_ok() {
+                let ran = match name.as_str() {
+                    "providers" => self.run_providers(&[typed]),
+                    "plugins" => self.run_plugins(&[typed]),
+                    _ => false,
+                };
+                if ran {
                     self.editor.cut_command_arg();
                 }
             }
             (Kind::Prompt, Some(v)) => {
                 self.cut_token();
                 self.editor
-                    .insert_atom(&format!("#{v}"), AtomKind::Prompt(v.clone(), None));
+                    .insert_atom(&format!("#{v}"), AtomKind::Prompt(v.clone()));
                 self.editor.insert(" ");
                 self.dismissed = None;
                 self.update_token_picker();
-            }
-            (Kind::PromptArg(_), Some(v)) => {
-                self.editor.set_prompt_arg(&v);
-                self.editor.insert(" ");
             }
             (Kind::File, Some(v)) if v.ends_with('/') => self.replace_token(&format!("@{v}")),
             (Kind::File, Some(v)) => self.insert_file(&v),
@@ -251,6 +262,9 @@ impl App {
             (Kind::LuaPicker(id), v) => {
                 let _ = self.session.ui_reply(*id, v);
             }
+            (Kind::Manage(pick), Some(v)) => {
+                self.choose_manage(pick.clone(), v);
+            }
             _ => {}
         }
         if self.picker.is_none() {
@@ -280,17 +294,7 @@ impl App {
     pub fn open_models(&mut self) {
         let config = self.session.config();
         let (current, _) = self.session.model();
-        let mut names = if config.models.is_empty() {
-            let mut names = self.session.available_models();
-            if !names.contains(&current) {
-                names.insert(0, current.clone());
-            }
-            names
-        } else {
-            config.models.iter().map(|m| m.name.clone()).collect()
-        };
-        names.sort();
-        names.dedup();
+        let names = self.session.available_models();
         let items: Vec<Item> = names
             .iter()
             .map(|n| {
@@ -364,12 +368,10 @@ mod tests {
     #[test]
     fn model_detail_repeats_the_name_only_under_a_display_name() {
         let opus = ModelDef {
-            name: "c/opus".into(),
             window: 200_000,
             ..Default::default()
         };
         let sonnet = ModelDef {
-            name: "c/sonnet".into(),
             display: "Sonnet".into(),
             window: 200_000,
             ..Default::default()

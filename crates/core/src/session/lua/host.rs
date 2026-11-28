@@ -2,11 +2,11 @@ use crate::event::UiPrompt;
 use crate::session::Session;
 use crate::session::bus::Signal;
 use crate::storage::tasks::{TaskInfo, Tasks};
+use crate::storage::{ConnectInput, Plugins, ProviderPatch, Providers};
 use crate::tools;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Instant;
 use tuse_lua::mlua::{self, Lua, LuaSerdeExt, Table, Value};
 use tuse_lua::{Done, ExtWait, Host, TaskStart, with_run};
 
@@ -34,81 +34,40 @@ impl Host for SessionHost {
         }
     }
 
-    fn task_start(&self, name: &str, code: &str, from_lua_hook: bool) -> Result<TaskStart, String> {
+    fn task_start(&self, name: &str, code: &str) -> Result<TaskStart, String> {
         let s = self.get().ok_or("session closed")?;
         let t = s.tasks.create(name, code)?;
-        if from_lua_hook {
-            s.task_lua
-                .lock()
-                .unwrap()
-                .insert(t.id.clone(), (String::new(), Instant::now()));
-        } else {
-            self.task_track(&t.id, name);
-        }
         s.emit(Signal::Tasks);
         Ok(t)
     }
 
-    fn task_track(&self, id: &str, name: &str) {
-        let Some(s) = self.get() else { return };
-        let exec_id = s.next_lua_id();
-        let display = if name.is_empty() { id } else { name };
-        s.task_lua
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), (exec_id.clone(), Instant::now()));
-        let code = s.tasks.get(id).map(|t| t.code).filter(|c| !c.is_empty());
-        s.lua_start_hook(exec_id, "task", code, Some(display.to_string()));
-    }
-
     fn task_end(&self, id: &str, d: Done) {
         let Some(s) = self.get() else { return };
-        let tracked = s.task_lua.lock().unwrap().remove(id);
-        if let Some((exec_id, started)) = tracked {
-            if exec_id.is_empty() {
-                if let Some(t) = s.tasks.get(id) {
-                    let status = if d.ok {
-                        "success"
-                    } else if d.stop == Some("cancelled") {
-                        "cancelled"
-                    } else {
-                        "failed"
-                    };
-                    let record = crate::Record::job(
-                        "task",
-                        t.name,
-                        t.code,
-                        status.into(),
-                        started.elapsed().as_millis() as u64,
-                        (!d.ok).then(|| crate::text::error_line(&d.text)),
-                    );
-                    s.push(&mut s.state.lock().unwrap(), record);
-                }
-            } else {
-                s.lua_end_done(&exec_id, "task", started.elapsed(), &d);
-            }
-        }
-        let ended = s.tasks.end(id, d.ok);
+        let Some((t, duration)) = s.tasks.end(id, d.ok) else {
+            return;
+        };
         s.emit(Signal::Tasks);
-        if let Some(t) = ended {
-            let last = if d.ok {
-                crate::text::last_line(&d.text).map(str::to_string)
-            } else {
-                Some(crate::text::error_line(&d.text))
-            };
-            let what = if d.ok { "finished" } else { "failed" };
-            let tail = last.map_or_else(String::new, |l| format!(" Last line: {l}."));
-            let out_hint = if s.config().is_disabled("task_get") {
-                String::new()
-            } else {
-                format!(" Output: `task_get(\"{}\").output`.", t.id)
-            };
-            let msg = format!(
-                "<task>Task {} ({}) {what}.{tail}{out_hint}</task>",
-                t.id, t.name
-            );
-            s.submit(crate::UserInput::notification(msg));
+        let error = (t.status == "failed").then(|| crate::text::error_line(&d.text));
+        if !s.record_task(&t, duration, error.clone()) {
+            return;
         }
+        if t.status == "stopped" {
+            return;
+        }
+        let last = error.as_deref().or_else(|| crate::text::last_line(&d.text));
+        let tail = last.map_or_else(String::new, |line| format!(" Last line: {line}."));
+        let what = if d.ok { "finished" } else { "failed" };
+        let text = format!(
+            "<task>Task {id} ({}) {what}.{tail} Output: `tasks.get(\"{id}\").output`.</task>",
+            t.name
+        );
+        s.submit_task(crate::convo::record::TaskMessage {
+            id: id.into(),
+            name: t.name,
+            status: t.status,
+            delivery: crate::convo::record::TaskDelivery::Wake,
+            text,
+        });
     }
 }
 
@@ -139,24 +98,47 @@ fn status(s: &Session, verb: &str, what: &str) {
 pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
     lua.set_app_data(s);
     let g = lua.globals();
-    g.set("read", lua.create_function(read)?)?;
-    g.set(
+    let raw = lua.create_table()?;
+    raw.raw_set("sh", g.raw_get::<Value>("sh")?)?;
+    raw.raw_set("json", g.raw_get::<Value>("json")?)?;
+    raw.raw_set(
+        "docs",
+        lua.create_userdata(crate::scripting::require::DocsObject { agent: false })?,
+    )?;
+    let start_reload = lua.create_function(start_reload)?;
+    raw.raw_set("reload", tuse_lua::yield_wait(lua, start_reload)?)?;
+    let llm_start = lua.create_function(start_llm)?;
+    raw.raw_set("llm", tuse_lua::yield_wait(lua, llm_start)?)?;
+
+    raw.raw_set("fs", build_fs(lua)?)?;
+    raw.raw_set("tasks", build_tasks(lua)?)?;
+    raw.raw_set("session", build_session(lua)?)?;
+    raw.raw_set("ui", build_ui(lua)?)?;
+    raw.raw_set("plugins", build_plugins(lua)?)?;
+    raw.raw_set("providers", build_providers(lua)?)?;
+    lua.set_named_registry_value("tuse.host_raw", raw)
+}
+
+fn build_fs(lua: &Lua) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set("read", lua.create_function(read)?)?;
+    t.set(
         "write",
         lua.create_function(|l, (p, c): (String, String)| {
             mutate(l, "writing", &p, |f| tools::write(f, &c))
         })?,
     )?;
-    g.set(
+    t.set(
         "append",
-        lua.create_function(|l, (p, t): (String, String)| {
-            mutate(l, "appending", &p, |f| tools::append(f, &t))
+        lua.create_function(|l, (p, txt): (String, String)| {
+            mutate(l, "appending", &p, |f| tools::append(f, &txt))
         })?,
     )?;
-    g.set(
+    t.set(
         "delete",
         lua.create_function(|l, p: String| mutate(l, "deleting", &p, tools::delete))?,
     )?;
-    g.set(
+    t.set(
         "edit",
         lua.create_function(
             |l, (p, old, new, o): (String, String, String, Option<Table>)| {
@@ -169,42 +151,264 @@ pub(crate) fn install(lua: &Lua, s: Slot) -> mlua::Result<()> {
             },
         )?,
     )?;
-    g.set("grep", lua.create_function(grep)?)?;
-    g.set(
-        "docs",
-        lua.create_function(|lua, topic: Option<String>| {
-            let disabled = session(lua)?.config().disabled_builtins();
-            Ok(crate::docs::docs_for(topic.as_deref(), &disabled))
-        })?,
-    )?;
-    g.set("set_session", lua.create_function(set_session)?)?;
-    g.set("session", lua.create_function(|lua, ()| lua_session(lua))?)?;
-    g.set("fork", lua.create_function(fork)?)?;
-    g.set("resume", lua.create_function(resume)?)?;
-    install_tasks(lua)?;
-    install_ui(lua)?;
-    let llm_start = lua.create_function(start)?;
-    g.set("llm", tuse_lua::yield_wait(lua, llm_start)?)?;
+    t.set("grep", lua.create_function(grep)?)?;
     tuse_lua::wrap(
         lua,
-        &g,
-        &[
-            "read",
-            "write",
-            "append",
-            "delete",
-            "edit",
-            "grep",
-            "docs",
-            "set_session",
-            "session",
-            "fork",
-            "resume",
-            "task_get",
-            "task_stop",
-            "task_list",
-        ],
-    )
+        &t,
+        &["read", "write", "append", "delete", "edit", "grep"],
+    )?;
+    Ok(t)
+}
+
+fn build_tasks(lua: &Lua) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set("spawn", lua.globals().raw_get::<Value>("spawn")?)?;
+    t.set(
+        "get",
+        lua.create_function(|lua, (id, lines): (String, Option<i64>)| {
+            let s = session(lua)?;
+            let ti = s
+                .tasks
+                .get(&id)
+                .ok_or_else(|| mlua::Error::runtime(format!("no task {id}")))?;
+            let out = Tasks::tail(&ti.log, lines.map_or(50, |n| n.max(1) as usize));
+            task(lua, &ti, Some(out))
+        })?,
+    )?;
+    t.set(
+        "stop",
+        lua.create_function(|lua, id: String| {
+            let s = session(lua)?;
+            let ti = s.stop_task(&id).map_err(mlua::Error::runtime)?;
+            task(lua, &ti, None)
+        })?,
+    )?;
+    t.set(
+        "list",
+        lua.create_function(|lua, ()| {
+            let s = session(lua)?;
+            let list = lua.create_table()?;
+            for ti in s.tasks.list() {
+                list.push(task(lua, &ti, None)?)?;
+            }
+            Ok(list)
+        })?,
+    )?;
+    tuse_lua::wrap(lua, &t, &["get", "stop", "list"])?;
+    Ok(t)
+}
+
+fn build_session(lua: &Lua) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set("get", lua.create_function(|lua, ()| lua_session(lua))?)?;
+    t.set("set", lua.create_function(set_session)?)?;
+    t.set("fork", lua.create_function(fork)?)?;
+    t.set("resume", lua.create_function(resume)?)?;
+    tuse_lua::wrap(lua, &t, &["get", "set", "fork", "resume"])?;
+    Ok(t)
+}
+
+fn build_ui(lua: &Lua) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set(
+        "show",
+        lua.create_function(|lua, (name, text, pin): (String, String, Option<bool>)| {
+            session(lua)?.ui_markdown(name, text, pin.unwrap_or(false));
+            Ok(())
+        })?,
+    )?;
+    let start_picker = lua.create_function(start_picker)?;
+    let start_question = lua.create_function(start_question)?;
+    t.set("pick", tuse_lua::yield_wait(lua, start_picker)?)?;
+    t.set("ask", tuse_lua::yield_wait(lua, start_question)?)?;
+    tuse_lua::wrap(lua, &t, &["show"])?;
+    Ok(t)
+}
+
+fn lua_json(lua: &Lua, v: impl serde::Serialize) -> mlua::Result<Value> {
+    let j = serde_json::to_value(v).map_err(mlua::Error::runtime)?;
+    tuse_lua::to_lua(lua, &j)
+}
+
+fn str_pairs(t: &Table, ctx: &str) -> mlua::Result<Vec<(String, Value)>> {
+    let mut out = vec![];
+    for pair in t.pairs::<Value, Value>() {
+        let (k, v) = pair?;
+        let Value::String(ks) = k else {
+            return Err(err(format!("{ctx} keys must be strings")));
+        };
+        out.push((ks.to_str()?.to_string(), v));
+    }
+    Ok(out)
+}
+
+fn opt_bool_field(v: Value, ctx: &str, f: &str) -> mlua::Result<Option<bool>> {
+    match v {
+        Value::Nil => Ok(None),
+        Value::Boolean(b) => Ok(Some(b)),
+        _ => Err(err(format!("{ctx} `{f}` must be a boolean"))),
+    }
+}
+
+fn build_plugins(lua: &Lua) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set(
+        "list",
+        lua.create_function(|l, ()| lua_json(l, Plugins::list().map_err(err)?))?,
+    )?;
+    t.set(
+        "get",
+        lua.create_function(|l, target: String| lua_json(l, Plugins::get(&target).map_err(err)?))?,
+    )?;
+    t.set(
+        "load",
+        lua.create_function(|l, name: String| {
+            let entrypoint = Plugins::entrypoint(&name).map_err(err)?;
+            crate::scripting::require::eval_file(l, &entrypoint).map_err(err)
+        })?,
+    )?;
+    t.set(
+        "delete",
+        lua.create_function(|l, target: String| {
+            lua_json(
+                l,
+                serde_json::json!({ "name": Plugins::delete(&target).map_err(err)? }),
+            )
+        })?,
+    )?;
+    t.set(
+        "add",
+        tuse_lua::yield_wait(lua, lua.create_function(start_plugin_add)?)?,
+    )?;
+    t.set(
+        "update",
+        tuse_lua::yield_wait(lua, lua.create_function(start_plugin_update)?)?,
+    )?;
+    tuse_lua::wrap(lua, &t, &["list", "get", "load", "delete"])?;
+    Ok(t)
+}
+
+fn build_providers(lua: &Lua) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set(
+        "list",
+        lua.create_function(|l, ()| lua_json(l, Providers::views().map_err(err)?))?,
+    )?;
+    t.set(
+        "disconnect",
+        lua.create_function(|l, name: String| {
+            let removed = match session(l) {
+                Ok(s) => s.disconnect_provider(&name).map_err(err)?,
+                Err(_) => Providers::disconnect(&name).map_err(err)?,
+            };
+            lua_json(l, serde_json::json!({ "name": removed }))
+        })?,
+    )?;
+    t.set(
+        "connect",
+        tuse_lua::yield_wait(lua, lua.create_function(start_provider_connect)?)?,
+    )?;
+    t.set(
+        "update",
+        tuse_lua::yield_wait(lua, lua.create_function(start_provider_update)?)?,
+    )?;
+    tuse_lua::wrap(lua, &t, &["list", "disconnect"])?;
+    Ok(t)
+}
+
+fn bg_wait(
+    lua: &Lua,
+    work: impl FnOnce() -> Result<serde_json::Value, String> + Send + 'static,
+) -> mlua::Result<Value> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(work());
+    });
+    let key = tuse_lua::add_wait(
+        lua,
+        ExtWait {
+            rx,
+            pause_timeout: false,
+            on_cancel: None,
+        },
+    )?;
+    Ok(Value::Integer(key as i64))
+}
+
+fn provider_options<T: serde::de::DeserializeOwned>(t: &Table, ctx: &str) -> mlua::Result<T> {
+    let mut fields = serde_json::Map::new();
+    for (key, value) in str_pairs(t, ctx)? {
+        let value = match value {
+            Value::Boolean(v) => serde_json::Value::Bool(v),
+            Value::String(v) => v.to_str()?.to_string().into(),
+            Value::Table(v) if key == "headers" => {
+                let mut headers = serde_json::Map::new();
+                for (k, v) in str_pairs(&v, "headers")? {
+                    let Value::String(v) = v else {
+                        return Err(err("header values must be strings".into()));
+                    };
+                    headers.insert(k, v.to_str()?.to_string().into());
+                }
+                headers.into()
+            }
+            _ => return Err(err(format!("{ctx}: invalid `{key}`"))),
+        };
+        fields.insert(key, value);
+    }
+    serde_json::from_value(fields.into()).map_err(|_| err(format!("{ctx}: invalid options")))
+}
+
+fn start_provider_connect(lua: &Lua, opts: Table) -> mlua::Result<Value> {
+    let s = session(lua).ok();
+    let input = provider_options::<ConnectInput>(&opts, "providers.connect")?;
+    bg_wait(lua, move || {
+        let res = match s {
+            Some(s) => s.connect_provider(input)?,
+            None => Providers::connect(input)?,
+        };
+        serde_json::to_value(res).map_err(|e| e.to_string())
+    })
+}
+
+fn start_provider_update(lua: &Lua, (name, patch_tbl): (String, Table)) -> mlua::Result<Value> {
+    let s = session(lua).ok();
+    let patch = provider_options::<ProviderPatch>(&patch_tbl, "providers.update")?;
+    bg_wait(lua, move || {
+        let res = match s {
+            Some(s) => s.update_provider(&name, patch)?,
+            None => Providers::update(&name, patch)?,
+        };
+        serde_json::to_value(res).map_err(|e| e.to_string())
+    })
+}
+
+fn start_plugin_add(lua: &Lua, (source, opts): (String, Option<Table>)) -> mlua::Result<Value> {
+    let mut replace = false;
+    if let Some(o) = opts {
+        for (k, v) in str_pairs(&o, "plugins.add opts")? {
+            match k.as_str() {
+                "replace" => {
+                    replace = opt_bool_field(v, "plugins.add", "replace")?.unwrap_or(false)
+                }
+                other => return Err(err(format!("unknown plugins.add option `{other}`"))),
+            }
+        }
+    }
+    bg_wait(lua, move || {
+        serde_json::to_value(Plugins::add(&source, replace)?).map_err(|e| e.to_string())
+    })
+}
+
+fn start_plugin_update(lua: &Lua, target: Value) -> mlua::Result<Value> {
+    let target = match target {
+        Value::Nil => None,
+        Value::String(s) => Some(s.to_str()?.to_string()),
+        _ => return Err(err("plugins.update target must be a string".into())),
+    };
+    bg_wait(lua, move || {
+        let updated = Plugins::update(target.as_deref())?;
+        Ok(serde_json::json!({ "updated": updated }))
+    })
 }
 
 fn mutate(
@@ -307,60 +511,6 @@ fn task(lua: &Lua, t: &TaskInfo, output: Option<String>) -> mlua::Result<Table> 
     Ok(r)
 }
 
-fn install_tasks(lua: &Lua) -> mlua::Result<()> {
-    let g = lua.globals();
-    g.set(
-        "task_get",
-        lua.create_function(|lua, (id, lines): (String, Option<i64>)| {
-            let s = session(lua)?;
-            let t = s
-                .tasks
-                .get(&id)
-                .ok_or_else(|| mlua::Error::runtime(format!("no task {id}")))?;
-            let out = Tasks::tail(&t.log, lines.map_or(50, |n| n.max(1) as usize));
-            task(lua, &t, Some(out))
-        })?,
-    )?;
-    g.set(
-        "task_stop",
-        lua.create_function(|lua, id: String| {
-            let s = session(lua)?;
-            let t = s.stop_task(&id).map_err(mlua::Error::runtime)?;
-            task(lua, &t, None)
-        })?,
-    )?;
-    g.set(
-        "task_list",
-        lua.create_function(|lua, ()| {
-            let s = session(lua)?;
-            let list = lua.create_table()?;
-            for t in s.tasks.list() {
-                list.push(task(lua, &t, None)?)?;
-            }
-            Ok(list)
-        })?,
-    )?;
-    Ok(())
-}
-
-fn install_ui(lua: &Lua) -> mlua::Result<()> {
-    let g = lua.globals();
-    g.set(
-        "show",
-        lua.create_function(|lua, (name, text, pin): (String, String, Option<bool>)| {
-            session(lua)?.ui_markdown(name, text, pin.unwrap_or(false));
-            Ok(())
-        })?,
-    )?;
-    let start_picker = lua.create_function(start_picker)?;
-    let start_question = lua.create_function(start_question)?;
-    g.set("pick", tuse_lua::yield_wait(lua, start_picker)?)?;
-    g.set("ask", tuse_lua::yield_wait(lua, start_question)?)?;
-    let start_reload = lua.create_function(start_reload)?;
-    g.set("reload", tuse_lua::yield_wait(lua, start_reload)?)?;
-    tuse_lua::wrap(lua, &g, &["show"])
-}
-
 fn start_picker(lua: &Lua, (options, title): (Table, Option<String>)) -> mlua::Result<Value> {
     let mut list = vec![];
     for v in options.sequence_values::<Value>() {
@@ -384,17 +534,16 @@ fn start_picker(lua: &Lua, (options, title): (Table, Option<String>)) -> mlua::R
 fn start_question(lua: &Lua, text: String) -> mlua::Result<Value> {
     enqueue(lua, UiPrompt::Question { text })
 }
-fn start_reload(lua: &Lua, ns: Value) -> mlua::Result<Value> {
-    let ns = match ns {
-        Value::Nil => None,
-        Value::String(ns) if !ns.as_bytes().is_empty() => Some(ns.to_str()?.to_owned()),
-        _ => return Err(mlua::Error::runtime("ns must be a non-empty string")),
-    };
+
+fn start_reload(lua: &Lua, args: mlua::MultiValue) -> mlua::Result<Value> {
+    if !args.is_empty() {
+        return Err(mlua::Error::runtime("reload takes no arguments"));
+    }
     let s = session(lua)?;
     let (tx, rx) = std::sync::mpsc::channel();
     let start = move || {
         std::thread::spawn(move || {
-            let _ = tx.send(s.reload_namespace(ns).map(|_| serde_json::Value::Null));
+            let _ = tx.send(s.reload().map(|_| serde_json::Value::Null));
         });
     };
     if tuse_lua::is_hook(lua) {
@@ -432,7 +581,7 @@ fn enqueue(lua: &Lua, prompt: UiPrompt) -> mlua::Result<Value> {
     Ok(Value::Integer(key as i64))
 }
 
-fn start(
+fn start_llm(
     lua: &Lua,
     (prompt, model, effort): (String, Option<String>, Option<String>),
 ) -> mlua::Result<Value> {
@@ -510,12 +659,13 @@ pub(crate) fn lua_session(lua: &Lua) -> mlua::Result<Value> {
     )
     .to_lua(lua)
 }
+
 fn set_session(lua: &Lua, table: Table) -> mlua::Result<()> {
     let mut update = crate::session::view::history::Update::default();
     for pair in table.pairs::<Value, Value>() {
         let (key, value) = pair?;
         let Value::String(key) = key else {
-            return Err(mlua::Error::runtime("set_session keys must be strings"));
+            return Err(mlua::Error::runtime("session.set keys must be strings"));
         };
         let key = key.to_str()?;
         match &*key {
@@ -570,7 +720,7 @@ fn set_session(lua: &Lua, table: Table) -> mlua::Result<()> {
             "title" | "model" | "effort" => {
                 let Value::String(value) = value else {
                     return Err(mlua::Error::runtime(format!(
-                        "set_session `{key}` must be a string"
+                        "session.set `{key}` must be a string"
                     )));
                 };
                 let value = Some(value.to_str()?.to_string());
@@ -582,7 +732,7 @@ fn set_session(lua: &Lua, table: Table) -> mlua::Result<()> {
             }
             _ => {
                 return Err(mlua::Error::runtime(format!(
-                    "unknown set_session key `{key}`"
+                    "unknown session.set key `{key}`"
                 )));
             }
         }

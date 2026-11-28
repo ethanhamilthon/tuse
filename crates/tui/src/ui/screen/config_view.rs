@@ -36,13 +36,6 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
         ]
     };
     sec("Config file", vec![file_row]);
-    let list = |v: &[String]| {
-        if v.is_empty() {
-            "(none)".to_string()
-        } else {
-            v.join(", ")
-        }
-    };
     let l = &ui.lines;
     let sp = &ui.space;
     sec(
@@ -57,6 +50,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 dim,
             ),
             kv("ui.input", ui.input.as_str().into(), dim),
+            kv("ui.picker", ui.picker.as_str().into(), dim),
             kv(
                 "ui.space",
                 format!(
@@ -65,15 +59,9 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                 ),
                 dim,
             ),
-            kv("history.hide", list(&cfg.history.hide), dim),
             kv(
                 "open",
-                list(
-                    &cfg.open
-                        .iter()
-                        .map(|e| tuse_config::open_label(e))
-                        .collect::<Vec<_>>(),
-                ),
+                if cfg.open { "callback" } else { "default" }.into(),
                 info,
             ),
         ],
@@ -85,27 +73,6 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             " ".repeat(w.saturating_sub(crate::kit::text::width(s)))
         )
     };
-    let pw = max_w(Box::new(
-        cfg.connect.iter().map(|c| crate::kit::text::width(&c.name)),
-    ));
-    let tw = max_w(Box::new(
-        cfg.connect
-            .iter()
-            .map(|c| crate::kit::text::width(c.api_type())),
-    ));
-    sec(
-        "Providers",
-        cfg.connect
-            .iter()
-            .map(|c| {
-                vec![
-                    span(format!("  {}", pad(&c.name, pw)), fg),
-                    span(pad(c.api_type(), tw), info),
-                    span(c.base_url.clone(), dim),
-                ]
-            })
-            .collect(),
-    );
     let plw = max_w(Box::new(
         cfg.plugins
             .iter()
@@ -124,13 +91,13 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
             .collect(),
     );
     let name_w = max_w(Box::new(
-        cfg.models.iter().map(|m| crate::kit::text::width(&m.name)),
+        cfg.models.keys().map(|name| crate::kit::text::width(name)),
     ));
     sec(
         "Models",
         cfg.models
             .iter()
-            .map(|m| {
+            .map(|(name, m)| {
                 let mut parts = vec![];
                 if !m.display.is_empty() {
                     parts.push(format!("display={}", m.display));
@@ -152,7 +119,7 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
                     ));
                 }
                 vec![
-                    span(format!("  {}", pad(&m.name, name_w)), fg),
+                    span(format!("  {}", pad(name, name_w)), fg),
                     span(parts.join(" "), dim),
                 ]
             })
@@ -176,24 +143,26 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
     );
     sec(
         "System prompts",
-        cfg.systems
-            .iter()
-            .enumerate()
-            .map(|(i, s)| kv(&format!("#{}", i + 1), first_line(s), fg))
-            .collect(),
+        match &cfg.systems {
+            tuse_config::Systems::Replace(s) => vec![kv(
+                "(replace)",
+                if s.is_empty() {
+                    "(empty)".into()
+                } else {
+                    first_line(s)
+                },
+                fg,
+            )],
+            tuse_config::Systems::Named(map) => {
+                map.iter().map(|(k, s)| kv(k, first_line(s), fg)).collect()
+            }
+        },
     );
     sec(
         "Prompts",
         cfg.prompts
             .iter()
-            .map(|(n, b)| match b.kind {
-                tuse_config::PromptKind::Text => kv(&format!("#{n}"), first_line(&b.body), fg),
-                tuse_config::PromptKind::Function => kv(
-                    &format!("#{n}"),
-                    format!("fn({})", b.args.join(" | ")),
-                    info,
-                ),
-            })
+            .map(|(n, b)| kv(&format!("#{n}"), first_line(b), fg))
             .collect(),
     );
     sec(
@@ -213,28 +182,16 @@ pub fn panel(cfg: &Config, p: &Palette) -> Panel {
     );
     sec(
         "Hooks",
-        cfg.hooks
+        cfg.hook
             .iter()
-            .map(|(n, h)| kv(n, h.events.join(", "), info))
+            .map(|(ev, listeners)| kv(ev, listeners.join(", "), info))
             .collect(),
     );
     sec(
         "Commands",
         cfg.commands
             .iter()
-            .map(|(n, c)| {
-                let mut row = vec![span(format!("  /{n}"), info)];
-                let args = c.args.join(" | ");
-                let detail = [c.desc.as_str(), args.as_str()]
-                    .into_iter()
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>()
-                    .join("  ");
-                if !detail.is_empty() {
-                    row.push(span(format!("  {detail}"), dim));
-                }
-                row
-            })
+            .map(|n| vec![span(format!("  /{n}"), info)])
             .collect(),
     );
     Panel::styled(lines).with_kind(crate::ui::panel::PanelKind::Config)
@@ -251,17 +208,19 @@ fn first_line(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tuse_config::{Connect, FunctionKind, Hook};
+    use tuse_config::{FunctionKind, Systems};
 
     #[test]
     fn model_details_start_in_one_column() {
         let mut cfg = Config::default();
         for name in ["p/a", "p/much-longer"] {
-            cfg.models.push(tuse_config::ModelDef {
-                name: name.into(),
-                window: 1_000_000,
-                ..Default::default()
-            });
+            cfg.models.insert(
+                name.into(),
+                tuse_config::ModelDef {
+                    window: 1_000_000,
+                    ..Default::default()
+                },
+            );
         }
         let p = Palette::from_config(&cfg);
         let mut pnl = panel(&cfg, &p);
@@ -281,55 +240,32 @@ mod tests {
     #[test]
     fn renders_all_sections_without_secrets() {
         let mut cfg = Config {
-            systems: vec!["Be helpful.".into()],
-            commands: [("hello".to_string(), Default::default())].into(),
+            systems: Systems::Named([("main".into(), "Be helpful.".into())].into()),
+            commands: ["test:hello".into()].into(),
             path: "/home/me/.config/tuse/init.lua".into(),
             ..Default::default()
         };
-        cfg.open = vec!["md".into()];
-        cfg.history.hide = vec!["usage".into()];
-        cfg.models.push(tuse_config::ModelDef {
-            name: "p/big".into(),
-            display: "Big".into(),
-            window: 200_000,
-            efforts: Some(vec![]),
-            prices: Some(Default::default()),
-        });
+        cfg.open = true;
+        cfg.models.insert(
+            "p/big".into(),
+            tuse_config::ModelDef {
+                display: "Big".into(),
+                window: 200_000,
+                efforts: Some(vec![]),
+                prices: Some(Default::default()),
+            },
+        );
         cfg.plugins.push(tuse_config::PluginSummary {
             name: "demo".into(),
             version: "1.0.0".into(),
         });
-        cfg.prompts.insert(
-            "spec".into(),
-            tuse_config::Prompt {
-                kind: tuse_config::PromptKind::Function,
-                body: String::new(),
-                args: vec!["apply".into()],
-            },
-        );
-        cfg.connect.push(Connect {
-            name: "p".into(),
-            base_url: "https://x".into(),
-            api_key: "sk-secret".into(),
-            ..Default::default()
-        });
-        cfg.prompts.insert(
-            "rev".into(),
-            tuse_config::Prompt {
-                body: "Review code".into(),
-                ..Default::default()
-            },
-        );
+        cfg.prompts
+            .insert("work:review".into(), "Review code".into());
         cfg.functions.insert("helper".into(), FunctionKind::Custom);
         cfg.functions.insert("sh".into(), FunctionKind::Override);
         cfg.functions
-            .insert("delete".into(), FunctionKind::Disabled);
-        cfg.hooks.insert(
-            "h".into(),
-            Hook {
-                events: vec!["user_message".into()],
-            },
-        );
+            .insert("fs.delete".into(), FunctionKind::Disabled);
+        cfg.hook.insert("user_message".into(), vec!["test".into()]);
         let p = Palette::from_config(&cfg);
         let mut pnl = panel(&cfg, &p);
         let text: String = (0..200)
@@ -341,8 +277,8 @@ mod tests {
             .flatten()
             .map(|s| s.text)
             .collect();
-        for s in "UI|Providers|Plugins|Models|Theme|System prompts|Prompts|Functions|Hooks|Commands"
-            .split('|')
+        for s in
+            "UI|Plugins|Models|Theme|System prompts|Prompts|Functions|Hooks|Commands".split('|')
         {
             assert!(text.contains(s), "missing {s}");
         }
@@ -376,16 +312,16 @@ mod tests {
                 "/config misses `{k}`"
             );
         }
-        assert!(text.contains("p/big") && text.contains("fn(apply)"));
+        assert!(text.contains("p/big") && text.contains("#work:review"));
         assert!(
-            text.contains("/hello")
-                && text.contains("#rev")
+            text.contains("/test:hello")
+                && text.contains("#work:review")
                 && text.contains("helper")
                 && text.contains("sh  [override]")
-                && text.contains("delete  [disabled]")
+                && text.contains("fs.delete  [disabled]")
         );
-        assert!(text.contains(".md"));
+        assert!(text.contains("callback"));
         assert!(text.contains("Config file") && text.contains("/home/me/.config/tuse/init.lua"));
-        assert!(!text.contains("sk-secret"));
+        assert!(text.contains("ui.picker") && text.contains("bottom"));
     }
 }

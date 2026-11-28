@@ -22,6 +22,8 @@ impl Level {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JobRecord {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub code: String,
@@ -29,6 +31,23 @@ pub struct JobRecord {
     pub ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskMessage {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub delivery: TaskDelivery,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskDelivery {
+    Wake,
+    Steer,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +88,7 @@ pub enum Record {
     Notification {
         text: String,
     },
+    TaskMessage(TaskMessage),
     Message {
         level: Level,
         text: String,
@@ -148,6 +168,7 @@ impl Record {
         error: Option<String>,
     ) -> Self {
         let j = JobRecord {
+            id: None,
             name,
             code,
             status,
@@ -170,19 +191,12 @@ pub struct FileDiff {
 
 #[derive(Debug, Clone, Default)]
 pub struct UserInput {
-    pub notification: bool,
     pub text: String,
     pub context: String,
     pub images: Vec<String>,
 }
 
 impl UserInput {
-    pub fn notification(t: impl Into<String>) -> Self {
-        Self {
-            notification: true,
-            ..Self::text(t)
-        }
-    }
     pub fn text(t: impl Into<String>) -> Self {
         Self {
             text: t.into(),

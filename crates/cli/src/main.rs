@@ -1,37 +1,31 @@
 mod args;
-mod connect;
-mod init;
 mod models;
-mod plugins;
 mod update;
 
 use args::Args;
 use std::path::PathBuf;
-
-use tuse_core::{Options, Session};
+use tuse_core::{LoadFlags, Options, Providers, Session};
 
 const USAGE: &str = "tuse - minimal AI coding agent
 
 USAGE
-  tuse [-c|--config PATH] [-r|--resume ID]       open the TUI; -r ID opens a saved session
+  tuse [-r|--resume ID] [--no-global] [--no-plugins]
+                                                 open the TUI; -r ID opens a saved session
                                                  (its ID is printed to stderr on exit)
-  tuse json [-c|--config PATH] [-r|--resume ID]  a JSON-RPC 2.0 session over stdin/stdout,
+  tuse json [-r|--resume ID] [--no-global] [--no-plugins]
+                                                 a JSON-RPC 2.0 session over stdin/stdout,
                                                  one message per line (see docs/json.md)
-  tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--header HEADER]... [--replace]
-                                                 verify and save an API provider
-  tuse disconnect NAME                           remove a provider
-  tuse providers [--json]                        list the providers
-  tuse models [-c|--config PATH]                 list configured model metadata and the
+  tuse providers [--json]                        list saved providers
+  tuse models                 list configured model metadata and the
                                                  saved default
-  tuse plugins <add|list|delete|print|update>    manage installed Lua plugins
-  tuse init                                      create a starter namespaced ./tuse.lua
-  tuse update                                    update the binary
+  tuse update                                    check for updates and update the binary
+  tuse rollback                                  restore the previous binary backup
   tuse version | -V|--version                    print the version
   tuse help [COMMAND] | -h|--help                this help; `tuse COMMAND -h` shows one command
 
-Config lookup: -c|--config PATH, else ./tuse.lua as primary local config; global config
-from $TUSE_GLOBAL_CONFIG (if set), else ~/.config/tuse.lua or ~/.config/tuse/init.lua;
-installed plugins from ~/.tuse/plugins.";
+Global config lookup: $TUSE_GLOBAL_CONFIG (if set), else ~/.config/tuse.lua or ~/.config/tuse/init.lua;
+installed plugins from the plugins/ subdirectory of the Tuse storage directory.
+Storage: $TUSE_HOME (if set and non-empty), else ~/.tuse.";
 
 struct Cmd {
     usage: &'static str,
@@ -40,38 +34,35 @@ struct Cmd {
     args: usize,
 }
 
-const CONFIG: &[&str] = &["--config", "-c"];
-const SESSION: &[&str] = &["--config", "-c", "--resume", "-r"];
+const SESSION: &[&str] = &["--resume", "-r"];
+const LOAD_FLAGS: &[&str] = &["--no-global", "--no-plugins"];
 
 fn spec(sub: &str) -> Option<Cmd> {
-    let cmd = |usage, valued, args| Cmd {
+    let cmd = |usage, valued, plain, args| Cmd {
         usage,
         valued,
-        plain: &[],
+        plain,
         args,
     };
     Some(match sub {
-        "" => cmd("tuse [-c|--config PATH] [-r|--resume ID]", SESSION, 0),
-        "json" => cmd("tuse json [-c|--config PATH] [-r|--resume ID]", SESSION, 0),
-        "connect" => Cmd {
-            usage: "tuse connect --base URL (--key '$ENV' | --key-stdin) --name NAME [--api TYPE] [--header HEADER]... [--replace]",
-            valued: &["--base", "--key", "--name", "--api", "--header"],
-            plain: &["--replace", "--key-stdin"],
-            args: 0,
-        },
-        "disconnect" => cmd("tuse disconnect NAME", &[], 1),
-        "providers" => Cmd {
-            usage: "tuse providers [--json]",
-            valued: &[],
-            plain: &["--json"],
-            args: 0,
-        },
-        "models" => cmd("tuse models [-c|--config PATH]", CONFIG, 0),
-        "plugins" => cmd(plugins::USAGE, &[], 0),
-        "init" => cmd("tuse init", &[], 0),
-        "update" => cmd("tuse update", &[], 0),
-        "version" => cmd("tuse version", &[], 0),
-        "help" => cmd("tuse help [COMMAND]", &[], 0),
+        "" => cmd(
+            "tuse [-r|--resume ID] [--no-global] [--no-plugins]",
+            SESSION,
+            LOAD_FLAGS,
+            0,
+        ),
+        "json" => cmd(
+            "tuse json [-r|--resume ID] [--no-global] [--no-plugins]",
+            SESSION,
+            LOAD_FLAGS,
+            0,
+        ),
+        "providers" => cmd("tuse providers [--json]", &[], &["--json"], 0),
+        "models" => cmd("tuse models", &[], &[], 0),
+        "update" => cmd("tuse update", &[], &[], 0),
+        "rollback" => cmd("tuse rollback", &[], &[], 0),
+        "version" => cmd("tuse version", &[], &[], 0),
+        "help" => cmd("tuse help [COMMAND]", &[], &[], 0),
         _ => return None,
     })
 }
@@ -101,9 +92,6 @@ fn run(raw: Vec<String>) -> Result<(), String> {
     if sub == "help" {
         return run_help(rest);
     }
-    if sub == "plugins" {
-        return plugins::run(rest);
-    }
     let help = rest
         .iter()
         .take_while(|s| *s != "--")
@@ -120,21 +108,29 @@ fn run(raw: Vec<String>) -> Result<(), String> {
     a.expect_args(cmd.args)
         .map_err(|msg| format!("{msg}\nusage: {}", cmd.usage))?;
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
-    let config = tuse_core::config_arg(&cwd, a.value(CONFIG).as_deref());
     match sub {
-        "connect" => connect::run(&a),
-        "disconnect" => connect::remove(a.arg(0)),
-        "providers" => connect::list(a.has(&["--json"])),
-        "models" => models::run(cwd, config),
-        "json" => json(&a, cwd, config),
-        "init" => init::run(&cwd),
+        "providers" => providers_list(a.has(&["--json"])),
+        "models" => models::run(cwd),
+        "json" => json(&a, cwd),
         "update" => update::update(),
+        "rollback" => update::rollback(),
         "version" => {
             println!("tuse {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        _ => start(&a, cwd, config),
+        _ => start(&a, cwd),
     }
+}
+
+fn providers_list(as_json: bool) -> Result<(), String> {
+    if as_json {
+        println!("{}", Providers::json()?);
+    } else {
+        for p in Providers::views()? {
+            println!("{}\t{}", p.name, p.base);
+        }
+    }
+    Ok(())
 }
 
 fn run_help(rest: &[String]) -> Result<(), String> {
@@ -165,27 +161,29 @@ fn run_help(rest: &[String]) -> Result<(), String> {
 fn open_session(
     a: &Args,
     cwd: PathBuf,
-    config: Option<PathBuf>,
     mode: tuse_core::Mode,
 ) -> Result<std::sync::Arc<Session>, String> {
     Session::open(Options {
         cwd,
-        config,
         mode,
         resume: a.value(&["--resume", "-r"]),
         start: tuse_core::Start::Launch,
+        flags: LoadFlags {
+            no_global: a.has(&["--no-global"]),
+            no_plugins: a.has(&["--no-plugins"]),
+        },
     })
 }
 
-fn start(a: &Args, cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
-    let session = open_session(a, cwd, config.clone(), tuse_core::Mode::Tui)?;
-    let id = tuse_tui::run(session, config).map_err(|e| e.to_string())?;
+fn start(a: &Args, cwd: PathBuf) -> Result<(), String> {
+    let session = open_session(a, cwd, tuse_core::Mode::Tui)?;
+    let id = tuse_tui::run(session).map_err(|e| e.to_string())?;
     eprintln!("tuse: session {id}");
     Ok(())
 }
 
-fn json(a: &Args, cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
-    let session = open_session(a, cwd, config, tuse_core::Mode::Json)?;
+fn json(a: &Args, cwd: PathBuf) -> Result<(), String> {
+    let session = open_session(a, cwd, tuse_core::Mode::Json)?;
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     for sig in [
         signal_hook::consts::SIGINT,
@@ -204,13 +202,10 @@ mod tests {
     const ALL: &[&str] = &[
         "",
         "json",
-        "connect",
-        "disconnect",
         "providers",
         "models",
-        "plugins",
-        "init",
         "update",
+        "rollback",
         "version",
         "help",
     ];
@@ -223,19 +218,11 @@ mod tests {
             let first = cmd.usage.lines().next().unwrap();
             let name = first.split(" [").next().unwrap();
             let name = name.split(" --").next().unwrap();
-            let name = name.split(" NAME").next().unwrap();
-            let name = name.split(" <").next().unwrap();
             assert!(super::USAGE.contains(name), "help misses {name}");
             assert!(docs.contains(&format!("`{name}")), "docs misses {name}");
             if cmd.valued.contains(&"--config") {
                 assert!(cmd.usage.contains("[-c|--config PATH]"), "{}", cmd.usage);
             }
-        }
-        for sub in ["add", "list", "delete", "print", "update"] {
-            assert!(
-                docs.contains(&format!("`tuse plugins {sub}")),
-                "docs misses tuse plugins {sub}"
-            );
         }
     }
 }

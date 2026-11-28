@@ -12,7 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 tuse-config.workspace = true
-tuse-api.workspace = true
 tuse-core.workspace = true
 tuse-tui.workspace = true
 tuse-rpc.workspace = true
@@ -21,5 +20,5 @@ serde.workspace = true
 serde_json.workspace = true
 signal-hook = "0.3"
 sha2 = "0.10"
-flate2 = "1"
-tar = { version = "0.4", default-features = false }
+flate2.workspace = true
+tar.workspace = true

@@ -9,7 +9,7 @@ pub use api::source_of;
 pub use api::{host, wrap, yield_wait};
 pub use job::{Done, ExtWait, Job, Out, Stop};
 pub use mlua;
-pub use sched::{add_wait, is_hook, is_lua_hook, start, stopped, with_run};
+pub use sched::{add_wait, is_hook, start, stopped, with_run};
 pub use sh::{kill_group, setsid};
 pub use value::to_lua;
 pub use vm::Vm;
@@ -27,8 +27,7 @@ pub struct TaskStart {
 pub trait Host: Send + Sync + 'static {
     fn cwd(&self) -> PathBuf;
     fn action(&self, _what: &str) {}
-    fn task_start(&self, name: &str, code: &str, from_lua_hook: bool) -> Result<TaskStart, String>;
-    fn task_track(&self, _id: &str, _name: &str) {}
+    fn task_start(&self, name: &str, code: &str) -> Result<TaskStart, String>;
     fn task_end(&self, id: &str, done: Done);
 }
 

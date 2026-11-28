@@ -33,6 +33,8 @@ impl App {
         let before = self.steering.map(|_| self.editor.snapshot());
         if self.searching() {
             self.editor.insert(&s.replace('\n', " "));
+        } else if self.secret_input() {
+            self.editor.insert(&s.replace(['\r', '\n'], ""));
         } else {
             self.editor.insert(s);
         }
@@ -71,6 +73,23 @@ impl App {
             let (name, after) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
             let has_ws = rest.len() > name.len();
             if !name.is_empty() && !name.contains('/') {
+                if matches!(name, "providers" | "plugins") {
+                    match tuse_config::command_words(after) {
+                        Ok(words) => {
+                            let saved = std::mem::take(&mut self.editor);
+                            let ok = if name == "providers" {
+                                self.run_providers(&words)
+                            } else {
+                                self.run_plugins(&words)
+                            };
+                            if !ok {
+                                self.editor = saved;
+                            }
+                        }
+                        Err(e) => self.error(format!("/{name}: {e}")),
+                    }
+                    return;
+                }
                 if crate::ui::picker::COMMANDS.iter().any(|(n, _)| *n == name) {
                     if has_ws {
                         self.error(format!("/{name} takes no words"));
@@ -80,18 +99,11 @@ impl App {
                     self.run_command(name);
                     return;
                 }
-                if let Some(cmd) = self.session.config().commands.get(name).cloned() {
-                    if cmd.args.is_empty() && cmd.params == Some(0) && has_ws {
+                if self.session.config().commands.contains(name) {
+                    if has_ws {
                         self.error(format!("/{name} takes no words"));
-                        return;
-                    }
-                    match tuse_config::command_words(after) {
-                        Ok(words) => {
-                            if self.session.run_command(name, &words).is_ok() {
-                                self.editor.clear();
-                            }
-                        }
-                        Err(e) => self.error(format!("/{name}: {e}")),
+                    } else if self.session.run_command(name, &[]).is_ok() {
+                        self.editor.clear();
                     }
                     return;
                 }

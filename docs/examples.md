@@ -1,86 +1,58 @@
 # Examples
 
-Ready Lua config modules for common setups: skills, MCP, themes, titles, notifications, multiplexers, and more. Copy a file next to your config and place it under a namespace:
+Copyable Lua snippets for the global config: project instructions, reusable prompts, custom commands, and themes. Combine their fields in one returned table, or split reusable pieces into sibling Lua modules with `require`.
+
+## Project instructions
+
+To attach a project's `AGENTS.md` without executing project Lua, read it as text from the session directory. Put this in your global config:
 
 ```lua
+local t = require("tuse")
+local ok, rules = pcall(t.fs.read, "AGENTS.md")
+
 return {
-  tmux = require("tmux"),
-  notify = require("notify"),
-  compaction = require("compaction")(0.8, 20),
-  colors = { ui = { theme = require("themes").gruvbox } },
+  systems = { project = ok and rules or "" },
+  work = {
+    prompts = {
+      review = "Review the diff for bugs, edge cases, and missing tests.",
+      test = "Run the relevant tests and report any failures.",
+    },
+    functions = {
+      status = function()
+        return t.sh("git status --short").out
+      end,
+    },
+    commands = {
+      diff = function()
+        t.ui.show("diff", "```diff\n" .. t.sh("git diff").out .. "\n```")
+      end,
+      rename = function()
+        local title = t.ui.ask("New session title?")
+        if title and title ~= "" then t.session.set { title = title } end
+      end,
+    },
+  },
 }
 ```
 
-The files live in the [`examples/`](https://github.com/ethanhamilthon/tuse/tree/main/examples) folder. Ask Tuse to adapt one for you.
+Select `#work:review` or `#work:test` in the prompt picker. Run `/work:diff` to show the diff or `/work:rename` to set a title. The agent can call `work.status()` in its Lua VM.
 
-## Skills
+## Theme
 
-Loads every `skills/<name>/SKILL.md` as a `#<name>` prompt. Skills are just reusable prompts. [`skills.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/skills.lua)
+Use `ui` at the top level to style the composer and code blocks:
 
-## MCP
+```lua
+return {
+  ui = {
+    input = "bar",
+    picker = "top",
+    theme = { accent = "#FFB86C", code = { keyword = "accent" } },
+  },
+}
+```
 
-Wraps a stdio MCP server as two agent functions, `mcp_tools()` and `mcp_call(name, args)`. [`mcp.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/mcp.lua)
+See [Config](config.md#theme-and-ui) for all tokens and defaults.
 
-## Themes
+## External plugins
 
-Full `ui.theme` tables: light, gruvbox, solarized, and one that uses the terminal colors. [`themes.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/themes.lua)
-
-## Rename
-
-Names the session with a small model after the first message, and adds `/rename`. [`rename.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/rename.lua)
-
-## Notifications
-
-A desktop notification when a turn finishes, on macOS and Linux. [`notify.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/notify.lua)
-
-## tmux
-
-Puts the session title and agent state together in the tmux window name. [`tmux.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/tmux.lua)
-
-## Zellij
-
-The same for the Zellij pane name. [`zellij.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/zellij.lua)
-
-## cmux
-
-Sets the cmux workspace status, sends a cmux notification when done, and renames the tab. [`cmux.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/cmux.lua)
-
-## Herdr
-
-Reports `working`/`idle` on the Herdr pane and renames it after the session. [`herdr.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/herdr.lua)
-
-## Orca
-
-Posts the session title and progress as an Orca worktree comment and marks the workspace unread when done. [`orca.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/orca.lua)
-
-## Rex
-
-Renames the current Rex block (`$REX_BLOCK`) with the session title and agent state. [`rex.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/rex.lua)
-
-## Web search
-
-A `websearch(query, n)` agent function backed by SearXNG, announced in `systems`. [`websearch.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/websearch.lua)
-
-## Sandbox
-
-Wraps the agent's `sh` with a timeout and a deny list, and removes `delete`. [`sandbox.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/sandbox.lua)
-
-## Commands
-
-`/diff`, `/test`, and `/commit` custom commands that use `show()` and `ask()`. [`commands.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/commands.lua)
-
-## Open handlers
-
-`open` handlers: Markdown in a `show()` block, images and PDFs in the OS viewer. [`open.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/open.lua)
-
-## OpenSpec
-
-One `#openspec` prompt with args (`explore`, `propose`, `apply`, `verify`, `archive`) instead of five prompts. [`openspec.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/openspec.lua)
-
-## Project config
-
-A per-project namespaced `tuse.lua` with `history.hide` and a short `models` list. [`project.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/project.lua)
-
-## Compaction
-
-`require("compaction")(0.8, 20)` summarizes older conversation records after a finished reply when `context` reaches 80% of `context_window`. It uses `llm` for the summary and `set_session` to replace the older history, retaining the system prompt and recent records without splitting tool calls from their results. [`compaction.lua`](https://github.com/ethanhamilthon/tuse/blob/main/examples/compaction.lua)
+Plugins are not bundled. Install one from a source you trust with `/plugins add <source>`, then run `/reload` to activate it in the current session. See [Installed plugins](config.md#installed-plugins) and the [Lua API](lua.md#plugins-plugins).

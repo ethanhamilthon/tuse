@@ -11,13 +11,11 @@ pub(crate) mod turn;
 pub(crate) mod ui;
 pub(crate) mod view;
 
-use crate::convo::record::{Record, UserInput};
-use crate::event::InputId;
-pub use crate::mode::{Mode, Options};
+use crate::convo::record::Record;
+pub use crate::mode::{LoadFlags, Mode, Options};
 use crate::session::bus::Subs;
 use crate::storage::store::{ReadCache, SessionDir};
 use crate::storage::tasks::{TaskInfo, Tasks};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -31,7 +29,7 @@ pub struct Session {
     pub(crate) tasks: Tasks,
     pub(crate) dir: Mutex<Option<SessionDir>>,
     pub(crate) config: RwLock<(u64, Arc<Config>)>,
-    pub(crate) config_arg: Option<PathBuf>,
+    pub(crate) flags: LoadFlags,
     pub(crate) state: Mutex<State>,
     pub(crate) subs: Mutex<Subs>,
     pub(crate) vm: tuse_lua::Vm,
@@ -41,8 +39,6 @@ pub struct Session {
     pub(crate) cmd_runs: Mutex<Vec<Arc<AtomicBool>>>,
     pub(crate) http: tuse_api::HttpAgent,
     pub(crate) next_lua: AtomicU64,
-    pub(crate) task_lua: Mutex<HashMap<String, (String, Instant)>>,
-    pub(crate) jobs: Mutex<HashMap<String, (&'static str, String, String)>>,
     pub(crate) reload_lock: Mutex<()>,
 }
 
@@ -65,7 +61,7 @@ pub(crate) struct State {
     pub generation: u64,
     pub cancel: Arc<AtomicBool>,
     pub tool_handoff: Option<Arc<AtomicBool>>,
-    pub queue: Vec<(InputId, UserInput)>,
+    pub queue: Vec<control::QueuedInput>,
     pub next_input: u64,
     pub turn_start: Instant,
     pub calls: usize,
@@ -74,6 +70,8 @@ pub(crate) struct State {
     pub reasoning: String,
     pub streaming: bool,
     pub remote: Vec<String>,
+    provider_names: std::collections::BTreeSet<String>,
+    discovery: std::collections::BTreeMap<String, (u64, u64)>,
 }
 
 impl Session {
@@ -118,8 +116,8 @@ impl Session {
         }
         self.ui_close();
         self.stop_commands();
+        self.stop_all_tasks();
         self.cancel_turn();
-        self.tasks.stop_all();
         self.finish_hooks(event);
         self.dir.lock().unwrap().take();
     }
@@ -137,29 +135,20 @@ impl Session {
     }
 
     pub fn reload(self: &Arc<Self>) -> Result<(), String> {
-        self.reload_namespace(None)
-    }
-
-    pub fn reload_namespace(self: &Arc<Self>, namespace: Option<String>) -> Result<(), String> {
-        let result = self.reload_config(namespace);
+        let result = self.reload_config();
         if let Err(e) = &result {
             self.error(format!("Reload failed: {e}"));
         }
         result
     }
 
-    fn reload_config(self: &Arc<Self>, namespace: Option<String>) -> Result<(), String> {
+    fn reload_config(self: &Arc<Self>) -> Result<(), String> {
         let _one = self.reload_lock.lock().unwrap();
-        let explicit = self.config_arg.clone();
         let cwd = self.cwd.clone();
-        let c = self.vm.call(move |lua| {
-            crate::session::lua::config_lua::prepare(
-                lua,
-                explicit.as_deref(),
-                &cwd,
-                namespace.as_deref(),
-            )
-        })?;
+        let flags = self.flags;
+        let c = self
+            .vm
+            .call(move |lua| crate::session::lua::config_lua::prepare(lua, &cwd, flags))?;
         self.finish_hooks(None);
         let c = Arc::new(c);
         let (s2, c2) = (self.clone(), c.clone());
@@ -168,6 +157,7 @@ impl Session {
         self.ui_cancel_hooks(false);
         self.hooks_on.store(true, Ordering::Release);
         self.simple_hook("config_load");
+        self.replay_ui_prompt();
         self.emit(Signal::Reloaded);
         Ok(())
     }
@@ -185,33 +175,54 @@ impl Session {
     ) -> Result<Vec<(String, Option<String>, String)>, String> {
         let config = self.config();
         let mut out = vec![];
-        for raw in names {
-            let (n, arg) = match raw.trim().split_once(char::is_whitespace) {
-                Some((n, a)) => (n, Some(a.trim().to_string())),
-                None => (raw.trim(), None),
-            };
-            let Some(p) = config.prompts.get(n) else {
-                if strict {
-                    return Err(format!("unknown prompt `{n}`"));
-                }
-                continue;
-            };
-            if let Some(a) = &arg
-                && !p.args.contains(a)
-            {
-                return Err(format!("prompt `{n}`: unknown arg `{a}`"));
+        for name in names {
+            match config.prompts.get(name) {
+                Some(p) => out.push((name.clone(), None, p.clone())),
+                None if strict => return Err(format!("unknown prompt `{name}`")),
+                None => {}
             }
-            let body = match p.kind {
-                tuse_config::PromptKind::Text => p.body.clone(),
-                tuse_config::PromptKind::Function => self.prompt_body(n, arg.as_deref())?,
-            };
-            out.push((n.to_string(), arg, body));
         }
         Ok(out)
     }
 
+    pub(crate) fn record_task(
+        &self,
+        t: &TaskInfo,
+        elapsed: std::time::Duration,
+        error: Option<String>,
+    ) -> bool {
+        let mut record = Record::job(
+            "task",
+            t.name.clone(),
+            t.code.clone(),
+            t.status.clone(),
+            elapsed.as_millis() as u64,
+            error,
+        );
+        if let Record::Task(j) = &mut record {
+            j.id = Some(t.id.clone());
+        }
+        let mut st = self.state.lock().unwrap();
+        if !self.record(&mut st, std::slice::from_ref(&record), []) {
+            return false;
+        }
+        if let Some(history) = &mut st.pending_history {
+            history.push(record);
+        }
+        true
+    }
+
+    fn stop_all_tasks(&self) {
+        for task in self.tasks.list().into_iter().filter(TaskInfo::alive) {
+            let _ = self.stop_task(&task.id);
+        }
+    }
+
     pub fn stop_task(&self, id: &str) -> Result<TaskInfo, String> {
-        let t = self.tasks.stop(id)?;
+        let (t, elapsed) = self.tasks.stop(id)?;
+        if let Some(elapsed) = elapsed {
+            self.record_task(&t, elapsed, None);
+        }
         self.emit(Signal::Tasks);
         Ok(t)
     }

@@ -101,8 +101,6 @@ local function inspect_val(v, depth, seen)
   return "{" .. tbl_concat(parts, ", ") .. "}"
 end
 
-inspect = inspect_val
-
 function tuse.render(...)
   local out = {}
   for i = 1, select("#", ...) do

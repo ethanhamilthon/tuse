@@ -15,6 +15,8 @@ pub struct PluginManifest {
     pub entrypoint: String,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub lazy: bool,
 }
 
 fn default_entrypoint() -> String {
@@ -96,7 +98,100 @@ pub fn load_plugin_dir(name: &str, dir: &Path) -> Result<InstalledPlugin, String
     })
 }
 
-pub fn discover_plugins_in(dir: &Path) -> Result<Vec<InstalledPlugin>, String> {
+static PLUGIN_LOCK: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+pub struct PluginLock {
+    _file: Option<std::fs::File>,
+    _guard: LockGuard,
+}
+
+#[allow(dead_code)]
+enum LockGuard {
+    Read(std::sync::RwLockReadGuard<'static, ()>),
+    Write(std::sync::RwLockWriteGuard<'static, ()>),
+}
+
+fn lock_file_path(dir: &Path) -> PathBuf {
+    dir.with_file_name(".plugins.lock")
+}
+
+fn open_lock(lp: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lp)
+}
+
+fn acquire_flock(file: &std::fs::File, exclusive: bool) -> std::io::Result<()> {
+    loop {
+        let res = if exclusive {
+            file.lock()
+        } else {
+            file.lock_shared()
+        };
+        match res {
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            other => return other,
+        }
+    }
+}
+
+pub fn plugins_read_lock(dir: &Path) -> Result<Option<PluginLock>, String> {
+    let guard = PLUGIN_LOCK.read().unwrap_or_else(|e| e.into_inner());
+    let Some(parent) = dir.parent() else {
+        return Ok(Some(PluginLock {
+            _file: None,
+            _guard: LockGuard::Read(guard),
+        }));
+    };
+    if !parent.is_dir() {
+        return Ok(None);
+    }
+    let lp = lock_file_path(dir);
+    let file = match open_lock(&lp) {
+        Ok(f) => Some(f),
+        Err(e) => match std::fs::File::open(&lp) {
+            Ok(f) => Some(f),
+            Err(e2)
+                if e2.kind() == std::io::ErrorKind::NotFound
+                    && matches!(
+                        e.kind(),
+                        std::io::ErrorKind::PermissionDenied
+                            | std::io::ErrorKind::ReadOnlyFilesystem
+                    ) =>
+            {
+                None
+            }
+            Err(_) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err(format!("{}: {e}", lp.display())),
+        },
+    };
+    if let Some(f) = &file {
+        acquire_flock(f, false).map_err(|e| format!("{}: {e}", lp.display()))?;
+    }
+    Ok(Some(PluginLock {
+        _file: file,
+        _guard: LockGuard::Read(guard),
+    }))
+}
+
+pub fn plugins_write_lock(dir: &Path) -> Result<PluginLock, String> {
+    let guard = PLUGIN_LOCK.write().unwrap_or_else(|e| e.into_inner());
+    if let Some(parent) = dir.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    let lp = lock_file_path(dir);
+    let file = open_lock(&lp).map_err(|e| format!("{}: {e}", lp.display()))?;
+    acquire_flock(&file, true).map_err(|e| format!("{}: {e}", lp.display()))?;
+    Ok(PluginLock {
+        _file: Some(file),
+        _guard: LockGuard::Write(guard),
+    })
+}
+
+pub fn discover_plugins_unlocked(dir: &Path) -> Result<Vec<InstalledPlugin>, String> {
     if !dir.is_dir() {
         return Ok(vec![]);
     }
@@ -107,14 +202,24 @@ pub fn discover_plugins_in(dir: &Path) -> Result<Vec<InstalledPlugin>, String> {
     {
         let path = entry.path();
         if path.is_dir()
-            && path.join("tuse-plugin.json").is_file()
             && let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && ![".staging-", ".backup-", ".trash-"]
+                .iter()
+                .any(|p| name.starts_with(p))
+            && path.join("tuse-plugin.json").is_file()
         {
             out.push(load_plugin_dir(name, &path)?);
         }
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(out)
+}
+
+pub fn discover_plugins_in(dir: &Path) -> Result<Vec<InstalledPlugin>, String> {
+    let Some(_lock) = plugins_read_lock(dir)? else {
+        return Ok(vec![]);
+    };
+    discover_plugins_unlocked(dir)
 }
 
 pub fn discover_plugins() -> Result<Vec<InstalledPlugin>, String> {

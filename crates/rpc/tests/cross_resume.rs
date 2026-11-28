@@ -31,21 +31,26 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
     ]);
     let extra = r#"
   commands = {
-    ui = { run = function()
+    ui = function()
       local t = require("tuse")
-      t.show("pin", "Stay?", true)
-      t.ask("Pending?")
-    end },
+      t.ui.show("pin", "Stay?", true)
+      t.ui.ask("Pending?")
+    end,
   },
 "#;
     let (dir, cfg) = common::setup("cross-resume", &addr, extra);
     let open = |mode, resume| {
-        Session::open(Options {
-            cwd: dir.clone(),
-            config: Some(cfg.clone()),
-            mode,
-            resume,
-            start: Start::Launch,
+        Session::open({
+            unsafe {
+                std::env::set_var("TUSE_GLOBAL_CONFIG", cfg.clone());
+            }
+            Options {
+                cwd: dir.clone(),
+                mode,
+                resume,
+                start: Start::Launch,
+                flags: Default::default(),
+            }
         })
     };
 
@@ -68,7 +73,7 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
         json!({"text": "hello from rpc"}),
     );
     event(&out, "turn_end");
-    call(&tx, &out, 4, "commands.run", json!({"name": "ui"}));
+    call(&tx, &out, 4, "commands.run", json!({"name": "test:ui"}));
     event(&out, "ui_request");
     call(&tx, &out, 5, "shutdown", json!({}));
     server.join().unwrap();
@@ -113,7 +118,7 @@ fn cross_frontend_resume_preserves_history_model_and_persisted_ui() {
     let ev2 = tui_s2.subscribe();
     tui_s2.submit(UserInput::text("hello from tui"));
     wait_turn(&ev2);
-    tui_s2.run_command("ui", &[]).unwrap();
+    tui_s2.run_command("test:ui", &[]).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while tui_s2.ui_snapshot().active.is_none() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));

@@ -11,12 +11,17 @@ use support::{call, event, spawn};
 fn failed_switch_keeps_the_session() {
     let addr = common::provider(vec![Reply::Text("still here")]);
     let (dir, cfg) = common::setup("rpc-switch", &addr, "");
-    let session = Session::open(Options {
-        cwd: dir.clone(),
-        config: Some(cfg.clone()),
-        mode: Mode::Json,
-        resume: None,
-        start: Start::Launch,
+    let session = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg.clone());
+        }
+        Options {
+            cwd: dir.clone(),
+            mode: Mode::Json,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     let id = session.id.clone();

@@ -24,8 +24,6 @@ pub fn from_value(mut value: Value, name: &str) -> Result<Config, String> {
         let msg = raw.split(" at line ").next().unwrap_or(&raw);
         let msg = if msg.starts_with("unknown field `") {
             "unknown key"
-        } else if path == "providers" || path.starts_with("providers.") {
-            "invalid provider settings"
         } else {
             msg
         };
@@ -51,10 +49,10 @@ mod tests {
     #[test]
     fn builds_from_a_table_and_checks_it() {
         let c = from_value(
-            json!({"ui": {"lines": {"tool": 7}, "theme": {"accent": "blue", "markdown": {"heading": "green"}}},
-                "history": {"hide": ["usage"]}, "open": ["md"],
-                "prompts": {"a": "x", "b": {"kind": "function", "args": ["p"]}},
-                "systems": {}, "hooks": {"h": {"events": ["user_message"]}}}),
+            json!({"ui": {"lines": {"tool": 7}, "picker": "top", "theme": {"accent": "blue", "markdown": {"heading": "green"}}},
+                "open": true,
+                "prompts": {"a": "x"},
+                "systems": {"main": "hi"}, "hook": {"user_message": ["ns"]}}),
             "t",
         )
         .unwrap();
@@ -64,11 +62,10 @@ mod tests {
             ("blue", "green")
         );
         assert_eq!(c.ui.lines.tool, 7);
-        assert_eq!(c.history.hide, ["usage"]);
-        assert_eq!(c.hooks["h"].events, ["user_message"]);
-        assert_eq!(c.open, ["md"]);
-        assert_eq!(c.prompts["a"].body, "x");
-        assert_eq!(c.prompts["b"].args, ["p"]);
+        assert_eq!(c.ui.picker, crate::PickerPlacement::Top);
+        assert_eq!(c.hook["user_message"], ["ns"]);
+        assert!(c.open);
+        assert_eq!(c.prompts["a"], "x");
         assert!(from_value(json!({"history": {"hide": ["hooks"]}}), "t").is_err());
         assert!(from_value(json!("x"), "t").is_err());
         assert!(from_value(json!({"unknown_key": 1}), "t").is_err());
@@ -139,11 +136,7 @@ mod tests {
     fn efforts_history_and_plugins() {
         let cfg = |v| from_value(v, "test");
         let c = cfg(json!({
-            "models": [
-                {"name": "p/a"},
-                {"name": "p/b", "efforts": []},
-                {"name": "p/c", "efforts": ["low", "high"]}
-            ]
+            "models": {"p/a": {}, "p/b": {"efforts": []}, "p/c": {"efforts": ["low", "high"]}}
         }))
         .unwrap();
         assert_eq!(c.model_efforts("p/a"), crate::DEFAULT_EFFORTS);
@@ -153,18 +146,22 @@ mod tests {
         assert_eq!(c.fallback_effort("p/b"), "");
         assert_eq!(c.fallback_effort("p/c"), "low");
         for bad in [
-            json!({"models": [{"name": "p/a", "efforts": ["default"]}]}),
-            json!({"models": [{"name": "p/a", "efforts": ["bogus"]}]}),
-            json!({"models": [{"name": "p/a", "efforts": ["low", "low"]}]}),
+            json!({"models": {"p/a": {"efforts": ["default"]}}}),
+            json!({"models": {"p/a": {"efforts": ["bogus"]}}}),
+            json!({"models": {"p/a": {"efforts": ["low", "low"]}}}),
         ] {
             let err = cfg(bad).unwrap_err();
-            assert!(err.contains("models[1].efforts["), "{err}");
+            assert!(err.contains("p/a: efforts["), "{err}");
         }
         let err = cfg(json!({"history": {"hide": ["user", "bogus"]}})).unwrap_err();
-        assert_eq!(err.matches("history.hide").count(), 1, "{err}");
+        assert!(
+            err.contains("history") || err.contains("unknown key"),
+            "{err}"
+        );
 
-        let d = std::env::temp_dir().join(format!("tuse-plug-{}", std::process::id()));
-        std::fs::remove_dir_all(&d).ok();
+        let root = std::env::temp_dir().join(format!("tuse-plug-{}", std::process::id()));
+        std::fs::remove_dir_all(&root).ok();
+        let d = root.join("plugins");
         std::fs::create_dir_all(d.join("alpha")).unwrap();
         std::fs::write(
             d.join("alpha/tuse-plugin.json"),
@@ -191,6 +188,6 @@ mod tests {
         )
         .unwrap();
         assert!(crate::discover_plugins_in(&d).is_err());
-        std::fs::remove_dir_all(d).ok();
+        std::fs::remove_dir_all(root).ok();
     }
 }

@@ -1,8 +1,0 @@
-- [x] 1. Add `Bar` to `InputStyle`, accept `bar` in config validation, and show it in `/config` and `config.get`
-- [x] 2. Add one blank row above the composer in every style and drop it first when the viewport is too small
-- [x] 3. Move the picker, question, and panel rows below the composer for `lines` and `boxed`
-- [x] 4. Place them between the editor block and the status row for `fill`, followed by one border rule row
-- [x] 5. Render the `bar` composer with the same fit and `lines` fallback rules as the other framed styles
-- [x] 6. Make `overlay_rows`, mouse hit testing, the cursor row, and the page size follow the new positions
-- [x] 7. Add one layout test per style with an open picker, and one for `bar`
-- [x] 8. Update `docs/config.md`, `docs/usage.md`, and the tui and config specs

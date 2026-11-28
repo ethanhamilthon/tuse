@@ -74,21 +74,21 @@ impl Session {
             if validate
                 && (name.is_empty()
                     || model.chars().any(char::is_whitespace)
-                    || config.connect(provider).is_none())
+                    || !crate::storage::Providers::has(provider))
             {
-                return Err(format!("model `{model}` is not configured"));
+                return Err(format!("model `{model}` is unavailable"));
             }
             if model != meta.model {
                 meta.model = model;
                 changed.push("model");
             }
-            if validate
-                && effort_omitted
-                && config.model_efforts(&meta.model).is_empty()
-                && !meta.effort.is_empty()
+            if validate && effort_omitted && config.check_effort(&meta.model, &meta.effort).is_err()
             {
-                meta.effort.clear();
-                changed.push("effort");
+                let next = config.fallback_effort(&meta.model);
+                if next != meta.effort {
+                    meta.effort = next;
+                    changed.push("effort");
+                }
             }
         }
         if let Some(effort) = update.effort

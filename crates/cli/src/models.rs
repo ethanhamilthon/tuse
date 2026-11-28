@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
-    let defs = tuse_core::configured_models(cwd, config)?;
+pub fn run(cwd: PathBuf) -> Result<(), String> {
+    let defs = tuse_core::configured_models(cwd)?;
     let model = tuse_core::Prefs::model();
     let cfg = tuse_config::Config {
         models: defs.clone(),
@@ -13,13 +13,11 @@ pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
         "Default: {} (effort: {shown_effort})",
         if model.is_empty() { "(none)" } else { &model }
     );
-    let defs: std::collections::BTreeMap<_, _> =
-        defs.into_iter().map(|m| (m.name.clone(), m)).collect();
     if defs.is_empty() {
         println!("No models configured.");
         return Ok(());
     }
-    for m in defs.into_values() {
+    for (name, m) in defs {
         let mut parts = vec![];
         if !m.display.is_empty() {
             parts.push(m.display);
@@ -40,7 +38,7 @@ pub fn run(cwd: PathBuf, config: Option<PathBuf>) -> Result<(), String> {
                 p.input, p.output, p.cache_read, p.cache_write
             ));
         }
-        println!("{}\t{}", m.name, parts.join(" · "));
+        println!("{name}\t{}", parts.join(" · "));
     }
     Ok(())
 }

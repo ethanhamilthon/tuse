@@ -74,6 +74,7 @@ impl App {
         rows: &[String],
         top: usize,
         overlay: Vec<Line>,
+        overlay_gap: usize,
     ) -> Vec<Line> {
         let bg = Style::default().on(self.palette.input_bg);
         let blank = || vec![span(" ".repeat(w), bg)];
@@ -86,7 +87,7 @@ impl App {
             out.push(row);
         }
         out.push(blank());
-        out.extend(self.status_tail(w, overlay));
+        out.extend(self.status_tail(w, overlay, overlay_gap));
         out
     }
 
@@ -97,17 +98,22 @@ impl App {
         rows: &[String],
         top: usize,
         overlay: Vec<Line>,
+        overlay_gap: usize,
     ) -> Vec<Line> {
         let mut out = self.input_rows(view, rows, top, InputStyle::Bar);
-        out.extend(self.status_tail(w, overlay));
+        out.extend(self.status_tail(w, overlay, overlay_gap));
         out
     }
 
-    fn status_tail(&self, w: usize, overlay: Vec<Line>) -> Vec<Line> {
-        let mut out = overlay;
-        if out.is_empty() {
+    fn status_tail(&self, w: usize, overlay: Vec<Line>, overlay_gap: usize) -> Vec<Line> {
+        let mut out = vec![];
+        if overlay.is_empty() {
             out.push(vec![]);
         } else {
+            if overlay_gap > 0 {
+                out.push(vec![]);
+            }
+            out.extend(overlay);
             out.push(rule(&self.palette, w, vec![], vec![]));
         }
         out.push(self.status_row(w));
@@ -199,27 +205,38 @@ impl App {
             if !prefix.is_empty() {
                 line.push(span(prefix, Style::fg(pfx_color)));
             }
-            if mode == InputStyle::Boxed && text.contains('\t') {
+            let secret = self.secret_input();
+            if secret {
+                let masked = "•".repeat(crate::kit::text::width(text));
+                line.push(span(masked, style));
+            } else if mode == InputStyle::Boxed && text.contains('\t') {
                 line.push(span(text.replace('\t', "    "), style));
             } else {
                 line.push(span(text, style));
             }
             out.push(line);
         }
-        if !dim {
-            for (line, ranges) in out.iter_mut().zip(view.atoms.iter().skip(top)) {
-                for &(a, b) in ranges {
-                    crate::kit::selection::highlight(line, left + a, left + b, Style::fg(p.accent));
+        if !self.secret_input() {
+            if !dim {
+                for (line, ranges) in out.iter_mut().zip(view.atoms.iter().skip(top)) {
+                    for &(a, b) in ranges {
+                        crate::kit::selection::highlight(
+                            line,
+                            left + a,
+                            left + b,
+                            Style::fg(p.accent),
+                        );
+                    }
                 }
             }
-        }
-        for (line, &(a, b)) in out.iter_mut().zip(view.selected.iter().skip(top)) {
-            crate::kit::selection::highlight(
-                line,
-                left + a,
-                left + b,
-                Style::fg(p.bg).on(p.accent),
-            );
+            for (line, &(a, b)) in out.iter_mut().zip(view.selected.iter().skip(top)) {
+                crate::kit::selection::highlight(
+                    line,
+                    left + a,
+                    left + b,
+                    Style::fg(p.bg).on(p.accent),
+                );
+            }
         }
         out
     }
@@ -273,7 +290,7 @@ mod tests {
         app.editor.insert("#typed ");
         app.editor.insert_atom(
             "#review",
-            crate::kit::editor::AtomKind::Prompt("review".into(), None),
+            crate::kit::editor::AtomKind::Prompt("review".into()),
         );
         app.editor.insert(" x");
         let view = app.editor.view(60);

@@ -4,7 +4,7 @@ use crate::kit::text::{CopyRow, CopySpan, Line, width};
 use crate::ui::app::App;
 use crate::ui::picker::Kind;
 use crate::ui::screen::input_view::BOXED_INSET;
-use tuse_config::InputStyle;
+use tuse_config::{InputStyle, PickerPlacement};
 fn option_copy(line: &Line) -> Option<CopyRow> {
     let mark = line.first().map_or(0, |s| width(&s.text));
     let text: String = line.iter().skip(1).map(|s| s.text.as_str()).collect();
@@ -73,8 +73,20 @@ impl App {
         self.page_rows = chat_h;
         let mut screen: Vec<Line> = Vec::with_capacity(h);
 
-        let cap = (chat_h - usize::from(chat_h > 2)).min(p.ui.lines.list);
-        let (mut overlay, mut overlay_hits) = if let Some(pk) = &mut self.picker {
+        let placement = p.ui.picker;
+        let has_overlay = self.picker.is_some()
+            || self.question.is_some()
+            || self.form.is_some()
+            || self.panel.is_some();
+        let reserved_gap = usize::from(has_overlay && chat_h > 1);
+        let avail = chat_h.saturating_sub(reserved_gap);
+        let cap = (avail - usize::from(avail > 2)).min(p.ui.lines.list);
+        let (mut overlay, mut overlay_hits) = if cap == 0 {
+            if self.picker.is_some() {
+                self.list_rows = 1;
+            }
+            (vec![], vec![])
+        } else if let Some(pk) = &mut self.picker {
             let mut rows = pk.title.as_deref().map_or_else(Vec::new, |title| {
                 crate::kit::rich::markdown::rows(title, inner, p, false)
             });
@@ -111,6 +123,7 @@ impl App {
             .question
             .as_mut()
             .map(|q| &mut q.panel)
+            .or_else(|| self.form.as_mut().map(|f| &mut f.panel))
             .or(self.panel.as_mut())
         {
             panel.rows(inner, cap, p)
@@ -119,15 +132,22 @@ impl App {
         };
         overlay.truncate(cap);
         overlay_hits.truncate(cap);
-        let history_h = chat_h - overlay.len();
+        let overlay_gap = usize::from(!overlay.is_empty() && chat_h > overlay.len());
+        let history_h = chat_h.saturating_sub(overlay.len() + overlay_gap);
+        let top_mode = placement == PickerPlacement::Top;
         let below = matches!(style, InputStyle::Lines | InputStyle::Boxed);
-        let start = history_h
-            + gap
-            + match style {
-                InputStyle::Lines | InputStyle::Boxed => extra + input_h,
-                InputStyle::Fill => input_h + 2,
-                InputStyle::Bar => input_h,
-            };
+        let start = if top_mode {
+            history_h + overlay_gap
+        } else {
+            history_h
+                + gap
+                + overlay_gap
+                + match style {
+                    InputStyle::Lines | InputStyle::Boxed => extra + input_h,
+                    InputStyle::Fill => input_h + 2,
+                    InputStyle::Bar => input_h,
+                }
+        };
         self.overlay_rows = start..start + overlay.len();
         self.chat_pad = pad;
         self.chat_hits.clear();
@@ -141,6 +161,7 @@ impl App {
                     self.scroll += total - prev;
                 }
                 self.chat_anchor = Some((inner, total));
+                self.scroll = self.scroll.min(total.saturating_sub(history_h));
             } else {
                 self.chat_anchor = None;
             }
@@ -153,26 +174,36 @@ impl App {
                 self.chat_hits.push(row.hit);
             }
         }
+        if top_mode && !overlay.is_empty() {
+            if overlay_gap == 1 {
+                screen.push(Vec::new());
+            }
+            screen.extend(std::mem::take(&mut overlay));
+            self.chat_hits.resize_with(self.overlay_rows.start, || None);
+            self.chat_hits.extend(std::mem::take(&mut overlay_hits));
+        }
         if gap == 1 {
             screen.push(Vec::new());
         }
+        let composer_top = screen.len();
         view.rows
             .resize_with(view.rows.len().max(input_h), String::new);
         let shown = &view.rows[input_top..input_top + input_h];
-        let tail = if below {
+        let tail = if top_mode || below {
             vec![]
         } else {
             std::mem::take(&mut overlay)
         };
+        let tail_gap = if tail.is_empty() { 0 } else { overlay_gap };
         match style {
             InputStyle::Boxed => {
                 screen.extend(self.boxed_input(&view, editor_w, shown, input_top));
             }
             InputStyle::Fill => {
-                screen.extend(self.fill_input(&view, editor_w, shown, input_top, tail));
+                screen.extend(self.fill_input(&view, editor_w, shown, input_top, tail, tail_gap));
             }
             InputStyle::Bar => {
-                screen.extend(self.bar_input(&view, editor_w, shown, input_top, tail));
+                screen.extend(self.bar_input(&view, editor_w, shown, input_top, tail, tail_gap));
             }
             InputStyle::Lines => screen.extend(
                 self.input_block(&view, editor_w, shown, input_top)
@@ -181,10 +212,17 @@ impl App {
                     .take(extra + input_h),
             ),
         }
-        screen.extend(overlay);
+        if !overlay.is_empty() {
+            if overlay_gap == 1 {
+                screen.push(Vec::new());
+            }
+            screen.extend(overlay);
+        }
         screen.truncate(h);
-        self.chat_hits.resize_with(self.overlay_rows.start, || None);
-        self.chat_hits.extend(overlay_hits);
+        if !overlay_hits.is_empty() {
+            self.chat_hits.resize_with(self.overlay_rows.start, || None);
+            self.chat_hits.extend(overlay_hits);
+        }
         self.links = crate::kit::links::scan(&screen, pad);
         if let Some(id) = self.hover
             && self.pointer.is_none_or(|pt| self.link_at(pt) != Some(id))
@@ -211,7 +249,7 @@ impl App {
             selection.render(&self.chat_hits, &mut screen, Style::fg(p.bg).on(p.accent));
         }
 
-        let first = history_h + gap + lead;
+        let first = composer_top + lead;
         self.input_area = Some(crate::ui::app::InputArea {
             row: first,
             col: input_col,
@@ -401,30 +439,107 @@ mod tests {
     #[test]
     fn lists_open_below_the_input() {
         let mut app = test_app("list-below");
-        app.palette.ui.input = InputStyle::Boxed;
-        open_list(&mut app);
-        let frame = app.compose(40, 20);
-        let bottom = frame
-            .screen
-            .iter()
-            .position(|r| text(r).starts_with('╰'))
-            .unwrap();
-        assert_eq!(app.overlay_rows.start, bottom + 1);
-        assert!(text(&frame.screen[bottom + 1]).contains("one"));
-        assert_eq!(frame.screen.len(), 20);
+        for style in [
+            InputStyle::Lines,
+            InputStyle::Boxed,
+            InputStyle::Fill,
+            InputStyle::Bar,
+        ] {
+            app.palette.ui.input = style;
+            open_list(&mut app);
+            let frame = app.compose(40, 20);
+            let list = app.overlay_rows.clone();
+            assert!(text(&frame.screen[list.start]).contains("one"), "{style:?}");
+            assert!(
+                frame.screen[list.start - 1].is_empty(),
+                "expected blank row before overlay for {style:?}"
+            );
+            assert_eq!(frame.screen.len(), 20);
+            match style {
+                InputStyle::Boxed => {
+                    let bottom = frame
+                        .screen
+                        .iter()
+                        .position(|r| text(r).starts_with('╰'))
+                        .unwrap();
+                    assert_eq!(list.start, bottom + 2);
+                }
+                InputStyle::Fill => {
+                    assert!(text(&frame.screen[list.end]).starts_with('─'));
+                    assert!(
+                        frame.screen[list.start - 2]
+                            .iter()
+                            .all(|s| s.style.bg == app.palette.input_bg)
+                    );
+                }
+                InputStyle::Bar => {
+                    let area = app.input_area.unwrap();
+                    assert_eq!(list.start, area.row + area.height + 1);
+                    assert!(text(&frame.screen[list.end]).starts_with('─'));
+                }
+                InputStyle::Lines => {
+                    assert!(text(&frame.screen[list.start - 2]).starts_with('─'));
+                }
+            }
+        }
+        cleanup(app);
+    }
 
-        app.palette.ui.input = InputStyle::Fill;
-        let frame = app.compose(40, 20);
-        let list = app.overlay_rows.clone();
-        assert!(text(&frame.screen[list.start]).contains("one"));
-        assert!(text(&frame.screen[list.end]).starts_with('─'));
-        assert_eq!(text(&frame.screen[list.start - 1]).trim(), "");
-        assert!(
-            frame.screen[list.start - 1]
-                .iter()
-                .all(|s| s.style.bg == app.palette.input_bg)
+    #[test]
+    fn top_placement_positions_overlays_above_composer_and_preserves_paging_and_hits() {
+        use crossterm::event::{
+            KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        };
+        let mut app = test_app("list-top");
+        app.palette.ui.picker = tuse_config::PickerPlacement::Top;
+        app.palette.ui.lines.list = 4;
+        for i in 0..20 {
+            app.notice(format!("msg {i}"));
+        }
+        app.open_lua_picker(
+            9,
+            (0..8).map(|i| format!("choice {i}")).collect(),
+            Some("**Top pick**".into()),
         );
-        assert_eq!(frame.screen.len(), 20);
+        for style in [
+            InputStyle::Lines,
+            InputStyle::Boxed,
+            InputStyle::Fill,
+            InputStyle::Bar,
+        ] {
+            app.palette.ui.input = style;
+            let frame = app.compose(36, 16);
+            let area = app.input_area.unwrap();
+            let rows = app.overlay_rows.clone();
+            assert!(rows.end < area.row, "{style:?}: {rows:?} vs {area:?}");
+            assert!(text(&frame.screen[rows.start]).contains("Top pick"));
+            assert_eq!(frame.screen.len(), 16);
+        }
+        app.palette.ui.input = InputStyle::Lines;
+        app.compose(36, 16);
+        assert_eq!(app.scroll, 0);
+        app.key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE), 16);
+        assert_eq!(app.scroll, 0);
+        assert_eq!(app.picker.as_ref().unwrap().selected, 3);
+        app.key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE), 16);
+        app.key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE), 16);
+        assert_eq!(app.picker.as_ref().unwrap().selected, 7);
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), 16);
+
+        app.editor.insert("click-me");
+        app.panel = Some(crate::ui::panel::Panel::new("top panel\nline two"));
+        app.compose(36, 16);
+        let area = app.input_area.unwrap();
+        let rows = app.overlay_rows.clone();
+        assert!(rows.end < area.row);
+        app.mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: (area.col + 3) as u16,
+            row: area.row as u16,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(app.editor.cursor(), 3);
+        app.compose(12, 6);
         cleanup(app);
     }
 
@@ -452,7 +567,8 @@ mod tests {
         let frame = app.compose(40, 12);
         let list = app.overlay_rows.clone();
         let area = app.input_area.unwrap();
-        assert_eq!(list.start, area.row + area.height);
+        assert_eq!(list.start, area.row + area.height + 1);
+        assert!(frame.screen[area.row + area.height].is_empty());
         assert!(text(&frame.screen[list.end]).starts_with('─'));
         cleanup(app);
     }

@@ -26,7 +26,7 @@ impl App {
         }
         self.selection = Default::default();
         if primary && k.code == KeyCode::Char('a') {
-            if !self.input_disabled() {
+            if !self.input_disabled() && !self.secret_input() {
                 self.editor.apply(Edit::SelectAll, self.input_cols);
             }
             return;
@@ -54,6 +54,9 @@ impl App {
             return;
         }
         if self.question_key(k.code, shift || alt) {
+            return;
+        }
+        if self.form_key(k.code, ctrl, shift || alt) {
             return;
         }
         if self.panel_key(k.code, k.modifiers) {
@@ -128,7 +131,7 @@ impl App {
     fn copy_selection(&mut self, cut: bool) -> bool {
         let text = if !cut && let Some(message) = self.selection.message {
             message.text(&self.chat_hits)
-        } else if !self.input_disabled() {
+        } else if !self.input_disabled() && !self.secret_input() {
             self.editor.selected_text()
         } else {
             None
@@ -173,6 +176,33 @@ impl App {
             }
             KeyCode::Down if self.editor.is_empty() => {
                 q.panel.scroll_by(step);
+                self.clear_link_hover();
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn form_key(&mut self, code: KeyCode, ctrl: bool, modified: bool) -> bool {
+        let Some(f) = &mut self.form else {
+            return false;
+        };
+        let secret = f.secret;
+        let step = crate::kit::style::WHEEL_STEP as isize;
+        match code {
+            KeyCode::Esc => {
+                self.form = None;
+                self.editor.clear();
+                self.restore_draft();
+            }
+            KeyCode::Enter if !modified || secret => self.submit_form(),
+            KeyCode::Char('j') if ctrl && secret => {}
+            KeyCode::Up if self.editor.is_empty() => {
+                f.panel.scroll_by(-step);
+                self.clear_link_hover();
+            }
+            KeyCode::Down if self.editor.is_empty() => {
+                f.panel.scroll_by(step);
                 self.clear_link_hover();
             }
             _ => return false,
@@ -415,13 +445,13 @@ mod tests {
         std::fs::write(&cfg, "return {}").unwrap();
         let session = Session::open(Options {
             cwd: dir.clone(),
-            config: Some(cfg.clone()),
             mode: tuse_core::Mode::Tui,
             resume: None,
             start: Default::default(),
+            flags: Default::default(),
         })
         .unwrap();
-        let mut app = App::new(session.clone(), Some(cfg));
+        let mut app = App::new(session.clone());
         let press = |app: &mut App, code| app.key(KeyEvent::new(code, KeyModifiers::NONE), 0);
         app.editor.insert("draft /models after");
         app.editor.set_cursor(13);
@@ -608,14 +638,14 @@ mod tests {
         std::fs::write(&cfg, "return {}").unwrap();
         let session = Session::open(Options {
             cwd: dir.clone(),
-            config: Some(cfg.clone()),
             mode: tuse_core::Mode::Tui,
             resume: None,
             start: Default::default(),
+            flags: Default::default(),
         })
         .unwrap();
         session.set_model("switch/m", "medium");
-        let mut app = App::new(session.clone(), Some(cfg.clone()));
+        let mut app = App::new(session.clone());
         std::fs::write(&cfg, "return { bad = { typo_key = 1 } }").unwrap();
         app.run_command("new");
         assert!(std::sync::Arc::ptr_eq(&app.session, &session) && session.is_open());

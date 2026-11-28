@@ -1,4 +1,0 @@
-- [x] 1. Add the name rules, the color aliases, and the hook rule to `docs/config.md`
-- [x] 2. Extend `contract.rs` to check top-level keys, `settings.ui` keys, theme and `theme.lua` tokens, hook events, and history roles against the docs
-- [x] 3. Fix any other gap those checks find
-- [x] 4. Update the docs spec

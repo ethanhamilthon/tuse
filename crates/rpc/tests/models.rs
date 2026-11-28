@@ -60,12 +60,17 @@ fn spawn_rpc(
     mpsc::Receiver<Value>,
     std::thread::JoinHandle<()>,
 ) {
-    let session = Session::open(Options {
-        cwd: dir.to_path_buf(),
-        config: Some(cfg.to_path_buf()),
-        mode,
-        resume: None,
-        start: Start::Launch,
+    let session = Session::open({
+        unsafe {
+            std::env::set_var("TUSE_GLOBAL_CONFIG", cfg);
+        }
+        Options {
+            cwd: dir.to_path_buf(),
+            mode,
+            resume: None,
+            start: Start::Launch,
+            flags: Default::default(),
+        }
     })
     .unwrap();
     support::spawn(session)
@@ -121,17 +126,20 @@ fn model_list_discards_stale_fetches_on_reload() {
         ("p", format!("http://{old_addr}")),
         ("broken", format!("http://{err_addr}")),
     ]);
-    std::fs::write(&cfg, "return { test = { models = {{ name = 'p/cfg' }} } }").unwrap();
+    std::fs::write(&cfg, "return { models = { ['p/cfg'] = {} } }").unwrap();
     let (tx, out, server) = spawn_rpc(&dir, &cfg, Mode::Json);
     rpc_call(&tx, &out, 1, "initialize");
-    assert_eq!(rpc_call(&tx, &out, 2, "model.list"), json!(["p/cfg"]));
+    assert_eq!(rpc_call(&tx, &out, 2, "model.list"), json!([]));
     let (rel_old, done_old) = old_req.recv_timeout(Duration::from_secs(5)).unwrap();
     let (rel_err, done_err) = err_req.recv_timeout(Duration::from_secs(5)).unwrap();
 
+    assert_eq!(rpc_call(&tx, &out, 20, "model.list"), json!([]));
+    assert!(old_req.recv_timeout(Duration::from_millis(50)).is_err());
+    assert!(err_req.try_recv().is_err());
     providers(&[("p", format!("http://{new_addr}"))]);
     rpc_call(&tx, &out, 3, "config.reload");
     support::event(&out, "reloaded");
-    assert_eq!(rpc_call(&tx, &out, 4, "model.list"), json!(["p/cfg"]));
+    assert_eq!(rpc_call(&tx, &out, 4, "model.list"), json!([]));
     let (rel_new, _) = new_req.recv_timeout(Duration::from_secs(5)).unwrap();
     rel_new.send(()).unwrap();
     wait_models_event(&out);
@@ -139,26 +147,16 @@ fn model_list_discards_stale_fetches_on_reload() {
     rel_err.send(()).unwrap();
     done_old.recv_timeout(Duration::from_secs(5)).unwrap();
     done_err.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!(
-        rpc_call(&tx, &out, 5, "model.list"),
-        json!(["p/cfg", "p/new_only"])
-    );
+    assert_eq!(rpc_call(&tx, &out, 5, "model.list"), json!(["p/new_only"]));
 
     providers(&[("all_p", format!("http://{fresh_addr}"))]);
-    std::fs::write(
-        &cfg,
-        "return { test = { models = {{ name = 'all_p/cfg' }} } }",
-    )
-    .unwrap();
+    std::fs::write(&cfg, "return { models = { ['all_p/cfg'] = {} } }").unwrap();
     rpc_call(&tx, &out, 6, "config.reload");
-    assert_eq!(rpc_call(&tx, &out, 7, "model.list"), json!(["all_p/cfg"]));
+    assert_eq!(rpc_call(&tx, &out, 7, "model.list"), json!([]));
     let (rel_fresh, _) = fresh_req.recv_timeout(Duration::from_secs(5)).unwrap();
     rel_fresh.send(()).unwrap();
     wait_models_event(&out);
-    assert_eq!(
-        rpc_call(&tx, &out, 8, "model.list"),
-        json!(["all_p/cfg", "all_p/fresh"])
-    );
+    assert_eq!(rpc_call(&tx, &out, 8, "model.list"), json!(["all_p/fresh"]));
     support::call(&tx, &out, 9, "shutdown", json!({}));
     server.join().unwrap();
 
